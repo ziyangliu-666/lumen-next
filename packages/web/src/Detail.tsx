@@ -9,7 +9,7 @@
 import { useState } from "react";
 import type { Step, TraceNode } from "@lumen/kernel";
 import { money } from "@lumen/kernel/trace/types";
-import { formatDuration, useElapsed } from "./elapsed.ts";
+import { formatDuration, useWorked } from "./elapsed.ts";
 import { Prose } from "./Prose.tsx";
 import { groupSteps } from "./steps.ts";
 import { hasDelegated, isLive, rollup, type State } from "./state.ts";
@@ -95,7 +95,7 @@ function origin(node: TraceNode, state: State): string {
 export function Detail({ state }: { state: State }) {
 	const node = state.selected ? state.nodes[state.selected] : undefined;
 	// Before the early return: a hook cannot be skipped, and there is no point to time yet.
-	const elapsed = useElapsed(node?.startedAt ?? 0, node?.endedAt);
+	const worked = useWorked(node?.worked ?? 0, node?.busySince ?? undefined);
 	if (!node) {
 		return (
 			<aside className="detail">
@@ -130,7 +130,7 @@ export function Detail({ state }: { state: State }) {
 					</span>
 				)}
 				<span>{node.usage.totalTokens.toLocaleString()} tok</span>
-				<span title="how long this window has been open">{formatDuration(elapsed)}</span>
+				<span title="how long this window has spent working, added up over its turns">{formatDuration(worked)}</span>
 				{/* Which model wrote this. It was recorded from the first day and shown nowhere,
 				    which was survivable while a run had one model in it. The model is now a
 				    per-conversation setting, so a graph can hold windows written by two of them,

@@ -276,7 +276,7 @@ export class Runtime {
 			depth: line.depth,
 			model: line.spec.model,
 		});
-		if (wasBusy) this.trace.updateNode(next.id, { busy: true });
+		if (wasBusy) this.trace.setBusy(next.id, true);
 		line.currentNodeId = next.id;
 	}
 
@@ -317,7 +317,7 @@ export class Runtime {
 	}
 
 	private async runTurn(line: Line, text: string, signal?: AbortSignal): Promise<void> {
-		this.trace.updateNode(line.currentNodeId, { busy: true });
+		this.trace.setBusy(line.currentNodeId, true);
 		const onAbort = () => void line.session.abort();
 		signal?.addEventListener("abort", onAbort, { once: true });
 		try {
@@ -325,8 +325,8 @@ export class Runtime {
 		} finally {
 			signal?.removeEventListener("abort", onAbort);
 			// Read `currentNodeId` again: the turn may have compacted, in which case the
-			// window that started busy no longer exists and the flag belongs to its heir.
-			this.trace.updateNode(line.currentNodeId, { busy: false });
+			// window that started busy no longer exists and the clock belongs to its heir.
+			this.trace.setBusy(line.currentNodeId, false);
 		}
 	}
 

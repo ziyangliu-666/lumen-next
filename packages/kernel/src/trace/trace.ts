@@ -75,6 +75,7 @@ export class Trace {
 			depth: options.depth,
 			state: "running",
 			startedAt: Date.now(),
+			worked: 0,
 			usage: emptyUsage(),
 			steps: [],
 			model: options.model,
@@ -95,6 +96,34 @@ export class Trace {
 		this.emit({ type: "node_update", nodeId: id, patch });
 	}
 
+	/**
+	 * Start or stop the clock on a window, and keep its total honest.
+	 *
+	 * One method rather than a `busy` flag anybody may set, because the flag and the time it
+	 * accounts for have to move together. Set independently they drift, and the way that
+	 * fails is silent: the spinner is right and the figure beside it is not.
+	 *
+	 * Idempotent in both directions. `say` sets it around every turn, and a turn that
+	 * compacts hands `busy` to the window that replaces it, so both edges arrive more than
+	 * once and a second one must not restart the clock or bank the same stretch twice.
+	 */
+	setBusy(id: string, busy: boolean): void {
+		const node = this.node(id);
+		if (busy === (node.busy === true)) return;
+		const patch: Partial<TraceNode> = { busy };
+		if (busy) {
+			patch.busySince = Date.now();
+		} else {
+			// Bank what this stretch was worth. `busySince` can be missing on a window that
+			// inherited `busy` from the one it replaced without ever being started here; count
+			// nothing rather than count from zero, which would bill it for the whole epoch.
+			patch.worked = node.worked + (node.busySince ? Date.now() - node.busySince : 0);
+			patch.busySince = null;
+		}
+		Object.assign(node, patch);
+		this.emit({ type: "node_update", nodeId: id, patch });
+	}
+
 	addUsage(id: string, usage: Usage | undefined): void {
 		if (!usage) return;
 		const node = this.node(id);
@@ -110,6 +139,14 @@ export class Trace {
 		if (node.state !== "running") return;
 		node.state = state;
 		node.endedAt = Date.now();
+		// A window closed while it was working stops working. Without this the clock would be
+		// left running on a point the interface has already drawn as finished, and the figure
+		// would climb for the rest of the session.
+		if (node.busy) {
+			node.worked += node.busySince ? node.endedAt - node.busySince : 0;
+			node.busy = false;
+			node.busySince = null;
+		}
 		if (extra?.summary !== undefined) node.summary = extra.summary;
 		if (extra?.error !== undefined) node.error = extra.error;
 		// A step still open when its node closes did not finish. Leaving it `running`

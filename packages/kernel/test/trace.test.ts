@@ -199,6 +199,78 @@ describe("trace", () => {
 		expect(trace.rollupUsage(second.id).cost.total).toBeCloseTo(0.2);
 	});
 
+	it("adds up the time a window spends working, and stops when it is idle", () => {
+		// The figure on screen used to be the window's age, and a delegated window that has
+		// answered is never closed on purpose — so a point that worked for ten seconds an hour
+		// ago was reading "1h 00m" and still climbing.
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(1_000_000);
+			const trace = new Trace("run-1");
+			const node = openRoot(trace);
+			expect(trace.node(node.id).worked).toBe(0);
+
+			trace.setBusy(node.id, true);
+			vi.setSystemTime(1_010_000);
+			trace.setBusy(node.id, false);
+			expect(trace.node(node.id).worked).toBe(10_000);
+
+			// An hour of sitting there answerable is not work.
+			vi.setSystemTime(4_610_000);
+			expect(trace.node(node.id).worked).toBe(10_000);
+
+			// A second turn adds to the first rather than replacing it.
+			trace.setBusy(node.id, true);
+			vi.setSystemTime(4_615_000);
+			trace.setBusy(node.id, false);
+			expect(trace.node(node.id).worked).toBe(15_000);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("does not restart the clock when told twice that it is working", () => {
+		// `say` sets it around every turn and a compaction hands `busy` to the window that
+		// replaces it, so both edges arrive more than once. A second start that reset
+		// `busySince` would throw away everything before it.
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(1_000_000);
+			const trace = new Trace("run-1");
+			const node = openRoot(trace);
+			trace.setBusy(node.id, true);
+			vi.setSystemTime(1_005_000);
+			trace.setBusy(node.id, true);
+			vi.setSystemTime(1_010_000);
+			trace.setBusy(node.id, false);
+
+			expect(trace.node(node.id).worked).toBe(10_000);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("banks the stretch in flight when a working window is closed", () => {
+		// Otherwise the clock is left running on a point the interface has already drawn as
+		// finished, which is the same bug in a different place.
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(1_000_000);
+			const trace = new Trace("run-1");
+			const node = openRoot(trace);
+			trace.setBusy(node.id, true);
+			vi.setSystemTime(1_007_000);
+			trace.closeNode(node.id, "aborted");
+
+			expect(trace.node(node.id).worked).toBe(7_000);
+			expect(trace.node(node.id).busy).toBe(false);
+			// Null rather than undefined, so the patch that carries it survives JSON.
+			expect(trace.node(node.id).busySince).toBeNull();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("counts a branch in the run total that no rollup charges anyone for", () => {
 		// The two numbers answer different questions, and a budget must read this one. A
 		// branch is excluded from every rollup on purpose — nobody waited for it — but it

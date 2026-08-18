@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { money } from "@lumen/kernel/trace/types";
-import { formatDuration, useElapsed } from "./elapsed.ts";
+import { formatDuration, useWorked } from "./elapsed.ts";
 import { fit } from "./fit.ts";
 import { COL, edges, layout, LANE, NODE_H, NODE_W, type Placed } from "./layout.ts";
 import { isLive, rollup, type State } from "./state.ts";
@@ -147,7 +147,7 @@ function Point({
 	// Called before the early return, because a hook cannot be skipped. A missing node is
 	// drawn as nothing, and passing zeros here costs one wasted format on a frame that is
 	// about to render null anyway.
-	const elapsed = useElapsed(node?.startedAt ?? 0, node?.endedAt);
+	const worked = useWorked(node?.worked ?? 0, node?.busySince ?? undefined);
 	if (!node) return null;
 	const live = isLive(node);
 	const selected = state.selected === node.id;
@@ -185,7 +185,7 @@ function Point({
 				    nothing the accent border, the pulsing mark and the wire arriving had not
 				    already said three times over, while the one thing a person actually wants
 				    from a point that has been going for a while — how long — was nowhere. */}
-				<span className={node.busy ? "working" : undefined}>{formatDuration(elapsed)}</span>
+				<span className={node.busy ? "working" : undefined}>{formatDuration(worked)}</span>
 			</div>
 		</div>
 	);

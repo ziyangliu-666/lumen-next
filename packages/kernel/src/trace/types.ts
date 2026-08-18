@@ -170,6 +170,30 @@ export interface TraceNode {
 	busy?: boolean;
 	startedAt: number;
 	endedAt?: number;
+	/**
+	 * How long this window has spent working, in milliseconds, added up over its turns.
+	 *
+	 * Not `endedAt - startedAt`, and the difference is the whole reason this field exists. A
+	 * delegated window that has answered is deliberately never closed — it is still a live
+	 * context somebody can walk into and question — so it has no `endedAt` at all, and a
+	 * figure derived from its age counted upwards for as long as the server stayed running. A
+	 * point that answered in forty seconds an hour ago was reading "1h 02m".
+	 *
+	 * Waiting for a subagent counts. The parent really was inside that turn for that long, and
+	 * a lead that shows less time than the work it commissioned would be describing something
+	 * nobody experienced.
+	 */
+	worked: number;
+	/**
+	 * When the current stretch of work began, or null while it is idle.
+	 *
+	 * Null and not undefined, because this crosses a socket as JSON and `JSON.stringify`
+	 * drops an undefined value entirely. The browser merges a `node_update` patch over what
+	 * it holds, so a missing key means "unchanged" — and clearing this by setting it to
+	 * undefined produced a patch that said the window had stopped working while carrying no
+	 * word about the clock, which went on counting on a point already drawn as finished.
+	 */
+	busySince?: number | null;
 	/** Its own model spend. Children are not folded in; `rollupUsage` does that on read. */
 	usage: Usage;
 	/** The final text it returned. This is what the parent actually received. */

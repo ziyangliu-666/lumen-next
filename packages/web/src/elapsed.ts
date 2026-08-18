@@ -54,33 +54,41 @@ export function formatDuration(ms: number): string {
 	return `${Math.floor(total / HOUR)}h${pad(minutes % 60)}m`;
 }
 
-/** How often a live point reads the clock. See `useElapsed` for why it is this and not less. */
+/** How often a live point reads the clock. See `useWorked` for why it is this and not less. */
 const TICK = SECOND;
 
 /**
- * Milliseconds this window has been open: fixed once it has ended, ticking while it runs.
+ * Milliseconds this window has spent working: fixed while it is idle, ticking while it is not.
+ *
+ * Working time, not age, and the two are nowhere near each other here. A delegated window
+ * that has answered is deliberately never closed — it is still a live context somebody can
+ * walk into and question — so a figure measured from `startedAt` counted upwards for as long
+ * as the server stayed up, and a point that answered in forty seconds an hour ago read
+ * "1h 02m". The clock now belongs to the trace, which starts it and banks it around every
+ * turn, and this only adds the stretch in progress.
  *
  * One second is the coarsest interval that still catches every change `formatDuration` can
  * show below the hour scale. Anything faster re-renders a point to paint the same characters.
  * That matters because the interval is paid per point, not per screen: a research run has
  * dozens of windows open at once, and each of them holds its own timer.
  */
-export function useElapsed(startedAt: number, endedAt: number | undefined): number {
+export function useWorked(worked: number, busySince: number | undefined): number {
 	const [now, setNow] = useState(() => Date.now());
-	const running = endedAt === undefined;
+	const running = busySince !== undefined;
 
-	// The dependency is the boolean, not `endedAt`. What the effect does turns on one fact —
-	// is this window still open — so the timer is built once and torn down once, and no render
+	// The dependency is the boolean, not `busySince`. What the effect does turns on one fact —
+	// is this window working — so the timer is built once and torn down once, and no render
 	// that leaves that answer unchanged can restart it.
 	useEffect(() => {
-		// An ended point schedules nothing at all. A timer left on a finished point is a leak
+		// An idle point schedules nothing at all. A timer left on a finished point is a leak
 		// with no symptom: it wakes up forever to compute a number that cannot change again.
 		if (!running) return;
 		const timer = setInterval(() => setNow(Date.now()), TICK);
 		return () => clearInterval(timer);
 	}, [running]);
 
-	// Read `endedAt` itself rather than the last tick, so a point that ended between two ticks
-	// settles on its true duration instead of one rounded up to the next second.
-	return Math.max(0, (endedAt ?? now) - startedAt);
+	// `busySince` was stamped by the server and `now` is read from this browser, so a clock a
+	// few seconds apart would otherwise show a point that has been working for minus one
+	// second. A bad measurement is worth nothing; it is not a negative duration.
+	return busySince === undefined ? worked : worked + Math.max(0, now - busySince);
 }

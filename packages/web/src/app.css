@@ -753,3 +753,95 @@ body.resizing {
 .step.run > .step {
 	padding-left: 14px;
 }
+
+/* An agent's answer.
+   
+   Set for reading rather than for looking at: one text size, generous line height, and the
+   only colour anywhere is on the two things that are actually actionable — a link out, and
+   a place in the repository. Everything else earns its hierarchy from weight and space,
+   which is what a monospace column has to work with. */
+.prose {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.prose > * {
+	margin: 0 0 10px;
+}
+.prose > *:last-child {
+	margin-bottom: 0;
+}
+/* Every heading level at one size. An agent's levels are arbitrary — one writes `##` where
+   another writes `###` — so honouring them literally made two answers side by side look
+   like different documents. Weight and a rule carry the break instead. */
+.proseHeading {
+	font-size: 13px;
+	font-weight: 600;
+	margin-top: 16px;
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--line);
+}
+.prose ul,
+.prose ol {
+	padding-left: 18px;
+	/* The agent's own line breaks are preserved for paragraphs; inside a list item they are
+	   the wrapping of a source file and would leave a ragged column. */
+	white-space: normal;
+}
+.prose li {
+	margin-bottom: 4px;
+}
+/* A tint, no border. Inline code and a path both used a bordered box, and side by side in
+   one sentence they were the same object — which loses the point, because one of them is a
+   fragment of quoted source and the other is a place you can go. The border now belongs to
+   the path alone. */
+.prose code {
+	background: var(--bg);
+	border-radius: 3px;
+	padding: 0 4px;
+	color: var(--dim);
+}
+.proseCode {
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	padding: 8px 10px;
+	overflow-x: auto;
+	white-space: pre;
+}
+.proseCode code {
+	background: none;
+	border: none;
+	padding: 0;
+}
+.prose blockquote {
+	margin-left: 0;
+	padding-left: 10px;
+	border-left: 1px solid var(--line);
+	color: var(--dim);
+}
+.prose hr {
+	border: none;
+	border-top: 1px solid var(--line);
+}
+.prose a {
+	color: var(--accent);
+}
+
+/* A place in the repository. The one thing every agent is told to quote, and the one thing
+   in an answer a person acts on, so it is the one thing given a shape of its own. */
+.ref {
+	font: inherit;
+	background: none;
+	border: none;
+	border-bottom: 1px solid var(--accent);
+	border-radius: 0;
+	color: var(--accent);
+	padding: 0;
+	cursor: pointer;
+}
+.ref:hover {
+	background: var(--bg);
+}
+.ref.copied {
+	color: var(--accent);
+}

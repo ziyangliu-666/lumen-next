@@ -10,6 +10,7 @@ import { useState } from "react";
 import type { Step, TraceNode } from "@lumen/kernel";
 import { money } from "@lumen/kernel/trace/types";
 import { formatDuration, useElapsed } from "./elapsed.ts";
+import { Prose } from "./Prose.tsx";
 import { groupSteps } from "./steps.ts";
 import { hasDelegated, isLive, rollup, type State } from "./state.ts";
 
@@ -153,11 +154,21 @@ export function Detail({ state }: { state: State }) {
 			{/* While it is working, never show the last answer: in the gap before the first
 			    token it sat under the new question and read as the reply to it. */}
 			{node.busy ? (
-				<div className="reply streaming">{streaming || <span className="hint">thinking</span>}</div>
+				<div className="reply streaming">
+					{/* Drawn as it arrives, half-written markers and all. The parser writes an
+					    unterminated `**` out as literal text rather than swallowing the rest, so a
+					    sentence in progress reads as a sentence in progress and settles the moment
+					    the agent closes the marker. */}
+					{streaming ? (
+						<Prose text={streaming} cwd={state.fixed?.cwd} />
+					) : (
+						<span className="hint">thinking</span>
+					)}
+				</div>
 			) : node.summary ? (
 				<div className="reply">
-					{node.summary}
 					<Copy text={node.summary} />
+					<Prose text={node.summary} cwd={state.fixed?.cwd} />
 				</div>
 			) : null}
 

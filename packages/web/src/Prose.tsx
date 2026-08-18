@@ -19,22 +19,22 @@
 import { useState } from "react";
 import { parse, type Block, type Inline } from "./markdown.ts";
 
-export function Prose({ text, cwd }: { text: string; cwd?: string }) {
+export function Prose({ text, base }: { text: string; base?: string }) {
 	return (
 		<div className="prose">
 			{parse(text).map((block, index) => (
-				<Blocks key={index} block={block} cwd={cwd} />
+				<Blocks key={index} block={block} base={base} />
 			))}
 		</div>
 	);
 }
 
-function Blocks({ block, cwd }: { block: Block; cwd?: string }) {
+function Blocks({ block, base }: { block: Block; base?: string }) {
 	switch (block.kind) {
 		case "para":
 			return (
 				<p>
-					<Inlines nodes={block.children} cwd={cwd} />
+					<Inlines nodes={block.children} base={base} />
 				</p>
 			);
 		case "heading": {
@@ -45,7 +45,7 @@ function Blocks({ block, cwd }: { block: Block; cwd?: string }) {
 			const Tag = `h${Math.min(block.level, 6)}` as "h1";
 			return (
 				<Tag className={`proseHeading h${block.level}`}>
-					<Inlines nodes={block.children} cwd={cwd} />
+					<Inlines nodes={block.children} base={base} />
 				</Tag>
 			);
 		}
@@ -55,7 +55,7 @@ function Blocks({ block, cwd }: { block: Block; cwd?: string }) {
 				<Tag>
 					{block.items.map((item, index) => (
 						<li key={index}>
-							<Inlines nodes={item} cwd={cwd} />
+							<Inlines nodes={item} base={base} />
 						</li>
 					))}
 				</Tag>
@@ -71,7 +71,7 @@ function Blocks({ block, cwd }: { block: Block; cwd?: string }) {
 			return (
 				<blockquote>
 					{block.children.map((child, index) => (
-						<Blocks key={index} block={child} cwd={cwd} />
+						<Blocks key={index} block={child} base={base} />
 					))}
 				</blockquote>
 			);
@@ -80,17 +80,17 @@ function Blocks({ block, cwd }: { block: Block; cwd?: string }) {
 	}
 }
 
-function Inlines({ nodes, cwd }: { nodes: Inline[]; cwd?: string }) {
+function Inlines({ nodes, base }: { nodes: Inline[]; base?: string }) {
 	return (
 		<>
 			{nodes.map((node, index) => (
-				<One key={index} node={node} cwd={cwd} />
+				<One key={index} node={node} base={base} />
 			))}
 		</>
 	);
 }
 
-function One({ node, cwd }: { node: Inline; cwd?: string }) {
+function One({ node, base }: { node: Inline; base?: string }) {
 	switch (node.kind) {
 		case "text":
 			return <>{node.text}</>;
@@ -99,13 +99,13 @@ function One({ node, cwd }: { node: Inline; cwd?: string }) {
 		case "strong":
 			return (
 				<strong>
-					<Inlines nodes={node.children} cwd={cwd} />
+					<Inlines nodes={node.children} base={base} />
 				</strong>
 			);
 		case "em":
 			return (
 				<em>
-					<Inlines nodes={node.children} cwd={cwd} />
+					<Inlines nodes={node.children} base={base} />
 				</em>
 			);
 		case "link":
@@ -113,11 +113,11 @@ function One({ node, cwd }: { node: Inline; cwd?: string }) {
 			// vetted, and there is no reason to tell one of them where the reader came from.
 			return (
 				<a href={node.href} target="_blank" rel="noreferrer noopener">
-					<Inlines nodes={node.children} cwd={cwd} />
+					<Inlines nodes={node.children} base={base} />
 				</a>
 			);
 		case "ref":
-			return <Ref node={node} cwd={cwd} />;
+			return <Ref node={node} base={base} />;
 	}
 }
 
@@ -132,14 +132,14 @@ function One({ node, cwd }: { node: Inline; cwd?: string }) {
  * link that silently does nothing. A path on the clipboard works in every editor's
  * quick-open, and it is what a person does with one of these anyway.
  */
-function Ref({ node, cwd }: { node: Extract<Inline, { kind: "ref" }>; cwd?: string }) {
+function Ref({ node, base }: { node: Extract<Inline, { kind: "ref" }>; base?: string }) {
 	const [copied, setCopied] = useState(false);
 	const full = node.line === undefined ? node.path : `${node.path}:${node.line}`;
 	return (
 		<button
 			type="button"
 			className={`ref ${copied ? "copied" : ""}`}
-			title={cwd ? `${cwd}/${full} — click to copy` : "click to copy"}
+			title={base ? `${base}/${full} — click to copy` : "click to copy"}
 			onClick={() => {
 				navigator.clipboard.writeText(full).then(
 					() => setCopied(true),

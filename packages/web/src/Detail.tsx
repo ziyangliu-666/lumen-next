@@ -160,7 +160,7 @@ export function Detail({ state }: { state: State }) {
 					    sentence in progress reads as a sentence in progress and settles the moment
 					    the agent closes the marker. */}
 					{streaming ? (
-						<Prose text={streaming} cwd={state.fixed?.cwd} />
+						<Prose text={streaming} base={state.settings?.material ?? undefined} />
 					) : (
 						<span className="hint">thinking</span>
 					)}
@@ -168,7 +168,7 @@ export function Detail({ state }: { state: State }) {
 			) : node.summary ? (
 				<div className="reply">
 					<Copy text={node.summary} />
-					<Prose text={node.summary} cwd={state.fixed?.cwd} />
+					<Prose text={node.summary} base={state.settings?.material ?? undefined} />
 				</div>
 			) : null}
 

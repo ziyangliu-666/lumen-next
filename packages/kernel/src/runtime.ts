@@ -143,6 +143,20 @@ export class Runtime {
 	 */
 	spendCap: number | undefined;
 	/**
+	 * Where the agents are standing, appended to every system prompt from the next window on.
+	 *
+	 * A conversation has a directory of its own now, and it may have been pointed at material
+	 * to study. Neither is something an agent can work out for itself: its tools resolve
+	 * relative paths against a directory nothing tells it the name of, and material outside
+	 * that directory can only be reached by an absolute path it has never been given.
+	 *
+	 * Held here and not in the specs because it changes per conversation and per setting,
+	 * while a spec is what an agent *is*. Read when a session is built, so it reaches the next
+	 * window and leaves the ones already open alone — the same promise the model setting makes,
+	 * and for the same reason.
+	 */
+	place: string | undefined;
+	/**
 	 * What new lines are built with. Held apart from the options they came from, because
 	 * these two can be changed while the run is going and the rest cannot.
 	 *
@@ -694,12 +708,17 @@ export class Runtime {
 		// top-level import would make runtime.ts and these a cycle.
 		const { createSubagentTool } = await import("./tools/subagent.ts");
 		const { createFinishTool } = await import("./tools/finish.ts");
+		const { createSaveTool } = await import("./tools/save.ts");
+
+		const cwd = this.options.cwd ?? process.cwd();
 		const customTools = [
 			...(spec.canDelegate ? [createSubagentTool({ runtime: this, line })] : []),
 			...(spec.canFinish ? [createFinishTool({ runtime: this, line })] : []),
+			// Rooted at the working directory, which is this conversation's own. The tool
+			// resolves paths itself rather than trusting pi's resolver, which lets an absolute
+			// path out of the directory entirely.
+			...(spec.canSave ? [createSaveTool({ root: cwd })] : []),
 		];
-
-		const cwd = this.options.cwd ?? process.cwd();
 		// Extensions, skills and context files are all discovered from the working
 		// directory, and the working directory is full of the user's own material. An
 		// agent that loads configuration from there is an agent whose instructions the
@@ -708,7 +727,9 @@ export class Runtime {
 		const resourceLoader = new DefaultResourceLoader({
 			cwd,
 			agentDir: getAgentDir(),
-			systemPrompt: spec.systemPrompt,
+			// The spec says what this agent is; `place` says where it is standing. Joined here
+			// rather than baked into the spec, because one is fixed and the other moves.
+			systemPrompt: this.place ? `${spec.systemPrompt}\n\n${this.place}` : spec.systemPrompt,
 			// Named by the operator, never discovered. An agent still cannot gain a tool by
 			// reading a repository that offers one.
 			additionalExtensionPaths: this.options.extensions ?? [],

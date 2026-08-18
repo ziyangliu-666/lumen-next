@@ -158,12 +158,45 @@ prints; it proxies the socket to the server.
 |---|---|---|
 | `LUMEN_PROVIDER` / `LUMEN_MODEL` | `deepseek` / `deepseek-v4-flash` | which model a new conversation starts on; changeable per conversation in the panel |
 | `LUMEN_PORT` | `4173` | |
-| `LUMEN_CWD` | current directory | what the agents can read |
+| `LUMEN_SESSIONS` | `~/.lumen/sessions` | where each conversation's own directory is made |
+| `LUMEN_MATERIAL` | none | a folder for the agents to study, if every conversation on this server is about the same one |
 | `LUMEN_AUTO_BUDGET` | `2` | dollars one run may spend while it runs itself |
 | `LUMEN_MAX_DEPTH` | `3` | how deep delegation may go |
 | `LUMEN_MAX_CONCURRENT` | `4` | how many children one call runs at once |
 | `LUMEN_KEEP_RECENT_TOKENS` | pi's default (20k) | set to a few hundred to watch a line compact without holding a long conversation first |
 | `LUMEN_EXTENSIONS` | `node_modules/pi-web-access` | pi extensions to load by path; set empty to run without the web tools |
+
+## Where a conversation lives
+
+Every conversation gets a directory of its own, made when it starts and named after it,
+under `~/.lumen/sessions`. It is the agents' working directory, it is where anything they
+save lands, and it is how one agent leaves something for another to read. It starts empty
+and nothing ever cleans it up.
+
+That is a change, and it came from a run that went wrong. The agents used to work in
+whatever directory the server was started from, which was almost always this repository. A
+question about a mathematical conjecture therefore arrived with a code search tool in the
+agents' hands and lumen's own source underneath it, and a worker duly grepped the repository
+and reported a test file as a finding.
+
+So a conversation is about nothing on your disk until you say otherwise. **material** in the
+settings panel points it at a folder to study; leave it empty and the agents know about
+nothing but their own directory.
+
+| | |
+|---|---|
+| the conversation's directory | theirs, writable through `save`, empty at the start |
+| material | yours, something they were asked to read, and told not to change |
+
+**`save` is lumen's own tool, and that is the reason it exists.** pi's `write` resolves an
+absolute path anywhere on the disk, so an agent given it in a session directory is not
+confined to that directory at all — the boundary would live in a sentence in a prompt, which
+is the one thing this project says not to rely on. `save` resolves paths itself, against the
+conversation's directory, and refuses anything that climbs out.
+
+The same is not true in the other direction, and it is worth saying plainly: pi's `read`,
+`grep`, `find` and `ls` resolve absolute paths too. **material is a default and a statement
+of intent, not a fence.** An agent that decides to read somewhere else can.
 
 ## Security
 
@@ -180,7 +213,10 @@ Two properties do hold:
 - **Agents cannot gain a tool from what they read.** Extension auto-discovery is off; only
   extensions named in code are loaded, so a repository cannot introduce one.
 - **The tool allowlist is enforced by the process, not asked for in a prompt.** An agent
-  without `write` cannot write whatever it is talked into.
+  without a tool cannot use it whatever it is talked into.
+- **What an agent writes, it writes inside its own conversation's directory.** `save` does
+  its own path resolution and refuses to climb out. This is the one path boundary here that
+  is real; reading has none.
 
 The second one was broken until recently: `tools: []` compiled to "drop the built-ins",
 which leaves every extension-registered tool standing. An agent declared as having no tools

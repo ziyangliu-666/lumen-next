@@ -11,8 +11,9 @@
  * share nothing, which is isolation for free and the reason there is no scheduling here.
  */
 
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { homedir } from "node:os";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
@@ -27,7 +28,25 @@ const WEB_DIST = resolve(HERE, "../../web/dist");
 const PORT = Number(process.env.LUMEN_PORT ?? 4173);
 const PROVIDER = process.env.LUMEN_PROVIDER ?? "deepseek";
 const MODEL_ID = process.env.LUMEN_MODEL ?? "deepseek-v4-flash";
-const CWD = process.env.LUMEN_CWD ?? process.cwd();
+/**
+ * Where each conversation gets a directory of its own.
+ *
+ * The agents used to work in whatever directory the server was started from, which was
+ * almost always this repository. Asking them to research a mathematical conjecture then put
+ * a code search tool in their hands and lumen's own source under it, and a worker duly
+ * grepped the repository and reported a test file as a finding. The material an agent has
+ * to hand is part of the question it is answering, and a question about mathematics should
+ * arrive with an empty desk.
+ */
+const SESSIONS = process.env.LUMEN_SESSIONS ?? join(homedir(), ".lumen", "sessions");
+/**
+ * A repository or folder to study, for the conversations that are about one.
+ *
+ * Unset by default, and that is the change: reading this project's own code is now something
+ * you ask for rather than something you get. Set it per conversation in the panel, or name a
+ * default here for a server you only ever point at one place.
+ */
+const MATERIAL = process.env.LUMEN_MATERIAL ?? null;
 /**
  * Set this low (a few thousand) to watch a line compact without holding a 20k-token
  * conversation first. It changes when the boundary appears, not what a boundary is.
@@ -85,12 +104,7 @@ if (!model) {
  * every entry has to be tried to be believed.
  */
 const AVAILABLE = await modelRuntime.getAvailable();
-const FIXED: Fixed = {
-	cwd: CWD,
-	extensions: EXTENSIONS,
-	port: PORT,
-	models: AVAILABLE.map((model) => ({ id: `${model.provider}/${model.id}`, name: model.name })),
-};
+const MODELS = AVAILABLE.map((model) => ({ id: `${model.provider}/${model.id}`, name: model.name }));
 
 let runCounter = 0;
 
@@ -134,7 +148,10 @@ class Conversation {
 		keepRecentTokens: KEEP_RECENT ?? null,
 		maxDepth: MAX_DEPTH,
 		maxConcurrent: MAX_CONCURRENT,
+		material: MATERIAL,
 	};
+	/** This conversation's own directory. Its working directory, and where its files land. */
+	private readonly workspace: string;
 	// A plain field rather than a constructor parameter property: node's strip-only
 	// TypeScript support cannot erase those, and this file is run directly.
 	// A set, not one socket. Two tabs on the same conversation are two windows onto one
@@ -149,19 +166,50 @@ class Conversation {
 	 */
 	private readonly said = new Map<string, string[]>();
 
-	constructor() {
+	constructor(key: string) {
 		runCounter += 1;
+		// The key comes off a query string, so it reaches this line as text a browser chose. It
+		// is about to become a directory name: anything but letters, digits, dash and
+		// underscore is dropped, so `?s=../../etc` cannot climb anywhere.
+		const safe = key.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64) || `run-${runCounter}`;
+		this.workspace = join(SESSIONS, safe);
+		mkdirSync(this.workspace, { recursive: true });
 		this.runtime = new Runtime({
 			runId: `run-${runCounter}`,
 			registry: new AgentRegistry(AGENTS),
 			modelRuntime,
 			model,
-			cwd: CWD,
+			cwd: this.workspace,
 			maxDepth: MAX_DEPTH,
 			maxConcurrent: MAX_CONCURRENT,
 			compaction: KEEP_RECENT === undefined ? undefined : { keepRecentTokens: KEEP_RECENT },
 			extensions: EXTENSIONS,
 		});
+		this.runtime.place = this.describePlace();
+	}
+
+	/**
+	 * The paragraph every agent in this conversation is given about where it is standing.
+	 *
+	 * Neither fact can be worked out from inside a session. Relative paths resolve against a
+	 * directory nothing names, and material outside that directory is reachable only by an
+	 * absolute path the agent has never been told. Rebuilt whenever the material changes, and
+	 * read when the next window opens.
+	 */
+	private describePlace(): string {
+		const lines = [
+			`You are working in ${this.workspace}. Relative paths resolve there.`,
+			"It is yours and it starts empty. Files another agent on this run saved are there",
+			"too, so it is how you leave something for them and how you read what they left.",
+		];
+		if (this.settings.material) {
+			lines.push(
+				"",
+				`The material you were asked about is at ${this.settings.material}. Read it with`,
+				"absolute paths. Do not change anything in it.",
+			);
+		}
+		return lines.join("\n");
 	}
 
 	async start(): Promise<void> {
@@ -237,7 +285,12 @@ class Conversation {
 			said: Object.fromEntries(this.said),
 			auto: this.autoState(),
 			settings: this.settings,
-			fixed: FIXED,
+			fixed: {
+				workspace: this.workspace,
+				extensions: EXTENSIONS,
+				port: PORT,
+				models: MODELS,
+			},
 		});
 	}
 
@@ -324,6 +377,24 @@ class Conversation {
 			}
 			this.settings[key] = value;
 			this.runtime[key] = value;
+		}
+
+		if (patch.material !== undefined) {
+			const material = patch.material === null ? null : patch.material.trim();
+			// Checked here rather than left for an agent to discover. A directory that does not
+			// exist becomes a worker reading nothing and reporting that it found nothing, which
+			// reads exactly like an answer.
+			if (material && !(existsSync(material) && statSync(material).isDirectory())) {
+				return refuse(`No directory at ${material}.`);
+			}
+			this.settings.material = material || null;
+			this.runtime.place = this.describePlace();
+			this.send({
+				type: "notice",
+				message: this.settings.material
+					? `Windows opened from now on are told the material is at ${this.settings.material}.`
+					: "Windows opened from now on are told about nothing but their own directory.",
+			});
 		}
 
 		if (patch.keepRecentTokens !== undefined) {
@@ -595,7 +666,7 @@ sockets.on("connection", async (socket, request) => {
 	const key = new URL(request.url ?? "/", "http://x").searchParams.get("s") ?? `anon-${++runCounter}`;
 	let conversation = conversations.get(key);
 	if (!conversation) {
-		conversation = new Conversation();
+		conversation = new Conversation(key);
 		try {
 			await conversation.start();
 		} catch (cause) {
@@ -643,7 +714,8 @@ http.listen(PORT, "127.0.0.1", () => {
 	console.log(
 		`lumen server on http://127.0.0.1:${PORT}\n` +
 			`  model      ${PROVIDER}/${MODEL_ID}\n` +
-			`  cwd        ${CWD}\n` +
+			`  sessions   ${SESSIONS}\n` +
+			`  material   ${MATERIAL ?? "none — set one per conversation in the panel"}\n` +
 			`  keepRecent ${keep}\n` +
 			`  auto cap   ${money(AUTO_BUDGET)}\n` +
 			`  depth      ${MAX_DEPTH}, ${MAX_CONCURRENT} at once\n` +

@@ -38,6 +38,15 @@ export interface AgentSpec {
 	 */
 	canFinish?: boolean;
 	/**
+	 * Whether this agent may leave files in the conversation's own directory.
+	 *
+	 * Separate from the file tools in `tools`, because it is a different question. Those say
+	 * what an agent may look at; this says whether it may leave anything behind. An agent
+	 * that reads a repository and an agent that writes a report are not the same risk, and
+	 * they are not the same feature.
+	 */
+	canSave?: boolean;
+	/**
 	 * Whether other agents may be handed work as this one. On by default.
 	 *
 	 * Off for the agent that holds the conversation. Once workers can delegate, the catalogue

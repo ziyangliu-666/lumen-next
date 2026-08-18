@@ -77,6 +77,16 @@ export interface Settings {
 	maxDepth: number;
 	/** How many children one delegation call runs at once. The rest queue behind them. */
 	maxConcurrent: number;
+	/**
+	 * A folder the agents were asked about, or null for a conversation that is about nothing
+	 * on this disk. Applies to windows opened from now on.
+	 *
+	 * Null by default, and that default is the point. The agents used to start in whatever
+	 * directory the server was launched from, so a question about mathematics arrived with a
+	 * code search tool pointed at somebody's repository, and a worker answered it by grepping
+	 * source that had nothing to do with the question.
+	 */
+	material: string | null;
 }
 
 /**
@@ -88,7 +98,14 @@ export interface Settings {
  * nobody should be able to change from a browser.
  */
 export interface Fixed {
-	cwd: string;
+	/**
+	 * This conversation's own directory: its working directory, and where its files land.
+	 *
+	 * Fixed for the life of the conversation rather than for the life of the process, and
+	 * shown because it is the only way to find what a run produced. Nothing else here can be
+	 * changed at all; this one cannot be changed, but it is different per conversation.
+	 */
+	workspace: string;
 	extensions: string[];
 	port: number;
 	/** Every model the operator has credentials for. */

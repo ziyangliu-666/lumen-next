@@ -41,7 +41,8 @@ type Field =
 			label: string;
 			when: string;
 			help: string;
-	  };
+	  }
+	| { kind: "path"; key: "material"; label: string; when: string; help: string };
 
 const FIELDS: Field[] = [
 	{
@@ -55,6 +56,17 @@ const FIELDS: Field[] = [
 			"carry on rather than start again.",
 		min: 0.01,
 		step: 0.25,
+	},
+	{
+		kind: "path",
+		key: "material",
+		label: "material",
+		when: "the next window that opens",
+		help:
+			"A folder the agents should study, if this conversation is about one. Leave it empty " +
+			"and they know about nothing but their own directory — which is what you want when " +
+			"the question is not about code. Point it at a repository and every window opened " +
+			"from then on is told where it is and told to read it without changing it.",
 	},
 	{
 		kind: "model",
@@ -192,6 +204,18 @@ export function Settings({
 							/>
 						)}
 
+						{field.kind === "path" && (
+							<input
+								id={`set-${field.key}`}
+								type="text"
+								spellCheck={false}
+								placeholder="empty — the agents study nothing on this disk"
+								value={draft.material ?? ""}
+								onChange={(event) => setDraft({ ...draft, material: event.target.value })}
+								onBlur={(event) => commit({ material: event.target.value.trim() || null })}
+							/>
+						)}
+
 						{field.kind === "optionalNumber" && (
 							<input
 								id={`set-${field.key}`}
@@ -236,14 +260,16 @@ export function Settings({
 				</div>
 
 				<div className="field fixed">
-					<strong>fixed when the server started</strong>
+					<strong>where this conversation lives</strong>
 					<p className="help">
-						Changing these from a page would mean a page that can point the agents at another
-						directory, or hand them another tool. Both stay on the command line.
+						Its own directory, made when it started and named after it. Everything the agents
+						save lands there, and it is how one of them leaves something for another. It is
+						not changeable, and it is not cleaned up: a folder deleted on your behalf is a
+						folder you wanted.
 					</p>
 					<dl>
-						<dt>what the agents can read</dt>
-						<dd>{fixed.cwd}</dd>
+						<dt>this conversation's directory</dt>
+						<dd>{fixed.workspace}</dd>
 						<dt>extensions loaded</dt>
 						<dd>{fixed.extensions.length > 0 ? fixed.extensions.join(", ") : "none"}</dd>
 						<dt>port</dt>

@@ -20,6 +20,13 @@
  * Neither has `bash`. That is deliberate and worth stating plainly: pi ships no network
  * tool, so an agent's only route to the internet is a shell, and handing out `bash` hands
  * out unfiltered outbound access along with it.
+ *
+ * Both can now write, which they could not before, and the split still holds because of
+ * where they can write. `save` is lumen's own tool and resolves paths against this
+ * conversation's directory itself, refusing anything that climbs out. pi's `write` would
+ * have been the easy route and it is the wrong one: its resolver takes an absolute path
+ * anywhere on the disk, so the boundary would have existed only in a sentence in this file
+ * — which is the thing this comment has always said not to rely on.
  */
 
 import type { AgentSpec } from "@lumen/kernel";
@@ -54,6 +61,10 @@ export const AGENTS: AgentSpec[] = [
 			"Then write the answer yourself, in a few sentences. Quote `path:line` when you",
 			"refer to something specific.",
 			"",
+			"You can leave files behind with `save`. A run that took an hour should end with",
+			"something on disk, not only with a paragraph in a window that closes when the",
+			"process does. Save the report when there is one, and say what you called it.",
+			"",
 			"When the person leaves this running by itself, every turn you end is continued",
 			"automatically and nobody reads it until you stop. Call `finish` the moment the",
 			"request is answered, and in that same turn say what was found and what is still",
@@ -65,6 +76,7 @@ export const AGENTS: AgentSpec[] = [
 		tools: [],
 		canDelegate: true,
 		canFinish: true,
+		canSave: true,
 		// Kept off the menu the workers read. They can delegate now, and a worker that handed
 		// work to a lead would open a second conversation with a person who is not there:
 		// a full window whose prompt says it is talking to somebody, holding no file tools,
@@ -92,6 +104,12 @@ export const AGENTS: AgentSpec[] = [
 			"",
 			"Do not report a problem you cannot describe a concrete failure for.",
 			"",
+			"Use `save` for anything too long to travel back in your answer — a full extract, a",
+			"list of sources, a table. Save it, then name the file in your answer and say in one",
+			"line what is in it. Do not save a copy of the answer as well as giving it: the",
+			"caller reads what you return, and a file nobody was told about is a file nobody",
+			"opens.",
+			"",
 			"You can hand work on as well. Do it when the question splits into parts that would",
 			"not fit in one window — several files that each have to be read in full, or a",
 			"search whose results you would then have to read through. Do not do it for",
@@ -99,6 +117,7 @@ export const AGENTS: AgentSpec[] = [
 			"context window and the wait for it, and whoever asked you is paying for both.",
 		].join("\n"),
 		tools: [...LOOK, ...WEB],
+		canSave: true,
 		// The reason the tree can get deep. A question that needs six files read in full does
 		// not fit in one window, and a worker that could only read or give up had to choose
 		// between running out of room and answering from half the evidence.

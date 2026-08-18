@@ -19,6 +19,7 @@ export {
 	type SpawnResult,
 } from "./runtime.ts";
 export { createFinishTool, type FinishToolOptions } from "./tools/finish.ts";
+export { createSaveTool, type SaveToolOptions } from "./tools/save.ts";
 export { createSubagentTool, type SubagentToolOptions } from "./tools/subagent.ts";
 export {
 	record,

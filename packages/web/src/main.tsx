@@ -2,27 +2,20 @@ import { StrictMode, useCallback, useEffect, useReducer, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import type { ClientFrame, ServerFrame, Target } from "@lumen/server/protocol";
 import { Composer } from "./Composer.tsx";
-import { Graph } from "./Graph.tsx";
+import { Canvas } from "./Canvas.tsx";
+import { Detail } from "./Detail.tsx";
 import { initialState, reduce } from "./state.ts";
 import "./app.css";
 
 function App() {
 	const [state, dispatch] = useReducer(reduce, initialState);
 	const socket = useRef<WebSocket | null>(null);
-	const pane = useRef<HTMLElement | null>(null);
 
 	const nodeCount = Object.keys(state.nodes).length;
 	// Every point's figure is inclusive of what is under it, so adding the column up
 	// multiplies the truth. This is the only number that is the run.
 	const spent = Object.values(state.nodes).reduce((sum, node) => sum + node.usage.cost.total, 0);
 	const empty = nodeCount <= 1 && !state.nodes[state.rootId ?? ""]?.summary;
-
-	// Follow the work. New points open below the fold, and without this the only sign that
-	// two agents had just run was the cost figure at the top ticking up.
-	useEffect(() => {
-		const el = pane.current;
-		if (el) el.scrollTop = el.scrollHeight;
-	}, [nodeCount]);
 
 	useEffect(() => {
 		// A stable id, kept in the browser, is what makes a refresh survivable: the server
@@ -95,31 +88,24 @@ function App() {
 				<span className={`dot ${state.connected ? "on" : "off"}`} />
 			</header>
 
-			<main ref={pane}>
+			<main>
 				{state.rootId ? (
-					<Graph
-						state={state}
-						nodeId={state.rootId}
-						onSelect={(nodeId) => dispatch({ kind: "select", nodeId })}
-					/>
+					<Canvas state={state} onSelect={(nodeId) => dispatch({ kind: "select", nodeId })} />
 				) : (
 					<p className="hint">waiting for the run to open…</p>
 				)}
-				{empty && (
-					<div className="blank">
-						<p>Ask for something that needs looking things up, and watch the work spread out.</p>
-						<p className="hint">
-							Try: <em>Find which file defines the Trace class and, separately, which file
-							defines AgentSpec. Use two agents in parallel.</em>
-						</p>
-						<p className="hint">
-							Each box below is one agent's context window. Delegated work nests inside the
-							box that asked for it; a dashed rail means a line that was started and never
-							reports back.
-						</p>
-					</div>
-				)}
+				<Detail state={state} />
 			</main>
+
+			{empty && (
+				<div className="blank">
+					Ask for something that needs looking things up, and watch the work spread out.
+					Try: <em>Find which file defines the Trace class and, separately, which file
+					defines AgentSpec. Use two workers in parallel.</em> Each box is one agent's
+					context window; a drop is work sent out, a run to the right is one conversation
+					continuing.
+				</div>
+			)}
 
 			{state.messages.length > 0 && (
 				<div className="messages">

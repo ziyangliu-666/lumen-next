@@ -15,9 +15,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /** Everything the driver needs, and nothing that talks to a model. */
 class Host {
-	blockDelegation = false;
-	/** Every turn it was asked to run, with the state of the block at that moment. */
-	said: { lineId: string; text: string; blocked: boolean }[] = [];
+	spendCap: number | undefined;
+	/** Every turn it was asked to run, with the cap that was published at that moment. */
+	said: { lineId: string; text: string; cap: number | undefined }[] = [];
 	settled = 0;
 	spend = 0;
 	/** What each turn costs, so a test can walk the run into its budget. */
@@ -43,7 +43,7 @@ class Host {
 	}
 
 	async say(lineId: string, text: string): Promise<void> {
-		this.said.push({ lineId, text, blocked: this.blockDelegation });
+		this.said.push({ lineId, text, cap: this.spendCap });
 		this.spend += this.perTurn;
 		if (this.fails) throw new Error(this.fails);
 		if (this.holding) await new Promise<void>((resolve) => this.waiting.push(resolve));
@@ -107,17 +107,17 @@ describe("autopilot", () => {
 		const stop = await stopped;
 
 		// Two ordinary turns take the run past a dollar, then one last turn that writes the
-		// report. That turn runs with delegation blocked, which is what stops it starting the
-		// work it has just been told there is no money for.
+		// report. The cap is still published for that turn, which is what stops it starting
+		// the work it has just been told there is no money for.
 		expect(host.said.map((turn) => turn.text)).toEqual([
 			CONTINUE_PROMPT,
 			CONTINUE_PROMPT,
 			WRAP_UP_PROMPT,
 		]);
-		expect(host.said.map((turn) => turn.blocked)).toEqual([false, false, true]);
-		// Cleared afterwards. Left set, it would refuse every delegation the person made by
-		// hand for the rest of the session.
-		expect(host.blockDelegation).toBe(false);
+		expect(host.said.map((turn) => turn.cap)).toEqual([1, 1, 1]);
+		// Withdrawn afterwards. Left published, it would refuse every delegation the person
+		// made by hand for the rest of the session.
+		expect(host.spendCap).toBeUndefined();
 		expect(stop.reason).toBe("budget");
 		expect(stop.turns).toBe(2);
 	});

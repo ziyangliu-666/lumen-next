@@ -102,14 +102,14 @@ export function createSubagentTool(options: SubagentToolOptions) {
 			),
 		}),
 		async execute(toolCallId: string, params: any, signal: AbortSignal | undefined) {
-			// Checked before the arguments are even read. There is one turn where an agent
-			// must be able to write but not to spend — the one after the budget is gone — and
-			// the refusal has to come from the process. A sentence in a prompt asking an agent
-			// not to delegate is a request; this is the answer it gets when it tries anyway.
-			if (runtime.blockDelegation) {
+			// Checked before the arguments are even read, and again per window inside `spawn`.
+			// This one stops a fan-out of twenty from being attempted at all; that one stops a
+			// fan-out that trips the cap halfway from finishing. A sentence in a prompt asking
+			// an agent not to delegate is a request; this is what it gets when it tries anyway.
+			if (runtime.overspent()) {
 				return errorResult(
-					"The budget for this run is spent, so no more agents can be started. Report " +
-						"what you already have, and say plainly what is still unanswered.",
+					`${capitalise(runtime.overspentMessage())}. Write down what you already have, ` +
+						"and say plainly what is still unanswered. Do not start anything else.",
 				);
 			}
 
@@ -122,10 +122,16 @@ export function createSubagentTool(options: SubagentToolOptions) {
 				);
 			}
 
-			const unknown = requested.agents.filter((name) => !runtime.registry.has(name));
+			// Both checks, not just the catalogue. Leaving an agent off the menu is a hint;
+			// this is the rule. The one agent kept off it holds the conversation with the
+			// person, and a worker that delegated to it would open a second conversation
+			// nobody is having.
+			const unknown = requested.agents.filter(
+				(name) => !runtime.registry.has(name) || !runtime.registry.delegable(name),
+			);
 			if (unknown.length > 0) {
 				return errorResult(
-					`Unknown agent(s): ${unknown.join(", ")}. Available:\n${runtime.registry.catalogue()}`,
+					`Cannot delegate to: ${unknown.join(", ")}. Available:\n${runtime.registry.catalogue()}`,
 				);
 			}
 
@@ -301,6 +307,11 @@ function renderForModel(results: SpawnResult[], maxChars: number): string {
 			return `${head}${body}`;
 		})
 		.join("\n\n");
+}
+
+/** The refusal reads as a sentence to the model, and it is assembled from a clause. */
+function capitalise(text: string): string {
+	return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function errorResult(message: string) {

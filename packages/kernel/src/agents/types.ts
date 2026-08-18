@@ -37,6 +37,17 @@ export interface AgentSpec {
 	 * to do it; handing it one only invites a call that means nothing to anybody.
 	 */
 	canFinish?: boolean;
+	/**
+	 * Whether other agents may be handed work as this one. On by default.
+	 *
+	 * Off for the agent that holds the conversation. Once workers can delegate, the catalogue
+	 * is a menu they read and the lead is on it — so a worker hands work to a lead, which is
+	 * a full conversational window with no file tools, which delegates again. The depth cap
+	 * is the only thing that ends that, three levels too late, and every window of it is
+	 * billed. A person sending a line off by hand is not affected: that goes through the
+	 * server, not through this menu.
+	 */
+	delegable?: boolean;
 }
 
 export class AgentRegistry {
@@ -65,13 +76,24 @@ export class AgentRegistry {
 		return this.specs.has(name);
 	}
 
+	/** Whether a model may hand work to this agent. Enforced, not merely left off the menu. */
+	delegable(name: string): boolean {
+		return this.specs.get(name)?.delegable !== false;
+	}
+
 	list(): AgentSpec[] {
 		return [...this.specs.values()];
 	}
 
-	/** The menu handed to a delegating model, as one block of text. */
+	/**
+	 * The menu handed to a delegating model, as one block of text.
+	 *
+	 * Only what may actually be delegated to. An agent listed here and refused on call would
+	 * teach the model to try it every time, and each attempt costs a turn.
+	 */
 	catalogue(): string {
 		return this.list()
+			.filter((spec) => spec.delegable !== false)
 			.map((spec) => `- ${spec.name}: ${spec.description}`)
 			.join("\n");
 	}

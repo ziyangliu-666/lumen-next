@@ -14,9 +14,14 @@ import type { Runtime } from "../src/runtime.ts";
 function stubRuntime(overrides: Partial<Runtime> = {}) {
 	const declared: { lineId: string; reason: string }[] = [];
 	const runtime = {
-		blockDelegation: false,
 		maxConcurrent: 4,
-		registry: { catalogue: () => "worker — looks things up", has: () => true },
+		overspent: () => false,
+		overspentMessage: () => "this run has spent $2.00 of its $2.00 cap; no more agents can be started",
+		registry: {
+			catalogue: () => "worker — looks things up",
+			has: () => true,
+			delegable: () => true,
+		},
 		declareFinish(lineId: string, reason: string) {
 			declared.push({ lineId, reason });
 		},
@@ -60,7 +65,7 @@ describe("finish", () => {
 
 describe("subagent", () => {
 	it("refuses every call while delegation is blocked, and says why", async () => {
-		const { runtime } = stubRuntime({ blockDelegation: true });
+		const { runtime } = stubRuntime({ overspent: () => true } as Partial<Runtime>);
 		const tool = createSubagentTool({ runtime, line });
 
 		const result = await tool.execute("t1", { agent: "worker", task: "look" }, undefined);
@@ -69,7 +74,7 @@ describe("subagent", () => {
 		// prompt asking an agent not to delegate is a request; this is what it gets when it
 		// tries anyway.
 		expect(result.isError).toBe(true);
-		expect(textOf(result)).toContain("budget for this run is spent");
+		expect(textOf(result)).toContain("no more agents can be started");
 	});
 
 	it("still refuses a badly shaped call when nothing is blocked", async () => {

@@ -36,10 +36,6 @@ export interface LineSession {
 	steer(text: string): Promise<void>;
 	/** Join the running turn once it has run out of work of its own. */
 	followUp(text: string): Promise<void>;
-	/** Whether a turn is running right now. pi's own answer, not our record of it. */
-	readonly isStreaming: boolean;
-	/** Resolves when no turn, retry or compaction is in flight. */
-	waitForIdle(): Promise<void>;
 	abort(): Promise<void>;
 	dispose(): void;
 	subscribe(listener: (event: any) => void): () => void;
@@ -62,6 +58,20 @@ export interface Line {
 	 * charging it a level would let a long line quietly lose the ability to delegate.
 	 */
 	depth: number;
+	/**
+	 * The turn running on this line, or nothing. Set before the turn starts.
+	 *
+	 * This is the latch that decides whether a sentence starts a turn or joins one, and it
+	 * has to be ours. pi has the same fact in `isStreaming`, but it sets it deep inside
+	 * `prompt` — after awaiting the extension input hook, an auth check and a compaction
+	 * check (`agent-session.js:919` reaches `:745`). So for a real, awaited stretch after a
+	 * turn has been asked for, pi still reports an idle session, and a second caller reading
+	 * it starts a second agent run over one message history.
+	 *
+	 * It resolves rather than rejects when the turn fails: it answers "is it over", and a
+	 * failed turn is over.
+	 */
+	inFlight?: Promise<void>;
 	/** Unsubscribe the recorder. Call before disposing the session. */
 	stop: () => void;
 	/**

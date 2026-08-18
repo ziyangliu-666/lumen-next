@@ -39,8 +39,19 @@ export interface AutopilotHost {
 	takeFinish(lineId: string): string | undefined;
 	/** Everything the run has spent so far, in dollars. */
 	totalCost(): number;
-	/** While set, the delegation tool refuses. */
-	blockDelegation: boolean;
+	/**
+	 * The cap the delegation machinery enforces, set while this loop is driving and unset
+	 * when it stops.
+	 *
+	 * The driver checking between turns is not enough on its own: one turn can fan out to
+	 * twenty workers, each of which may fan out again, and all of it happens between two
+	 * checks. Publishing the cap here is what lets the tools refuse inside the turn.
+	 *
+	 * It is unset on stop rather than left standing, because a cap that outlived the run
+	 * would eventually refuse a delegation the person made by hand, hours later, for a
+	 * reason nothing on screen would explain.
+	 */
+	spendCap: number | undefined;
 }
 
 export interface AutopilotStop {
@@ -88,8 +99,8 @@ export const CONTINUE_PROMPT = [
  *
  * The alternative was stopping dead, which loses the run's own account of itself: the
  * findings are scattered across a dozen windows and the person has to assemble them by
- * clicking. This turn costs one model call and cannot start an agent, because
- * `blockDelegation` is set around it.
+ * clicking. This turn costs one model call and can start nothing: the cap it has just
+ * passed is still published, so every route to a new window is already refusing.
  */
 export const WRAP_UP_PROMPT = [
 	"The budget for this run is spent. You cannot start any more work.",
@@ -130,6 +141,9 @@ export class Autopilot {
 		if (this.active) return;
 		this.active = true;
 		this.turn = 0;
+		// Published before the first turn, so the tools refuse from the first fan-out rather
+		// than from the second.
+		this.options.host.spendCap = this.options.budget;
 		this.loop = this.run().finally(() => {
 			this.loop = null;
 		});
@@ -145,6 +159,9 @@ export class Autopilot {
 	stop(reason: AutopilotStop["reason"] = "you", note?: string): void {
 		if (!this.active) return;
 		this.active = false;
+		// Taken down with the loop. Left standing it would refuse the person's own
+		// delegations later, with nothing on screen to explain why.
+		this.options.host.spendCap = undefined;
 		this.options.onStop?.({
 			reason,
 			turns: this.turn,
@@ -216,19 +233,17 @@ export class Autopilot {
 	 *
 	 * Its cost is not checked against the budget, and that is not an oversight: the budget is
 	 * already gone by the time this runs, so testing it would only ever refuse. What holds
-	 * instead is `blockDelegation` — this turn is one model call and can start nothing.
+	 * instead is the cap itself — every route to a new window is already refusing, so this
+	 * turn is one model call on a window that exists and can start nothing.
 	 */
 	private async wrapUp(): Promise<void> {
 		const { host } = this.options;
-		host.blockDelegation = true;
 		try {
 			await host.say(this.lineId, WRAP_UP_PROMPT);
 		} catch {
 			// The report is the last thing the run does. Losing it is worth a shrug, because
 			// the findings are still on the graph where the person can read them, and the
 			// reason the loop is ending has already been decided by the caller.
-		} finally {
-			host.blockDelegation = false;
 		}
 	}
 }

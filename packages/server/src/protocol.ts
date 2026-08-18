@@ -16,8 +16,19 @@ import type { AgentSpec, TraceEvent, TraceSnapshot } from "@lumen/kernel";
  * something a person should have to work out.
  */
 export type Target =
-	/** Same window. It remembers everything. */
-	| { kind: "continue" }
+	/**
+	 * Same window. It remembers everything.
+	 *
+	 * `whenBusy` only means anything when a turn is already running, which is normal once
+	 * the lead drives itself. It is not two more kinds of target, because both still mean
+	 * "this window, which remembers everything" — the only difference is the moment the
+	 * sentence reaches the model.
+	 *
+	 *   queue   after the turn has finished its own work. It reads what came back first.
+	 *   cutIn   at the model's next step. Subagents already running are left alone; this
+	 *           redirects the thinking, it does not cancel the work.
+	 */
+	| { kind: "continue"; whenBusy?: "queue" | "cutIn" }
 	/** Compact first, then say it to the window that replaces this one. Same agent. */
 	| { kind: "next" }
 	/** Compact first, then hand the summary to a different agent. */

@@ -114,15 +114,25 @@ export class Runtime {
 	readonly maxDepth: number;
 	readonly maxConcurrent: number;
 	/**
-	 * While set, the delegation tool refuses every call.
+	 * The most this run may spend, in dollars, before it stops opening windows. Unset means
+	 * no cap.
 	 *
-	 * There is one turn where an agent must be able to write but not to spend: the last one,
-	 * after the budget is gone. The tool list cannot be changed for it — `toolSelection`
-	 * binds tools when the session is built, and rebuilding the session would throw away the
-	 * window that holds everything the run learned. So the tool itself refuses, and says why,
-	 * which the model can act on.
+	 * Set by whoever is driving the run, and only while they are driving it. A cap that
+	 * stayed on would eventually stop a person's own delegations working, hours after the
+	 * automatic run it was meant for had finished.
+	 *
+	 * It is checked in three places for three different time scales, and all three are
+	 * needed. The driver checks between turns, so a loop never starts a turn it cannot pay
+	 * for. The delegation tool checks when a fan-out arrives, so one turn cannot spend the
+	 * cap twenty times over. `spawn` checks per window, so a twenty-entry array that trips
+	 * the cap at entry five leaves the rest as readable failed points instead of running to
+	 * completion.
+	 *
+	 * It is also what makes the last turn of a spent run work. The tool list is bound when
+	 * the session is built, so the delegation tool cannot be taken away from a line already
+	 * running; instead the tool stays and refuses, in words the model can act on.
 	 */
-	blockDelegation = false;
+	spendCap: number | undefined;
 	private readonly options: RuntimeOptions;
 	private readonly lines = new Map<string, Line>();
 	/** Lines whose agent has said its work is complete, by the reason it gave. */
@@ -227,12 +237,36 @@ export class Runtime {
 	/**
 	 * Send one message to a line and wait for it to settle.
 	 *
-	 * `busy` is set around the call rather than derived from events. A window that has
-	 * answered and a window that is thinking are both `running`, and the interface has to
-	 * put an input box on one and a spinner on the other.
+	 * `busy` on the node is set around the call rather than derived from events. A window
+	 * that has answered and a window that is thinking are both `running`, and the interface
+	 * has to put an input box on one and a spinner on the other.
+	 *
+	 * Refuses when a turn is already running rather than queueing behind it. Two turns over
+	 * one message history is not a longer conversation, it is two agents writing into the
+	 * same window; `deliver` is the one place that decides which of the two things a
+	 * sentence should do.
 	 */
-	async say(lineId: string, text: string, signal?: AbortSignal): Promise<void> {
+	say(lineId: string, text: string, signal?: AbortSignal): Promise<void> {
 		const line = this.line(lineId);
+		if (line.inFlight) {
+			return Promise.reject(
+				new Error(`line ${lineId} is already running a turn; use deliver(), which joins it`),
+			);
+		}
+		// Latched before the turn is started, and released by the turn itself. A latch set
+		// after the work begins is a latch the next caller can slip past, which is exactly
+		// how pi's own `isStreaming` fails us here.
+		let released!: () => void;
+		line.inFlight = new Promise<void>((resolve) => {
+			released = resolve;
+		});
+		return this.runTurn(line, text, signal).finally(() => {
+			line.inFlight = undefined;
+			released();
+		});
+	}
+
+	private async runTurn(line: Line, text: string, signal?: AbortSignal): Promise<void> {
 		this.trace.updateNode(line.currentNodeId, { busy: true });
 		const onAbort = () => void line.session.abort();
 		signal?.addEventListener("abort", onAbort, { once: true });
@@ -247,20 +281,45 @@ export class Runtime {
 	}
 
 	/**
+	 * Send a sentence to a line whatever state it is in, and say which way it went.
+	 *
+	 * The caller cannot make this choice for itself. Between asking "is a turn running?" and
+	 * acting on the answer, a caller that awaits anything has already lost the race: pi
+	 * throws on `prompt` during a turn, and queues into nowhere when there is none. Here the
+	 * latch is read and acted on with nothing awaited in between, which is what makes the
+	 * decision atomic on a single thread.
+	 *
+	 * It returns which of the three happened because they read differently to a person, and
+	 * the interface has to say. A sentence that joined a turn and a sentence that started one
+	 * both leave the point spinning.
+	 */
+	async deliver(
+		lineId: string,
+		text: string,
+		whenBusy: "steer" | "followUp",
+		signal?: AbortSignal,
+	): Promise<"turn" | "steer" | "followUp"> {
+		const line = this.line(lineId);
+		if (!line.inFlight) {
+			await this.say(lineId, text, signal);
+			return "turn";
+		}
+		await this.interject(lineId, text, whenBusy);
+		return whenBusy;
+	}
+
+	/**
 	 * Put a sentence into a turn that is already running.
 	 *
 	 * Not a turn of its own, so `busy` is untouched: the window was working before this
-	 * arrived and is working after, and flipping the flag would make the interface start a
-	 * fresh block of streaming text in the middle of one.
+	 * arrived and is working after. Flipping the flag here would clear it when this returns,
+	 * a moment later, while the agent is still working — and the point would draw itself
+	 * idle, with an input box, in the middle of a turn.
 	 *
 	 *   steer      reaches the model at its next step. Subagents already running are left
 	 *              alone, which is why this is the right "interrupt": aborting would throw
 	 *              away work that has already been paid for.
 	 *   followUp   waits until the turn has run out of work of its own.
-	 *
-	 * The caller has to have decided that a turn is running. `prompt` refuses while the
-	 * session streams and these two refuse when it does not, so the choice between them is
-	 * made from `session.isStreaming` at the moment the sentence arrives.
 	 */
 	async interject(lineId: string, text: string, how: "steer" | "followUp"): Promise<void> {
 		const line = this.line(lineId);
@@ -270,12 +329,17 @@ export class Runtime {
 
 	/** Resolve once this line has no turn in flight. */
 	async settle(lineId: string): Promise<void> {
-		await this.line(lineId).session.waitForIdle();
+		await this.line(lineId).inFlight;
 	}
 
-	/** Whether a turn is running on this line, as pi sees it rather than as the trace does. */
-	isStreaming(lineId: string): boolean {
-		return this.line(lineId).session.isStreaming;
+	/** What the run has spent and what it may spend, so every refusal quotes the same pair. */
+	budget(): { spent: number; cap: number } {
+		return { spent: this.trace.totalCost(), cap: this.spendCap ?? Infinity };
+	}
+
+	/** Whether the run has spent everything it was allowed to. */
+	overspent(): boolean {
+		return this.spendCap !== undefined && this.trace.totalCost() >= this.spendCap;
 	}
 
 	/**
@@ -302,6 +366,38 @@ export class Runtime {
 		return reason;
 	}
 
+	/** The refusal every spend-related message quotes, so they cannot disagree with each other. */
+	overspentMessage(): string {
+		const { spent, cap } = this.budget();
+		return `this run has spent $${spent.toFixed(2)} of its $${cap.toFixed(2)} cap; no more agents can be started`;
+	}
+
+	/**
+	 * Turn down a request for a window, and draw the refusal.
+	 *
+	 * Still a point on the graph, and drawn as failed. A refusal the parent can read is
+	 * worth a point; a refusal that leaves no trace looks exactly like an agent that simply
+	 * chose not to delegate, and the person is left wondering why nothing happened.
+	 */
+	private refuse(
+		request: SpawnRequest,
+		spec: AgentSpec,
+		error: string,
+		origin: NodeOrigin,
+	): SpawnResult {
+		const node = this.trace.openNode({
+			parentId: request.parentNodeId,
+			agent: spec.name,
+			task: request.task,
+			origin,
+			depth: request.depth,
+			model: spec.model,
+		});
+		this.trace.linkChild(request.parentNodeId, request.stepId, node.id);
+		this.trace.closeNode(node.id, "failed", { error });
+		return { nodeId: node.id, lineId: "", agent: spec.name, ok: false, output: "", error };
+	}
+
 	/**
 	 * Run one agent on one task and return what it said.
 	 *
@@ -312,22 +408,20 @@ export class Runtime {
 	async spawn(request: SpawnRequest, signal?: AbortSignal): Promise<SpawnResult> {
 		const spec = this.registry.get(request.agent);
 
+		// Per window, not per call. One `tasks` array can hold twenty entries, and the cap
+		// being reached at entry five must leave the other fifteen as points a person can
+		// read rather than fifteen windows that ran anyway.
+		if (this.overspent()) {
+			return this.refuse(request, spec, this.overspentMessage(), { kind: "delegate", stepId: request.stepId });
+		}
+
 		if (request.depth > this.maxDepth) {
-			// Still drawn, and drawn as failed. A refusal the parent can read is worth a
-			// point on the graph; a refusal that leaves no trace looks like an agent that
-			// simply chose not to delegate.
-			const node = this.trace.openNode({
-				parentId: request.parentNodeId,
-				agent: spec.name,
-				task: request.task,
-				origin: { kind: "delegate", stepId: request.stepId },
-				depth: request.depth,
-				model: spec.model,
-			});
-			this.trace.linkChild(request.parentNodeId, request.stepId, node.id);
-			const error = `delegation depth ${request.depth} exceeds the limit of ${this.maxDepth}`;
-			this.trace.closeNode(node.id, "failed", { error });
-			return { nodeId: node.id, lineId: "", agent: spec.name, ok: false, output: "", error };
+			return this.refuse(
+				request,
+				spec,
+				`delegation depth ${request.depth} exceeds the limit of ${this.maxDepth}`,
+				{ kind: "delegate", stepId: request.stepId },
+			);
 		}
 
 		let line: Line;
@@ -397,22 +491,20 @@ export class Runtime {
 		const spec = this.registry.get(request.agent);
 		const origin = { kind: "branch", stepId: request.stepId, by } as const;
 
+		if (this.overspent()) {
+			return this.refuse(request, spec, this.overspentMessage(), origin);
+		}
+
 		if (request.depth > this.maxDepth) {
 			// The same cap as delegation, and for a sharper reason. If branching reset the
 			// count, an agent stopped at the limit could open a branch, start again from
 			// zero, and recurse without end — with nothing waiting on any of it to notice.
-			const node = this.trace.openNode({
-				parentId: request.parentNodeId,
-				agent: spec.name,
-				task: request.task,
+			return this.refuse(
+				request,
+				spec,
+				`branch depth ${request.depth} exceeds the limit of ${this.maxDepth}`,
 				origin,
-				depth: request.depth,
-				model: spec.model,
-			});
-			this.trace.linkChild(request.parentNodeId, request.stepId, node.id);
-			const error = `branch depth ${request.depth} exceeds the limit of ${this.maxDepth}`;
-			this.trace.closeNode(node.id, "failed", { error });
-			return { nodeId: node.id, lineId: "", agent: spec.name, ok: false, output: "", error };
+			);
 		}
 
 		const line = await this.openLine({

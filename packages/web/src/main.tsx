@@ -12,6 +12,19 @@ import "./app.css";
 function App() {
 	const [state, dispatch] = useReducer(reduce, initialState);
 	const [showSettings, setShowSettings] = useState(false);
+	/**
+	 * How wide the reading panel is.
+	 *
+	 * It was a third of the window, which is right for a two-line answer and wrong for the
+	 * thing this is for: a research run ends in several paragraphs with paths and quotations
+	 * in them, and a fixed narrow column turns that into a ribbon. The canvas and the reading
+	 * want opposite amounts of room at different moments, so the person gets to say.
+	 */
+	const [panel, setPanel] = useState(() => {
+		const saved = Number(localStorage.getItem("lumen.panel"));
+		return Number.isFinite(saved) && saved >= 320 ? saved : 420;
+	});
+	const dragging = useRef(false);
 	const socket = useRef<WebSocket | null>(null);
 
 	const nodeCount = Object.keys(state.nodes).length;
@@ -38,6 +51,32 @@ function App() {
 			dispatch({ kind: "frame", frame: JSON.parse(event.data) as ServerFrame });
 		return () => ws.close();
 	}, []);
+
+	// On the window rather than on the handle: a pointer moving faster than React re-renders
+	// leaves the handle behind, and a drag that stops the moment the cursor outruns it reads
+	// as a broken control.
+	useEffect(() => {
+		const move = (event: MouseEvent) => {
+			if (!dragging.current) return;
+			event.preventDefault();
+			const from = window.innerWidth - event.clientX;
+			setPanel(Math.round(Math.min(Math.max(320, from), window.innerWidth * 0.7)));
+		};
+		const up = () => {
+			dragging.current = false;
+			document.body.classList.remove("resizing");
+		};
+		window.addEventListener("mousemove", move);
+		window.addEventListener("mouseup", up);
+		return () => {
+			window.removeEventListener("mousemove", move);
+			window.removeEventListener("mouseup", up);
+		};
+	}, []);
+
+	useEffect(() => {
+		localStorage.setItem("lumen.panel", String(panel));
+	}, [panel]);
 
 	const send = useCallback(
 		(frame: ClientFrame) => socket.current?.send(JSON.stringify(frame)),
@@ -145,22 +184,40 @@ function App() {
 				/>
 			)}
 
-			<main>
+			<main style={{ gridTemplateColumns: `1fr 5px ${panel}px` }}>
 				{state.rootId ? (
 					<Canvas state={state} onSelect={(nodeId) => dispatch({ kind: "select", nodeId })} />
 				) : (
 					<p className="hint">waiting for the run to open…</p>
 				)}
+				{/* Keyboard-reachable, because a drag is the only other way to move it and a
+				    person who cannot drag would be left with whatever width they were given. */}
+				<div
+					className="handle"
+					role="separator"
+					aria-orientation="vertical"
+					aria-label="width of the reading panel"
+					tabIndex={0}
+					onMouseDown={() => {
+						dragging.current = true;
+						document.body.classList.add("resizing");
+					}}
+					onKeyDown={(event) => {
+						const step = event.shiftKey ? 80 : 20;
+						if (event.key === "ArrowLeft") setPanel((w) => Math.min(window.innerWidth * 0.7, w + step));
+						if (event.key === "ArrowRight") setPanel((w) => Math.max(320, w - step));
+					}}
+				/>
 				<Detail state={state} />
 			</main>
 
 			{empty && (
 				<div className="blank">
-					Ask for something that needs looking things up, and watch the work spread out.
-					Try: <em>Find which file defines the Trace class and, separately, which file
-					defines AgentSpec. Use two workers in parallel.</em> Each box is one agent's
-					context window; a drop is work sent out, a run to the right is one conversation
-					continuing.
+					Ask for something that has parts, and watch the work spread out. Each box is one
+					agent's context window: a drop is work sent out, a run to the right is one
+					conversation continuing. Turn on <em>run by itself</em> once you have asked, and
+					the lead keeps going — delegating, reading what came back, deciding what is still
+					missing — until it says it is done or the budget stops it.
 				</div>
 			)}
 

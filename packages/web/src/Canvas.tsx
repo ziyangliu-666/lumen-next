@@ -8,6 +8,9 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { money } from "@lumen/kernel/trace/types";
+import { formatDuration, useElapsed } from "./elapsed.ts";
+import { fit } from "./fit.ts";
 import { COL, edges, layout, LANE, NODE_H, NODE_W, type Placed } from "./layout.ts";
 import { isLive, rollup, type State } from "./state.ts";
 
@@ -25,6 +28,7 @@ export function Canvas({
 	const [view, setView] = useState({ x: 24, y: 24, k: 1 });
 	const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
 	const seen = useRef(0);
+	const frame = useRef<HTMLDivElement | null>(null);
 
 	// Follow the work when the graph grows, but never while the person is looking around:
 	// yanking the view mid-read is worse than letting a new point wait to be found.
@@ -48,6 +52,7 @@ export function Canvas({
 	return (
 		<div
 			className="canvas"
+			ref={frame}
 			onMouseDown={(event) => {
 				drag.current = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
 			}}
@@ -108,8 +113,21 @@ export function Canvas({
 
 			<div className="scale">
 				{Math.round(view.k * 100)}% · drag to pan · ⌘scroll to zoom
+				{/* Before this there was only `reset`, which goes back to 100% at the origin —
+				    no help at all once the graph is bigger than the window, which is what a
+				    fan-out of twenty-eight points is. The shape of the run is the product, and
+				    this is the only control that shows all of it. */}
+				<button
+					type="button"
+					onClick={() => {
+						const box = frame.current?.getBoundingClientRect();
+						if (box) setView(fit(placed, { width: box.width, height: box.height }));
+					}}
+				>
+					fit
+				</button>
 				<button type="button" onClick={() => setView({ x: 24, y: 24, k: 1 })}>
-					reset
+					100%
 				</button>
 			</div>
 		</div>
@@ -126,6 +144,10 @@ function Point({
 	onSelect: (id: string) => void;
 }) {
 	const node = state.nodes[spot.id];
+	// Called before the early return, because a hook cannot be skipped. A missing node is
+	// drawn as nothing, and passing zeros here costs one wasted format on a frame that is
+	// about to render null anyway.
+	const elapsed = useElapsed(node?.startedAt ?? 0, node?.endedAt);
 	if (!node) return null;
 	const live = isLive(node);
 	const selected = state.selected === node.id;
@@ -154,9 +176,16 @@ function Point({
 				<span className="pointId">{node.id}</span>
 			</div>
 			<div className="pointFoot">
-				<span>${spend.cost.total.toFixed(4)}</span>
+				{/* Only once there is something to say. A window that has not billed yet drew
+				    `$0.0000`, and four zeros repeated on every fresh point is a column of noise
+				    that reads as a figure. */}
+				{spend.cost.total > 0 && <span>{money(spend.cost.total)}</span>}
 				{tools > 0 && <span>{tools} tool{tools > 1 ? "s" : ""}</span>}
-				{node.busy && <span className="working">working</span>}
+				{/* The figure takes the slot the word "working" used to hold. That word said
+				    nothing the accent border, the pulsing mark and the wire arriving had not
+				    already said three times over, while the one thing a person actually wants
+				    from a point that has been going for a while — how long — was nowhere. */}
+				<span className={node.busy ? "working" : undefined}>{formatDuration(elapsed)}</span>
 			</div>
 		</div>
 	);

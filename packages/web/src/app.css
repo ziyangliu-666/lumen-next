@@ -57,8 +57,47 @@ header {
 main {
 	flex: 1;
 	display: grid;
-	grid-template-columns: 1fr minmax(320px, 30%);
+	/* Overridden inline with the width the person dragged to. This is the fallback for the
+	   first paint, before that width is read back. */
+	grid-template-columns: 1fr 5px 420px;
 	min-height: 0;
+}
+
+/* The grip between the canvas and the reading. Deliberately thin and unmarked: it is found
+   by the cursor changing, not by a texture drawn on it. */
+.handle {
+	cursor: col-resize;
+	background: var(--line);
+}
+.handle:hover,
+.handle:focus-visible {
+	background: var(--accent);
+	outline: none;
+}
+/* While a drag is going, the pointer is usually outside the handle. Without this the text
+   under it selects and the whole page ends up highlighted blue. */
+body.resizing {
+	user-select: none;
+	cursor: col-resize;
+}
+
+/* Small, quiet, and out of the way of the words. It is worth having and not worth looking
+   at, so it earns a corner and no colour. */
+.copy {
+	float: right;
+	margin: 0 0 4px 8px;
+	background: none;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	color: var(--dim);
+	font: inherit;
+	font-size: 11px;
+	padding: 1px 6px;
+	cursor: pointer;
+}
+.copy:hover {
+	color: var(--text);
+	border-color: var(--dim);
 }
 
 /* The canvas. Points and wires share one transformed layer, so there is no second
@@ -127,9 +166,14 @@ main {
 	opacity: 0.55;
 	border-style: dashed;
 }
+/* Where you are standing, and what is alive, are different facts and must not share a
+   colour. They did: both drew an accent border, so on a canvas with work running you could
+   not tell the point you had selected from the points that were thinking. The accent now
+   means live, everywhere — the wire carries it too — and selection is a ring outside the
+   box, in the text colour, which nothing else uses. */
 .point.selected {
-	border-color: var(--accent);
-	box-shadow: 0 0 0 2px var(--accent);
+	outline: 1px solid var(--text);
+	outline-offset: 3px;
 }
 .point.busy {
 	border-color: var(--accent);
@@ -695,4 +739,17 @@ main {
 		animation: none;
 		opacity: 1;
 	}
+}
+
+/* A folded run of identical calls. The marker is the disclosure triangle the browser
+   already draws; adding a second affordance beside it would be two things saying one. */
+.step.run > summary {
+	cursor: pointer;
+	color: var(--dim);
+}
+.step.run > summary:hover {
+	color: var(--text);
+}
+.step.run > .step {
+	padding-left: 14px;
 }

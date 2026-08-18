@@ -6,7 +6,11 @@
  * be read word by word lives here, so a point on the graph can stay the size of a point.
  */
 
-import type { TraceNode } from "@lumen/kernel";
+import { useState } from "react";
+import type { Step, TraceNode } from "@lumen/kernel";
+import { money } from "@lumen/kernel/trace/types";
+import { formatDuration, useElapsed } from "./elapsed.ts";
+import { groupSteps } from "./steps.ts";
 import { hasDelegated, isLive, rollup, type State } from "./state.ts";
 
 const MARK: Record<string, string> = { done: "✓", failed: "✗", aborted: "■", running: "•" };
@@ -20,6 +24,54 @@ const ENDED: Record<string, string> = {
 };
 
 /** Why this point exists, said plainly. */
+/**
+ * Take the answer away with you.
+ *
+ * The answer is the product, and until now the only way to keep one was to select the text
+ * in a panel that rewrites itself the moment the agent says anything else. The label changes
+ * to say what happened rather than flashing a tick: a person who clicked needs to know it
+ * worked, and a tick that appears and vanishes is easy to miss.
+ */
+function Copy({ text }: { text: string }) {
+	const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+	return (
+		<button
+			type="button"
+			className="copy"
+			onClick={() => {
+				navigator.clipboard.writeText(text).then(
+					() => setState("copied"),
+					// Refused, which happens on a page the browser does not consider trusted.
+					// Saying so beats a button that silently does nothing.
+					() => setState("failed"),
+				);
+				window.setTimeout(() => setState("idle"), 2000);
+			}}
+		>
+			{state === "idle" ? "copy" : state === "copied" ? "copied" : "could not copy"}
+		</button>
+	);
+}
+
+function StepRow({ state, step }: { state: State; step: Step }) {
+	return (
+		<div className="step">
+			<div className={`stepHead ${step.state}`}>
+				<span className="mark" title={step.state}>
+					{MARK[step.state]}
+				</span>
+				<span className="title">{step.title}</span>
+			</div>
+			{step.preview && !step.childIds?.length && <div className="preview">{step.preview}</div>}
+			{step.childIds?.map((childId) => (
+				<div className="spawned" key={childId}>
+					{state.nodes[childId]?.agent} ({childId}) — on the canvas
+				</div>
+			))}
+		</div>
+	);
+}
+
 function origin(node: TraceNode, state: State): string {
 	switch (node.origin.kind) {
 		case "root":
@@ -41,6 +93,8 @@ function origin(node: TraceNode, state: State): string {
 
 export function Detail({ state }: { state: State }) {
 	const node = state.selected ? state.nodes[state.selected] : undefined;
+	// Before the early return: a hook cannot be skipped, and there is no point to time yet.
+	const elapsed = useElapsed(node?.startedAt ?? 0, node?.endedAt);
 	if (!node) {
 		return (
 			<aside className="detail">
@@ -68,13 +122,19 @@ export function Detail({ state }: { state: State }) {
 
 			<div className="figures">
 				<span title="how many delegations deep this point is">depth {node.depth}</span>
-				<span title="this window alone">${node.usage.cost.total.toFixed(4)} own</span>
+				<span title="this window alone">{money(node.usage.cost.total)} own</span>
 				{hasDelegated(state, node.id) && (
 					<span title="this window plus the work it delegated; lines started here are not included">
-						${spend.cost.total.toFixed(4)} with delegated
+						{money(spend.cost.total)} with delegated
 					</span>
 				)}
 				<span>{node.usage.totalTokens.toLocaleString()} tok</span>
+				<span title="how long this window has been open">{formatDuration(elapsed)}</span>
+				{/* Which model wrote this. It was recorded from the first day and shown nowhere,
+				    which was survivable while a run had one model in it. The model is now a
+				    per-conversation setting, so a graph can hold windows written by two of them,
+				    and the difference in what they produce is visible to the naked eye. */}
+				{node.model && <span title="the model that wrote this window">{node.model}</span>}
 			</div>
 
 			{node.task && (
@@ -95,31 +155,37 @@ export function Detail({ state }: { state: State }) {
 			{node.busy ? (
 				<div className="reply streaming">{streaming || <span className="hint">thinking</span>}</div>
 			) : node.summary ? (
-				<div className="reply">{node.summary}</div>
+				<div className="reply">
+					{node.summary}
+					<Copy text={node.summary} />
+				</div>
 			) : null}
 
 			{node.error && <div className="failure">{node.error}</div>}
 
 			{node.steps.length > 0 && (
 				<div className="steps">
-					{node.steps.map((step) => (
-						<div className="step" key={step.id}>
-							<div className={`stepHead ${step.state}`}>
-								<span className="mark" title={step.state}>
-									{MARK[step.state]}
-								</span>
-								<span className="title">{step.title}</span>
-							</div>
-							{step.preview && !step.childIds?.length && (
-								<div className="preview">{step.preview}</div>
-							)}
-							{step.childIds?.map((childId) => (
-								<div className="spawned" key={childId}>
-									{state.nodes[childId]?.agent} ({childId}) — on the canvas
-								</div>
-							))}
-						</div>
-					))}
+					{/* Grouped rather than listed. A worker researching one topic made twenty-odd
+					    consecutive greps and reads, and twenty near-identical rows with previews
+					    under them buried the shape of what it did. A run of one is unchanged; a
+					    run of several folds into a count you can open. What never folds is what a
+					    person is looking for — the call that opened children, and the call that
+					    failed or was stopped. */}
+					{groupSteps(node.steps).map((run) =>
+						// Folded from three. Two rows are not a wall: folding them costs a click,
+						// saves one line, and puts a disclosure triangle over the amount of content
+						// that reads as though something bigger were hidden behind it.
+						run.steps.length <= 2 ? (
+							run.steps.map((step) => <StepRow key={step.id} state={state} step={step} />)
+						) : (
+							<details className="step run" key={run.steps[0].id}>
+								<summary>{run.title}</summary>
+								{run.steps.map((step) => (
+									<StepRow key={step.id} state={state} step={step} />
+								))}
+							</details>
+						),
+					)}
 				</div>
 			)}
 		</aside>

@@ -1,0 +1,23 @@
+{
+  "name": "@lumen/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./protocol": "./src/protocol.ts"
+  },
+  "scripts": {
+    "dev": "node --experimental-strip-types src/index.ts"
+  },
+  "dependencies": {
+    "@lumen/kernel": "*",
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "ws": "^8.18.0",
+    "pi-web-access": "^0.23.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
+  }
+}

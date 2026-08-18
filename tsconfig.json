@@ -10,5 +10,8 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts"]
+  "include": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts"],
+  // The web package is browser code: DOM lib, JSX, bundler resolution. It carries its own
+  // tsconfig, and checking it under Node settings here would only report false errors.
+  "exclude": ["packages/web"]
 }

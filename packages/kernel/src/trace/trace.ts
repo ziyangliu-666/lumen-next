@@ -8,7 +8,15 @@
  */
 
 import { addUsage, emptyUsage } from "./types.ts";
-import type { NodeState, Step, TraceEvent, TraceNode, TraceSnapshot, Usage } from "./types.ts";
+import type {
+	NodeOrigin,
+	NodeState,
+	Step,
+	TraceEvent,
+	TraceNode,
+	TraceSnapshot,
+	Usage,
+} from "./types.ts";
 
 let counter = 0;
 function nextId(prefix: string): string {
@@ -20,6 +28,8 @@ export interface OpenNodeOptions {
 	parentId: string | null;
 	agent: string;
 	task: string;
+	origin: NodeOrigin;
+	depth: number;
 	model?: string;
 }
 
@@ -61,6 +71,8 @@ export class Trace {
 			parentId: options.parentId,
 			agent: options.agent,
 			task: options.task,
+			origin: options.origin,
+			depth: options.depth,
 			state: "running",
 			startedAt: Date.now(),
 			usage: emptyUsage(),
@@ -104,7 +116,7 @@ export class Trace {
 		// would draw a spinner nobody will ever clear.
 		for (const step of node.steps) {
 			if (step.state === "running") {
-				step.state = state === "done" ? "done" : "failed";
+				step.state = state === "running" ? "failed" : state;
 				step.endedAt = node.endedAt;
 			}
 		}
@@ -134,24 +146,51 @@ export class Trace {
 		this.emit({ type: "step_close", nodeId, stepId, step });
 	}
 
-	/** Link a spawned node to the step that spawned it. The one call that builds the tree. */
+	/**
+	 * Link a spawned node to the step that spawned it. The one call that builds the tree.
+	 *
+	 * Throws when the step is missing rather than returning quietly. A child that fails to
+	 * link still has a `parentId`, so it looks attached in the data and appears in nobody's
+	 * `childIds` — it is simply absent from the picture, with nothing logged. That is the
+	 * worst shape a bug can take here, because the screen stays plausible while an agent
+	 * runs and spends money off-camera.
+	 */
 	linkChild(nodeId: string, stepId: string, childId: string): void {
 		const step = this.node(nodeId).steps.find((candidate) => candidate.id === stepId);
-		if (!step) return;
+		if (!step) {
+			throw new Error(
+				`cannot link child ${childId}: node ${nodeId} has no step ${stepId}. ` +
+					"A spawn needs a step to hang from; open one first.",
+			);
+		}
 		step.childIds = [...(step.childIds ?? []), childId];
 		this.emit({ type: "step_update", nodeId, stepId, patch: { childIds: step.childIds } });
 	}
 
 	/**
-	 * This node's spend plus every descendant's.
+	 * What this window cost to answer: its own spend, plus the work it delegated.
 	 *
-	 * Kept as a function rather than a stored field. A stored rollup has to be
-	 * invalidated up the whole chain on every child update, and the first time that is
-	 * missed the number on screen is wrong in the direction that costs the user money.
+	 * Only delegation folds upward, because only delegation was paid for by this window and
+	 * came back into it. The other two kinds of child are their own windows and carry their
+	 * own numbers:
+	 *
+	 *   branch    nothing returned from it. It was started here and went its own way, so
+	 *             charging it to this window overstates what answering actually cost.
+	 *   compact   the window that replaced this one. Folding it in would say "this window
+	 *             cost X" where X includes a window that only exists because this one ended.
+	 *   handoff   the same, with a different agent holding it.
+	 *
+	 * Nothing is lost by excluding them: every point carries its own spend, and the run's
+	 * total is the sum of those, added once.
+	 *
+	 * Kept as a function rather than a stored field. A stored rollup has to be invalidated
+	 * up the whole chain on every child update, and the first time that is missed the number
+	 * on screen is wrong in the direction that costs the user money.
 	 */
 	rollupUsage(id: string): Usage {
 		let total = addUsage(emptyUsage(), this.node(id).usage);
 		for (const childId of this.childIds.get(id) ?? []) {
+			if (this.node(childId).origin.kind !== "delegate") continue;
 			total = addUsage(total, this.rollupUsage(childId));
 		}
 		return total;
@@ -183,4 +222,4 @@ export class Trace {
 	}
 }
 
-type StepStateArg = "done" | "failed";
+type StepStateArg = "done" | "failed" | "aborted";

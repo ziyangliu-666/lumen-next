@@ -54,32 +54,37 @@ runtime.trace.subscribe((event) => {
 	}
 });
 
-const { nodeId, session, stop } = await runtime.openRoot(
-	registry.get("lead"),
-	"Two things: what is 17 * 23, and what does 'residual stress' mean in metallurgy?",
-);
+const task = "Two things: what is 17 * 23, and what does 'residual stress' mean in metallurgy?";
+const line = await runtime.openRoot(registry.get("lead"), task);
+const rootId = line.currentNodeId;
 
 try {
-	await session.prompt(
-		"Two things: what is 17 * 23, and what does 'residual stress' mean in metallurgy?",
-	);
-	runtime.trace.closeNode(nodeId, "done");
+	await runtime.say(line.id, task);
 } finally {
-	stop();
-	session.dispose();
+	// Closes every line, including the subagents' — they stay alive after answering so a
+	// person can go back to them, which only matters when something is watching.
+	runtime.closeAll();
 }
 
 console.log("\n--- call tree ---");
-print(runtime.trace.node(nodeId), "");
+print(runtime.trace.node(rootId), "");
 
 function print(node: TraceNode, indent: string): void {
 	const spend = runtime.trace.rollupUsage(node.id);
 	console.log(
-		`${indent}${node.agent} [${node.state}] $${spend.cost.total.toFixed(4)} ${spend.totalTokens} tok`,
+		`${indent}${node.agent} [${node.state}] d${node.depth} $${spend.cost.total.toFixed(4)} ${spend.totalTokens} tok`,
 	);
 	if (node.summary) console.log(`${indent}  = ${node.summary.replaceAll("\n", " ").slice(0, 140)}`);
 	for (const step of node.steps) {
 		console.log(`${indent}  . ${step.title} [${step.state}]`);
 		for (const childId of step.childIds ?? []) print(runtime.trace.node(childId), `${indent}    `);
+	}
+	// A window replaced by its own summary is this node's child without being any step's,
+	// so walking steps alone would stop the tree at the first compaction.
+	for (const child of runtime.trace.children(node.id)) {
+		if (child.origin.kind === "compact") {
+			console.log(`${indent}  ~ compacted (${child.origin.reason})`);
+			print(child, indent);
+		}
 	}
 }

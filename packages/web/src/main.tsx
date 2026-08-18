@@ -1,0 +1,148 @@
+import { StrictMode, useCallback, useEffect, useReducer, useRef } from "react";
+import { createRoot } from "react-dom/client";
+import type { ClientFrame, ServerFrame, Target } from "@lumen/server/protocol";
+import { Composer } from "./Composer.tsx";
+import { Graph } from "./Graph.tsx";
+import { initialState, reduce } from "./state.ts";
+import "./app.css";
+
+function App() {
+	const [state, dispatch] = useReducer(reduce, initialState);
+	const socket = useRef<WebSocket | null>(null);
+	const pane = useRef<HTMLElement | null>(null);
+
+	const nodeCount = Object.keys(state.nodes).length;
+	// Every point's figure is inclusive of what is under it, so adding the column up
+	// multiplies the truth. This is the only number that is the run.
+	const spent = Object.values(state.nodes).reduce((sum, node) => sum + node.usage.cost.total, 0);
+	const empty = nodeCount <= 1 && !state.nodes[state.rootId ?? ""]?.summary;
+
+	// Follow the work. New points open below the fold, and without this the only sign that
+	// two agents had just run was the cost figure at the top ticking up.
+	useEffect(() => {
+		const el = pane.current;
+		if (el) el.scrollTop = el.scrollHeight;
+	}, [nodeCount]);
+
+	useEffect(() => {
+		// A stable id, kept in the browser, is what makes a refresh survivable: the server
+		// hands back the same conversation instead of starting an empty one. Without it,
+		// reloading silently threw away the whole graph — including lines still running.
+		let key = localStorage.getItem("lumen.session");
+		if (!key) {
+			key = `s-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+			localStorage.setItem("lumen.session", key);
+		}
+		const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?s=${key}`;
+		const ws = new WebSocket(url);
+		socket.current = ws;
+		ws.onopen = () => dispatch({ kind: "connection", connected: true });
+		ws.onclose = () => dispatch({ kind: "connection", connected: false });
+		ws.onmessage = (event) =>
+			dispatch({ kind: "frame", frame: JSON.parse(event.data) as ServerFrame });
+		return () => ws.close();
+	}, []);
+
+	const send = useCallback(
+		(frame: ClientFrame) => socket.current?.send(JSON.stringify(frame)),
+		[],
+	);
+
+	const say = useCallback(
+		(text: string, target: Target) => {
+			const nodeId = state.selected;
+			if (!nodeId) return;
+			// Echo locally rather than waiting for it to come back. The server has no event
+			// for "the person said something" — the trace records what agents did — and a
+			// message that only appears once the model replies reads as a dropped keystroke.
+			//
+			// Only for the targets this window actually receives. A handed-over or sent-off
+			// sentence goes to a point that does not exist yet, and drawing it here said
+			// this agent had been spoken to when it never was — contradicted a line below by
+			// the very step that recorded where the sentence really went.
+			// Notices describe the action you just took. Leaving the previous one on screen
+			// beside the new one made a stale line read as a second, current complaint.
+			dispatch({ kind: "clearMessages" });
+			if (target.kind === "continue" || target.kind === "next") {
+				dispatch({ kind: "said", nodeId, text });
+			}
+			send({ type: "say", nodeId, text, target });
+		},
+		[send, state.selected],
+	);
+
+	const abort = useCallback(() => {
+		if (state.selected) send({ type: "abort", nodeId: state.selected });
+	}, [send, state.selected]);
+
+	return (
+		<div className="app">
+			<header>
+				<strong>lumen</strong>
+				<span className="hint">a point is one context window — click one to talk to it</span>
+				{/* The glyphs carry the only distinction that matters while work is running,
+				    and two of them differ by a few pixels at this size. Spell them out. */}
+				<span className="legend">
+					<span>◍ working</span>
+					<span>• idle, talk to it</span>
+					<span>✓ done</span>
+					<span>■ stopped</span>
+					<span>✗ failed</span>
+				</span>
+				<span className="meta" title="every window's own spend, added once">
+					${spent.toFixed(4)} this run
+				</span>
+				<span className={`dot ${state.connected ? "on" : "off"}`} />
+			</header>
+
+			<main ref={pane}>
+				{state.rootId ? (
+					<Graph
+						state={state}
+						nodeId={state.rootId}
+						onSelect={(nodeId) => dispatch({ kind: "select", nodeId })}
+					/>
+				) : (
+					<p className="hint">waiting for the run to open…</p>
+				)}
+				{empty && (
+					<div className="blank">
+						<p>Ask for something that needs looking things up, and watch the work spread out.</p>
+						<p className="hint">
+							Try: <em>Find which file defines the Trace class and, separately, which file
+							defines AgentSpec. Use two agents in parallel.</em>
+						</p>
+						<p className="hint">
+							Each box below is one agent's context window. Delegated work nests inside the
+							box that asked for it; a dashed rail means a line that was started and never
+							reports back.
+						</p>
+					</div>
+				)}
+			</main>
+
+			{state.messages.length > 0 && (
+				<div className="messages">
+					{state.messages.slice(-3).map((message, index) => (
+						<div className={message.level} key={index}>
+							{message.text}
+						</div>
+					))}
+				</div>
+			)}
+
+			<Composer
+				state={state}
+				onSend={say}
+				onAbort={abort}
+				onSelect={(nodeId) => dispatch({ kind: "select", nodeId })}
+			/>
+		</div>
+	);
+}
+
+createRoot(document.getElementById("root")!).render(
+	<StrictMode>
+		<App />
+	</StrictMode>,
+);

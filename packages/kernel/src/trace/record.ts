@@ -1,12 +1,20 @@
 /**
- * Attach one pi session to one trace node.
+ * Attach one pi session to the trace.
  *
  * Everything a person sees about a running agent comes through here: its tool calls in
  * order, its streaming text, its token spend, and the sentence it finally returned.
  *
- * The recorder never decides when a node ends. The caller does, because only the caller
- * knows whether the run stopped because it finished, because a tool threw, or because
- * the user pressed stop, and those three must not collapse into one word.
+ * The recorder never decides when a node ends, and it never decides where the next one
+ * goes. The caller does, because only the caller knows whether the run stopped because it
+ * finished, because a tool threw, or because the user pressed stop, and those three must
+ * not collapse into one word. Compaction is reported the same way: this file says the
+ * window was replaced and hands over the summary, and the caller decides what that means
+ * for the tree.
+ *
+ * Which node events land on is read fresh every time, not captured once. A session
+ * outlives any single node of its own — compaction ends one window and starts another
+ * inside the same session — so a recorder holding one id would keep writing into a node
+ * the interface has already drawn as finished.
  */
 
 import type { Trace } from "./trace.ts";
@@ -15,6 +23,27 @@ import type { Usage } from "./types.ts";
 /** The subset of `AgentSession` this file needs. Narrow on purpose, so tests can fake it. */
 export interface RecordableSession {
 	subscribe(listener: (event: any) => void): () => void;
+}
+
+/** What the recorder reports when a context window is replaced by its own summary. */
+export interface CompactionReport {
+	reason: "manual" | "threshold" | "overflow";
+	/** The text the next window starts from. */
+	summary: string;
+	/** What the summarising call itself cost. Real money, and easy to forget to bill. */
+	usage?: Usage;
+}
+
+export interface RecordOptions {
+	/** The node to write to right now. Called per event, never cached. */
+	nodeId: () => string;
+	/**
+	 * The window filled up (or someone asked) and was replaced by its summary. Fired only
+	 * when compaction actually produced something: an aborted or failed attempt leaves the
+	 * conversation exactly where it was, and reporting it would open a node for a window
+	 * that never existed.
+	 */
+	onCompaction?: (report: CompactionReport) => void;
 }
 
 /** One line for the collapsed view of a step. */
@@ -53,6 +82,10 @@ function subagentTitle(args: any): string {
 	if (Array.isArray(args.chain)) {
 		return `chain: ${args.chain.map((step: any) => step.agent).join(" -> ")}`;
 	}
+	if (Array.isArray(args.branches)) {
+		const names = args.branches.map((task: any) => task.agent).join(", ");
+		return `started ${args.branches.length} line(s): ${names}`;
+	}
 	return `subagent ${args.agent ?? ""}`;
 }
 
@@ -71,16 +104,21 @@ function previewOf(result: any, limit = 400): string {
 }
 
 /**
- * Subscribe to a session and write everything it does into `nodeId`.
+ * Subscribe to a session and write everything it does into whichever node is current.
  *
- * Returns the unsubscribe function. Call it before the node closes; a listener left on
- * a disposed session keeps the session object alive and, worse, keeps writing steps
- * into a node the interface has already drawn as finished.
+ * Returns the unsubscribe function. Call it before the line closes; a listener left on a
+ * disposed session keeps the session object alive and, worse, keeps writing steps into a
+ * node the interface has already drawn as finished.
  */
-export function record(trace: Trace, nodeId: string, session: RecordableSession): () => void {
+export function record(
+	trace: Trace,
+	session: RecordableSession,
+	options: RecordOptions,
+): () => void {
 	let assistantText = "";
 
 	return session.subscribe((event: any) => {
+		const nodeId = options.nodeId();
 		switch (event.type) {
 			case "message_start": {
 				if (event.message?.role === "assistant") assistantText = "";
@@ -119,22 +157,53 @@ export function record(trace: Trace, nodeId: string, session: RecordableSession)
 				return;
 			}
 			case "tool_execution_end": {
-				trace.closeStep(
-					nodeId,
-					event.toolCallId,
-					event.isError ? "failed" : "done",
-					previewOf(event.result),
-				);
+				// A spawning call's verdict comes from its children, not from pi's flag. On
+				// an abort the tool still returns normally, so `isError` is false and the
+				// step drew a green tick over children the person had just stopped. The
+				// children are on the graph saying `stopped`; the row above them must not
+				// contradict that.
+				const children = trace
+					.node(nodeId)
+					.steps.find((step) => step.id === event.toolCallId)?.childIds;
+				// Ask what actually went wrong, not what is missing. Testing for `!== "done"`
+				// marked every successful delegation as failed, because a child that answers
+				// stays `running` — it is still a live window someone can go back to, and
+				// nothing closes it. The states that mean trouble are the two that say so.
+				const ended = (children ?? []).map((childId) => trace.node(childId).state);
+				const allBad =
+					ended.length > 0 && ended.every((state) => state === "failed" || state === "aborted");
+				// And say which trouble. The children below this row are labelled `stopped`
+				// or `failed`; collapsing both into one word here would contradict them.
+				const stepState = event.isError
+					? "failed"
+					: allBad
+						? ended.every((state) => state === "aborted")
+							? "aborted"
+							: "failed"
+						: "done";
+				trace.closeStep(nodeId, event.toolCallId, stepState, previewOf(event.result));
 				// A tool that ran nested model work reports it here, and adding it keeps the
 				// node's own line honest. But a spawning tool's children are trace nodes
 				// that already carry their own spend, and `rollupUsage` walks them. Adding
 				// the tool's usage as well would bill every subagent twice, on the screen
 				// that shows the user what the run cost. So the step that opened children
 				// is the one step whose usage is deliberately dropped.
-				const spawned = trace
-					.node(nodeId)
-					.steps.find((step) => step.id === event.toolCallId)?.childIds?.length;
-				if (!spawned) trace.addUsage(nodeId, event.result?.usage as Usage | undefined);
+				if (!children?.length) trace.addUsage(nodeId, event.result?.usage as Usage | undefined);
+				return;
+			}
+			case "compaction_end": {
+				// `result` is absent when the attempt was aborted or errored. Nothing was
+				// replaced in that case, so there is no new window and nothing to report.
+				const result = event.result;
+				if (event.aborted || !result?.summary) return;
+				// Bill the summarising call to the window that ran out. It is a real model
+				// call, and the node it belongs to is the one whose length caused it.
+				trace.addUsage(nodeId, result.usage as Usage | undefined);
+				options.onCompaction?.({
+					reason: event.reason,
+					summary: result.summary,
+					usage: result.usage,
+				});
 				return;
 			}
 			default:

@@ -65,7 +65,14 @@ export function addUsage(into: Usage, from: Usage | undefined): Usage {
  */
 export type NodeState = "running" | "done" | "failed" | "aborted";
 
-export type StepState = "running" | "done" | "failed";
+/**
+ * How a tool call ended.
+ *
+ * `aborted` is here for the same reason it is on a node: a call the person stopped and a
+ * call that broke are different events, and a spawning step drawn as `failed` over
+ * children labelled `stopped` contradicts the very thing it summarises.
+ */
+export type StepState = "running" | "done" | "failed" | "aborted";
 
 /** One tool call inside a node. Ordered, because the order is the reasoning. */
 export interface Step {
@@ -87,7 +94,47 @@ export interface Step {
 	childIds?: string[];
 }
 
-/** One agent run: the root prompt, or one subagent invocation. */
+/**
+ * Why this node exists, and therefore how the edge to its parent is drawn.
+ *
+ * The kinds anchor differently, which is the whole reason this is a union rather than a
+ * string. `delegate` and `branch` hang off a tool call, so they carry the step they came
+ * from and the renderer nests them there. `compact` and `handoff` have no tool call behind
+ * them at all: the window was replaced by its own summary, so the node's parent is the
+ * point that ended.
+ *
+ * `delegate` and `branch` differ by one fact — whether anyone is waiting for the answer —
+ * and everything else follows from it. A delegate returns its summary into the caller's
+ * window, dies with the caller's abort, and its failure is text the caller can read. A
+ * branch returns nothing, outlives the caller, and if it fails the graph is the only place
+ * that will ever say so.
+ *
+ * `compact` and `handoff` are the same physical event — a window replaced by its summary —
+ * and are kept apart because they read differently to a person. A `compact` with reason
+ * `threshold` means the machine hit a wall and carries no intent; a `handoff` means someone
+ * decided the work should change hands. Collapsing them would let a token limit look like a
+ * turn in the work.
+ *
+ * The renderer must read this and never infer from shape. A tool call that opened exactly
+ * one child and a compaction both draw as one point leading to one point, and they mean
+ * opposite things: one is work sent out, the other is the same conversation continuing
+ * because the machine could not carry it any further.
+ */
+export type NodeOrigin =
+	| { kind: "root" }
+	| { kind: "delegate"; stepId: string }
+	| { kind: "branch"; stepId: string; by: "model" | "you" }
+	| { kind: "compact"; reason: "manual" | "threshold" | "overflow" }
+	| { kind: "handoff"; from: string };
+
+/**
+ * One agent run: one context window, from the moment it opens to the moment it can hold no
+ * more.
+ *
+ * A node is not a task and not a turn. It is a window. Delegation opens one, compaction
+ * replaces one, and the agent's own think-act loop stays inside one — which is why a long
+ * loop grows `steps` and never grows the tree.
+ */
 export interface TraceNode {
 	id: string;
 	parentId: string | null;
@@ -95,7 +142,21 @@ export interface TraceNode {
 	agent: string;
 	/** What it was asked to do, in the words it was asked in. */
 	task: string;
+	origin: NodeOrigin;
+	/**
+	 * How many delegations deep this is. Delegation adds one; compaction does not, because
+	 * a compacted window is the same conversation continuing rather than a derived one. A
+	 * line that compacts often would otherwise walk itself into the depth limit and lose
+	 * the ability to delegate for no reason a person could see.
+	 */
+	depth: number;
 	state: NodeState;
+	/**
+	 * Whether the agent is working right now, as opposed to idle and waiting for input.
+	 * Both look like `running`, and the interface has to put a spinner on one and an input
+	 * box on the other.
+	 */
+	busy?: boolean;
 	startedAt: number;
 	endedAt?: number;
 	/** Its own model spend. Children are not folded in; `rollupUsage` does that on read. */

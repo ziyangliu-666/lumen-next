@@ -1,0 +1,317 @@
+:root {
+	--bg: #0f1115;
+	--panel: #161a21;
+	--line: #262c36;
+	--text: #d7dce4;
+	--dim: #7d8797;
+	--accent: #7aa2f7;
+	--ok: #7bc47f;
+	--bad: #e06c75;
+	--warn: #d4a45e;
+	color-scheme: dark;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.app {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+}
+
+header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 16px;
+	border-bottom: 1px solid var(--line);
+}
+
+main {
+	flex: 1;
+	overflow: auto;
+	padding: 16px;
+}
+
+.hint {
+	color: var(--dim);
+}
+
+.legend {
+	display: flex;
+	gap: 12px;
+	margin-left: auto;
+	color: var(--dim);
+	font-size: 12px;
+}
+
+.blank {
+	max-width: 60ch;
+	margin: 24px 0 0 4px;
+}
+.blank em {
+	color: var(--text);
+	font-style: normal;
+}
+
+.warn {
+	color: var(--warn);
+	font-size: 12px;
+}
+
+.meta.id {
+	opacity: 0.65;
+}
+
+.dot {
+	margin-left: 12px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+}
+.dot.on {
+	background: var(--ok);
+}
+.dot.off {
+	background: var(--bad);
+}
+
+/* A line runs down the page; delegated work indents away from it. */
+.line {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.node {
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--panel);
+	padding: 8px 10px;
+}
+.node.live {
+	cursor: pointer;
+}
+.node.closed {
+	opacity: 0.62;
+}
+.node.selected {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 1px var(--accent);
+}
+
+.head {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+}
+.agent {
+	font-weight: 600;
+}
+.meta {
+	color: var(--dim);
+	font-size: 12px;
+}
+.here {
+	color: var(--accent);
+}
+.closedTag {
+	font-style: italic;
+}
+
+.mark.done,
+.stepHead.done .mark {
+	color: var(--ok);
+}
+.mark.failed,
+.stepHead.failed .mark {
+	color: var(--bad);
+}
+.mark.aborted,
+.stepHead.aborted .mark {
+	color: var(--warn);
+}
+.mark.running,
+.stepHead.running .mark {
+	color: var(--accent);
+}
+
+.task {
+	color: var(--dim);
+	margin: 6px 0;
+}
+.task > summary {
+	cursor: pointer;
+	list-style: revert;
+}
+.task > pre {
+	margin: 6px 0 0;
+	padding: 8px;
+	background: var(--bg);
+	border-radius: 4px;
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 22em;
+	overflow: auto;
+	font: inherit;
+}
+
+.node.live:hover {
+	border-color: var(--dim);
+}
+
+.you {
+	margin: 6px 0;
+	padding-left: 8px;
+	border-left: 2px solid var(--accent);
+	white-space: pre-wrap;
+}
+
+.reply {
+	margin: 6px 0;
+	white-space: pre-wrap;
+}
+.reply.streaming::after {
+	content: "▍";
+	color: var(--accent);
+}
+
+.failure {
+	margin: 6px 0;
+	color: var(--bad);
+	white-space: pre-wrap;
+}
+
+.step {
+	margin-top: 6px;
+}
+.stepHead {
+	display: flex;
+	gap: 8px;
+}
+.title {
+	color: var(--text);
+}
+.preview {
+	color: var(--dim);
+	padding-left: 18px;
+	white-space: pre-wrap;
+	max-height: 3.2em;
+	overflow: hidden;
+}
+
+/* Delegation: down and to the right, because it comes back. */
+.delegated {
+	margin: 6px 0 6px 18px;
+	padding-left: 12px;
+	border-left: 1px solid var(--line);
+}
+
+/*
+ * A branch was started here and left. The dashed edge says nothing returns along it, so
+ * the parent's answer never depended on this and never will.
+ */
+.sent {
+	margin: 6px 0 6px 18px;
+	padding-left: 12px;
+	border-left: 2px dashed var(--accent);
+}
+.sentLabel {
+	color: var(--accent);
+	font-size: 12px;
+	margin-bottom: 4px;
+}
+
+/*
+ * Continuations. Dashed means the machine hit its limit and the boundary carries no
+ * intent; solid means a person chose it and it does. Drawing them alike would let a token
+ * limit read as a turn in the work.
+ */
+.edge {
+	padding: 2px 0 2px 14px;
+	font-size: 12px;
+	color: var(--dim);
+	margin-left: 10px;
+}
+.edge.forced {
+	border-left: 2px dashed var(--line);
+}
+.edge.chosen {
+	border-left: 2px solid var(--accent);
+	color: var(--accent);
+}
+
+/* A handled fallback and a real failure must not look alike, or the word stops working. */
+.messages {
+	padding: 8px 16px;
+	border-top: 1px solid var(--line);
+}
+.messages .error {
+	color: var(--bad);
+}
+.messages .notice {
+	color: var(--warn);
+}
+
+.composer {
+	border-top: 1px solid var(--line);
+	padding: 10px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	background: var(--panel);
+}
+.composer .row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.composer textarea {
+	min-height: 62px;
+	resize: vertical;
+	background: var(--bg);
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 8px;
+	font: inherit;
+}
+.composer select,
+.composer button {
+	background: var(--bg);
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 5px 10px;
+	font: inherit;
+}
+.composer button:disabled {
+	opacity: 0.45;
+}
+.composer .cites {
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.composer button.cite {
+	padding: 2px 7px;
+	font-size: 12px;
+	color: var(--dim);
+}
+.composer button.cite:hover {
+	color: var(--accent);
+	border-color: var(--accent);
+}
+.composer button.stop {
+	margin-left: auto;
+	border-color: var(--bad);
+	color: var(--bad);
+}

@@ -156,7 +156,7 @@ prints; it proxies the socket to the server.
 
 | variable | default | what for |
 |---|---|---|
-| `LUMEN_PROVIDER` / `LUMEN_MODEL` | `deepseek` / `deepseek-v4-pro` | which model |
+| `LUMEN_PROVIDER` / `LUMEN_MODEL` | `deepseek` / `deepseek-v4-flash` | which model a new conversation starts on; changeable per conversation in the panel |
 | `LUMEN_PORT` | `4173` | |
 | `LUMEN_CWD` | current directory | what the agents can read |
 | `LUMEN_AUTO_BUDGET` | `2` | dollars one run may spend while it runs itself |

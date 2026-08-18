@@ -26,7 +26,7 @@ const WEB_DIST = resolve(HERE, "../../web/dist");
 
 const PORT = Number(process.env.LUMEN_PORT ?? 4173);
 const PROVIDER = process.env.LUMEN_PROVIDER ?? "deepseek";
-const MODEL_ID = process.env.LUMEN_MODEL ?? "deepseek-v4-pro";
+const MODEL_ID = process.env.LUMEN_MODEL ?? "deepseek-v4-flash";
 const CWD = process.env.LUMEN_CWD ?? process.cwd();
 /**
  * Set this low (a few thousand) to watch a line compact without holding a 20k-token
@@ -189,6 +189,19 @@ class Conversation {
 			turns: this.autopilot.turns,
 			stopped: this.stopped,
 		};
+	}
+
+	/**
+	 * Lines that were started as branches and are still going.
+	 *
+	 * Counted from the trace rather than tracked, because the trace is already the record of
+	 * what exists; a second list of live branches would be a second thing to keep in step.
+	 */
+	private liveBranches(): number {
+		const { nodes } = this.runtime.trace.snapshot();
+		return Object.values(nodes).filter(
+			(node) => node.origin.kind === "branch" && node.state === "running",
+		).length;
 	}
 
 	/** The window the conversation is standing in now, however many times it has moved. */
@@ -364,12 +377,25 @@ class Conversation {
 			// watches the work they just cancelled begin again.
 			if (line.id === this.leadLineId) this.autopilot.stop("you", "you pressed stop");
 			await this.runtime.abort(line.id);
-			// Say it. The only other evidence is a `stopped` tag on whichever children were
-			// running, which on a tall run is below the fold — so a stop could look like the
-			// work having quietly finished.
+			// Say it, and say it accurately. The only other evidence is a `stopped` tag on
+			// whichever children were running, which on a tall run is below the fold — so a
+			// stop could look like the work having quietly finished.
+			//
+			// The count matters. This used to claim "anything it had started is marked
+			// stopped", which is false for exactly the work a person most needs to know about:
+			// a delegate dies with the turn that was waiting for it, and a branch does not,
+			// because nothing was waiting. Left as it was, the message told people the money
+			// had stopped while two lines went on spending.
+			const running = this.liveBranches();
 			this.send({
 				type: "notice",
-				message: "You stopped this run. Anything it had started is marked stopped.",
+				message:
+					running === 0
+						? "You stopped this run. The work it was waiting on is marked stopped."
+						: "You stopped this run. The work it was waiting on is marked stopped, but " +
+							`${running === 1 ? "1 line" : `${running} lines`} started as a branch ` +
+							`${running === 1 ? "is" : "are"} still running — nothing was waiting for ` +
+							"those. Click one and stop it to end it.",
 			});
 			return;
 		}

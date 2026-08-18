@@ -8,7 +8,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { record, stepTitle } from "../src/trace/record.ts";
-import { SUBAGENT_TOOL, toolSelection } from "../src/runtime.ts";
+import { FINISH_TOOL, SUBAGENT_TOOL, toolSelection } from "../src/runtime.ts";
 import { Trace } from "../src/trace/trace.ts";
 import type { TraceEvent, Usage } from "../src/trace/types.ts";
 
@@ -197,6 +197,29 @@ describe("trace", () => {
 
 		expect(trace.rollupUsage(first.id).cost.total).toBeCloseTo(0.01);
 		expect(trace.rollupUsage(second.id).cost.total).toBeCloseTo(0.2);
+	});
+
+	it("counts a branch in the run total that no rollup charges anyone for", () => {
+		// The two numbers answer different questions, and a budget must read this one. A
+		// branch is excluded from every rollup on purpose — nobody waited for it — but it
+		// holds a model connection and it bills, so leaving it out of "what has this run
+		// spent" is wrong in the one direction that costs the person money.
+		const trace = new Trace("run-1");
+		const root = openRoot(trace);
+		trace.addUsage(root.id, usage(10, 5, 0.01));
+		trace.openStep(root.id, { id: "t1", tool: "subagent", args: {}, title: "started 1 line" });
+		const branch = trace.openNode({
+			parentId: root.id,
+			agent: "worker",
+			task: "go",
+			origin: { kind: "branch", stepId: "t1", by: "model" },
+			depth: 0,
+		});
+		trace.linkChild(root.id, "t1", branch.id);
+		trace.addUsage(branch.id, usage(400, 80, 0.5));
+
+		expect(trace.rollupUsage(root.id).cost.total).toBeCloseTo(0.01);
+		expect(trace.totalCost()).toBeCloseTo(0.51);
 	});
 
 	it("still bills a plain tool that did nested model work", () => {
@@ -498,26 +521,36 @@ describe("toolSelection", () => {
 		// tools a loaded extension registered. A lead declared with no tools at all then
 		// fetched web pages, because `pi-web-access` was loaded and its tools were never
 		// built-in to begin with. Only an explicit list says what we mean.
-		expect(toolSelection(spec([]), true)).toEqual({ tools: [SUBAGENT_TOOL] });
+		expect(toolSelection(spec([]), [SUBAGENT_TOOL])).toEqual({ tools: [SUBAGENT_TOOL] });
 	});
 
-	it("gives an agent that cannot delegate nothing at all", () => {
-		expect(toolSelection(spec([]), false)).toEqual({ noTools: "all" });
+	it("names every custom tool, not just the first", () => {
+		// The lead holds two: it delegates, and it declares itself finished. A list that
+		// carried only one would hand pi a tool it had not been allowed to use, and pi drops
+		// it without a word — so the agent would call `finish`, nothing would happen, and the
+		// run would go on spending.
+		expect(toolSelection(spec([]), [SUBAGENT_TOOL, FINISH_TOOL])).toEqual({
+			tools: [SUBAGENT_TOOL, FINISH_TOOL],
+		});
+	});
+
+	it("gives an agent with no tools of its own nothing at all", () => {
+		expect(toolSelection(spec([]), [])).toEqual({ noTools: "all" });
 	});
 
 	it("adds delegation to a named list without disturbing the rest", () => {
-		expect(toolSelection(spec(["read", "grep"]), true)).toEqual({
+		expect(toolSelection(spec(["read", "grep"]), [SUBAGENT_TOOL])).toEqual({
 			tools: ["read", "grep", SUBAGENT_TOOL],
 		});
 	});
 
 	it("does not add delegation twice", () => {
-		expect(toolSelection(spec(["read", SUBAGENT_TOOL]), true)).toEqual({
+		expect(toolSelection(spec(["read", SUBAGENT_TOOL]), [SUBAGENT_TOOL])).toEqual({
 			tools: ["read", SUBAGENT_TOOL],
 		});
 	});
 
 	it("leaves an unset list alone, so the agent inherits the caller's tools", () => {
-		expect(toolSelection(spec(undefined), true)).toEqual({});
+		expect(toolSelection(spec(undefined), [SUBAGENT_TOOL])).toEqual({});
 	});
 });

@@ -196,6 +196,20 @@ export class Trace {
 		return total;
 	}
 
+	/**
+	 * What the whole run has spent: every window's own figure, added once.
+	 *
+	 * Not `rollupUsage(root)`. That deliberately folds only delegated children, so a branch
+	 * — a line nobody waited for, which still holds a model connection and still bills —
+	 * would not appear in it. As the answer to "what did this cost me" that is wrong in the
+	 * one direction that matters, so anything spending against a budget must read this.
+	 */
+	totalCost(): number {
+		let total = 0;
+		for (const node of this.nodes.values()) total += node.usage.cost.total;
+		return total;
+	}
+
 	snapshot(): TraceSnapshot {
 		return {
 			runId: this.runId,

@@ -69,6 +69,10 @@ export function stepTitle(tool: string, args: any): string {
 			return `retrieve ${JSON.stringify(args.query ?? "")}`;
 		case "subagent":
 			return subagentTitle(args);
+		case "finish":
+			// The reason, not the word "finish". This row is the last thing on the point and
+			// the only place the agent says why it stopped rather than what it found.
+			return `finish: ${String(args.reason ?? "").split("\n")[0]}`;
 		default:
 			return tool;
 	}

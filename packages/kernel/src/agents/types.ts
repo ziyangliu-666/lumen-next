@@ -29,6 +29,14 @@ export interface AgentSpec {
 	 * cap alone catches that too late to be comfortable.
 	 */
 	canDelegate?: boolean;
+	/**
+	 * Whether this agent may declare its work complete, and so stop whoever is driving it.
+	 *
+	 * Only worth giving to an agent that is driven — one that is asked again the moment it
+	 * stops. A delegated worker ends its own turn by saying nothing more, and needs no tool
+	 * to do it; handing it one only invites a call that means nothing to anybody.
+	 */
+	canFinish?: boolean;
 }
 
 export class AgentRegistry {

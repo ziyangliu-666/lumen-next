@@ -102,6 +102,17 @@ export function createSubagentTool(options: SubagentToolOptions) {
 			),
 		}),
 		async execute(toolCallId: string, params: any, signal: AbortSignal | undefined) {
+			// Checked before the arguments are even read. There is one turn where an agent
+			// must be able to write but not to spend — the one after the budget is gone — and
+			// the refusal has to come from the process. A sentence in a prompt asking an agent
+			// not to delegate is a request; this is the answer it gets when it tries anyway.
+			if (runtime.blockDelegation) {
+				return errorResult(
+					"The budget for this run is spent, so no more agents can be started. Report " +
+						"what you already have, and say plainly what is still unanswered.",
+				);
+			}
+
 			const requested = describeMode(params);
 			if (!requested) {
 				return errorResult(

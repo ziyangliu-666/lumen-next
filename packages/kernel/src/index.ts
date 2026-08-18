@@ -1,6 +1,15 @@
 export { AgentRegistry, type AgentSpec } from "./agents/types.ts";
+export {
+	Autopilot,
+	CONTINUE_PROMPT,
+	WRAP_UP_PROMPT,
+	type AutopilotHost,
+	type AutopilotOptions,
+	type AutopilotStop,
+} from "./autopilot.ts";
 export type { Line, LineSession } from "./line.ts";
 export {
+	FINISH_TOOL,
 	Runtime,
 	SUBAGENT_TOOL,
 	toolSelection,
@@ -9,6 +18,7 @@ export {
 	type SpawnRequest,
 	type SpawnResult,
 } from "./runtime.ts";
+export { createFinishTool, type FinishToolOptions } from "./tools/finish.ts";
 export { createSubagentTool, type SubagentToolOptions } from "./tools/subagent.ts";
 export {
 	record,

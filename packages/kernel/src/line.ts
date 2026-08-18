@@ -20,9 +20,26 @@
 
 import type { AgentSpec } from "./agents/types.ts";
 
-/** The bit of `AgentSession` a line needs. Narrow so tests can drive a line without a model. */
+/**
+ * The bit of `AgentSession` a line needs. Narrow so tests can drive a line without a model.
+ *
+ * `steer` and `followUp` are the two ways a sentence can join a turn that is already
+ * running, and pi delivers them at different moments: `steer` reaches the model at its next
+ * step, `followUp` waits until the turn has no work of its own left. Both are here rather
+ * than an options argument on `prompt`, because `prompt` refuses outright while the session
+ * is streaming — the choice is not a variation on sending a prompt, it is the other thing
+ * you can do instead.
+ */
 export interface LineSession {
 	prompt(text: string): Promise<void>;
+	/** Join the running turn at the model's next step. Subagents in flight keep running. */
+	steer(text: string): Promise<void>;
+	/** Join the running turn once it has run out of work of its own. */
+	followUp(text: string): Promise<void>;
+	/** Whether a turn is running right now. pi's own answer, not our record of it. */
+	readonly isStreaming: boolean;
+	/** Resolves when no turn, retry or compaction is in flight. */
+	waitForIdle(): Promise<void>;
 	abort(): Promise<void>;
 	dispose(): void;
 	subscribe(listener: (event: any) => void): () => void;

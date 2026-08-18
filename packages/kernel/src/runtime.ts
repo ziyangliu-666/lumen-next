@@ -113,8 +113,20 @@ export class Runtime {
 	readonly registry: AgentRegistry;
 	readonly maxDepth: number;
 	readonly maxConcurrent: number;
+	/**
+	 * While set, the delegation tool refuses every call.
+	 *
+	 * There is one turn where an agent must be able to write but not to spend: the last one,
+	 * after the budget is gone. The tool list cannot be changed for it — `toolSelection`
+	 * binds tools when the session is built, and rebuilding the session would throw away the
+	 * window that holds everything the run learned. So the tool itself refuses, and says why,
+	 * which the model can act on.
+	 */
+	blockDelegation = false;
 	private readonly options: RuntimeOptions;
 	private readonly lines = new Map<string, Line>();
+	/** Lines whose agent has said its work is complete, by the reason it gave. */
+	private readonly finished = new Map<string, string>();
 
 	constructor(options: RuntimeOptions) {
 		this.options = options;
@@ -232,6 +244,62 @@ export class Runtime {
 			// window that started busy no longer exists and the flag belongs to its heir.
 			this.trace.updateNode(line.currentNodeId, { busy: false });
 		}
+	}
+
+	/**
+	 * Put a sentence into a turn that is already running.
+	 *
+	 * Not a turn of its own, so `busy` is untouched: the window was working before this
+	 * arrived and is working after, and flipping the flag would make the interface start a
+	 * fresh block of streaming text in the middle of one.
+	 *
+	 *   steer      reaches the model at its next step. Subagents already running are left
+	 *              alone, which is why this is the right "interrupt": aborting would throw
+	 *              away work that has already been paid for.
+	 *   followUp   waits until the turn has run out of work of its own.
+	 *
+	 * The caller has to have decided that a turn is running. `prompt` refuses while the
+	 * session streams and these two refuse when it does not, so the choice between them is
+	 * made from `session.isStreaming` at the moment the sentence arrives.
+	 */
+	async interject(lineId: string, text: string, how: "steer" | "followUp"): Promise<void> {
+		const line = this.line(lineId);
+		if (how === "steer") await line.session.steer(text);
+		else await line.session.followUp(text);
+	}
+
+	/** Resolve once this line has no turn in flight. */
+	async settle(lineId: string): Promise<void> {
+		await this.line(lineId).session.waitForIdle();
+	}
+
+	/** Whether a turn is running on this line, as pi sees it rather than as the trace does. */
+	isStreaming(lineId: string): boolean {
+		return this.line(lineId).session.isStreaming;
+	}
+
+	/**
+	 * Record that this line's agent says the work is complete.
+	 *
+	 * Written by the `finish` tool and read by whoever is driving the line. Kept here rather
+	 * than on the node, because it is not something the agent did — the trace records tool
+	 * calls and windows — it is a message to the driver about whether to ask again.
+	 */
+	declareFinish(lineId: string, reason: string): void {
+		this.finished.set(lineId, reason);
+	}
+
+	/**
+	 * Read the declaration once and clear it.
+	 *
+	 * Read-and-clear rather than a plain getter. A declaration left standing would stop the
+	 * next automatic run on its first turn, and the person would see a run that ended
+	 * instantly for a reason given hours ago.
+	 */
+	takeFinish(lineId: string): string | undefined {
+		const reason = this.finished.get(lineId);
+		this.finished.delete(lineId);
+		return reason;
 	}
 
 	/**
@@ -489,10 +557,14 @@ export class Runtime {
 	}
 
 	private async createSession(spec: AgentSpec, line: Line) {
-		// Imported here rather than at the top because the tool needs the runtime, and a
-		// top-level import would make runtime.ts and subagent.ts a cycle.
+		// Imported here rather than at the top because the tools need the runtime, and a
+		// top-level import would make runtime.ts and these a cycle.
 		const { createSubagentTool } = await import("./tools/subagent.ts");
-		const customTools = spec.canDelegate ? [createSubagentTool({ runtime: this, line })] : [];
+		const { createFinishTool } = await import("./tools/finish.ts");
+		const customTools = [
+			...(spec.canDelegate ? [createSubagentTool({ runtime: this, line })] : []),
+			...(spec.canFinish ? [createFinishTool({ runtime: this, line })] : []),
+		];
 
 		const cwd = this.options.cwd ?? process.cwd();
 		// Extensions, skills and context files are all discovered from the working
@@ -528,7 +600,7 @@ export class Runtime {
 			...(this.options.compaction
 				? { settingsManager: SettingsManager.inMemory({ compaction: this.options.compaction }) }
 				: {}),
-			...toolSelection(spec, customTools.length > 0),
+			...toolSelection(spec, customTools.map((tool) => tool.name)),
 			customTools,
 		});
 		return session;
@@ -537,6 +609,8 @@ export class Runtime {
 
 /** The tool name the delegation tool registers under. Kept here so the allowlist can name it. */
 export const SUBAGENT_TOOL = "subagent";
+/** Likewise for the tool an agent uses to say its work is complete. */
+export const FINISH_TOOL = "finish";
 
 /**
  * Turn a spec's tool list into pi's own options.
@@ -547,26 +621,29 @@ export const SUBAGENT_TOOL = "subagent";
  * delegate: it writes the tool call out as plain text, the text goes nowhere, and the
  * run looks like it worked. That is measured, not feared; it is what the first real run
  * of this code did.
+ *
+ * `custom` is the names of the tools built for this agent, and every one of them has to be
+ * listed. Taking a boolean here was enough while there was one such tool and became a trap
+ * the moment there were two: the second would be handed to pi in `customTools`, left out of
+ * the allowlist, and dropped without a word.
  */
 export function toolSelection(
 	spec: AgentSpec,
-	hasDelegation: boolean,
+	custom: string[],
 ): { tools?: string[]; noTools?: "all" | "builtin" } {
 	if (spec.tools === undefined) return {};
 	if (spec.tools.length === 0) {
-		// Name the one tool that survives, rather than asking for the built-ins to be
-		// dropped. `noTools: "builtin"` removes exactly the built-ins and leaves everything
-		// else standing — including any tool a loaded extension registered. That was
-		// measured, not feared: with `pi-web-access` loaded, a lead declared as having no
-		// tools at all fetched two web pages when asked to.
+		// Name the tools that survive, rather than asking for the built-ins to be dropped.
+		// `noTools: "builtin"` removes exactly the built-ins and leaves everything else
+		// standing — including any tool a loaded extension registered. That was measured,
+		// not feared: with `pi-web-access` loaded, a lead declared as having no tools at all
+		// fetched two web pages when asked to.
 		//
 		// An allowlist that holds only until someone installs an extension is not an
 		// allowlist. `tools` means "enable exactly these", so it is the only form that says
 		// what we mean.
-		return hasDelegation ? { tools: [SUBAGENT_TOOL] } : { noTools: "all" };
+		return custom.length > 0 ? { tools: [...custom] } : { noTools: "all" };
 	}
-	const names = hasDelegation && !spec.tools.includes(SUBAGENT_TOOL)
-		? [...spec.tools, SUBAGENT_TOOL]
-		: spec.tools;
-	return { tools: names };
+	const missing = custom.filter((name) => !spec.tools?.includes(name));
+	return { tools: [...spec.tools, ...missing] };
 }

@@ -34,6 +34,7 @@ import type { AgentRegistry, AgentSpec } from "./agents/types.ts";
 import type { Line, LineSession } from "./line.ts";
 import { record } from "./trace/record.ts";
 import { Trace } from "./trace/trace.ts";
+import { money } from "./trace/types.ts";
 import type { NodeOrigin, NodeState } from "./trace/types.ts";
 
 export interface RuntimeOptions {
@@ -253,6 +254,10 @@ export class Runtime {
 				new Error(`line ${lineId} is already running a turn; use deliver(), which joins it`),
 			);
 		}
+		// A new turn supersedes any earlier declaration. Without this, a line that said it was
+		// finished an hour ago would stop the next automatic run before its first turn, and
+		// the person would be shown a reason given long before the question they just asked.
+		this.finished.delete(line.id);
 		// Latched before the turn is started, and released by the turn itself. A latch set
 		// after the work begins is a latch the next caller can slip past, which is exactly
 		// how pi's own `isStreaming` fails us here.
@@ -332,14 +337,19 @@ export class Runtime {
 		await this.line(lineId).inFlight;
 	}
 
+	/** Everything this run has spent, in dollars. Every window's own figure, added once. */
+	totalCost(): number {
+		return this.trace.totalCost();
+	}
+
 	/** What the run has spent and what it may spend, so every refusal quotes the same pair. */
 	budget(): { spent: number; cap: number } {
-		return { spent: this.trace.totalCost(), cap: this.spendCap ?? Infinity };
+		return { spent: this.totalCost(), cap: this.spendCap ?? Infinity };
 	}
 
 	/** Whether the run has spent everything it was allowed to. */
 	overspent(): boolean {
-		return this.spendCap !== undefined && this.trace.totalCost() >= this.spendCap;
+		return this.spendCap !== undefined && this.totalCost() >= this.spendCap;
 	}
 
 	/**
@@ -369,7 +379,7 @@ export class Runtime {
 	/** The refusal every spend-related message quotes, so they cannot disagree with each other. */
 	overspentMessage(): string {
 		const { spent, cap } = this.budget();
-		return `this run has spent $${spent.toFixed(2)} of its $${cap.toFixed(2)} cap; no more agents can be started`;
+		return `this run has spent ${money(spent)} of its ${money(cap)} cap; no more agents can be started`;
 	}
 
 	/**

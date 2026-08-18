@@ -53,12 +53,23 @@ export const AGENTS: AgentSpec[] = [
 			"",
 			"Then write the answer yourself, in a few sentences. Quote `path:line` when you",
 			"refer to something specific.",
+			"",
+			"When the person leaves this running by itself, every turn you end is continued",
+			"automatically and nobody reads it until you stop. Call `finish` the moment the",
+			"request is answered, and in that same turn say what was found and what is still",
+			"open. Carrying on past the answer spends their money on work they did not ask for.",
 		].join("\n"),
 		// Empty rather than absent: pi reads an empty list as "no built-ins", and the
 		// delegation tool is added back on top. This is what forces every fact on screen to
 		// have come from a worker that actually looked.
 		tools: [],
 		canDelegate: true,
+		canFinish: true,
+		// Kept off the menu the workers read. They can delegate now, and a worker that handed
+		// work to a lead would open a second conversation with a person who is not there:
+		// a full window whose prompt says it is talking to somebody, holding no file tools,
+		// which then delegates again. Nothing but the depth cap would end it.
+		delegable: false,
 	},
 	{
 		name: "worker",
@@ -80,7 +91,17 @@ export const AGENTS: AgentSpec[] = [
 			"is spent from it.",
 			"",
 			"Do not report a problem you cannot describe a concrete failure for.",
+			"",
+			"You can hand work on as well. Do it when the question splits into parts that would",
+			"not fit in one window — several files that each have to be read in full, or a",
+			"search whose results you would then have to read through. Do not do it for",
+			"something you could settle by reading two files: a delegation costs a whole",
+			"context window and the wait for it, and whoever asked you is paying for both.",
 		].join("\n"),
 		tools: [...LOOK, ...WEB],
+		// The reason the tree can get deep. A question that needs six files read in full does
+		// not fit in one window, and a worker that could only read or give up had to choose
+		// between running out of room and answering from half the evidence.
+		canDelegate: true,
 	},
 ];

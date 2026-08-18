@@ -46,12 +46,17 @@ export function Composer({
 			? { kind: "send", agent: choice.slice("send:".length) }
 			: choice === "next"
 				? { kind: "next" }
-				: { kind: "continue" };
+				: choice === "queue" || choice === "cutIn"
+					? { kind: choice }
+					: { kind: "continue" };
 
-	// Sending a line off does not touch this window's session, so it need not wait for it.
-	// Making you wait would defeat the point: branches exist so a long run does not freeze
-	// the conversation.
-	const blocked = !live || !state.connected || (busy && target.kind !== "send");
+	// What is still forbidden is what still cannot work. `next` and `handoff` both run the
+	// summariser, and pi will not summarise a conversation that is mid-turn. Talking to a
+	// working point is no longer forbidden: the server picks the way in from the line's own
+	// state, so the browser no longer has to guess from a flag that crossed a network. And
+	// sending a line off never touched this window's session in the first place.
+	const blocked =
+		!live || !state.connected || (busy && (target.kind === "next" || target.kind === "handoff"));
 
 	function send() {
 		const trimmed = text.trim();
@@ -79,6 +84,15 @@ export function Composer({
 			<div className="row">
 				<select value={choice} onChange={(event) => setChoice(event.target.value)}>
 					<option value="continue">talk to {node?.agent ?? "…"}</option>
+					{/* Only while it is working. Offered on an idle point they would be two
+					    words for the thing "talk to" already does, and the person would have
+					    to work out which. */}
+					{busy && (
+						<optgroup label="it is working — join this turn">
+							<option value="queue">wait for this turn to end</option>
+							<option value="cutIn">cut in now</option>
+						</optgroup>
+					)}
 					<option value="next">start the next window</option>
 					<optgroup label="hand over — this line becomes theirs">
 						{state.agents
@@ -115,7 +129,9 @@ export function Composer({
 						: !live
 							? `this window is ${node?.state === "aborted" ? "stopped" : node?.state === "failed" ? "failed" : "closed"} — nothing can be sent to it`
 							: busy
-								? `${node?.agent} is working. To work meanwhile, choose "send … off" above.`
+								? choice === "cutIn"
+									? `${node?.agent} is working — this reaches it before its next thought`
+									: `${node?.agent} is working — this waits until this turn ends`
 								: exampleId
 									? `say something. @${exampleId} pastes in what that point currently says`
 									: "say something"

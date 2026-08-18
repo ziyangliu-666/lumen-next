@@ -16,10 +16,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { AgentRegistry, Runtime, type Line } from "@lumen/kernel";
+import { AgentRegistry, Autopilot, money, Runtime, type AutopilotStop } from "@lumen/kernel";
 import { WebSocketServer, type WebSocket } from "ws";
 import { AGENTS } from "./agents.ts";
-import type { ClientFrame, ServerFrame } from "./protocol.ts";
+import type { AutoState, ClientFrame, ServerFrame } from "./protocol.ts";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const WEB_DIST = resolve(HERE, "../../web/dist");
@@ -47,6 +47,17 @@ const EXTENSIONS = (process.env.LUMEN_EXTENSIONS ?? resolve(HERE, "../../../node
 	.split(",")
 	.map((path) => path.trim())
 	.filter(Boolean);
+/**
+ * The most one conversation may spend while it is running itself.
+ *
+ * The only number this feature has, and it is on the money rather than on the turns because
+ * money is what the person actually pays. A turn cap would be a proxy for it: turns differ
+ * in cost by two orders of magnitude between a one-line answer and a fan-out of twelve
+ * workers, so a turn limit either cuts cheap useful work short or waves an expensive run
+ * through. $2 is small enough that the first time somebody leaves this running by accident
+ * it costs them the price of a coffee.
+ */
+const AUTO_BUDGET = Number(process.env.LUMEN_AUTO_BUDGET ?? 2);
 
 const modelRuntime = await ModelRuntime.create();
 const model = modelRuntime.getModel(PROVIDER, MODEL_ID);
@@ -73,7 +84,17 @@ let runCounter = 0;
  */
 class Conversation {
 	readonly runtime: Runtime;
-	private root!: Line;
+	/**
+	 * The line holding the conversation, by id rather than by object.
+	 *
+	 * A handoff disposes the old line and opens another, so an object captured at startup
+	 * goes stale the first time the person hands over — and `hello` would then name a window
+	 * that closed, landing a reconnecting tab on a dead point.
+	 */
+	private leadLineId!: string;
+	private autopilot!: Autopilot;
+	/** How the last automatic run ended, kept so a tab that reconnects can still read it. */
+	private stopped: AutopilotStop | undefined;
 	// A plain field rather than a constructor parameter property: node's strip-only
 	// TypeScript support cannot erase those, and this file is run directly.
 	// A set, not one socket. Two tabs on the same conversation are two windows onto one
@@ -103,10 +124,36 @@ class Conversation {
 	}
 
 	async start(): Promise<void> {
-		this.root = await this.runtime.openRoot(this.runtime.registry.get("lead"), "");
+		const root = await this.runtime.openRoot(this.runtime.registry.get("lead"), "");
+		this.leadLineId = root.id;
+		this.autopilot = new Autopilot({
+			host: this.runtime,
+			lineId: root.id,
+			budget: AUTO_BUDGET,
+			onTurn: () => this.send({ type: "auto", state: this.autoState() }),
+			onStop: (stop) => {
+				this.stopped = stop;
+				this.send({ type: "auto", state: this.autoState() });
+				this.send({ type: "notice", message: describeStop(stop) });
+			},
+		});
 		// Subscribed once, for the life of the conversation. Events go to whichever socket
 		// is attached, or nowhere while none is.
 		this.runtime.trace.subscribe((event) => this.send(event));
+	}
+
+	private autoState(): AutoState {
+		return {
+			on: this.autopilot.running,
+			turns: this.autopilot.turns,
+			budget: AUTO_BUDGET,
+			stopped: this.stopped,
+		};
+	}
+
+	/** The window the conversation is standing in now, however many times it has moved. */
+	private get leadNodeId(): string {
+		return this.runtime.line(this.leadLineId).currentNodeId;
 	}
 
 	/** Point this conversation at a socket and bring it up to date. */
@@ -116,8 +163,9 @@ class Conversation {
 			type: "hello",
 			agents: this.runtime.registry.list(),
 			snapshot: this.runtime.trace.snapshot(),
-			rootNodeId: this.root.currentNodeId,
+			rootNodeId: this.leadNodeId,
 			said: Object.fromEntries(this.said),
+			auto: this.autoState(),
 		});
 	}
 
@@ -149,9 +197,24 @@ class Conversation {
 	}
 
 	async handle(frame: ClientFrame): Promise<void> {
+		if (frame.type === "auto") {
+			if (frame.on) {
+				this.stopped = undefined;
+				this.autopilot.start();
+			} else {
+				this.autopilot.stop("you");
+			}
+			this.send({ type: "auto", state: this.autoState() });
+			return;
+		}
+
 		if (frame.type === "abort") {
 			const line = this.runtime.lineAt(frame.nodeId);
 			if (!line) return;
+			// Before the abort, not after. Stopping a turn while the switch is still on ends
+			// one turn and the loop immediately starts another: the person presses stop and
+			// watches the work they just cancelled begin again.
+			if (line.id === this.leadLineId) this.autopilot.stop("you", "you pressed stop");
 			await this.runtime.abort(line.id);
 			// Say it. The only other evidence is a `stopped` tag on whichever children were
 			// running, which on a tall run is below the fold — so a stop could look like the
@@ -180,9 +243,30 @@ class Conversation {
 
 		switch (frame.target.kind) {
 			case "continue":
+			case "queue":
+			case "cutIn": {
+				// One case, because all three say the same thing about where the sentence goes:
+				// this window, which remembers everything. They differ only in what to do if a
+				// turn is already running, and only the server can decide that — the browser's
+				// `busy` flag crossed a network to get here and may already be wrong.
+				const whenBusy = frame.target.kind === "cutIn" ? "steer" : "followUp";
 				this.remember(line.currentNodeId, frame.text);
-				await this.runtime.say(line.id, text);
+				const how = await this.runtime.deliver(line.id, text, whenBusy);
+				if (how !== "turn" && frame.target.kind === "continue") {
+					this.send({
+						type: "notice",
+						message:
+							`${line.spec.name} was mid-turn, so your sentence waits until this turn ` +
+							"finishes. Choose “cut in now” to reach it sooner.",
+					});
+				}
+				// Deliberately does not start the loop. The switch is the only thing that does,
+				// and a second entry point here raced it: the switch starts a loop that waits
+				// for the turn in flight, and this line started another the moment that same
+				// turn ended — so a run that had just declared itself finished took one more
+				// turn to say so again. One owner, one loop.
 				return;
+			}
 			case "send": {
 				// A user-opened line has no tool call behind it, and `linkChild` needs a step
 				// to hang from. Opening one by hand is not a workaround: it puts the person's
@@ -236,6 +320,14 @@ class Conversation {
 					frame.target.agent,
 					text,
 				);
+				if (line.id === this.leadLineId) {
+					this.leadLineId = next.id;
+					this.autopilot.retarget(next.id);
+					// And stopped. The agent now holding the conversation may have no way to say
+					// it is finished, and driving an agent that cannot stop itself leaves the
+					// money as the only thing that ends the run.
+					this.autopilot.stop("you", `the line was handed to ${frame.target.agent}`);
+				}
 				if (note === "last reply") {
 					this.send({
 						type: "notice",
@@ -253,6 +345,7 @@ class Conversation {
 
 	/** Only on shutdown. A socket closing is a person looking away, not a run ending. */
 	close(): void {
+		this.autopilot.stop("you", "the server is shutting down");
 		this.runtime.closeAll("done");
 	}
 
@@ -265,6 +358,34 @@ class Conversation {
 
 	private sendTo(socket: WebSocket, frame: ServerFrame): void {
 		if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frame));
+	}
+}
+
+/**
+ * Why an automatic run ended, in the words a person would use.
+ *
+ * The reason is most of the value of stopping. A run that simply went quiet reads as a
+ * crash, and the next thing the person does is press the switch again.
+ */
+function describeStop(stop: AutopilotStop): string {
+	// The run's total, not the loop's share, and said as such. The loop can stop having taken
+	// no turn at all — the turn the person asked for had already ended with `finish` — and
+	// "$0.07 over 0 turns" reads as money spent by nothing.
+	const spent =
+		stop.turns === 0
+			? `${money(stop.spent)} spent on this run`
+			: `${stop.turns} turn${stop.turns === 1 ? "" : "s"} taken, ${money(stop.spent)} spent on this run`;
+	switch (stop.reason) {
+		case "declared":
+			return `The lead says the work is done: ${stop.note ?? "no reason given"} (${spent}).`;
+		case "budget":
+			return `It spent its budget of ${money(AUTO_BUDGET)}, so it stopped and wrote up what it had (${spent}).`;
+		case "you":
+			return stop.note
+				? `Running by itself stopped — ${stop.note} (${spent}).`
+				: `You turned off running by itself (${spent}).`;
+		case "failed":
+			return `A turn failed, so it stopped rather than asking again: ${stop.note ?? "no reason recorded"} (${spent}).`;
 	}
 }
 
@@ -341,6 +462,7 @@ http.listen(PORT, "127.0.0.1", () => {
 			`  model      ${PROVIDER}/${MODEL_ID}\n` +
 			`  cwd        ${CWD}\n` +
 			`  keepRecent ${keep}\n` +
+			`  auto cap   ${money(AUTO_BUDGET)}\n` +
 			`  extensions ${EXTENSIONS.length ? EXTENSIONS.map((p) => p.split("/").pop()).join(", ") : "none"}`,
 	);
 });

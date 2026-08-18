@@ -14,7 +14,7 @@ import { addUsage, emptyUsage } from "@lumen/kernel/trace/types";
 import type { AgentSpec, TraceNode, Usage } from "@lumen/kernel";
 // Type-only, so nothing from the server package is bundled. One definition of the wire
 // format, imported by both ends, rather than a copy here that can drift out of step.
-import type { ServerFrame, Target } from "@lumen/server/protocol";
+import type { AutoState, ServerFrame, Target } from "@lumen/server/protocol";
 
 export interface State {
 	nodes: Record<string, TraceNode>;
@@ -29,6 +29,8 @@ export interface State {
 	saidBy: Record<string, string[]>;
 	messages: { level: "error" | "notice"; text: string }[];
 	connected: boolean;
+	/** The switch: whether the lead is carrying on by itself, and what it may spend. */
+	auto: AutoState;
 }
 
 export const initialState: State = {
@@ -41,6 +43,9 @@ export const initialState: State = {
 	saidBy: {},
 	messages: [],
 	connected: false,
+	// Until `hello` arrives there is no run to know anything about. Zero rather than a guess
+	// at the budget: a cap invented by the page would be the wrong number on screen.
+	auto: { on: false, turns: 0, budget: 0 },
 };
 
 export type Action =
@@ -65,10 +70,15 @@ export function reduce(state: State, action: Action): State {
 			// answer underneath the new question — which reads as "that was the reply".
 			// The server's own `busy` frames overwrite this either way.
 			const node = state.nodes[action.nodeId];
+			// Only when this sentence starts a turn. A sentence typed at a point that is
+			// already working joins the turn instead, and clearing the buffer there would
+			// wipe the paragraph the agent is in the middle of writing — the deltas that
+			// follow would append to nothing and the first half would be gone.
+			const starting = node?.busy !== true;
 			return {
 				...state,
 				nodes: node ? { ...state.nodes, [action.nodeId]: { ...node, busy: true } } : state.nodes,
-				live: { ...state.live, [action.nodeId]: "" },
+				live: starting ? { ...state.live, [action.nodeId]: "" } : state.live,
 				saidBy: {
 					...state.saidBy,
 					[action.nodeId]: [...(state.saidBy[action.nodeId] ?? []), action.text],
@@ -97,6 +107,7 @@ function applyFrame(state: State, frame: ServerFrame): State {
 			return {
 				...state,
 				agents: frame.agents,
+				auto: frame.auto,
 				nodes: frame.snapshot.nodes,
 				children: frame.snapshot.children,
 				rootId: frame.snapshot.rootId,
@@ -104,6 +115,9 @@ function applyFrame(state: State, frame: ServerFrame): State {
 				selected: state.selected ?? stillLive ?? rootLive ?? frame.rootNodeId,
 			};
 		}
+
+		case "auto":
+			return { ...state, auto: frame.state };
 
 		case "error":
 			return { ...state, messages: [...state.messages, { level: "error", text: frame.message }] };
@@ -257,6 +271,10 @@ export function describeTarget(target: Target): string {
 	switch (target.kind) {
 		case "continue":
 			return "keeps everything it already knows";
+		case "queue":
+			return "it finishes what it is doing, then reads this";
+		case "cutIn":
+			return "it reads this before its next thought, and keeps the workers it started";
 		case "next":
 			return "starts a fresh window from a summary of this one";
 		case "handoff":

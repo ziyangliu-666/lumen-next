@@ -179,6 +179,6 @@ describe("the spend cap", () => {
 		});
 
 		expect(runtime.overspent()).toBe(true);
-		expect(runtime.overspentMessage()).toContain("$1.20 of its $1.00 cap");
+		expect(runtime.overspentMessage()).toContain("$1.2000 of its $1.0000 cap");
 	});
 });

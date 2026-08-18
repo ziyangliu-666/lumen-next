@@ -27,6 +27,17 @@ export interface Usage {
 	};
 }
 
+/**
+ * Dollars, written out for a person or a model to read.
+ *
+ * Four decimals, not two. A window is often worth a fraction of a cent, and two decimals
+ * printed a $0.006 cap as "$0.01" — which a lead then quoted back in its own report,
+ * telling the person a number nobody had set.
+ */
+export function money(amount: number): string {
+	return Number.isFinite(amount) ? `$${amount.toFixed(4)}` : "no cap";
+}
+
 export function emptyUsage(): Usage {
 	return {
 		input: 0,

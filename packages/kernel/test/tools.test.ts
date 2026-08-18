@@ -16,7 +16,7 @@ function stubRuntime(overrides: Partial<Runtime> = {}) {
 	const runtime = {
 		maxConcurrent: 4,
 		overspent: () => false,
-		overspentMessage: () => "this run has spent $2.00 of its $2.00 cap; no more agents can be started",
+		overspentMessage: () => "this run has spent $2.0000 of its $2.0000 cap; no more agents can be started",
 		registry: {
 			catalogue: () => "worker — looks things up",
 			has: () => true,

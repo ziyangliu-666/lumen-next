@@ -23,6 +23,8 @@ class Host {
 	/** What each turn costs, so a test can walk the run into its budget. */
 	perTurn = 0;
 	declared: string | undefined;
+	/** Declare the work finished at the end of the turn with this number, counting from 1. */
+	declareAfterTurn = 0;
 	fails: string | undefined;
 	/** While set, a turn does not end until `release` is called. */
 	holding = false;
@@ -45,6 +47,7 @@ class Host {
 	async say(lineId: string, text: string): Promise<void> {
 		this.said.push({ lineId, text, cap: this.spendCap });
 		this.spend += this.perTurn;
+		if (this.said.length === this.declareAfterTurn) this.declared = "that answers it";
 		if (this.fails) throw new Error(this.fails);
 		if (this.holding) await new Promise<void>((resolve) => this.waiting.push(resolve));
 	}
@@ -85,17 +88,33 @@ describe("autopilot", () => {
 
 	it("stops when the agent declares the work finished", async () => {
 		const host = new Host();
+		host.declareAfterTurn = 2;
+		const { auto, stopped } = drive(host);
+
+		auto.start();
+		const stop = await stopped;
+
+		expect(host.said.map((turn) => turn.text)).toEqual([CONTINUE_PROMPT, CONTINUE_PROMPT]);
+		expect(stop.reason).toBe("declared");
+		expect(stop.note).toBe("that answers it");
+		expect(stop.turns).toBe(2);
+		expect(auto.running).toBe(false);
+	});
+
+	it("takes no turn at all when the work was already declared finished", async () => {
+		const host = new Host();
 		host.declared = "the question is answered";
 		const { auto, stopped } = drive(host);
 
 		auto.start();
 		const stop = await stopped;
 
-		expect(host.said.map((turn) => turn.text)).toEqual([CONTINUE_PROMPT]);
+		// The turn the person asked for may have ended with `finish` before the switch was
+		// even read. Asking again would spend money to be told the same thing twice.
+		// A stale declaration cannot get here: starting a turn clears it.
+		expect(host.said).toEqual([]);
 		expect(stop.reason).toBe("declared");
-		expect(stop.note).toBe("the question is answered");
-		expect(stop.turns).toBe(1);
-		expect(auto.running).toBe(false);
+		expect(stop.turns).toBe(0);
 	});
 
 	it("stops on the budget, after one turn that cannot delegate", async () => {

@@ -195,6 +195,16 @@ export class Autopilot {
 		}
 
 		while (this.active) {
+			// Before the turn, so the first thing this loop does is check whether there is
+			// anything to drive. The turn the person just asked for may already have ended
+			// with `finish`, and asking again would spend money to be told so a second time.
+			// A stale declaration cannot reach here: starting a turn clears it.
+			const declared = host.takeFinish(this.lineId);
+			if (declared !== undefined) {
+				this.stop("declared", declared);
+				return;
+			}
+
 			if (host.totalCost() >= budget) {
 				await this.wrapUp();
 				this.stop("budget");
@@ -213,18 +223,6 @@ export class Autopilot {
 				this.stop("failed", messageOf(cause));
 				return;
 			}
-
-			// Read after the turn, not during it. `finish` is a declaration about the work as
-			// a whole, and an agent that calls it then keeps working has not finished yet.
-			const declared = host.takeFinish(this.lineId);
-			if (declared !== undefined) {
-				this.stop("declared", declared);
-				return;
-			}
-
-			// The person may have pressed stop while that turn ran. Checked here rather than
-			// only in the `while`, so the state is read after every await rather than before.
-			if (!this.active) return;
 		}
 	}
 

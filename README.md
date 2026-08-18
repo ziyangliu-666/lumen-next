@@ -50,6 +50,37 @@ whether its failure has any channel other than the graph.
 Cost obeys the same rule. A point's total is its own spend plus the work it **delegated**.
 Branches and compacted successors are their own points with their own numbers.
 
+## Leaving it running
+
+There is a switch in the header. While it is on, every turn the lead ends is continued
+automatically: it delegates, reads what came back, decides what is still missing, and
+delegates again. You state the question once instead of once per round.
+
+It adds nothing to the graph. Each automatic turn is an ordinary turn on the lead's own
+line, so a long run fills its window, compacts, and draws itself as a chain of lead points
+running to the right with its delegations hanging underneath.
+
+Three things end a run, and they read differently on purpose:
+
+| | |
+|---|---|
+| the lead calls `finish` | the work is done. It says why, in its own words |
+| the budget runs out | the money is gone. It gets one last turn, which can write but not spend |
+| you press stop, or the switch | a decision |
+
+**The budget is the only number.** `LUMEN_AUTO_BUDGET`, $2 by default. Not a turn cap:
+turns differ in cost by two orders of magnitude between a one-line answer and a fan-out of
+twelve workers, so a turn limit either cuts cheap work short or waves an expensive run
+through. The cap is checked in three places, because one turn can spend a lot between two
+checks — the driver checks between turns, the delegation tool checks when a fan-out
+arrives, and each window is checked as it opens. Work already in flight when the cap trips
+still finishes, so a run can overshoot by up to one round of concurrent windows per waiting
+call.
+
+Workers delegate too, so the tree is as deep as the question needs. The lead is the one
+agent kept off the menu they read: a worker that delegated to a lead would open a second
+conversation with a person who is not there.
+
 ## What you can do
 
 Three actions. Everything else the system does on its own; these are takeovers.
@@ -59,9 +90,15 @@ Three actions. Everything else the system does on its own; these are takeovers.
    | target | new point? | what it sees | can swap agent? |
    |---|---|---|---|
    | talk to X | no | the window it already has | no |
+   | talk to X while it works | no | the same, from inside the turn | no |
    | start the next window | yes | a summary focused by what you just said | no |
    | hand over to X | yes | the same summary | yes |
    | send X off | yes | **only your sentence** | yes |
+
+   Typing at a point that is working is the second row. Your sentence joins the turn
+   already running rather than starting one, and you choose when it lands: at the end of
+   this turn, or at the model's next step. Neither is an abort — the workers that were
+   already going keep going, which is why cutting in is cheaper than stopping.
 
    `@n-4` in your message pastes in what that point currently says. Referencing several
    points is all "merging" is: a fresh empty window fed several summaries.
@@ -69,7 +106,8 @@ Three actions. Everything else the system does on its own; these are takeovers.
 2. **Click a point** to move there. Live points take input; ended ones explain why not and
    offer the way forward.
 
-3. **Stop.**
+3. **Stop.** It also turns the switch off, because a stop that left the driver running
+   would start the work again a second later.
 
 ## Running it
 
@@ -90,6 +128,7 @@ prints; it proxies the socket to the server.
 | `LUMEN_PROVIDER` / `LUMEN_MODEL` | `deepseek` / `deepseek-v4-pro` | which model |
 | `LUMEN_PORT` | `4173` | |
 | `LUMEN_CWD` | current directory | what the agents can read |
+| `LUMEN_AUTO_BUDGET` | `2` | dollars one run may spend while it runs itself |
 | `LUMEN_KEEP_RECENT_TOKENS` | pi's default (20k) | set to a few hundred to watch a line compact without holding a long conversation first |
 | `LUMEN_EXTENSIONS` | `node_modules/pi-web-access` | pi extensions to load by path; set empty to run without the web tools |
 
@@ -117,7 +156,8 @@ fetched two web pages. If you add tools, check the allowlist still means what it
 ## Layout
 
 ```
-packages/kernel   the engine. Line, Trace, the subagent tool. No web, no server.
+packages/kernel   the engine. Line, Trace, the subagent and finish tools, the driver.
+                  No web, no server.
 packages/server   one process: HTTP + WebSocket, and the agent definitions.
 packages/web      React + Vite. One reducer over the trace events.
 ```

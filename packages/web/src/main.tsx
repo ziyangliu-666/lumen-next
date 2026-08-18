@@ -4,6 +4,7 @@ import type { ClientFrame, ServerFrame, Target } from "@lumen/server/protocol";
 import { Composer } from "./Composer.tsx";
 import { Canvas } from "./Canvas.tsx";
 import { Detail } from "./Detail.tsx";
+import { money } from "@lumen/kernel/trace/types";
 import { initialState, reduce } from "./state.ts";
 import "./app.css";
 
@@ -56,7 +57,12 @@ function App() {
 			// Notices describe the action you just took. Leaving the previous one on screen
 			// beside the new one made a stale line read as a second, current complaint.
 			dispatch({ kind: "clearMessages" });
-			if (target.kind === "continue" || target.kind === "next") {
+			if (
+				target.kind === "continue" ||
+				target.kind === "next" ||
+				target.kind === "queue" ||
+				target.kind === "cutIn"
+			) {
 				dispatch({ kind: "said", nodeId, text });
 			}
 			send({ type: "say", nodeId, text, target });
@@ -82,8 +88,19 @@ function App() {
 					<span>■ stopped</span>
 					<span>✗ failed</span>
 				</span>
+				<label className="auto" title="the lead keeps working until it says it is done, or the budget runs out">
+					<input
+						type="checkbox"
+						checked={state.auto.on}
+						disabled={!state.connected}
+						onChange={(event) => send({ type: "auto", on: event.target.checked })}
+					/>
+					run by itself
+				</label>
+				{state.auto.on && <span className="meta">turn {state.auto.turns}</span>}
 				<span className="meta" title="every window's own spend, added once">
-					${spent.toFixed(4)} this run
+					{money(spent)}
+					{state.auto.budget > 0 ? ` of ${money(state.auto.budget)}` : ""} this run
 				</span>
 				<span className={`dot ${state.connected ? "on" : "off"}`} />
 			</header>

@@ -232,6 +232,25 @@ main {
 	opacity: 0.65;
 }
 
+/* The switch. Deliberately plain and beside the spend it is bounded by: the two numbers
+   that matter while it runs are how far it has got and what it has cost. */
+.auto {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--dim);
+	font-size: 12px;
+	cursor: pointer;
+	user-select: none;
+}
+.auto input {
+	accent-color: var(--accent);
+	cursor: pointer;
+}
+.auto:has(input:checked) {
+	color: var(--accent);
+}
+
 .dot {
 	margin-left: 12px;
 	width: 8px;

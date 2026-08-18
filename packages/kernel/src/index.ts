@@ -31,6 +31,7 @@ export { Trace, type OpenNodeOptions } from "./trace/trace.ts";
 export {
 	addUsage,
 	emptyUsage,
+	money,
 	type NodeOrigin,
 	type NodeState,
 	type Step,

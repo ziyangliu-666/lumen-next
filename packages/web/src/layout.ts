@@ -62,6 +62,14 @@ export interface Edge {
 	to: Placed;
 	kind: "delegate" | "branch" | "compact" | "handoff";
 	path: string;
+	/**
+	 * The window at the far end is thinking right now.
+	 *
+	 * Carried on the edge rather than looked up while drawing, because it is a property of
+	 * this connection: the wire is the only thing on screen that can say *where* in the tree
+	 * the live work is, on a tree too tall to read point by point.
+	 */
+	live: boolean;
 }
 
 export function edges(state: State, placed: Placed[]): Edge[] {
@@ -85,6 +93,7 @@ export function edges(state: State, placed: Placed[]): Edge[] {
 			to: spot,
 			kind: node.origin.kind,
 			path: `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`,
+			live: node.busy === true,
 		});
 	}
 	return out;

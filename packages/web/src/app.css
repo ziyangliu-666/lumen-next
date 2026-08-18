@@ -34,6 +34,24 @@ header {
 	gap: 12px;
 	padding: 10px 16px;
 	border-bottom: 1px solid var(--line);
+	white-space: nowrap;
+}
+/* Below this the header has more in it than fits, and it wrapped into two ragged lines.
+   What goes first is the teaching: the tagline and the glyph key explain the page to
+   somebody meeting it, while the switch, the spend and the settings are the state of the
+   run and have to stay. */
+@media (max-width: 1400px) {
+	/* `header .legend`, not `.legend`. The base rule for it is defined further down this
+	   file at the same weight, so a bare class here loses to it on order alone — and the
+	   tagline vanished while the glyph key stayed, which is the half-applied result that
+	   looks like a layout bug rather than a rule. */
+	header .hint,
+	header .legend {
+		display: none;
+	}
+	header .auto {
+		margin-left: auto;
+	}
 }
 
 main {
@@ -619,4 +637,62 @@ main {
 .settings .fixed button:hover {
 	border-color: var(--accent);
 	color: var(--accent);
+}
+
+/* Current in the wire.
+   
+   The one moving thing on the canvas, and it moves only where work is actually happening:
+   a short bright dash travelling from the caller to the window it is waiting on. On a tree
+   of forty points this is the only way to see where the live work is without reading every
+   glyph, and its direction is the direction the work went, which is what the wire already
+   means.
+   
+   Drawn over the wire rather than replacing it, so the edge kind stays legible underneath. */
+.wire.flow {
+	stroke: var(--accent);
+	stroke-width: 2;
+	stroke-linecap: round;
+	/* One bead per wire, not a row of them. The gap between two points is about 60px, so a
+	   period of 65 puts a single travelling mark on the wire — which reads as current moving.
+	   A shorter period tiled the wire with dots, and a still dotted line says nothing that a
+	   solid one did not already say. */
+	stroke-dasharray: 4 61;
+	animation: flow 2.4s linear infinite;
+}
+@keyframes flow {
+	from {
+		stroke-dashoffset: 65;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+/* The point at the far end breathes on the same clock, so the wire arriving and the window
+   thinking read as one thing rather than two effects that happen to be near each other. */
+.point.busy .mark {
+	animation: breathe 2.4s ease-in-out infinite;
+}
+@keyframes breathe {
+	0%,
+	100% {
+		opacity: 0.35;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+/* Movement is how this says "live", so with movement off it has to say it another way
+   rather than say nothing: the wire stays lit and the mark stays bright. */
+@media (prefers-reduced-motion: reduce) {
+	.wire.flow {
+		stroke-dasharray: none;
+		stroke-width: 1.5;
+		animation: none;
+	}
+	.point.busy .mark {
+		animation: none;
+		opacity: 1;
+	}
 }

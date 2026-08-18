@@ -80,6 +80,20 @@ export function Canvas({
 							markerEnd={wire.kind === "branch" ? "url(#tip)" : undefined}
 						/>
 					))}
+					{/* Drawn again on top, and only while the far end is thinking. A second path
+					    rather than a dash on the first, so the wire keeps saying what kind of edge
+					    it is — solid for delegated work, dashed for a line nobody waits for — while
+					    the light travelling along it says the work is live. The two facts are
+					    different and the picture must not merge them. */}
+					{wires
+						.filter((wire) => wire.live)
+						.map((wire) => (
+							<path
+								key={`flow-${wire.from.id}-${wire.to.id}`}
+								d={wire.path}
+								className="wire flow"
+							/>
+						))}
 					<defs>
 						<marker id="tip" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
 							<path d="M0,0 L8,4 L0,8 z" className="tipFill" />

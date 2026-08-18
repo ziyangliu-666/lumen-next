@@ -72,6 +72,27 @@ function App() {
 		[send, state.selected],
 	);
 
+	/**
+	 * Close this conversation and come back to an empty page.
+	 *
+	 * The reload has to wait for the socket to go, not fire beside it. A frame sent into a
+	 * page that is already navigating away is a frame the server never reads, and the
+	 * conversation it was supposed to close would keep its lines open — and, if it was
+	 * running by itself, keep spending in a window nobody can reach any more.
+	 */
+	const newConversation = useCallback(() => {
+		const ws = socket.current;
+		localStorage.removeItem("lumen.session");
+		localStorage.removeItem("lumen.selected");
+		const reload = () => location.reload();
+		if (!ws || ws.readyState !== WebSocket.OPEN) return reload();
+		ws.addEventListener("close", reload, { once: true });
+		// The fallback, for a socket that dies without closing cleanly. Better a fresh page
+		// than a button that does nothing.
+		setTimeout(reload, 1000);
+		ws.send(JSON.stringify({ type: "close" } satisfies ClientFrame));
+	}, []);
+
 	const abort = useCallback(() => {
 		if (state.selected) send({ type: "abort", nodeId: state.selected });
 	}, [send, state.selected]);
@@ -120,6 +141,7 @@ function App() {
 					fixed={state.fixed}
 					onChange={(patch) => send({ type: "settings", patch })}
 					onClose={() => setShowSettings(false)}
+					onNewConversation={newConversation}
 				/>
 			)}
 

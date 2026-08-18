@@ -112,8 +112,16 @@ let lineCounter = 0;
 export class Runtime {
 	readonly trace: Trace;
 	readonly registry: AgentRegistry;
-	readonly maxDepth: number;
-	readonly maxConcurrent: number;
+	/**
+	 * How deep delegation may go, and how many children one call may run at once.
+	 *
+	 * Both are read at the moment they are needed — the depth when a window is asked for, the
+	 * concurrency when a fan-out starts — so changing either applies to work started from now
+	 * on and disturbs nothing already running. Neither is a spending limit: raising the depth
+	 * multiplies the tree, and the budget is the only thing that bounds what that costs.
+	 */
+	maxDepth: number;
+	maxConcurrent: number;
 	/**
 	 * The most this run may spend, in dollars, before it stops opening windows. Unset means
 	 * no cap.

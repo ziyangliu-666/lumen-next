@@ -122,8 +122,14 @@ conversation starts from.
 | budget | yes | at once, including a run already going |
 | model | yes | the next window that opens |
 | keep-recent tokens | yes | the next window that opens |
+| delegation depth | yes | work started from now on |
+| how many at once | yes | the next delegation call |
 | working directory | **no** | |
 | extensions | **no** | |
+
+The panel is also the way back to an empty page. **new conversation** closes this one — the
+driver stops, its windows end, and the server forgets it — then reloads. Nothing is saved
+anywhere, so there is no other way, and no way back to what you closed.
 
 The model and the thresholds cannot claim more than "the next window": pi binds both when a
 session is built, and rebuilding one to change them would throw away the window, which is
@@ -154,6 +160,8 @@ prints; it proxies the socket to the server.
 | `LUMEN_PORT` | `4173` | |
 | `LUMEN_CWD` | current directory | what the agents can read |
 | `LUMEN_AUTO_BUDGET` | `2` | dollars one run may spend while it runs itself |
+| `LUMEN_MAX_DEPTH` | `3` | how deep delegation may go |
+| `LUMEN_MAX_CONCURRENT` | `4` | how many children one call runs at once |
 | `LUMEN_KEEP_RECENT_TOKENS` | pi's default (20k) | set to a few hundred to watch a line compact without holding a long conversation first |
 | `LUMEN_EXTENSIONS` | `node_modules/pi-web-access` | pi extensions to load by path; set empty to run without the web tools |
 

@@ -8,10 +8,10 @@
  *
  * Two rules the panel keeps, and both are about not lying:
  *
- *   Every changeable setting says when it starts to matter. Two of the three cannot claim
- *   "now": pi binds the model and the compaction thresholds when a session is built, so
- *   they apply to the next window. A page that implied otherwise would have people watching
- *   a run they thought had changed model.
+ *   Every changeable setting says when it starts to matter, and they differ. pi binds the
+ *   model and the compaction thresholds when a session is built, so those reach the next
+ *   window and not this one. A page that implied otherwise would have people watching a run
+ *   they thought had changed model.
  *
  *   What cannot be changed is shown anyway, as text. A panel listing only the changeable
  *   things teaches that the rest does not exist — and the two worth reading most, the
@@ -34,7 +34,14 @@ type Field =
 			step: number;
 	  }
 	| { kind: "model"; key: "model"; label: string; when: string; help: string }
-	| { kind: "optionalNumber"; key: "keepRecentTokens"; label: string; when: string; help: string };
+	| { kind: "optionalNumber"; key: "keepRecentTokens"; label: string; when: string; help: string }
+	| {
+			kind: "whole";
+			key: "maxDepth" | "maxConcurrent";
+			label: string;
+			when: string;
+			help: string;
+	  };
 
 const FIELDS: Field[] = [
 	{
@@ -69,6 +76,27 @@ const FIELDS: Field[] = [
 			"pi's own default of 20k. Set it to a few hundred to watch a line compact without " +
 			"holding a long conversation first.",
 	},
+	{
+		kind: "whole",
+		key: "maxDepth",
+		label: "depth",
+		when: "work started from now on",
+		help:
+			"How many levels of delegation are allowed. Three is a lead that splits a question, " +
+			"workers that split their part, and a leaf that goes and looks. Each level multiplies " +
+			"the tree rather than lengthening it, and nothing bounds what that costs except the " +
+			"budget.",
+	},
+	{
+		kind: "whole",
+		key: "maxConcurrent",
+		label: "at once",
+		when: "the next delegation call",
+		help:
+			"How many children one call runs at the same time. The rest queue behind them and " +
+			"all of them still run, so this is about how hard the model provider is hit, not " +
+			"about how much work happens.",
+	},
 ];
 
 export function Settings({
@@ -76,11 +104,13 @@ export function Settings({
 	fixed,
 	onChange,
 	onClose,
+	onNewConversation,
 }: {
 	settings: SettingsValues;
 	fixed: Fixed;
 	onChange: (patch: Partial<SettingsValues>) => void;
 	onClose: () => void;
+	onNewConversation: () => void;
 }) {
 	// A draft, so typing "0.5" does not send a patch at "0" and again at "0.". The server is
 	// the authority: whatever it sends back replaces this.
@@ -147,6 +177,21 @@ export function Settings({
 							</select>
 						)}
 
+						{field.kind === "whole" && (
+							<input
+								id={`set-${field.key}`}
+								type="number"
+								min={1}
+								max={8}
+								step={1}
+								value={draft[field.key]}
+								onChange={(event) =>
+									setDraft({ ...draft, [field.key]: Number(event.target.value) })
+								}
+								onBlur={(event) => commit({ [field.key]: Number(event.target.value) })}
+							/>
+						)}
+
 						{field.kind === "optionalNumber" && (
 							<input
 								id={`set-${field.key}`}
@@ -173,6 +218,22 @@ export function Settings({
 						<p className="help">{field.help}</p>
 					</div>
 				))}
+
+				{/* Down here rather than in the header, because it cannot be undone: the run you
+				    are looking at is closed and its key forgotten, and there is no history to
+				    find it in again. A destructive action a stray click can reach needs either a
+				    confirmation box or somewhere quieter to live, and this is the quieter one. */}
+				<div className="field fixed">
+					<strong>start again</strong>
+					<p className="help">
+						Closes this conversation — it stops running by itself, its windows end, and the
+						server forgets it. The graph you are looking at goes with it. Nothing is saved
+						anywhere, so this is the only way back to an empty page.
+					</p>
+					<button type="button" onClick={onNewConversation}>
+						new conversation
+					</button>
+				</div>
 
 				<div className="field fixed">
 					<strong>fixed when the server started</strong>

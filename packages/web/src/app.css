@@ -605,3 +605,18 @@ main {
 	border-color: var(--bad);
 	color: var(--bad);
 }
+
+/* The one button in the panel that does something rather than setting something. */
+.settings .fixed button {
+	background: var(--bg);
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	padding: 6px 12px;
+	font: inherit;
+	cursor: pointer;
+}
+.settings .fixed button:hover {
+	border-color: var(--accent);
+	color: var(--accent);
+}

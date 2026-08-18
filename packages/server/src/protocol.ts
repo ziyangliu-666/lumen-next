@@ -67,6 +67,16 @@ export interface Settings {
 	 * without holding a long conversation first.
 	 */
 	keepRecentTokens: number | null;
+	/**
+	 * How deep delegation may go. Applies to work started from now on.
+	 *
+	 * Raising it multiplies the tree rather than lengthening it: every level fans out again.
+	 * Nothing here bounds that except the budget, which is the honest place for it to be
+	 * bounded.
+	 */
+	maxDepth: number;
+	/** How many children one delegation call runs at once. The rest queue behind them. */
+	maxConcurrent: number;
 }
 
 /**
@@ -96,7 +106,17 @@ export type ClientFrame =
 	 */
 	| { type: "auto"; on: boolean }
 	/** Change some settings. Anything left out of the patch is left as it is. */
-	| { type: "settings"; patch: Partial<Settings> };
+	| { type: "settings"; patch: Partial<Settings> }
+	/**
+	 * Done with this conversation: stop driving it, close its windows, forget it.
+	 *
+	 * The one thing that may end a run other than the process. Nothing reclaims a
+	 * conversation on its own — a timer would eventually collect the line somebody left
+	 * running on purpose — but a person saying they have finished with it is not a timer, and
+	 * without this every fresh start left a runtime behind holding live sessions, and an
+	 * automatic run still spending in a window nobody could see any more.
+	 */
+	| { type: "close" };
 
 export type ServerFrame =
 	| {

@@ -58,6 +58,15 @@ const EXTENSIONS = (process.env.LUMEN_EXTENSIONS ?? resolve(HERE, "../../../node
  * it costs them the price of a coffee.
  */
 const AUTO_BUDGET = Number(process.env.LUMEN_AUTO_BUDGET ?? 2);
+/**
+ * Where a conversation starts. Both are changeable per conversation from the panel.
+ *
+ * Three levels is enough for a lead that splits a question, workers that split their part,
+ * and a leaf that goes and looks. Four at a fan-out of four is 256 windows, which is a
+ * decision to make deliberately rather than to arrive at.
+ */
+const MAX_DEPTH = Number(process.env.LUMEN_MAX_DEPTH ?? 3);
+const MAX_CONCURRENT = Number(process.env.LUMEN_MAX_CONCURRENT ?? 4);
 
 const modelRuntime = await ModelRuntime.create();
 const model = modelRuntime.getModel(PROVIDER, MODEL_ID);
@@ -123,6 +132,8 @@ class Conversation {
 		autoBudget: AUTO_BUDGET,
 		model: `${PROVIDER}/${MODEL_ID}`,
 		keepRecentTokens: KEEP_RECENT ?? null,
+		maxDepth: MAX_DEPTH,
+		maxConcurrent: MAX_CONCURRENT,
 	};
 	// A plain field rather than a constructor parameter property: node's strip-only
 	// TypeScript support cannot erase those, and this file is run directly.
@@ -146,7 +157,8 @@ class Conversation {
 			modelRuntime,
 			model,
 			cwd: CWD,
-			maxDepth: 3,
+			maxDepth: MAX_DEPTH,
+			maxConcurrent: MAX_CONCURRENT,
 			compaction: KEEP_RECENT === undefined ? undefined : { keepRecentTokens: KEEP_RECENT },
 			extensions: EXTENSIONS,
 		});
@@ -252,13 +264,21 @@ class Conversation {
 	 * the conversation. So they take effect on the next window, and the page says so.
 	 */
 	private applySettings(patch: Partial<Settings>): void {
+		// A refusal has to send the settings back too. Without it the box keeps the number that
+		// was turned down, so the panel shows 9 while the runtime uses 4 — a screen that has
+		// quietly stopped describing the machine, which is the failure this whole design is
+		// arranged to avoid.
+		const refuse = (message: string) => {
+			this.send({ type: "error", message });
+			this.send({ type: "settings", settings: this.settings });
+		};
+
 		if (patch.autoBudget !== undefined) {
 			const budget = Number(patch.autoBudget);
 			// Checked here rather than trusted from the page. A budget of NaN compares false
 			// against every spend, which is not a large cap — it is no cap at all.
 			if (!Number.isFinite(budget) || budget <= 0) {
-				this.send({ type: "error", message: "The budget has to be a number above zero." });
-				return;
+				return refuse("The budget has to be a number above zero.");
 			}
 			this.settings.autoBudget = budget;
 			this.autopilot.setBudget(budget);
@@ -268,11 +288,9 @@ class Conversation {
 			const [provider, ...rest] = patch.model.split("/");
 			const model = modelRuntime.getModel(provider, rest.join("/"));
 			if (!model) {
-				this.send({
-					type: "error",
-					message: `No credentials for ${patch.model}. The models you can run are in ~/.pi/agent/auth.json.`,
-				});
-				return;
+				return refuse(
+					`No credentials for ${patch.model}. The models you can run are in ~/.pi/agent/auth.json.`,
+				);
 			}
 			this.settings.model = patch.model;
 			this.runtime.setModel(model);
@@ -282,11 +300,23 @@ class Conversation {
 			});
 		}
 
+		// Two whole numbers with the same shape of check, so they share one. Both are read at
+		// the moment they are used, so a change reaches the next window asked for and leaves
+		// everything already running alone.
+		for (const key of ["maxDepth", "maxConcurrent"] as const) {
+			const value = patch[key];
+			if (value === undefined) continue;
+			if (!Number.isInteger(value) || value < 1 || value > 8) {
+				return refuse(`${key} has to be a whole number from 1 to 8.`);
+			}
+			this.settings[key] = value;
+			this.runtime[key] = value;
+		}
+
 		if (patch.keepRecentTokens !== undefined) {
 			const keep = patch.keepRecentTokens;
 			if (keep !== null && (!Number.isFinite(keep) || keep <= 0)) {
-				this.send({ type: "error", message: "Keep-recent has to be a number above zero, or empty." });
-				return;
+				return refuse("Keep-recent has to be a number above zero, or empty.");
 			}
 			this.settings.keepRecentTokens = keep;
 			this.runtime.setCompaction(keep === null ? undefined : { keepRecentTokens: keep });
@@ -295,7 +325,7 @@ class Conversation {
 		this.send({ type: "settings", settings: this.settings });
 	}
 
-	async handle(frame: ClientFrame): Promise<void> {
+	async handle(frame: Exclude<ClientFrame, { type: "close" }>): Promise<void> {
 		if (frame.type === "settings") {
 			this.applySettings(frame.patch);
 			return;
@@ -558,6 +588,15 @@ sockets.on("connection", async (socket, request) => {
 		} catch {
 			return;
 		}
+		// Ending a conversation is the map's business rather than the conversation's: it is the
+		// only thing here that holds the key. Everything else the conversation answers itself.
+		if (frame.type === "close") {
+			conversation.close();
+			conversations.delete(key);
+			socket.close();
+			return;
+		}
+
 		try {
 			await conversation.handle(frame);
 		} catch (cause) {
@@ -581,6 +620,7 @@ http.listen(PORT, "127.0.0.1", () => {
 			`  cwd        ${CWD}\n` +
 			`  keepRecent ${keep}\n` +
 			`  auto cap   ${money(AUTO_BUDGET)}\n` +
+			`  depth      ${MAX_DEPTH}, ${MAX_CONCURRENT} at once\n` +
 			`  extensions ${EXTENSIONS.length ? EXTENSIONS.map((p) => p.split("/").pop()).join(", ") : "none"}`,
 	);
 });

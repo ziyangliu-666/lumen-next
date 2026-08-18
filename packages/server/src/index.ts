@@ -156,6 +156,23 @@ class Conversation {
 		return this.runtime.line(this.leadLineId).currentNodeId;
 	}
 
+	/**
+	 * Whether the lead has anything to carry on from.
+	 *
+	 * Three ways to have something, because the switch can be pressed at three moments: the
+	 * person has spoken to this window, or it is already working, or it has said something
+	 * that a next turn could build on. A window with none of the three is empty, and the
+	 * driver has nothing to drive.
+	 */
+	private hasSomethingToDo(): boolean {
+		const node = this.runtime.trace.node(this.leadNodeId);
+		return (
+			(this.said.get(node.id)?.length ?? 0) > 0 ||
+			node.steps.length > 0 ||
+			(node.summary ?? "").trim().length > 0
+		);
+	}
+
 	/** Point this conversation at a socket and bring it up to date. */
 	attach(socket: WebSocket): void {
 		this.sockets.add(socket);
@@ -199,6 +216,20 @@ class Conversation {
 	async handle(frame: ClientFrame): Promise<void> {
 		if (frame.type === "auto") {
 			if (frame.on) {
+				// Nothing to carry on from. Measured, not feared: the first thing a person does
+				// is press the interesting switch, and on an empty conversation that started a
+				// loop against a window with nothing in it — which answers nobody, never
+				// declares itself finished, and goes round again until the money runs out.
+				if (!this.hasSomethingToDo()) {
+					this.send({
+						type: "notice",
+						message:
+							"Ask for something first. There is nothing in this window to carry on from, " +
+							"and it would keep asking itself until the budget ran out.",
+					});
+					this.send({ type: "auto", state: this.autoState() });
+					return;
+				}
 				this.stopped = undefined;
 				this.autopilot.start();
 			} else {

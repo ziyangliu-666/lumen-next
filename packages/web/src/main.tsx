@@ -97,7 +97,11 @@ function App() {
 					/>
 					run by itself
 				</label>
-				{state.auto.on && <span className="meta">turn {state.auto.turns}</span>}
+				{/* Only once a turn has actually been taken. Between switching on and the first
+				    automatic turn the count is zero, and "turn 0" reads as a fault. */}
+				{state.auto.on && state.auto.turns > 0 && (
+					<span className="meta">turn {state.auto.turns}</span>
+				)}
 				<span className="meta" title="every window's own spend, added once">
 					{money(spent)}
 					{state.auto.budget > 0 ? ` of ${money(state.auto.budget)}` : ""} this run

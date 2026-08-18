@@ -68,7 +68,9 @@ Three things end a run, and they read differently on purpose:
 | the budget runs out | the money is gone. It gets one last turn, which can write but not spend |
 | you press stop, or the switch | a decision |
 
-**The budget is the only number.** `LUMEN_AUTO_BUDGET`, $2 by default. Not a turn cap:
+**The budget is the only number.** `LUMEN_AUTO_BUDGET`, $2 by default, and changeable
+while a run is going from the settings panel — raising it after a run stopped on its budget
+lets it carry on rather than start the question again. Not a turn cap:
 turns differ in cost by two orders of magnitude between a one-line answer and a fan-out of
 twelve workers, so a turn limit either cuts cheap work short or waves an expensive run
 through. The cap is checked in three places, because one turn can spend a lot between two
@@ -108,6 +110,29 @@ Three actions. Everything else the system does on its own; these are takeovers.
 
 3. **Stop.** It also turns the switch off, because a stop that left the driver running
    would start the work again a second later.
+
+## Settings
+
+The `settings` link in the header opens a panel. What it changes lasts as long as the
+conversation and is saved nowhere; the environment variables below are what every new
+conversation starts from.
+
+| | changeable | when it takes effect |
+|---|---|---|
+| budget | yes | at once, including a run already going |
+| model | yes | the next window that opens |
+| keep-recent tokens | yes | the next window that opens |
+| working directory | **no** | |
+| extensions | **no** | |
+
+The model and the thresholds cannot claim more than "the next window": pi binds both when a
+session is built, and rebuilding one to change them would throw away the window, which is
+the conversation.
+
+The last two are absent on purpose rather than unimplemented. Extensions execute arbitrary
+code with your permissions, so a page that could add one is a page that can install a tool
+into an agent, and the working directory is the boundary of what the agents can read. Both
+stay on the command line, and the panel shows their values so nobody has to guess.
 
 ## Running it
 

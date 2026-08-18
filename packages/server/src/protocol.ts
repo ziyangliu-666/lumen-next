@@ -44,6 +44,47 @@ export type Target =
 	 */
 	| { kind: "send"; agent: string };
 
+/**
+ * What the page may change about a run, in one object.
+ *
+ * One shape rather than a frame per setting, because the list will grow and every new
+ * setting would otherwise cost a frame kind, a case in the reducer and a case on the
+ * server. A patch is a partial of this; anything absent is left alone.
+ *
+ * Only what can honestly be changed while a run exists is here. `cwd` and the extension
+ * list are not, and their absence is a decision rather than an omission: extensions execute
+ * arbitrary code with the operator's permissions, so a page that could add one would be a
+ * page that can install a tool into an agent. That decision stays on the command line.
+ */
+export interface Settings {
+	/** Dollars one automatic run may spend. Applies at once, including to a run in progress. */
+	autoBudget: number;
+	/** `provider/id`, from `Fixed.models`. Applies to windows opened from now on. */
+	model: string;
+	/**
+	 * How many tokens of recent conversation pi keeps when it compacts, or null for pi's own
+	 * default. Applies to windows opened from now on. Set it low to watch a line compact
+	 * without holding a long conversation first.
+	 */
+	keepRecentTokens: number | null;
+}
+
+/**
+ * What the page shows and cannot change. Fixed when the process started.
+ *
+ * Shown rather than hidden. A settings page that lists only the changeable things teaches
+ * that the rest does not exist, and the two that matter most for reading a run — which
+ * directory the agents can see, and which extensions are loaded — are exactly the two
+ * nobody should be able to change from a browser.
+ */
+export interface Fixed {
+	cwd: string;
+	extensions: string[];
+	port: number;
+	/** Every model the operator has credentials for. */
+	models: { id: string; name: string }[];
+}
+
 export type ClientFrame =
 	| { type: "say"; nodeId: string; text: string; target: Target }
 	| { type: "abort"; nodeId: string }
@@ -53,7 +94,9 @@ export type ClientFrame =
 	 * It carries the value wanted rather than toggling. Two tabs are two views of one run,
 	 * and a toggle would leave them alternating instead of agreeing.
 	 */
-	| { type: "auto"; on: boolean };
+	| { type: "auto"; on: boolean }
+	/** Change some settings. Anything left out of the patch is left as it is. */
+	| { type: "settings"; patch: Partial<Settings> };
 
 export type ServerFrame =
 	| {
@@ -69,6 +112,8 @@ export type ServerFrame =
 			said: Record<string, string[]>;
 			/** Where the switch stands, so a reconnecting tab does not draw it off. */
 			auto: AutoState;
+			settings: Settings;
+			fixed: Fixed;
 	  }
 	/** Something went wrong handling a frame. Shown to the person, not thrown away. */
 	| { type: "error"; message: string }
@@ -90,8 +135,16 @@ export type ServerFrame =
 	 * drawn from prose, and a tab that reconnects would have no way to learn where it stands.
 	 */
 	| { type: "auto"; state: AutoState }
+	/** The settings as they now stand, after any change, to every attached tab. */
+	| { type: "settings"; settings: Settings }
 	| TraceEvent;
 
+/**
+ * What the switch is doing. Deliberately not what it is allowed to spend: that is
+ * `Settings.autoBudget`, and it was carried here too until the two disagreed on screen —
+ * the budget was changed in the panel and the header went on quoting the old number. One
+ * fact, one place, however cheap the copy looks.
+ */
 export interface AutoState {
 	on: boolean;
 	/**
@@ -102,8 +155,6 @@ export interface AutoState {
 	 * turn limit would either cut cheap useful work short or wave an expensive run through.
 	 */
 	turns: number;
-	/** What this run may spend. The spend beside it on screen is the page's own sum. */
-	budget: number;
 	/** How the last automatic run ended. Cleared when the switch goes on again. */
 	stopped?: AutopilotStop;
 }

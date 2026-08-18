@@ -251,6 +251,111 @@ main {
 	color: var(--accent);
 }
 
+/* A button that reads as a link, for the one header action that opens something. */
+.link {
+	background: none;
+	border: none;
+	color: var(--dim);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+	padding: 0;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+.link:hover {
+	color: var(--text);
+}
+
+/* The settings panel, over everything, dismissed by clicking away or pressing escape. */
+.sheet {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.55);
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	padding: 48px 16px;
+	z-index: 10;
+	overflow: auto;
+}
+.settings {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	width: min(640px, 100%);
+	padding: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+}
+/* `.row` is laid out only under `.composer`, so this needs its own flex rather than
+   inheriting one. Without it the title ran into the hint and the close button landed
+   in the middle of the sentence. */
+.settings .row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.settings .row button {
+	margin-left: auto;
+}
+/* Label, control, and the "takes effect" note on one line; the explanation under them.
+   The note sits with the control because it is part of what the control means. */
+.settings .field {
+	display: grid;
+	grid-template-columns: 110px minmax(0, 1fr);
+	gap: 4px 12px;
+	align-items: center;
+}
+.settings .field label {
+	color: var(--dim);
+}
+.settings .field input,
+.settings .field select {
+	background: var(--bg);
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	padding: 5px 7px;
+	font: inherit;
+	width: 100%;
+}
+.settings .when {
+	grid-column: 2;
+	color: var(--accent);
+	font-size: 12px;
+}
+.settings .help {
+	grid-column: 2;
+	margin: 0;
+	color: var(--dim);
+	font-size: 12px;
+	max-width: 62ch;
+}
+.settings .fixed {
+	display: block;
+	border-top: 1px solid var(--line);
+	padding-top: 14px;
+}
+.settings .fixed .help {
+	margin: 6px 0 10px;
+}
+.settings dl {
+	margin: 0;
+	display: grid;
+	grid-template-columns: 190px minmax(0, 1fr);
+	gap: 4px 12px;
+	font-size: 12px;
+}
+.settings dt {
+	color: var(--dim);
+}
+.settings dd {
+	margin: 0;
+	word-break: break-all;
+}
+
 .dot {
 	margin-left: 12px;
 	width: 8px;
@@ -433,6 +538,12 @@ main {
 .messages {
 	padding: 8px 16px;
 	border-top: 1px solid var(--line);
+	/* Above the settings sheet. Half of what these say is the answer to something just done
+	   in that panel — a budget refused, a model changed — and the sheet was covering the
+	   second half of the sentence. */
+	position: relative;
+	z-index: 11;
+	background: var(--bg);
 }
 .messages .error {
 	color: var(--bad);

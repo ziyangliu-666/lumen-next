@@ -1,15 +1,17 @@
-import { StrictMode, useCallback, useEffect, useReducer, useRef } from "react";
+import { StrictMode, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { ClientFrame, ServerFrame, Target } from "@lumen/server/protocol";
 import { Composer } from "./Composer.tsx";
 import { Canvas } from "./Canvas.tsx";
 import { Detail } from "./Detail.tsx";
+import { Settings } from "./Settings.tsx";
 import { money } from "@lumen/kernel/trace/types";
 import { initialState, reduce } from "./state.ts";
 import "./app.css";
 
 function App() {
 	const [state, dispatch] = useReducer(reduce, initialState);
+	const [showSettings, setShowSettings] = useState(false);
 	const socket = useRef<WebSocket | null>(null);
 
 	const nodeCount = Object.keys(state.nodes).length;
@@ -104,10 +106,22 @@ function App() {
 				)}
 				<span className="meta" title="every window's own spend, added once">
 					{money(spent)}
-					{state.auto.budget > 0 ? ` of ${money(state.auto.budget)}` : ""} this run
+					{state.settings ? ` of ${money(state.settings.autoBudget)}` : ""} this run
 				</span>
+				<button type="button" className="link" onClick={() => setShowSettings(true)}>
+					settings
+				</button>
 				<span className={`dot ${state.connected ? "on" : "off"}`} />
 			</header>
+
+			{showSettings && state.settings && state.fixed && (
+				<Settings
+					settings={state.settings}
+					fixed={state.fixed}
+					onChange={(patch) => send({ type: "settings", patch })}
+					onClose={() => setShowSettings(false)}
+				/>
+			)}
 
 			<main>
 				{state.rootId ? (

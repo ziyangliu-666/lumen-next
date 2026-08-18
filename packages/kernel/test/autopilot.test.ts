@@ -191,6 +191,55 @@ describe("autopilot", () => {
 		expect(auto.running).toBe(false);
 	});
 
+	it("carries on when the budget is raised under it", async () => {
+		const host = new Host();
+		host.holding = true;
+		host.perTurn = 0.6;
+		const { auto } = drive(host, 1);
+
+		auto.start();
+		await tick();
+		// Raised while the first turn is still running, before the loop notices it is broke.
+		// A budget captured once at the start would stop anyway, which would make the panel a
+		// lie: the number changed on screen and nothing changed underneath it.
+		auto.setBudget(5);
+
+		host.release();
+		await tick();
+		host.release();
+		await tick();
+
+		// $1.20 spent, past the dollar it began with. On the old budget the third turn would
+		// have been the wrap-up; on the new one the work simply goes on.
+		expect(host.said.map((turn) => turn.text)).toEqual([
+			CONTINUE_PROMPT,
+			CONTINUE_PROMPT,
+			CONTINUE_PROMPT,
+		]);
+
+		auto.stop();
+		host.release();
+	});
+
+	it("republishes the cap when the budget changes mid-run, so the tools stop refusing", async () => {
+		const host = new Host();
+		host.holding = true;
+		const { auto } = drive(host, 1);
+
+		auto.start();
+		await tick();
+		expect(host.spendCap).toBe(1);
+		auto.setBudget(5);
+
+		// The loop's own check is not enough. Delegation is refused inside the turn by
+		// whatever cap was published, so raising the budget has to reach that too or the run
+		// carries on being told it cannot afford anything.
+		expect(host.spendCap).toBe(5);
+
+		auto.stop();
+		host.release();
+	});
+
 	it("follows the conversation to the line a handoff opened", async () => {
 		const host = new Host();
 		host.holding = true;

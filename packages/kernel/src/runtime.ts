@@ -134,6 +134,17 @@ export class Runtime {
 	 * running; instead the tool stays and refuses, in words the model can act on.
 	 */
 	spendCap: number | undefined;
+	/**
+	 * What new lines are built with. Held apart from the options they came from, because
+	 * these two can be changed while the run is going and the rest cannot.
+	 *
+	 * A line already open keeps the model and the thresholds it was built with. pi binds both
+	 * when the session is created, and rebuilding a session to change them would throw away
+	 * the window — which is the conversation. So the honest promise is "from the next window
+	 * onwards", and the interface says exactly that rather than implying more.
+	 */
+	private model: RuntimeOptions["model"];
+	private compaction: RuntimeOptions["compaction"];
 	private readonly options: RuntimeOptions;
 	private readonly lines = new Map<string, Line>();
 	/** Lines whose agent has said its work is complete, by the reason it gave. */
@@ -145,6 +156,18 @@ export class Runtime {
 		this.trace = new Trace(options.runId);
 		this.maxDepth = options.maxDepth ?? 3;
 		this.maxConcurrent = options.maxConcurrent ?? 4;
+		this.model = options.model;
+		this.compaction = options.compaction;
+	}
+
+	/** The model the next window will open with. Windows already open keep theirs. */
+	setModel(model: RuntimeOptions["model"]): void {
+		this.model = model;
+	}
+
+	/** The compaction thresholds the next window will open with. */
+	setCompaction(compaction: RuntimeOptions["compaction"]): void {
+		this.compaction = compaction;
 	}
 
 	line(id: string): Line {
@@ -691,7 +714,7 @@ export class Runtime {
 
 		const { session } = await createAgentSession({
 			cwd,
-			model: this.options.model,
+			model: this.model,
 			modelRuntime: this.options.modelRuntime,
 			resourceLoader,
 			// In memory: a subagent's transcript belongs to this run's trace, not to a
@@ -699,8 +722,8 @@ export class Runtime {
 			sessionManager: SessionManager.inMemory(),
 			// Only when asked. Left unset, pi reads the operator's own settings file, which
 			// is what they expect their thresholds to mean.
-			...(this.options.compaction
-				? { settingsManager: SettingsManager.inMemory({ compaction: this.options.compaction }) }
+			...(this.compaction
+				? { settingsManager: SettingsManager.inMemory({ compaction: this.compaction }) }
 				: {}),
 			...toolSelection(spec, customTools.map((tool) => tool.name)),
 			customTools,

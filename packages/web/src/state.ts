@@ -14,7 +14,7 @@ import { addUsage, emptyUsage } from "@lumen/kernel/trace/types";
 import type { AgentSpec, TraceNode, Usage } from "@lumen/kernel";
 // Type-only, so nothing from the server package is bundled. One definition of the wire
 // format, imported by both ends, rather than a copy here that can drift out of step.
-import type { AutoState, ServerFrame, Target } from "@lumen/server/protocol";
+import type { AutoState, Fixed, ServerFrame, Settings, Target } from "@lumen/server/protocol";
 
 export interface State {
 	nodes: Record<string, TraceNode>;
@@ -31,6 +31,9 @@ export interface State {
 	connected: boolean;
 	/** The switch: whether the lead is carrying on by itself, and what it may spend. */
 	auto: AutoState;
+	/** What can be changed about this run, and what was fixed when the server started. */
+	settings: Settings | null;
+	fixed: Fixed | null;
 }
 
 export const initialState: State = {
@@ -43,9 +46,12 @@ export const initialState: State = {
 	saidBy: {},
 	messages: [],
 	connected: false,
-	// Until `hello` arrives there is no run to know anything about. Zero rather than a guess
-	// at the budget: a cap invented by the page would be the wrong number on screen.
-	auto: { on: false, turns: 0, budget: 0 },
+	// Until `hello` arrives there is no run to know anything about.
+	auto: { on: false, turns: 0 },
+	// Null until `hello`. The panel cannot be drawn from guesses: an invented model list
+	// would offer models this machine has no credentials for.
+	settings: null,
+	fixed: null,
 };
 
 export type Action =
@@ -108,6 +114,8 @@ function applyFrame(state: State, frame: ServerFrame): State {
 				...state,
 				agents: frame.agents,
 				auto: frame.auto,
+				settings: frame.settings,
+				fixed: frame.fixed,
 				nodes: frame.snapshot.nodes,
 				children: frame.snapshot.children,
 				rootId: frame.snapshot.rootId,
@@ -118,6 +126,9 @@ function applyFrame(state: State, frame: ServerFrame): State {
 
 		case "auto":
 			return { ...state, auto: frame.state };
+
+		case "settings":
+			return { ...state, settings: frame.settings };
 
 		case "error":
 			return { ...state, messages: [...state.messages, { level: "error", text: frame.message }] };

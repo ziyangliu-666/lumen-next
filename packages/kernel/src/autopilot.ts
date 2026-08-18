@@ -181,8 +181,21 @@ export class Autopilot {
 		this.lineId = lineId;
 	}
 
+	/**
+	 * Change what this run may spend, including while it is running.
+	 *
+	 * Raising it mid-run is the point: a run that stopped on its budget with the work nearly
+	 * done should be resumable by saying "here is another dollar", rather than by starting
+	 * the whole question again. The cap the tools read is republished at the same moment, so
+	 * delegation stops being refused as soon as there is money for it.
+	 */
+	setBudget(budget: number): void {
+		this.options.budget = budget;
+		if (this.active) this.options.host.spendCap = budget;
+	}
+
 	private async run(): Promise<void> {
-		const { host, budget } = this.options;
+		const { host } = this.options;
 
 		// Wait for whatever is running before the first turn. The switch is usually pressed
 		// while the lead is mid-answer, and pi refuses a prompt during a turn rather than
@@ -205,7 +218,9 @@ export class Autopilot {
 				return;
 			}
 
-			if (host.totalCost() >= budget) {
+			// Read fresh every turn rather than captured once, so raising the budget while the
+			// run is going lets it carry on instead of stopping on the number it started with.
+			if (host.totalCost() >= this.options.budget) {
 				await this.wrapUp();
 				this.stop("budget");
 				return;

@@ -19,7 +19,7 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { AgentRegistry, Autopilot, money, Runtime, type AutopilotStop } from "@lumen/kernel";
 import { WebSocketServer, type WebSocket } from "ws";
 import { AGENTS } from "./agents.ts";
-import type { AutoState, ClientFrame, ServerFrame } from "./protocol.ts";
+import type { AutoState, ClientFrame, Fixed, ServerFrame, Settings } from "./protocol.ts";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const WEB_DIST = resolve(HERE, "../../web/dist");
@@ -68,6 +68,21 @@ if (!model) {
 	);
 }
 
+/**
+ * What the page shows and cannot change, worked out once.
+ *
+ * `getAvailable` asks pi which models the credentials actually reach, rather than listing
+ * everything it knows about. A menu offering a model that cannot be run is a menu whose
+ * every entry has to be tried to be believed.
+ */
+const AVAILABLE = await modelRuntime.getAvailable();
+const FIXED: Fixed = {
+	cwd: CWD,
+	extensions: EXTENSIONS,
+	port: PORT,
+	models: AVAILABLE.map((model) => ({ id: `${model.provider}/${model.id}`, name: model.name })),
+};
+
 let runCounter = 0;
 
 /**
@@ -95,6 +110,20 @@ class Conversation {
 	private autopilot!: Autopilot;
 	/** How the last automatic run ended, kept so a tab that reconnects can still read it. */
 	private stopped: AutopilotStop | undefined;
+	/**
+	 * Per conversation, not per process.
+	 *
+	 * Two tabs with different session keys are two runs that share nothing, so one of them
+	 * turning the budget up must not spend the other's money. The environment supplies the
+	 * value each new conversation starts from, and nothing writes back to it: a setting
+	 * changed here lasts as long as the conversation, which is as long as it can honestly
+	 * claim to, since nothing here is persisted at all.
+	 */
+	private settings: Settings = {
+		autoBudget: AUTO_BUDGET,
+		model: `${PROVIDER}/${MODEL_ID}`,
+		keepRecentTokens: KEEP_RECENT ?? null,
+	};
 	// A plain field rather than a constructor parameter property: node's strip-only
 	// TypeScript support cannot erase those, and this file is run directly.
 	// A set, not one socket. Two tabs on the same conversation are two windows onto one
@@ -129,12 +158,12 @@ class Conversation {
 		this.autopilot = new Autopilot({
 			host: this.runtime,
 			lineId: root.id,
-			budget: AUTO_BUDGET,
+			budget: this.settings.autoBudget,
 			onTurn: () => this.send({ type: "auto", state: this.autoState() }),
 			onStop: (stop) => {
 				this.stopped = stop;
 				this.send({ type: "auto", state: this.autoState() });
-				this.send({ type: "notice", message: describeStop(stop) });
+				this.send({ type: "notice", message: describeStop(stop, this.settings.autoBudget) });
 			},
 		});
 		// Subscribed once, for the life of the conversation. Events go to whichever socket
@@ -146,7 +175,6 @@ class Conversation {
 		return {
 			on: this.autopilot.running,
 			turns: this.autopilot.turns,
-			budget: AUTO_BUDGET,
 			stopped: this.stopped,
 		};
 	}
@@ -183,6 +211,8 @@ class Conversation {
 			rootNodeId: this.leadNodeId,
 			said: Object.fromEntries(this.said),
 			auto: this.autoState(),
+			settings: this.settings,
+			fixed: FIXED,
 		});
 	}
 
@@ -213,7 +243,64 @@ class Conversation {
 		return { text: filled, cited };
 	}
 
+	/**
+	 * Take a patch, apply what it names, and tell every tab where things now stand.
+	 *
+	 * Each setting says for itself when it starts to matter, and two of the three cannot
+	 * honestly claim "now": pi binds the model and the compaction thresholds when a session
+	 * is built, and rebuilding a session to change them would throw away the window, which is
+	 * the conversation. So they take effect on the next window, and the page says so.
+	 */
+	private applySettings(patch: Partial<Settings>): void {
+		if (patch.autoBudget !== undefined) {
+			const budget = Number(patch.autoBudget);
+			// Checked here rather than trusted from the page. A budget of NaN compares false
+			// against every spend, which is not a large cap — it is no cap at all.
+			if (!Number.isFinite(budget) || budget <= 0) {
+				this.send({ type: "error", message: "The budget has to be a number above zero." });
+				return;
+			}
+			this.settings.autoBudget = budget;
+			this.autopilot.setBudget(budget);
+		}
+
+		if (patch.model !== undefined && patch.model !== this.settings.model) {
+			const [provider, ...rest] = patch.model.split("/");
+			const model = modelRuntime.getModel(provider, rest.join("/"));
+			if (!model) {
+				this.send({
+					type: "error",
+					message: `No credentials for ${patch.model}. The models you can run are in ~/.pi/agent/auth.json.`,
+				});
+				return;
+			}
+			this.settings.model = patch.model;
+			this.runtime.setModel(model);
+			this.send({
+				type: "notice",
+				message: `Windows opened from now on use ${patch.model}. The ones already open keep the model they were built with.`,
+			});
+		}
+
+		if (patch.keepRecentTokens !== undefined) {
+			const keep = patch.keepRecentTokens;
+			if (keep !== null && (!Number.isFinite(keep) || keep <= 0)) {
+				this.send({ type: "error", message: "Keep-recent has to be a number above zero, or empty." });
+				return;
+			}
+			this.settings.keepRecentTokens = keep;
+			this.runtime.setCompaction(keep === null ? undefined : { keepRecentTokens: keep });
+		}
+
+		this.send({ type: "settings", settings: this.settings });
+	}
+
 	async handle(frame: ClientFrame): Promise<void> {
+		if (frame.type === "settings") {
+			this.applySettings(frame.patch);
+			return;
+		}
+
 		if (frame.type === "auto") {
 			if (frame.on) {
 				// Nothing to carry on from. Measured, not feared: the first thing a person does
@@ -398,7 +485,7 @@ class Conversation {
  * The reason is most of the value of stopping. A run that simply went quiet reads as a
  * crash, and the next thing the person does is press the switch again.
  */
-function describeStop(stop: AutopilotStop): string {
+function describeStop(stop: AutopilotStop, budget: number): string {
 	// The run's total, not the loop's share, and said as such. The loop can stop having taken
 	// no turn at all — the turn the person asked for had already ended with `finish` — and
 	// "$0.07 over 0 turns" reads as money spent by nothing.
@@ -410,7 +497,7 @@ function describeStop(stop: AutopilotStop): string {
 		case "declared":
 			return `The lead says the work is done: ${stop.note ?? "no reason given"} (${spent}).`;
 		case "budget":
-			return `It spent its budget of ${money(AUTO_BUDGET)}, so it stopped and wrote up what it had (${spent}).`;
+			return `It spent its budget of ${money(budget)}, so it stopped and wrote up what it had (${spent}).`;
 		case "you":
 			return stop.note
 				? `Running by itself stopped — ${stop.note} (${spent}).`

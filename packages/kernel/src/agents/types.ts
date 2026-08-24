@@ -47,6 +47,16 @@ export interface AgentSpec {
 	 */
 	canSave?: boolean;
 	/**
+	 * Whether this agent may run commands on the conversation's machine.
+	 *
+	 * The widest permission here, and separate from every other one because it is a
+	 * different kind of thing. `tools` says what an agent may look at and `canSave` says
+	 * what it may leave behind; this says whether it may cause arbitrary code to execute.
+	 * That the code runs in somebody else's container and not on this disk is what makes it
+	 * grantable at all, and it is still the permission to read every second of it as money.
+	 */
+	canRun?: boolean;
+	/**
 	 * Whether other agents may be handed work as this one. On by default.
 	 *
 	 * Off for the agent that holds the conversation. Once workers can delegate, the catalogue

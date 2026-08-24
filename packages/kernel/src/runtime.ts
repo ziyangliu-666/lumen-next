@@ -31,6 +31,7 @@ import {
 	type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentRegistry, AgentSpec } from "./agents/types.ts";
+import type { Compute, Machine } from "./compute/types.ts";
 import type { Line, LineSession } from "./line.ts";
 import { record } from "./trace/record.ts";
 import { Trace } from "./trace/trace.ts";
@@ -76,6 +77,15 @@ export interface RuntimeOptions {
 	 * this runtime has no container to fall back on if that decision is wrong.
 	 */
 	extensions?: string[];
+	/**
+	 * Where an agent's commands run, if anywhere.
+	 *
+	 * Absent by default, and absent is a working configuration rather than a broken one:
+	 * lumen without it is what it has always been, a system that reads and reports. An
+	 * agent given `canRun` with no compute here is told plainly that it has no machine,
+	 * which it can act on, instead of meeting a crash.
+	 */
+	compute?: Compute;
 }
 
 export interface SpawnRequest {
@@ -398,6 +408,33 @@ export class Runtime {
 	}
 
 	/**
+	 * This conversation's machine, opened on first use.
+	 *
+	 * Opened here rather than when the conversation starts, because opening one costs
+	 * money from the second it exists. A conversation that turns out to be a question
+	 * about a paper should not be billed for a container nothing ever ran a command on.
+	 *
+	 * Null when no provider was configured. The caller says so to the agent; it is not an
+	 * error, it is a smaller system.
+	 */
+	async machine(): Promise<Machine | null> {
+		if (!this.options.compute) return null;
+		return await this.options.compute.open();
+	}
+
+	/**
+	 * Shut the machine down and hand back the last seconds it ran up.
+	 *
+	 * Those seconds belong to nobody in particular — they are the gap between the last
+	 * command and the conversation ending — so the caller charges them to the root, which
+	 * is the one window that is always there.
+	 */
+	async closeCompute(): Promise<number> {
+		if (!this.options.compute) return 0;
+		return await this.options.compute.close();
+	}
+
+	/**
 	 * Record that this line's agent says the work is complete.
 	 *
 	 * Written by the `finish` tool and read by whoever is driving the line. Kept here rather
@@ -709,6 +746,7 @@ export class Runtime {
 		const { createSubagentTool } = await import("./tools/subagent.ts");
 		const { createFinishTool } = await import("./tools/finish.ts");
 		const { createSaveTool } = await import("./tools/save.ts");
+		const { createRunTool } = await import("./tools/run.ts");
 
 		const cwd = this.options.cwd ?? process.cwd();
 		const customTools = [
@@ -718,6 +756,11 @@ export class Runtime {
 			// resolves paths itself rather than trusting pi's resolver, which lets an absolute
 			// path out of the directory entirely.
 			...(spec.canSave ? [createSaveTool({ root: cwd })] : []),
+			// Given whether or not a provider is configured. The tool itself says "there is
+			// no machine" and the agent carries on reading; taking the tool away instead
+			// would leave the model calling a name that does not exist, which pi returns as
+			// an error with nothing in it a model can act on.
+			...(spec.canRun ? [createRunTool({ runtime: this, line })] : []),
 		];
 		// Extensions, skills and context files are all discovered from the working
 		// directory, and the working directory is full of the user's own material. An

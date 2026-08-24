@@ -23,7 +23,9 @@ export function Composer({
 	onSelect: (nodeId: string) => void;
 }) {
 	const [text, setText] = useState("");
-	const [choice, setChoice] = useState("continue");
+	// Only ever read while `busy` is true, when the select showing it is on screen — so its
+	// idle value never matters, and "queue" is the safer of the two to land on first.
+	const [choice, setChoice] = useState("queue");
 
 	const node = state.selected ? state.nodes[state.selected] : undefined;
 	const live = node ? isLive(node) : false;
@@ -40,30 +42,26 @@ export function Composer({
 		.map((match) => match[1])
 		.filter((id) => !state.nodes[id]);
 
-	const target: Target = choice.startsWith("handoff:")
-		? { kind: "handoff", agent: choice.slice("handoff:".length) }
-		: choice.startsWith("send:")
-			? { kind: "send", agent: choice.slice("send:".length) }
-			: choice === "next"
-				? { kind: "next" }
-				: choice === "queue" || choice === "cutIn"
-					? { kind: choice }
-					: { kind: "continue" };
+	// `next`, `handoff` and `send` are still real — a line can still change hands, still
+	// compact early, still branch off — but only an agent triggers them now, through its
+	// own `subagent` call. Nobody reached for the manual versions of these from this box,
+	// so the box no longer offers them; `Target` itself is unchanged; a person reading a
+	// point that already changed hands still sees whose it is on the point itself.
+	// Gated on `busy`, not only on `choice`: the select holding "queue"/"cutIn" only exists
+	// on screen while busy, but `choice` itself does not reset the moment work finishes —
+	// reading it unguarded left last turn's "wait" or "cut in" as this turn's target on an
+	// idle point that never offered either.
+	const target: Target =
+		busy && (choice === "queue" || choice === "cutIn") ? { kind: choice } : { kind: "continue" };
 
-	// What is still forbidden is what still cannot work. `next` and `handoff` both run the
-	// summariser, and pi will not summarise a conversation that is mid-turn. Talking to a
-	// working point is no longer forbidden: the server picks the way in from the line's own
-	// state, so the browser no longer has to guess from a flag that crossed a network. And
-	// sending a line off never touched this window's session in the first place.
-	const blocked =
-		!live || !state.connected || (busy && (target.kind === "next" || target.kind === "handoff"));
+	const blocked = !live || !state.connected;
 
 	function send() {
 		const trimmed = text.trim();
 		if (!trimmed || blocked) return;
 		onSend(trimmed, target);
 		setText("");
-		setChoice("continue");
+		setChoice("queue");
 	}
 
 	return (
@@ -82,38 +80,18 @@ export function Composer({
 			)}
 
 			<div className="row">
-				<select value={choice} onChange={(event) => setChoice(event.target.value)}>
-					<option value="continue">talk to {node?.agent ?? "…"}</option>
-					{/* Only while it is working. Offered on an idle point they would be two
-					    words for the thing "talk to" already does, and the person would have
-					    to work out which. */}
-					{busy && (
-						<optgroup label="it is working — join this turn">
-							<option value="queue">wait for this turn to end</option>
-							<option value="cutIn">cut in now</option>
-						</optgroup>
-					)}
-					<option value="next">start the next window</option>
-					<optgroup label="hand over — this line becomes theirs">
-						{state.agents
-							// Handing a line to the agent already holding it is a no-op that
-							// still pays for a summarisation. Offering it invites the mistake.
-							.filter((agent) => agent.name !== node?.agent)
-							.map((agent) => (
-								<option key={agent.name} value={`handoff:${agent.name}`}>
-									hand over to {agent.name}
-								</option>
-							))}
-					</optgroup>
-					<optgroup label="send off — a new line, you stay here">
-						{state.agents.map((agent) => (
-							<option key={agent.name} value={`send:${agent.name}`}>
-								send {agent.name} off
-							</option>
-						))}
-					</optgroup>
-				</select>
-				<span className="hint">{describeTarget(target)}</span>
+				{/* A dropdown with one real choice in it is chrome, not a control — so idle
+				    shows a plain label. While it is working there is an actual question
+				    (wait, or cut in), so that is the one moment a select earns its place. */}
+				{busy ? (
+					<select value={choice} onChange={(event) => setChoice(event.target.value)}>
+						<option value="queue">wait for this turn to end</option>
+						<option value="cutIn">cut in now</option>
+					</select>
+				) : (
+					<span className="target">talk to {node?.agent ?? "…"}</span>
+				)}
+				<span className="hint targetHint">{describeTarget(target)}</span>
 				{busy && (
 					<button type="button" className="stop" onClick={onAbort}>
 						stop

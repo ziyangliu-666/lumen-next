@@ -227,11 +227,27 @@ body.resizing {
 }
 
 /* Everything that has to be read word by word, so a point can stay the size of a point. */
+/* The right-hand column: what you're reading, on top of what you'd type into it. One flex
+   column so the composer's own height is exactly what it needs and the reading pane takes
+   the rest — the reverse (a fixed reading pane and however much composer is left over)
+   would make the box shrink as its own hint text and citation chips grew. */
+.side {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+}
+
 .detail {
+	flex: 1;
 	border-left: 1px solid var(--line);
 	padding: 14px 16px;
 	overflow: auto;
 	min-width: 0;
+	/* A flex child scrolling inside a fixed column, not the column growing to fit it —
+	   without this the panel's content pushes the composer down and off the bottom of the
+	   page instead of scrolling on its own. */
+	min-height: 0;
 }
 .detailHead {
 	display: flex;
@@ -531,6 +547,29 @@ body.resizing {
 	color: var(--accent);
 }
 
+/* The reasoning that streams ahead of the answer. Dim and in its own block on purpose:
+   it is the work being done, not the product, and it must read as such next to the reply. */
+.thinking {
+	margin: 6px 0;
+	border-left: 2px solid var(--line);
+	padding-left: 10px;
+}
+.thinkingLabel {
+	color: var(--dim);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+.thinkingText {
+	color: var(--dim);
+	white-space: pre-wrap;
+	margin-top: 3px;
+}
+.thinkingText::after {
+	content: "▍";
+	color: var(--accent);
+}
+
 .failure {
 	margin: 6px 0;
 	color: var(--bad);
@@ -625,7 +664,16 @@ body.resizing {
 .composer .row {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	flex-wrap: wrap;
+	gap: 6px 10px;
+}
+/* The one item in this row allowed to actually grow: everything else (the select, the
+   target label, the stop button) is a fixed control, and without this the hint text is
+   squeezed into whatever sliver is left beside them — a few words at a time down a column
+   barely wide enough for one. Letting it wrap onto its own line reads as a sentence again.
+   Scoped to just this hint, not `.cites`' "quote:" label, which is short and belongs inline. */
+.composer .targetHint {
+	flex-basis: 100%;
 }
 .composer textarea {
 	min-height: 62px;
@@ -666,6 +714,11 @@ body.resizing {
 	margin-left: auto;
 	border-color: var(--bad);
 	color: var(--bad);
+}
+/* The idle-state label a select used to fill. Same weight, none of the chrome — there is
+   nothing to open. */
+.composer .target {
+	font-weight: 600;
 }
 
 /* The one button in the panel that does something rather than setting something. */

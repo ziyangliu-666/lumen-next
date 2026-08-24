@@ -208,35 +208,42 @@ function App() {
 						if (event.key === "ArrowRight") setPanel((w) => Math.max(320, w - step));
 					}}
 				/>
-				<Detail state={state} />
-			</main>
+				{/* The reading panel and the box you type into are one column now: what you
+				    say goes to the point you are reading, so the box sits directly under it
+				    rather than spanning a width that includes the canvas it has nothing to do
+				    with. */}
+				<div className="side">
+					<Detail state={state} />
 
-			{empty && (
-				<div className="blank">
-					Ask for something that has parts, and watch the work spread out. Each box is one
-					agent's context window: a drop is work sent out, a run to the right is one
-					conversation continuing. Turn on <em>run by itself</em> once you have asked, and
-					the lead keeps going — delegating, reading what came back, deciding what is still
-					missing — until it says it is done or the budget stops it.
-				</div>
-			)}
-
-			{state.messages.length > 0 && (
-				<div className="messages">
-					{state.messages.slice(-3).map((message, index) => (
-						<div className={message.level} key={index}>
-							{message.text}
+					{empty && (
+						<div className="blank">
+							Ask for something that has parts, and watch the work spread out. Each box is
+							one agent's context window: a drop is work sent out, a run to the right is
+							one conversation continuing. Turn on <em>run by itself</em> once you have
+							asked, and the lead keeps going — delegating, reading what came back,
+							deciding what is still missing — until it says it is done or the budget stops
+							it.
 						</div>
-					))}
-				</div>
-			)}
+					)}
 
-			<Composer
-				state={state}
-				onSend={say}
-				onAbort={abort}
-				onSelect={(nodeId) => dispatch({ kind: "select", nodeId })}
-			/>
+					{state.messages.length > 0 && (
+						<div className="messages">
+							{state.messages.slice(-3).map((message, index) => (
+								<div className={message.level} key={index}>
+									{message.text}
+								</div>
+							))}
+						</div>
+					)}
+
+					<Composer
+						state={state}
+						onSend={say}
+						onAbort={abort}
+						onSelect={(nodeId) => dispatch({ kind: "select", nodeId })}
+					/>
+				</div>
+			</main>
 		</div>
 	);
 }

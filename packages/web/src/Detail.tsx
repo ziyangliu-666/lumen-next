@@ -6,7 +6,7 @@
  * be read word by word lives here, so a point on the graph can stay the size of a point.
  */
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { Step, TraceNode } from "@lumen/kernel";
 import { money } from "@lumen/kernel/trace/types";
 import { formatDuration, useWorked } from "./elapsed.ts";
@@ -96,9 +96,40 @@ export function Detail({ state }: { state: State }) {
 	const node = state.selected ? state.nodes[state.selected] : undefined;
 	// Before the early return: a hook cannot be skipped, and there is no point to time yet.
 	const worked = useWorked(node?.worked ?? 0, node?.busySince ?? undefined);
+	const streaming = node ? state.live[node.id] : undefined;
+	const reasoning = node ? state.thinking[node.id] : undefined;
+	const stepCount = node?.steps.length ?? 0;
+
+	const container = useRef<HTMLElement | null>(null);
+	/**
+	 * Whether the panel should chase new content to the bottom.
+	 *
+	 * A ref, not state: this changes on every scroll event, and a token arriving every few
+	 * milliseconds is not a reason to re-render the whole panel. It only has to be read at
+	 * the moment new content lands.
+	 */
+	const follow = useRef(true);
+
+	// A point just selected starts pinned to its own tail, not wherever a different point
+	// happened to leave the scrollbar.
+	useLayoutEffect(() => {
+		follow.current = true;
+	}, [node?.id]);
+
+	// Chase the tail while it streams, the way a terminal does — but only while `follow`
+	// holds. A person who scrolled up to read something earlier must not be dragged back
+	// down by the next token; that was the actual bug, not the absence of scrolling.
+	// `useLayoutEffect` rather than `useEffect`: it runs before the browser paints, so the
+	// jump happens in the same frame as the new content rather than as a visible snap after.
+	useLayoutEffect(() => {
+		const el = container.current;
+		if (!el || !follow.current) return;
+		el.scrollTop = el.scrollHeight;
+	}, [node?.id, streaming, reasoning, node?.summary, stepCount]);
+
 	if (!node) {
 		return (
-			<aside className="detail">
+			<aside className="detail" ref={container}>
 				<p className="hint">Click a point to read it.</p>
 			</aside>
 		);
@@ -107,10 +138,19 @@ export function Detail({ state }: { state: State }) {
 	const live = isLive(node);
 	const spend = rollup(state, node.id);
 	const said = state.saidBy[node.id] ?? [];
-	const streaming = state.live[node.id];
 
 	return (
-		<aside className="detail">
+		<aside
+			className="detail"
+			ref={container}
+			onScroll={(event) => {
+				const el = event.currentTarget;
+				// Near enough counts as "at the bottom": scrollHeight/scrollTop arithmetic
+				// rarely lands on an exact integer, and a one-pixel gap should not read as
+				// "the person scrolled away".
+				follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+			}}
+		>
 			<div className="detailHead">
 				<span className={`mark ${node.state}`}>{node.busy ? "◍" : MARK[node.state]}</span>
 				<strong>{node.agent}</strong>
@@ -154,17 +194,28 @@ export function Detail({ state }: { state: State }) {
 			{/* While it is working, never show the last answer: in the gap before the first
 			    token it sat under the new question and read as the reply to it. */}
 			{node.busy ? (
-				<div className="reply streaming">
-					{/* Drawn as it arrives, half-written markers and all. The parser writes an
-					    unterminated `**` out as literal text rather than swallowing the rest, so a
-					    sentence in progress reads as a sentence in progress and settles the moment
-					    the agent closes the marker. */}
-					{streaming ? (
-						<Prose text={streaming} base={state.settings?.material ?? undefined} />
-					) : (
-						<span className="hint">thinking</span>
+				<>
+					{/* The reasoning is the work being watched, not the answer. It streams
+					    ahead of the reply and is drawn as raw thought — dim, in its own block —
+					    so a person can follow it instead of staring at a spinner. */}
+					{reasoning && (
+						<div className="thinking">
+							<span className="thinkingLabel">thinking</span>
+							<div className="thinkingText">{reasoning}</div>
+						</div>
 					)}
-				</div>
+					<div className="reply streaming">
+						{/* Drawn as it arrives, half-written markers and all. The parser writes an
+						    unterminated `**` out as literal text rather than swallowing the rest, so a
+						    sentence in progress reads as a sentence in progress and settles the moment
+						    the agent closes the marker. */}
+						{streaming ? (
+							<Prose text={streaming} base={state.settings?.material ?? undefined} />
+						) : reasoning ? null : (
+							<span className="hint">thinking</span>
+						)}
+					</div>
+				</>
 			) : node.summary ? (
 				<div className="reply">
 					<Copy text={node.summary} />

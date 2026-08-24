@@ -265,13 +265,17 @@ export function Settings({
 						Its own directory, made when it started and named after it. Everything the agents
 						save lands there, and it is how one of them leaves something for another. It is
 						not changeable, and it is not cleaned up: a folder deleted on your behalf is a
-						folder you wanted.
+						folder you wanted. The machine is somewhere else and shares no files with it; it
+						starts on the first command an agent runs, and every second it is up is in the
+						total above.
 					</p>
 					<dl>
 						<dt>this conversation's directory</dt>
 						<dd>{fixed.workspace}</dd>
 						<dt>extensions loaded</dt>
 						<dd>{fixed.extensions.length > 0 ? fixed.extensions.join(", ") : "none"}</dd>
+						<dt>machine</dt>
+						<dd>{fixed.compute ?? "none — agents cannot run anything"}</dd>
 						<dt>port</dt>
 						<dd>{fixed.port}</dd>
 					</dl>

@@ -1,23 +1,39 @@
 /**
- * One process, one person, one machine.
+ * One process, one person, one machine — or one process, one password, if you say so.
  *
- * No auth, no sandbox, no persistence. Those are not oversights: the agents here run bash
- * and write files with the operator's own permissions, so this is safe exactly as long as
- * the only person who can reach it is the person already sitting at the keyboard. It binds
- * to loopback for that reason, and that is the whole of the security model. Do not put it
- * behind a tunnel without putting a container around it first.
+ * No sandbox, no persistence. Those are not oversights: the agents here run commands and
+ * write files with the operator's own permissions (or a machine's, for `run`), so reaching
+ * this process at all is reaching everything it can do — read files, spend money, reach the
+ * network. By default that boundary is physical: the server binds to loopback, so the only
+ * way in is the keyboard already in front of it, and no password is asked for because none
+ * is needed.
+ *
+ * `LUMEN_HOST` moves that boundary, and `LUMEN_BASIC_AUTH` is what replaces it when it
+ * moves. The two are checked together, once, at startup: a non-loopback host with no
+ * password set is refused rather than started with a warning nobody reads, because a public
+ * bind with nothing guarding it is not a smaller version of the security model, it is the
+ * absence of one.
  *
  * A conversation owns a `Runtime`. Two browser tabs with different ids are two runs that
  * share nothing, which is isolation for free and the reason there is no scheduling here.
  */
 
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { AgentRegistry, Autopilot, money, Runtime, type AutopilotStop } from "@lumen/kernel";
+import {
+	AgentRegistry,
+	Autopilot,
+	emptyUsage,
+	modalCompute,
+	money,
+	Runtime,
+	type AutopilotStop,
+} from "@lumen/kernel";
 import { WebSocketServer, type WebSocket } from "ws";
 import { AGENTS } from "./agents.ts";
 import type { AutoState, ClientFrame, Fixed, ServerFrame, Settings } from "./protocol.ts";
@@ -26,6 +42,54 @@ const HERE = fileURLToPath(new URL(".", import.meta.url));
 const WEB_DIST = resolve(HERE, "../../web/dist");
 
 const PORT = Number(process.env.LUMEN_PORT ?? 4173);
+/** Where the server binds. Loopback unless told otherwise. */
+const HOST = process.env.LUMEN_HOST ?? "127.0.0.1";
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+/**
+ * `user:password`, or unset. Checked on every request once `HOST` is not loopback.
+ *
+ * Read once, hashed once, and compared with `timingSafeEqual` rather than `===`: `===`
+ * returns the moment the first differing byte is found, so how long a wrong guess takes
+ * says something about how much of it was right. A hash first, because the two strings
+ * being compared then have equal length regardless of what was typed, which is what
+ * `timingSafeEqual` requires and what stops the credential's actual length leaking too.
+ */
+const BASIC_AUTH = process.env.LUMEN_BASIC_AUTH;
+const BASIC_AUTH_HASH = BASIC_AUTH ? createHash("sha256").update(BASIC_AUTH).digest() : undefined;
+
+if (!LOOPBACK_HOSTS.has(HOST) && !BASIC_AUTH) {
+	console.error(
+		`LUMEN_HOST=${HOST} is not loopback, and LUMEN_BASIC_AUTH is not set.\n` +
+			"Refusing to start: every agent's file access, its spending, and its reach to the\n" +
+			"network would sit behind a bare address with nothing guarding it.\n" +
+			'Set LUMEN_BASIC_AUTH="user:password" to run this reachable from outside this machine.',
+	);
+	process.exit(1);
+}
+
+/** Whether this request carries the password. Always true when none is configured. */
+function authorized(request: IncomingMessage): boolean {
+	if (!BASIC_AUTH_HASH) return true;
+	const header = request.headers.authorization ?? "";
+	const [scheme, encoded] = header.split(" ");
+	if (scheme !== "Basic" || !encoded) return false;
+	let given: string;
+	try {
+		given = Buffer.from(encoded, "base64").toString("utf8");
+	} catch {
+		return false;
+	}
+	const givenHash = createHash("sha256").update(given).digest();
+	return timingSafeEqual(givenHash, BASIC_AUTH_HASH);
+}
+
+function requireAuth(response: ServerResponse): void {
+	response.writeHead(401, {
+		"WWW-Authenticate": 'Basic realm="lumen"',
+		"content-type": "text/plain; charset=utf-8",
+	});
+	response.end("Authentication required.\n");
+}
 const PROVIDER = process.env.LUMEN_PROVIDER ?? "deepseek";
 const MODEL_ID = process.env.LUMEN_MODEL ?? "deepseek-v4-flash";
 /**
@@ -86,6 +150,20 @@ const AUTO_BUDGET = Number(process.env.LUMEN_AUTO_BUDGET ?? 2);
  */
 const MAX_DEPTH = Number(process.env.LUMEN_MAX_DEPTH ?? 3);
 const MAX_CONCURRENT = Number(process.env.LUMEN_MAX_CONCURRENT ?? 4);
+/**
+ * Where an agent's commands run. `modal` by default; set LUMEN_COMPUTE="" for nowhere.
+ *
+ * On by default, for the same reason `pi-web-access` is: a machine nobody had to set up is
+ * the point, and a capability that has to be switched on is a capability most people never
+ * find. What that costs is bounded by the same thing everything else here is bounded by.
+ * Nothing opens until an agent actually runs a command, so a conversation that only reads
+ * is billed for no machine at all.
+ *
+ * It needs Modal credentials in ~/.modal.toml, which `modal setup` writes. Without them the
+ * first command an agent runs comes back as a failure it can read, and the conversation
+ * carries on as the reading system it was before.
+ */
+const COMPUTE = (process.env.LUMEN_COMPUTE ?? "modal").trim();
 
 const modelRuntime = await ModelRuntime.create();
 const model = modelRuntime.getModel(PROVIDER, MODEL_ID);
@@ -152,6 +230,8 @@ class Conversation {
 	};
 	/** This conversation's own directory. Its working directory, and where its files land. */
 	private readonly workspace: string;
+	/** Where its agents' commands run, if anywhere. Held so the panel can name it. */
+	private readonly compute: ReturnType<typeof modalCompute> | undefined;
 	// A plain field rather than a constructor parameter property: node's strip-only
 	// TypeScript support cannot erase those, and this file is run directly.
 	// A set, not one socket. Two tabs on the same conversation are two windows onto one
@@ -174,6 +254,9 @@ class Conversation {
 		const safe = key.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64) || `run-${runCounter}`;
 		this.workspace = join(SESSIONS, safe);
 		mkdirSync(this.workspace, { recursive: true });
+		// Named after the conversation, so a machine left running is findable in Modal's own
+		// dashboard under the same name this conversation has here.
+		this.compute = COMPUTE === "modal" ? modalCompute({ label: safe }) : undefined;
 		this.runtime = new Runtime({
 			runId: `run-${runCounter}`,
 			registry: new AgentRegistry(AGENTS),
@@ -184,6 +267,7 @@ class Conversation {
 			maxConcurrent: MAX_CONCURRENT,
 			compaction: KEEP_RECENT === undefined ? undefined : { keepRecentTokens: KEEP_RECENT },
 			extensions: EXTENSIONS,
+			compute: this.compute,
 		});
 		this.runtime.place = this.describePlace();
 	}
@@ -202,6 +286,14 @@ class Conversation {
 			"It is yours and it starts empty. Files another agent on this run saved are there",
 			"too, so it is how you leave something for them and how you read what they left.",
 		];
+		if (COMPUTE) {
+			lines.push(
+				"",
+				"You may also have a machine, reached with `run`. It is somewhere else and it",
+				"cannot see this directory, so a file has to be printed and saved to cross",
+				"between them. It is shared by everyone on this run.",
+			);
+		}
 		if (this.settings.material) {
 			lines.push(
 				"",
@@ -288,6 +380,7 @@ class Conversation {
 			fixed: {
 				workspace: this.workspace,
 				extensions: EXTENSIONS,
+				compute: this.compute?.describe ?? null,
 				port: PORT,
 				models: MODELS,
 			},
@@ -589,8 +682,17 @@ class Conversation {
 	}
 
 	/** Only on shutdown. A socket closing is a person looking away, not a run ending. */
-	close(): void {
+	async close(): Promise<void> {
 		this.autopilot.stop("you", "the server is shutting down");
+		// Before the windows close, because the seconds are charged to one of them. They are
+		// the gap between the last command and now: the machine was up for all of it, and
+		// nothing has read that time yet.
+		const owed = await this.runtime.closeCompute();
+		if (owed > 0) {
+			const usage = emptyUsage();
+			usage.cost.total = owed;
+			this.runtime.trace.addUsage(this.runtime.line(this.leadLineId).currentNodeId, usage);
+		}
 		this.runtime.closeAll("done");
 	}
 
@@ -657,8 +759,33 @@ function serveStatic(request: IncomingMessage, response: ServerResponse): void {
 	createReadStream(target).pipe(response);
 }
 
-const http = createServer(serveStatic);
-const sockets = new WebSocketServer({ server: http, path: "/ws" });
+const http = createServer((request, response) => {
+	if (!authorized(request)) {
+		requireAuth(response);
+		return;
+	}
+	serveStatic(request, response);
+});
+// `noServer` rather than `{ server: http }`: the `ws` library's own wiring upgrades every
+// request that matches `path` before this file gets a look at it, which would serve the
+// WebSocket to anyone who guessed the URL, password or not. Checking auth first and only
+// then handing the upgrade to `ws` is the only order that actually gates it.
+const sockets = new WebSocketServer({ noServer: true, path: "/ws" });
+
+http.on("upgrade", (request, socket, head) => {
+	if (!authorized(request)) {
+		socket.write('HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm="lumen"\r\n\r\n');
+		socket.destroy();
+		return;
+	}
+	if (new URL(request.url ?? "/", "http://x").pathname !== "/ws") {
+		socket.destroy();
+		return;
+	}
+	sockets.handleUpgrade(request, socket, head, (ws) => {
+		sockets.emit("connection", ws, request);
+	});
+});
 
 const conversations = new Map<string, Conversation>();
 
@@ -688,7 +815,7 @@ sockets.on("connection", async (socket, request) => {
 		// Ending a conversation is the map's business rather than the conversation's: it is the
 		// only thing here that holds the key. Everything else the conversation answers itself.
 		if (frame.type === "close") {
-			conversation.close();
+			await conversation.close();
 			conversations.delete(key);
 			socket.close();
 			return;
@@ -709,16 +836,41 @@ sockets.on("connection", async (socket, request) => {
 	socket.on("close", () => conversation.detach(socket));
 });
 
-http.listen(PORT, "127.0.0.1", () => {
+/**
+ * Shut every conversation's machine down before the process goes.
+ *
+ * Without this a machine outlives the server that opened it. It is billed by the second
+ * and nothing is left holding its id, so it runs until it dies of being idle — ten minutes
+ * of a container nobody can reach, for every conversation that had one. The windows die
+ * with the process anyway; the machines do not, and they are the part that costs money.
+ *
+ * Two signals and a flag, because a second Ctrl-C while this is waiting must not skip it.
+ */
+let shuttingDown = false;
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+	process.on(signal, () => {
+		if (shuttingDown) return;
+		shuttingDown = true;
+		const open = [...conversations.values()];
+		if (open.length > 0) console.log(`\nclosing ${open.length} conversation(s) and their machines…`);
+		void Promise.allSettled(open.map((conversation) => conversation.close())).then(() => {
+			process.exit(0);
+		});
+	});
+}
+
+http.listen(PORT, HOST, () => {
 	const keep = KEEP_RECENT === undefined ? "pi default" : `${KEEP_RECENT} tok`;
 	console.log(
-		`lumen server on http://127.0.0.1:${PORT}\n` +
+		`lumen server on http://${HOST}:${PORT}\n` +
+			`  auth       ${BASIC_AUTH_HASH ? "required (LUMEN_BASIC_AUTH set)" : "none — reachable only from this machine"}\n` +
 			`  model      ${PROVIDER}/${MODEL_ID}\n` +
 			`  sessions   ${SESSIONS}\n` +
 			`  material   ${MATERIAL ?? "none — set one per conversation in the panel"}\n` +
 			`  keepRecent ${keep}\n` +
 			`  auto cap   ${money(AUTO_BUDGET)}\n` +
 			`  depth      ${MAX_DEPTH}, ${MAX_CONCURRENT} at once\n` +
-			`  extensions ${EXTENSIONS.length ? EXTENSIONS.map((p) => p.split("/").pop()).join(", ") : "none"}`,
+			`  extensions ${EXTENSIONS.length ? EXTENSIONS.map((p) => p.split("/").pop()).join(", ") : "none"}\n` +
+			`  machine    ${COMPUTE || "none — agents cannot run anything"}`,
 	);
 });

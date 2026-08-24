@@ -107,6 +107,16 @@ export interface Fixed {
 	 */
 	workspace: string;
 	extensions: string[];
+	/**
+	 * The machine an agent's commands run on, in words, or null when there is none.
+	 *
+	 * Shown because it is a bill. Every second that machine is up is charged to this
+	 * conversation's total, and a person reading that total should be able to see what it
+	 * is a total of. Not changeable from here for the same reason the extension list is
+	 * not: it is a decision about what code may execute, and a browser is not where that
+	 * decision is made.
+	 */
+	compute: string | null;
 	port: number;
 	/** Every model the operator has credentials for. */
 	models: { id: string; name: string }[];

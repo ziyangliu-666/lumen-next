@@ -62,6 +62,29 @@ class FakeSession {
 		});
 	}
 
+	think(reasoning: string, text: string, spend: Usage): void {
+		this.emit({ type: "message_start", message: { role: "assistant" } });
+		this.emit({
+			type: "message_update",
+			message: { role: "assistant" },
+			assistantMessageEvent: { type: "thinking_delta", delta: reasoning },
+		});
+		this.emit({
+			type: "message_update",
+			message: { role: "assistant" },
+			assistantMessageEvent: { type: "text_delta", delta: text },
+		});
+		this.emit({
+			type: "message_end",
+			message: {
+				role: "assistant",
+				content: [{ type: "text", text }],
+				usage: spend,
+				model: "m",
+			},
+		});
+	}
+
 	callTool(id: string, name: string, args: unknown, result: unknown, isError = false): void {
 		this.emit({ type: "tool_execution_start", toolCallId: id, toolName: name, args });
 		this.emit({ type: "tool_execution_end", toolCallId: id, toolName: name, result, isError });
@@ -104,6 +127,46 @@ describe("trace", () => {
 		session.say("the answer is 3", usage(10, 5, 0.01));
 
 		expect(trace.node(node.id).summary).toBe("the answer is 3");
+	});
+
+	it("streams reasoning apart from the answer, and never into the summary", () => {
+		// Reasoning arrives before the text and is the work, not the product. It must reach
+		// the interface on its own event so it can be drawn beside the answer, and it must
+		// never become the summary — that is the text the parent actually receives.
+		const trace = new Trace("run-1");
+		const events: TraceEvent[] = [];
+		trace.subscribe((event) => events.push(event));
+		const node = openRoot(trace);
+		const session = new FakeSession();
+		record(trace, session, { nodeId: () => node.id });
+
+		session.think("let me work this out", "the answer is 3", usage(10, 5, 0.01));
+
+		expect(events.some((event) => event.type === "thinking" && event.delta === "let me work this out")).toBe(true);
+		expect(trace.node(node.id).summary).toBe("the answer is 3");
+	});
+
+	it("emits turn_start on every assistant turn, not only the first", () => {
+		// A node stays busy across many turns in a row — think, call a tool, read the
+		// result, think and write again — without its context window ever closing. The
+		// interface needs a boundary event on every one of these turns, not only the
+		// first, or a later turn's text runs on from the one before it.
+		const trace = new Trace("run-1");
+		const events: TraceEvent[] = [];
+		trace.subscribe((event) => events.push(event));
+		const node = openRoot(trace);
+		const session = new FakeSession();
+		record(trace, session, { nodeId: () => node.id });
+
+		session.think("first pass reasoning", "let me check something", usage(10, 5, 0.01));
+		session.callTool("t1", "read", { path: "a.ts" }, { content: [{ type: "text", text: "ok" }] });
+		session.think("second pass reasoning", "the answer is 3", usage(10, 5, 0.01));
+
+		const turnStarts = events.filter((event) => event.type === "turn_start");
+		expect(turnStarts).toHaveLength(2);
+		expect(turnStarts.every((event) => event.type === "turn_start" && event.nodeId === node.id)).toBe(
+			true,
+		);
 	});
 
 	it("does not blank the summary on a turn that was tool calls only", () => {

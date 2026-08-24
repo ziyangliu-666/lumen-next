@@ -51,6 +51,9 @@ export function stepTitle(tool: string, args: any): string {
 	if (!args || typeof args !== "object") return tool;
 	switch (tool) {
 		case "bash":
+		// Drawn the same as `bash`, because to a person reading the row it is the same
+		// thing: a command that ran. Where it ran is the panel's business, not this line's.
+		case "run":
 			return `$ ${String(args.command ?? "").split("\n")[0]}`;
 		case "read": {
 			const range = args.offset ? `:${args.offset}-${(args.offset ?? 0) + (args.limit ?? 0)}` : "";
@@ -127,7 +130,10 @@ export function record(
 		const nodeId = options.nodeId();
 		switch (event.type) {
 			case "message_start": {
-				if (event.message?.role === "assistant") assistantText = "";
+				if (event.message?.role === "assistant") {
+					assistantText = "";
+					trace.emit({ type: "turn_start", nodeId });
+				}
 				return;
 			}
 			case "message_update": {
@@ -135,6 +141,11 @@ export function record(
 				if (inner?.type === "text_delta" && typeof inner.delta === "string") {
 					assistantText += inner.delta;
 					trace.emit({ type: "text", nodeId, delta: inner.delta });
+				} else if (inner?.type === "thinking_delta" && typeof inner.delta === "string") {
+					// Reasoning streams ahead of the answer and is not part of it. Forwarded on
+					// its own event rather than folded into `text`, so the two can be drawn apart:
+					// the thinking is the work, the text is what the parent actually receives.
+					trace.emit({ type: "thinking", nodeId, delta: inner.delta });
 				}
 				return;
 			}

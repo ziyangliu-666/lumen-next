@@ -220,4 +220,22 @@ export type TraceEvent =
 	| { type: "step_update"; nodeId: string; stepId: string; patch: Partial<Step> }
 	| { type: "step_close"; nodeId: string; stepId: string; step: Step }
 	/** Streaming assistant text, so the interface can show a node thinking. */
-	| { type: "text"; nodeId: string; delta: string };
+	| { type: "text"; nodeId: string; delta: string }
+	/**
+	 * Streaming reasoning, kept apart from `text`.
+	 *
+	 * Reasoning tokens arrive before the answer and are not part of it: the summary a
+	 * parent receives is the text, never the thinking. The two get separate events rather
+	 * than sharing one, so the interface can draw the work that produced the answer next
+	 * to the answer instead of folding one into the other.
+	 */
+	| { type: "thinking"; nodeId: string; delta: string }
+	/**
+	 * A new assistant turn just began on this node.
+	 *
+	 * A node stays `busy` across many turns in a row — tool call, read the result, think
+	 * and write again — without its context window ever closing. Without this event the
+	 * interface has no way to know a fresh turn started, and keeps appending `text` and
+	 * `thinking` deltas onto whatever the previous turn already left on screen.
+	 */
+	| { type: "turn_start"; nodeId: string };

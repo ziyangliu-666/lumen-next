@@ -25,6 +25,8 @@ export interface State {
 	selected: string | null;
 	/** Text streaming in right now, per node. Cleared when a node starts a fresh turn. */
 	live: Record<string, string>;
+	/** Reasoning streaming in right now, per node. Cleared on the same edge as `live`. */
+	thinking: Record<string, string>;
 	/** What you have said, per node, so the page reads as a conversation and not a log. */
 	saidBy: Record<string, string[]>;
 	messages: { level: "error" | "notice"; text: string }[];
@@ -43,6 +45,7 @@ export const initialState: State = {
 	agents: [],
 	selected: null,
 	live: {},
+	thinking: {},
 	saidBy: {},
 	messages: [],
 	connected: false,
@@ -85,6 +88,7 @@ export function reduce(state: State, action: Action): State {
 				...state,
 				nodes: node ? { ...state.nodes, [action.nodeId]: { ...node, busy: true } } : state.nodes,
 				live: starting ? { ...state.live, [action.nodeId]: "" } : state.live,
+				thinking: starting ? { ...state.thinking, [action.nodeId]: "" } : state.thinking,
 				saidBy: {
 					...state.saidBy,
 					[action.nodeId]: [...(state.saidBy[action.nodeId] ?? []), action.text],
@@ -161,13 +165,16 @@ function applyFrame(state: State, frame: ServerFrame): State {
 			const existing = state.nodes[frame.nodeId];
 			if (!existing) return state;
 			const merged = { ...existing, ...frame.patch };
-			// A turn beginning is the one moment the live text should start over. Without
-			// this the next reply arrives glued to the previous one.
+			// A turn beginning is a moment the live text should start over. `turn_start`
+			// below is the event meant to carry this, but a node going busy is kept as a
+			// second, redundant clear rather than trusted alone: a missing clear leaves
+			// stale text on screen, a harmless double clear does not.
 			const startedWorking = frame.patch.busy === true && !existing.busy;
 			return {
 				...state,
 				nodes: { ...state.nodes, [frame.nodeId]: merged },
 				live: startedWorking ? { ...state.live, [frame.nodeId]: "" } : state.live,
+				thinking: startedWorking ? { ...state.thinking, [frame.nodeId]: "" } : state.thinking,
 			};
 		}
 
@@ -209,6 +216,25 @@ function applyFrame(state: State, frame: ServerFrame): State {
 			return {
 				...state,
 				live: { ...state.live, [frame.nodeId]: (state.live[frame.nodeId] ?? "") + frame.delta },
+			};
+
+		case "thinking":
+			return {
+				...state,
+				thinking: {
+					...state.thinking,
+					[frame.nodeId]: (state.thinking[frame.nodeId] ?? "") + frame.delta,
+				},
+			};
+
+		case "turn_start":
+			// A fresh assistant turn started on a node that may already be mid-session.
+			// Clear both buffers so the next deltas do not run on from a turn that already
+			// finished and is still sitting on screen.
+			return {
+				...state,
+				live: { ...state.live, [frame.nodeId]: "" },
+				thinking: { ...state.thinking, [frame.nodeId]: "" },
 			};
 
 		default:

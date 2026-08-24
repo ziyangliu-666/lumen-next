@@ -126,6 +126,7 @@ conversation starts from.
 | how many at once | yes | the next delegation call |
 | working directory | **no** | |
 | extensions | **no** | |
+| the machine | **no** | |
 
 The panel is also the way back to an empty page. **new conversation** closes this one — the
 driver stops, its windows end, and the server forgets it — then reloads. Nothing is saved
@@ -135,14 +136,18 @@ The model and the thresholds cannot claim more than "the next window": pi binds 
 session is built, and rebuilding one to change them would throw away the window, which is
 the conversation.
 
-The last two are absent on purpose rather than unimplemented. Extensions execute arbitrary
+The last three are absent on purpose rather than unimplemented. Extensions execute arbitrary
 code with your permissions, so a page that could add one is a page that can install a tool
-into an agent, and the working directory is the boundary of what the agents can read. Both
-stay on the command line, and the panel shows their values so nobody has to guess.
+into an agent; the working directory is the boundary of what the agents can read; and the
+machine is where code an agent wrote gets executed. All three stay on the command line, and
+the panel shows their values so nobody has to guess.
 
 ## Running it
 
-Needs Node 22+ and model credentials in `~/.pi/agent/auth.json`.
+Needs Node 22+ and model credentials in `~/.pi/agent/auth.json`. For `run`, Modal
+credentials in `~/.modal.toml`, which `modal setup` writes. Without them a conversation
+still works: the first command an agent tries comes back as a failure it can read, and the
+run carries on as the reading system it was before.
 
 ```bash
 npm install
@@ -158,6 +163,8 @@ prints; it proxies the socket to the server.
 |---|---|---|
 | `LUMEN_PROVIDER` / `LUMEN_MODEL` | `deepseek` / `deepseek-v4-flash` | which model a new conversation starts on; changeable per conversation in the panel |
 | `LUMEN_PORT` | `4173` | |
+| `LUMEN_HOST` | `127.0.0.1` | move it off loopback and the server refuses to start unless `LUMEN_BASIC_AUTH` is set |
+| `LUMEN_BASIC_AUTH` | none | `user:password`; required once `LUMEN_HOST` is not loopback, ignored otherwise |
 | `LUMEN_SESSIONS` | `~/.lumen/sessions` | where each conversation's own directory is made |
 | `LUMEN_MATERIAL` | none | a folder for the agents to study, if every conversation on this server is about the same one |
 | `LUMEN_AUTO_BUDGET` | `2` | dollars one run may spend while it runs itself |
@@ -165,6 +172,7 @@ prints; it proxies the socket to the server.
 | `LUMEN_MAX_CONCURRENT` | `4` | how many children one call runs at once |
 | `LUMEN_KEEP_RECENT_TOKENS` | pi's default (20k) | set to a few hundred to watch a line compact without holding a long conversation first |
 | `LUMEN_EXTENSIONS` | `node_modules/pi-web-access` | pi extensions to load by path; set empty to run without the web tools |
+| `LUMEN_COMPUTE` | `modal` | where `run` sends commands; set empty and agents cannot run anything |
 
 ## Where a conversation lives
 
@@ -198,15 +206,96 @@ The same is not true in the other direction, and it is worth saying plainly: pi'
 `grep`, `find` and `ls` resolve absolute paths too. **material is a default and a statement
 of intent, not a fence.** An agent that decides to read somewhere else can.
 
+## The machine
+
+An agent can run commands. `run` sends one to a Linux container that belongs to a compute
+provider — Modal today — and hands back what it printed and what it exited with.
+
+```
+worker
+├─ run   $ git clone https://github.com/…
+├─ run   $ pip install -r requirements.txt
+└─ run   $ pytest -q
+```
+
+**This is not `bash`, and the difference is the whole reason it exists.** pi ships a `bash`
+tool. It runs here, with your permissions, on your disk, with unfiltered outbound access,
+and nothing in this project has ever handed it to an agent. `run` executes somewhere else,
+on a container that cannot see this machine and is destroyed with the conversation. What
+made execution unsafe to give out was where it ran, so that is what moved.
+
+The two names must also stay apart mechanically. `toolSelection` merges custom tool names
+into the same allowlist pi reads, so a custom tool named `bash` would put the string
+"bash" into that list — and that string is what switches pi's own local shell back on,
+under a name that looks like ours. `save` carries the same warning about `write`.
+
+| | |
+|---|---|
+| the machine | a container elsewhere, `/work`, empty, network, shared by every agent on the run |
+| the conversation's directory | on your disk, where `save` writes, what `read` sees |
+
+**The two do not share a filesystem.** Nothing copies between them. An agent that wants a
+result to survive prints it and saves it, which works for text and not for a plot. A tool
+that pulls a file back is the obvious next thing and is not written.
+
+One machine per conversation, not one per agent. It is the same reason the conversation has
+one directory: one worker clones the repository and a second runs the tests against that
+checkout, and agents with a machine each would both start from an empty disk.
+
+It starts on the first command and not before, so a conversation that never runs anything is
+billed for no machine. It is 2 cores and 4 GiB, with no GPU and no way to ask for one.
+Choosing hardware is meant to be the system's job; a menu of GPU sizes would be the thing
+this is trying to remove, and reading a repository well enough to size it is not written yet.
+
+Two limits are constants rather than settings, because money is the one quantity you bound
+here and the budget already bounds it: a machine lives at most an hour, and dies after ten
+idle minutes. A command gets ten minutes unless the agent asks for more, up to forty-five.
+When a machine has died, the next command opens another and its result says so in the first
+line — a worker that has just lost its checkout has to be told, not left to conclude the
+repository was never cloned.
+
+### What it costs
+
+**Compute goes into the same total as tokens.** A machine is billed for every second it is
+up, including the minutes a model spends deciding what to run next, and those dollars are
+charged to the window that ran the command through the same call model spend arrives on. So
+the budget covers compute without the driver learning a second number, and a point's figure
+in the panel is what that window really cost.
+
+It is an estimate of list price. lumen multiplies seconds by Modal's published Sandbox rates
+(read 2026-08-24: $0.00003942 per core-second, $0.00000667 per GiB-second — note those are
+the Sandbox rates, three times the standard ones printed higher on the same page). Free
+credits, committed spend and plan allowances all move the real figure and none of them are
+visible from here. Modal's own dashboard is the invoice.
+
+One case is under-counted: the last machine of a conversation nobody comes back to. It idles
+for up to ten minutes and dies, and if no further command runs, those minutes reach no
+window. That is about nine cents.
+
 ## Security
 
-**Loopback only, one person, one machine. That is the whole model.**
+**Loopback only, one person, one machine, by default. That is the whole model, until you
+move `LUMEN_HOST`.**
 
-The agents run bash-free but with your file permissions, `pi-web-access` reaches the
-internet, and pi packages execute arbitrary code. There is no sandbox: `Runtime` runs
+Setting `LUMEN_HOST` to anything but loopback moves the boundary from "only this machine
+can reach the port" to "only someone with the password can". `LUMEN_BASIC_AUTH` is that
+password, as `user:password`; the server refuses to start on a non-loopback host without
+one, because a public bind with nothing guarding it is not a smaller version of this model,
+it is the absence of one. Basic Auth is plain text on the wire unless something in front of
+this terminates TLS — a domain and a certificate, which lumen does not set up for you.
+
+The agents run with your file permissions, `pi-web-access` reaches the internet, and pi
+packages execute arbitrary code. There is no sandbox around lumen itself: `Runtime` runs
 subagents in-process precisely so their events arrive directly, and the isolation that
 needs is a container around the whole run, which does not exist yet. Do not put this behind
 a tunnel.
+
+`run` does not change that, in either direction. The code an agent runs is isolated from
+this machine, because it is on somebody else's; the process that decides what to run is
+not isolated from anything. An agent that reads a hostile repository and then runs what it
+suggests harms a container you are paying for, and can still spend your money and reach the
+internet from it. The container has no outbound restrictions: `pip` and `git` need the
+network, and an allowlist that covers those covers most of what an attacker wants too.
 
 Two properties do hold:
 
@@ -217,6 +306,8 @@ Two properties do hold:
 - **What an agent writes, it writes inside its own conversation's directory.** `save` does
   its own path resolution and refuses to climb out. This is the one path boundary here that
   is real; reading has none.
+- **What an agent runs, it runs somewhere else.** `run` reaches a provider's container and
+  has no route to this filesystem. It is never named `bash`, and the reason is above.
 
 The second one was broken until recently: `tools: []` compiled to "drop the built-ins",
 which leaves every extension-registered tool standing. An agent declared as having no tools
@@ -225,8 +316,8 @@ fetched two web pages. If you add tools, check the allowlist still means what it
 ## Layout
 
 ```
-packages/kernel   the engine. Line, Trace, the subagent and finish tools, the driver.
-                  No web, no server.
+packages/kernel   the engine. Line, Trace, the subagent, finish, save and run tools, the
+                  driver, and the compute providers. No web, no HTTP server.
 packages/server   one process: HTTP + WebSocket, and the agent definitions.
 packages/web      React + Vite. One reducer over the trace events.
 ```

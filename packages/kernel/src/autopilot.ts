@@ -89,9 +89,6 @@ export const CONTINUE_PROMPT = [
 	"established that it cannot be answered with what you can reach, call `finish`.",
 	"Otherwise delegate the specific look-ups that are still missing, then say what you",
 	"now know.",
-	"",
-	"Do not repeat a look-up that has already been done, and do not report anything no",
-	"worker actually found.",
 ].join("\n");
 
 /**

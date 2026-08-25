@@ -11,15 +11,45 @@
 // re-exports `Runtime`, which pulls pi and every model SDK behind it — 4 MB of Node-only
 // code that would end up in the browser bundle for the sake of two arithmetic helpers.
 import { addUsage, emptyUsage } from "@lumen/kernel/trace/types";
-import type { AgentSpec, TraceNode, Usage } from "@lumen/kernel";
+import type { AgentSpec, Idea, TraceNode, Usage } from "@lumen/kernel";
 // Type-only, so nothing from the server package is bundled. One definition of the wire
 // format, imported by both ends, rather than a copy here that can drift out of step.
-import type { AutoState, Fixed, ServerFrame, Settings, Target } from "@lumen/server/protocol";
+import type {
+	AutoState,
+	ConversationSummary,
+	Fixed,
+	ServerFrame,
+	Settings,
+	Target,
+} from "@lumen/server/protocol";
+
+/**
+ * What `files.read` sends back for one file, taken from the one frame that carries it rather
+ * than redeclared here — a second copy of the same union is a second place it could drift
+ * from `protocol.ts`.
+ */
+export type FileContent = Extract<ServerFrame, { type: "files.content" }>["content"];
+
+/**
+ * One step's whole result, past what its `preview` shows — or that it is on the way.
+ *
+ * A union rather than a bare string keyed alongside a separate `loading` set, because the
+ * two facts always change together: a fetch in flight has no text yet, and text never
+ * arrives without the fetch that was in flight for it ending. One field, one place to read
+ * whether a click should show a spinner or the text it asked for.
+ */
+export type StepFull =
+	| { status: "loading" }
+	| { status: "done"; text: string; truncated: boolean };
 
 export interface State {
 	nodes: Record<string, TraceNode>;
 	children: Record<string, string[]>;
 	rootId: string | null;
+	/** The findings graph, kept the same way `nodes`/`children` keep the call tree. */
+	ideas: Record<string, Idea>;
+	/** Child idea ids per parent id; root ideas are keyed under "". */
+	ideaChildren: Record<string, string[]>;
 	agents: AgentSpec[];
 	/** Where your typing goes. */
 	selected: string | null;
@@ -36,12 +66,39 @@ export interface State {
 	/** What can be changed about this run, and what was fixed when the server started. */
 	settings: Settings | null;
 	fixed: Fixed | null;
+	/**
+	 * How many other conversations this server holds, from `hello`. A tab that opens onto an
+	 * empty conversation reads this to say so, rather than sitting silent while a paid-for run
+	 * keeps going somewhere this tab has no way to name.
+	 */
+	otherConversations: number;
+	/**
+	 * The list behind `otherConversations`, once actually asked for — see `conversations.list`
+	 * in `protocol.ts`. Null means never asked; an empty array means asked and there were none.
+	 */
+	conversations: ConversationSummary[] | null;
+	/** The read-only browser over this conversation's own directory. See `Files.tsx`. */
+	files: {
+		// One directory's immediate children, keyed by its own path; "" is the root. A path
+		// absent here has not been asked for yet.
+		tree: Record<string, { name: string; kind: "file" | "dir" }[]>;
+		/** The file open in the preview pane, or none. */
+		preview: { path: string; content: FileContent } | null;
+	};
+	/**
+	 * Step results fetched in full, keyed by step id — the on-demand counterpart to the
+	 * preview every step already carries. Absent means neither asked for nor arrived; see
+	 * `StepFull` for the two states an id moves through once it has been asked for.
+	 */
+	stepFull: Record<string, StepFull>;
 }
 
 export const initialState: State = {
 	nodes: {},
 	children: {},
 	rootId: null,
+	ideas: {},
+	ideaChildren: {},
 	agents: [],
 	selected: null,
 	live: {},
@@ -55,6 +112,10 @@ export const initialState: State = {
 	// would offer models this machine has no credentials for.
 	settings: null,
 	fixed: null,
+	otherConversations: 0,
+	conversations: null,
+	files: { tree: {}, preview: null },
+	stepFull: {},
 };
 
 export type Action =
@@ -62,7 +123,9 @@ export type Action =
 	| { kind: "select"; nodeId: string }
 	| { kind: "said"; nodeId: string; text: string }
 	| { kind: "clearMessages" }
-	| { kind: "connection"; connected: boolean };
+	| { kind: "connection"; connected: boolean }
+	/** A `step.full` request just went out. Marks the step loading before the reply can land. */
+	| { kind: "step.full.request"; stepId: string };
 
 export function reduce(state: State, action: Action): State {
 	switch (action.kind) {
@@ -97,6 +160,11 @@ export function reduce(state: State, action: Action): State {
 		}
 		case "frame":
 			return applyFrame(state, action.frame);
+		case "step.full.request":
+			return {
+				...state,
+				stepFull: { ...state.stepFull, [action.stepId]: { status: "loading" } },
+			};
 	}
 }
 
@@ -123,10 +191,16 @@ function applyFrame(state: State, frame: ServerFrame): State {
 				nodes: frame.snapshot.nodes,
 				children: frame.snapshot.children,
 				rootId: frame.snapshot.rootId,
+				ideas: frame.ideas.ideas,
+				ideaChildren: frame.ideas.children,
 				saidBy: frame.said,
 				selected: state.selected ?? stillLive ?? rootLive ?? frame.rootNodeId,
+				otherConversations: frame.otherConversations,
 			};
 		}
+
+		case "conversations.list":
+			return { ...state, conversations: frame.conversations };
 
 		case "auto":
 			return { ...state, auto: frame.state };
@@ -134,11 +208,58 @@ function applyFrame(state: State, frame: ServerFrame): State {
 		case "settings":
 			return { ...state, settings: frame.settings };
 
-		case "error":
-			return { ...state, messages: [...state.messages, { level: "error", text: frame.message }] };
+		case "error": {
+			// A failed `step.full` leaves its id sitting at `loading` forever unless something
+			// clears it — the failure reuses this shared frame rather than a shape of its own
+			// (see `protocol.ts`), so there is no `stepId` here to clear precisely. Clearing
+			// every id still `loading` is safe: at most one such fetch is ever in flight, since
+			// the button that starts one disables itself for the id it just asked about.
+			const stepFull = Object.fromEntries(
+				Object.entries(state.stepFull).filter(([, entry]) => entry.status !== "loading"),
+			);
+			return {
+				...state,
+				messages: [...state.messages, { level: "error", text: frame.message }],
+				stepFull,
+			};
+		}
 
 		case "notice":
 			return { ...state, messages: [...state.messages, { level: "notice", text: frame.message }] };
+
+		case "files.tree":
+			return {
+				...state,
+				files: { ...state.files, tree: { ...state.files.tree, [frame.path]: frame.entries } },
+			};
+
+		case "files.content":
+			return {
+				...state,
+				files: { ...state.files, preview: { path: frame.path, content: frame.content } },
+			};
+
+		case "step.content":
+			return {
+				...state,
+				stepFull: {
+					...state.stepFull,
+					[frame.stepId]: { status: "done", text: frame.text, truncated: frame.truncated },
+				},
+			};
+
+		case "idea_add": {
+			const idea = frame.idea;
+			const key = idea.parentId ?? "";
+			return {
+				...state,
+				ideas: { ...state.ideas, [idea.id]: idea },
+				ideaChildren: {
+					...state.ideaChildren,
+					[key]: [...(state.ideaChildren[key] ?? []), idea.id],
+				},
+			};
+		}
 
 		case "node_open": {
 			const node = frame.node;
@@ -198,18 +319,43 @@ function applyFrame(state: State, frame: ServerFrame): State {
 			const node = state.nodes[frame.nodeId];
 			if (!node) return state;
 			const patch = frame.type === "step_close" ? frame.step : frame.patch;
-			return {
-				...state,
-				nodes: {
-					...state.nodes,
-					[frame.nodeId]: {
-						...node,
-						steps: node.steps.map((step) =>
-							step.id === frame.stepId ? { ...step, ...patch } : step,
-						),
-					},
+			const nodes = {
+				...state.nodes,
+				[frame.nodeId]: {
+					...node,
+					steps: node.steps.map((step) =>
+						step.id === frame.stepId ? { ...step, ...patch } : step,
+					),
 				},
 			};
+
+			// A finished `save` step means a file just landed in this conversation's own
+			// directory, which is the directory `files.tree` is a cached picture of. Rather
+			// than teach the server to push a fresh listing (a second frame type doing what
+			// `step_close` already tells us), the fix lives entirely on this side: drop the
+			// stale entries and let `Files.tsx`'s own effect notice the gap and re-ask for
+			// any of them it still has open. Dropped, not the whole tree — a person with an
+			// unrelated folder open elsewhere should not see it flicker back to "reading…"
+			// for a save that never touched it.
+			//
+			// Every prefix of the file's directory is dropped, not just the deepest one: a
+			// save into `a/b/c/x.md` may have just created `a/b/c`, which means the listing
+			// for `a/b` (and `a`, and the root) may have gained a child it did not have a
+			// moment ago.
+			if (frame.type === "step_close" && frame.step.tool === "save" && frame.step.state === "done") {
+				const savedPath = savedFilePath(frame.step.args);
+				if (savedPath !== null) {
+					const tree = { ...state.files.tree };
+					delete tree[""];
+					const dirs = savedPath.split("/").slice(0, -1);
+					for (let depth = 1; depth <= dirs.length; depth++) {
+						delete tree[dirs.slice(0, depth).join("/")];
+					}
+					return { ...state, nodes, files: { ...state.files, tree } };
+				}
+			}
+
+			return { ...state, nodes };
 		}
 
 		case "text":
@@ -240,6 +386,13 @@ function applyFrame(state: State, frame: ServerFrame): State {
 		default:
 			return state;
 	}
+}
+
+/** The `path` a closed `save` step wrote to, or null if the step carried no usable one. */
+function savedFilePath(args: unknown): string | null {
+	if (!args || typeof args !== "object") return null;
+	const path = (args as { path?: unknown }).path;
+	return typeof path === "string" && path.length > 0 ? path : null;
 }
 
 /**
@@ -302,6 +455,26 @@ export function frontierOf(state: State, id: string): string | null {
 		}
 	}
 	return null;
+}
+
+/**
+ * The nodes a person reads as one conversation, oldest first.
+ *
+ * Compaction opens a new point because the kernel's context window is gone — but nothing a
+ * person said was lost, it is one hop back on the same line. Walking back across `compact`
+ * origins only (never `handoff`, which is a real, deliberate change of speaker and stays
+ * visible as its own thing) recovers the chain that reads as one continuous exchange, so the
+ * panel can show it that way instead of appearing to reset at every compaction.
+ */
+export function chatChain(state: State, id: string): TraceNode[] {
+	const chain: TraceNode[] = [];
+	let node: TraceNode | undefined = state.nodes[id];
+	while (node) {
+		chain.unshift(node);
+		if (node.origin.kind !== "compact") break;
+		node = node.parentId ? state.nodes[node.parentId] : undefined;
+	}
+	return chain;
 }
 
 export function describeTarget(target: Target): string {

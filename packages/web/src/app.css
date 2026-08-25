@@ -35,12 +35,26 @@ header {
 	padding: 10px 16px;
 	border-bottom: 1px solid var(--line);
 	white-space: nowrap;
+	/* A backstop, not the fix below it. The breakpoint is what keeps the common case clean;
+	   this is what stops the *next* thing added to the header from doing what "hide files"
+	   and "show call graph" already did once — quietly pushing the header's real width past
+	   the breakpoint and widening the whole page underneath it, scrollbar and all, until
+	   someone happened to open the window at exactly the wrong size to notice. If that
+	   happens again, only this bar gets a thin scrollbar of its own; the page does not. */
+	overflow-x: auto;
 }
 /* Below this the header has more in it than fits, and it wrapped into two ragged lines.
    What goes first is the teaching: the tagline and the glyph key explain the page to
    somebody meeting it, while the switch, the spend and the settings are the state of the
-   run and have to stay. */
-@media (max-width: 1400px) {
+   run and have to stay.
+   1600px, not 1400: the header's own content now measures ~1532px wide with every item
+   showing — "hide files" and "show call graph" were added after 1400 was chosen, and
+   nothing moved this number when they were. A window between 1400 and roughly 1530px wide
+   fell through the gap: too wide to trigger the hiding, too narrow for the header to
+   actually fit, so the page scrolled sideways to show it. Leave real headroom above the
+   measured width rather than matching it exactly, since a font a person's system substitutes
+   can render a few pixels wider than what this was measured with. */
+@media (max-width: 1600px) {
 	/* `header .legend`, not `.legend`. The base rule for it is defined further down this
 	   file at the same weight, so a bare class here loses to it on order alone — and the
 	   tagline vanished while the glyph key stayed, which is the half-applied result that
@@ -57,10 +71,94 @@ header {
 main {
 	flex: 1;
 	display: grid;
-	/* Overridden inline with the width the person dragged to. This is the fallback for the
-	   first paint, before that width is read back. */
-	grid-template-columns: 1fr 5px 420px;
+	/* Overridden inline with the files column's open/collapsed width and the graphs column's
+	   width, the panel the person dragged. This is the fallback for the first paint, before
+	   either is read back. Source order is files, reading, handle, graphs — the same order
+	   as `<main>`'s children in `main.tsx` — so this and the inline style always agree on
+	   which column is which. */
+	grid-template-columns: 220px 1fr 5px 420px;
 	min-height: 0;
+}
+
+/* Explicit, rather than left to source order, because two of the rules below hide one or
+   two of these four children with `display: none`. Grid auto-placement fills gaps in
+   document order — remove the first item and the other three slide down to fill tracks 1–3,
+   leaving the last track empty and every remaining pane holding the wrong width for what it
+   is. Naming each child's cell keeps a hidden sibling from ever moving the others. */
+.filesCol {
+	grid-column: 1;
+	grid-row: 1;
+}
+.side {
+	grid-column: 2;
+	grid-row: 1;
+}
+.handle {
+	grid-column: 3;
+	grid-row: 1;
+}
+.graphs {
+	grid-column: 4;
+	grid-row: 1;
+}
+
+/* Below this the saved-or-default graphs width and a fixed files column stop fitting: a
+   420px graphs column plus a 220px files column leaves the reading pane — the dominant
+   pane the whole layout exists to protect — a sliver, and at the narrower end of this range
+   a column that size is exactly what clipped findings text mid-word and wrapped it one
+   character per line before this file's layout changed. `!important` beats the inline style
+   `main.tsx` sets on every render; nothing here has to know what the drag handle or the
+   files toggle currently hold, it only has to win once the window gets this narrow. Files
+   auto-collapses — nothing in it is worth the width once the window is this size — and the
+   graphs column is clamped to a fraction of the viewport instead of a fixed pixel count, so
+   it shrinks with the window instead of forcing the reading pane to give up the difference.
+   `display: none` rather than a 0px cell: a 0px-wide grid track still lays the pane's content
+   out and lets it overflow the track (which is exactly what happened here the first time —
+   see the comment on `.filesCol`, `.side`, `.handle` and `.graphs`'s explicit placement
+   above for why a hidden sibling no longer drags the rest out of position). */
+@media (max-width: 900px) {
+	main {
+		grid-template-columns: minmax(0, 1fr) 5px clamp(220px, 36vw, 340px) !important;
+	}
+	.filesCol {
+		display: none;
+	}
+	.side {
+		grid-column: 1;
+	}
+	.handle {
+		grid-column: 2;
+	}
+	.graphs {
+		grid-column: 3;
+	}
+}
+
+/* Below this even a clamped side-by-side graphs column reads as a strip rather than a
+   picture — the pan/zoom canvas in particular needs width to be worth panning at all, not
+   just height. `<main>` drops to one column and two rows instead: the reading pane on top,
+   the graphs column underneath at the full window's width, each far more legible at 390px
+   than a third or a quarter of it would be. The handle is hidden with the files column —
+   dragging a divider between two rows instead of two columns is a different control, and
+   this task is "merely usable" below 900px, not a second resize gesture to design. */
+@media (max-width: 620px) {
+	main {
+		grid-template-columns: 1fr !important;
+		grid-template-rows: minmax(0, 1fr) minmax(200px, 38vh) !important;
+	}
+	.handle {
+		display: none;
+	}
+	.side {
+		grid-column: 1;
+		grid-row: 1;
+	}
+	.graphs {
+		grid-column: 1;
+		grid-row: 2;
+		border-left: none;
+		border-top: 1px solid var(--line);
+	}
 }
 
 /* The grip between the canvas and the reading. Deliberately thin and unmarked: it is found
@@ -101,9 +199,14 @@ body.resizing {
 }
 
 /* The canvas. Points and wires share one transformed layer, so there is no second
-   coordinate system to keep in step when panning or zooming. */
+   coordinate system to keep in step when panning or zooming.
+   It lives inside `.callPane` now, a flex column, and needs `flex: 1` to actually claim
+   the height that row has to give — a plain block child of a flex column is only as tall
+   as its own content, which for an absolutely-positioned `.world` is nothing at all. */
 .canvas {
 	position: relative;
+	flex: 1;
+	min-height: 0;
 	overflow: hidden;
 	cursor: grab;
 	background:
@@ -226,6 +329,375 @@ body.resizing {
 	cursor: pointer;
 }
 
+/* The file browser: the new leading column of `<main>`, collapsed to near nothing rather than
+   unmounted when its header toggle is off — so the toggle always has a column to reopen.
+   `min-width: 0` plus `overflow: hidden` is what makes the collapse actually work: a grid
+   item's default minimum width is its content's, and without this the tree would refuse to
+   shrink below its longest file name and spill into the column beside it. */
+.filesCol {
+	min-width: 0;
+	overflow: hidden;
+	border-right: 1px solid var(--line);
+}
+.filesPane {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	/* Wide enough to read a file name at the open width; clipped rather than reflowed while
+	   the column is animating shut. */
+	width: 220px;
+}
+.filesHead {
+	padding: 8px 10px;
+	color: var(--dim);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	border-bottom: 1px solid var(--line);
+}
+.fileTree {
+	flex: 1;
+	overflow: auto;
+	padding: 6px;
+	min-height: 0;
+}
+.fileList {
+	list-style: none;
+	margin: 0;
+	padding-left: 14px;
+}
+.fileTree > .fileList {
+	padding-left: 0;
+}
+.fileDir,
+.fileLeaf {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	width: 100%;
+	text-align: left;
+	background: none;
+	border: none;
+	border-radius: 4px;
+	color: var(--text);
+	font: inherit;
+	font-size: 12px;
+	padding: 3px 4px;
+	cursor: pointer;
+}
+.fileDir:hover,
+.fileLeaf:hover {
+	background: var(--panel);
+}
+.fileLeaf.selected {
+	background: var(--panel);
+	color: var(--accent);
+}
+.fileDisclosure {
+	display: inline-block;
+	width: 10px;
+	color: var(--dim);
+	font-size: 10px;
+}
+.fileIndent {
+	margin: 2px 0;
+	padding-left: 20px;
+	font-size: 12px;
+}
+/* Under the tree, not beside it: the column is narrow on purpose, and a preview that opened
+   sideways would be a ribbon nobody could read. */
+.filePreview {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	max-height: 45%;
+	border-top: 1px solid var(--line);
+}
+.filePreviewHead {
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--line);
+	color: var(--dim);
+	font-size: 11px;
+	word-break: break-all;
+}
+/* The scrolling region under the head. Every kind of preview — plain text, highlighted code,
+   an agent's own markdown, an image, a PDF — sits inside this one box, so only one place
+   needs `min-height: 0` for the nested-flex scrolling this whole page already relies on
+   elsewhere (see `.detail`'s own comment on the same rule, for the same reason). */
+.filePreviewBody {
+	flex: 1;
+	overflow: auto;
+	min-height: 0;
+}
+.filePreviewText {
+	margin: 0;
+	padding: 8px 10px;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font: inherit;
+	font-size: 12px;
+}
+/* Highlighted source. `pre` for the horizontal scroll a long line needs — code is not prose,
+   and wrapping it wrongly moves the meaning of the indentation. */
+.filePreviewCode {
+	margin: 0;
+	padding: 8px 10px;
+	overflow-x: auto;
+	white-space: pre;
+	font: inherit;
+	font-size: 12px;
+}
+.filePreviewBody .prose {
+	padding: 8px 10px;
+}
+.filePreviewCsv {
+	padding: 8px 10px;
+	overflow-x: auto;
+}
+.filePreviewImage {
+	display: block;
+	max-width: 100%;
+	max-height: 100%;
+	margin: 8px auto;
+	object-fit: contain;
+}
+/* Tall enough to be worth opening at all; the pane itself scrolls past this if the PDF's own
+   viewer wants more. */
+.filePreviewPdf {
+	display: block;
+	width: 100%;
+	height: 360px;
+	border: none;
+}
+
+/* The right-hand column: the findings graph stacked over the call graph, so both are on
+   screen together instead of one replacing the other behind a toggle. Two grid rows, not
+   two equal flex halves: the findings graph is a short, static list by design (see
+   `IdeaGraph.tsx`'s own doc comment — "expected to stay small and shallow") and gets a
+   capped row with its own scrollbar for the rare run with a long one, while the call graph
+   is a pan/zoom canvas that is only worth having if it gets real height, so it takes
+   whatever the column has left rather than splitting evenly with a pane that does not need
+   the space. */
+.graphs {
+	display: grid;
+	grid-template-rows: minmax(120px, 30%) 1fr;
+	min-height: 0;
+	min-width: 0;
+	border-left: 1px solid var(--line);
+}
+.findingsPane,
+.callPane {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.findingsPane {
+	border-bottom: 1px solid var(--line);
+}
+/* Same tone and weight as `.filesHead` — a third pane in the same page, labelled the same
+   way, since nothing else on screen says which half of `.graphs` is which now that there is
+   no toggle whose own label used to do that job. */
+.paneHead {
+	padding: 8px 10px;
+	color: var(--dim);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	border-bottom: 1px solid var(--line);
+}
+.graphs .hint {
+	padding: 16px;
+}
+
+/* The findings graph: an indented tree list, not a canvas. It sits in `.findingsPane`, one
+   row of `.graphs`, and has to read as the same application as the call graph beside it, so
+   it borrows the same tokens rather than inventing its own. `flex: 1` is what lets it use
+   the row's actual height for its own scrolling rather than the row growing to fit it. */
+.ideaGraph {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 16px;
+}
+.ideaList {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.ideaList .ideaList {
+	/* Each level of nesting is a level of "grew from", drawn the plain way an outline is.
+	   The indent lines up a child's triangle under its parent's title rather than under the
+	   parent's own triangle, so the guide reads as descent and not as a second column. */
+	margin-top: 1px;
+	margin-left: 8px;
+	padding-left: 10px;
+	border-left: 1px solid var(--line);
+}
+.ideaNode {
+	margin: 1px 0;
+}
+/* A row, not a card. The border and padding a card needs are what made a dozen findings
+   unscrollable; the tree's own indent guides already say where each one sits, so the row
+   carries no box of its own and earns its whole height from one line of text. */
+.idea {
+	border-radius: 4px;
+	font: inherit;
+	/* Declared here, not only inside `.justArrived` below: the fade is what happens when
+	   `.justArrived` is *removed*, so the property that animates it has to already be on the
+	   element's own resting state for the removal to transition rather than snap. */
+	transition: background 1.6s ease-out;
+}
+.ideaRow {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+.idea:hover {
+	background: var(--panel);
+}
+/* A finding that appeared while you were looking, not one you scrolled to — a product whose
+   point is that findings accumulate should say so when one lands, especially one that
+   arrives below the fold. Tinted with `--accent`, the same token the rest of the app already
+   spends on "something is live", rather than a new colour invented for one event. It appears
+   at once (no transition on the way in) and fades over the `.idea` rule above on the way
+   out, once `useNewlyArrived` in `IdeaGraph.tsx` drops this class. */
+.idea.justArrived {
+	background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+	transition: none;
+}
+/* The row itself: the whole line is the target for the frequent act, opening the finding.
+   `min-width: 0` because it is a flex item holding a title that can be one long unbroken
+   run — without it the title's min-content width becomes the row's floor and the column
+   cannot shrink, which is the same failure `.step .title` documents further down. */
+.ideaToggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1;
+	min-width: 0;
+	text-align: left;
+	background: none;
+	border: none;
+	color: inherit;
+	font: inherit;
+	padding: 3px 4px;
+	cursor: pointer;
+}
+.ideaToggle:disabled {
+	cursor: default;
+}
+/* A fixed column so every title in the tree starts at the same x whether its row has a
+   triangle or not — a ragged left edge reads as broken indentation rather than as some rows
+   having more to say. */
+.ideaMark {
+	display: inline-block;
+	width: 10px;
+	flex: none;
+	color: var(--dim);
+	font-size: 10px;
+}
+/* The rarer action, so it gets a mark at the end of the row rather than the row. Dim until
+   the row is under the cursor: it should be findable without competing with the title for
+   attention on every line of a long list. */
+.ideaGoto {
+	flex: none;
+	background: none;
+	border: none;
+	color: transparent;
+	font: inherit;
+	font-size: 11px;
+	padding: 2px 4px;
+	cursor: pointer;
+}
+.idea:hover .ideaGoto {
+	color: var(--dim);
+}
+.ideaGoto:hover {
+	color: var(--accent);
+}
+.ideaGoto:focus-visible {
+	color: var(--accent);
+}
+/* Same ring `.point.selected` draws on the call graph, for the same fact: where you are
+   standing. The discoveries view has its own list instead of a canvas, but the question
+   "which window am I about to talk to" does not go away when the view changes, and this is
+   the only mark of the answer that survives a switch between the two. */
+.idea.selected {
+	outline: 1px solid var(--text);
+	outline-offset: 3px;
+}
+.ideaHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+/* Where an idea stands, not what it says — see the `IdeaKind` doc comment in `ideas.ts`.
+   "finding" and "direction" have earned a color because something is known about them
+   (settled, or actively open); a plain "idea" gets an outline only, in the same dim tone
+   everything unremarkable uses, because nothing has tested it yet. */
+.ideaKind {
+	font-size: 10px;
+	line-height: 1.6;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	padding: 0 6px;
+	border-radius: 3px;
+	border: 1px solid;
+}
+.ideaKind.finding {
+	background: var(--ok);
+	border-color: var(--ok);
+	color: var(--bg);
+}
+.ideaKind.direction {
+	background: var(--warn);
+	border-color: var(--warn);
+	color: var(--bg);
+}
+.ideaKind.idea {
+	background: none;
+	border-color: var(--dim);
+	color: var(--dim);
+}
+/* The same breathing the wire and the point use for "working", borrowed rather than
+   reinvented, so the direction's badge reads as the same signal a person already knows. */
+.ideaHead .mark {
+	animation: breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+	.ideaHead .mark {
+		animation: none;
+	}
+	/* The signal survives (the tint still appears and still leaves after the same
+	   `HIGHLIGHT_MS`, see `IdeaGraph.tsx`); only the gradual fade is a motion, so it is what
+	   this drops — the tint disappears in the same frame the class is removed, a cut instead
+	   of a fade. */
+	.idea {
+		transition: none;
+	}
+}
+.ideaTitle {
+	font-weight: 600;
+	/* The same guard `.step .title` documents further down this file, for the same failure:
+	   a title with one long unbroken run (a path, a flag) is exactly as able to force this
+	   column wider than the page as a step's title is. */
+	overflow-wrap: anywhere;
+}
+/* Only present while the row is open. Indented to the title's own column, so it reads as
+   belonging to the line above it rather than to the tree level beside it. */
+.ideaExcerpt {
+	color: var(--dim);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+	padding: 2px 4px 6px 20px;
+}
+.ideaEmpty {
+	padding: 16px;
+	color: var(--dim);
+	max-width: 100ch;
+}
+
 /* Everything that has to be read word by word, so a point can stay the size of a point. */
 /* The right-hand column: what you're reading, on top of what you'd type into it. One flex
    column so the composer's own height is exactly what it needs and the reading pane takes
@@ -239,6 +711,7 @@ body.resizing {
 }
 
 .detail {
+	position: relative;
 	flex: 1;
 	border-left: 1px solid var(--line);
 	padding: 14px 16px;
@@ -248,6 +721,36 @@ body.resizing {
 	   without this the panel's content pushes the composer down and off the bottom of the
 	   page instead of scrolling on its own. */
 	min-height: 0;
+}
+/* `.detailBody` carries no rule of its own — a plain block box, the same as if its
+   children sat directly in `.detail`. Its only job is to exist as one element: see
+   `Detail.tsx`'s comment on the ref it carries for why the panel needs a box whose height
+   a `ResizeObserver` can watch to mean "the content grew", which `.detail` itself cannot
+   report since flex holds its own box at the viewport's size regardless of what
+   overflows it. */
+
+/* The way back to the tail once a person has scrolled away from it. `position: absolute`
+   against `.detail`'s own box, not its scrolled content, is what keeps this sitting over
+   the same spot in the viewport regardless of where `scrollTop` currently is — the usual
+   trick for a control that floats over a scroll region instead of scrolling with it. */
+.jumpToLatest {
+	position: absolute;
+	left: 50%;
+	bottom: 14px;
+	transform: translateX(-50%);
+	z-index: 1;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: var(--panel);
+	color: var(--text);
+	padding: 6px 14px;
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+	box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+}
+.jumpToLatest:hover {
+	border-color: var(--dim);
 }
 .detailHead {
 	display: flex;
@@ -272,10 +775,20 @@ body.resizing {
 	border-top: 1px solid var(--line);
 	padding-top: 8px;
 }
+
+/* The boundary between two windows stitched into one scroll by `chatChain`. Compaction
+   carries no news, so this must stay as faint as the `.wire.compact` edge that draws the
+   same seam on the canvas — a rule, not a banner. */
+.chainBreak {
+	margin: 12px 0;
+	border-top: 1px dashed var(--line);
+	opacity: 0.5;
+}
 .spawned {
 	color: var(--dim);
 	font-size: 12px;
 	padding-left: 18px;
+	overflow-wrap: anywhere;
 }
 
 .hint {
@@ -301,8 +814,88 @@ body.resizing {
 	font-style: normal;
 }
 
+/* The warning that this empty-looking conversation may not be the only one running. Its own
+   border, not folded into `.blank` below it: the two are read in the opposite order from how
+   they sit on the page (this is the thing to notice first) and a shared box would blur them
+   into one paragraph nobody reads all of. */
+.orphanNotice {
+	margin: 10px 16px 0;
+	padding: 10px 12px;
+	border: 1px solid var(--warn);
+	border-radius: 4px;
+	color: var(--warn);
+	max-width: 100ch;
+}
+.orphanNotice .link {
+	color: inherit;
+}
+
+/* A restored conversation is history, not a warning — `--accent` rather than `--warn`, so it
+   reads as a fact about what this page is, not as something that went wrong. Persistent by
+   design: unlike `.messages`, this is not cleared or scrolled away, because the one thing it
+   says has to stay true on screen for as long as the page does. */
+.historyNotice {
+	margin: 10px 16px 0;
+	padding: 10px 12px;
+	border: 1px solid var(--accent);
+	border-radius: 4px;
+	color: var(--accent);
+	max-width: 100ch;
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.historyNotice .link {
+	color: inherit;
+}
+
+/* One row per conversation in the `Conversations` panel: what it is, what it costs, the way
+   back into it. Three lines rather than one wide one — `.settings dl`'s two-column grid
+   assumes a short label and a short value, and a conversation's key does not fit that. */
+.conversations {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.conversationRow {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	grid-template-rows: auto auto;
+	column-gap: 12px;
+	align-items: center;
+	padding: 8px 10px;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+}
+.conversationMain {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+}
+.conversationKey {
+	overflow-wrap: anywhere;
+}
+.conversationMeta {
+	grid-column: 1;
+	font-size: 12px;
+}
+.conversationRow button {
+	grid-column: 2;
+	grid-row: 1 / span 2;
+}
+
 .warn {
 	color: var(--warn);
+	font-size: 12px;
+}
+
+/* The badge that tells a `Conversations` row apart from a live one — `--accent`, the same
+   color `.historyNotice` already uses for the same fact stated inside a restored conversation
+   itself, so the two places that say "this is history" agree with each other. */
+.historyTag {
+	color: var(--accent);
 	font-size: 12px;
 }
 
@@ -342,6 +935,14 @@ body.resizing {
 	text-underline-offset: 3px;
 }
 .link:hover {
+	color: var(--text);
+}
+/* Two classes, so this beats the bare `.link` rule above regardless of source order — the
+   one link in the header that names something worth noticing, not just an action to take. */
+.link.warn {
+	color: var(--warn);
+}
+.link.warn:hover {
 	color: var(--text);
 }
 
@@ -506,6 +1107,21 @@ body.resizing {
 .stepHead.running .mark {
 	color: var(--accent);
 }
+/* Motion is what a running row was missing: a tool call fifty seconds in looked identical
+   to one that had just started, because nothing on it ever moved. Scoped to `.stepHead.running`
+   rather than folded into `.mark.running` above — that combined selector also matches the
+   node header's own idle marker (`.mark ${node.state}` when state is "running" and the node
+   is not busy, the legend's "idle, talk to it"), and an idle point must not breathe. */
+.stepHead.running .mark {
+	animation: breathe 1.1s ease-in-out infinite;
+}
+/* The other half of "looks running": a duration read from the wall clock, ticking beside
+   the marker. Accent, the same colour a live point's own duration uses on the canvas, so
+   both readings agree that a growing number here means "still going". */
+.stepElapsed {
+	color: var(--accent);
+	font-size: 12px;
+}
 
 .task {
 	color: var(--dim);
@@ -536,6 +1152,9 @@ body.resizing {
 	padding-left: 8px;
 	border-left: 2px solid var(--accent);
 	white-space: pre-wrap;
+	/* Free text a person typed, which can carry a pasted URL or path with no spaces in it —
+	   the same unbroken-run overflow `.step`'s title has, and the same fix. */
+	overflow-wrap: anywhere;
 }
 
 .reply {
@@ -563,21 +1182,42 @@ body.resizing {
 .thinkingText {
 	color: var(--dim);
 	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 	margin-top: 3px;
 }
 .thinkingText::after {
 	content: "▍";
 	color: var(--accent);
+	/* Static otherwise read as a stray character, not a sign that something is actively
+	   being thought right now — the same "breathe" pulse the rest of the app already uses
+	   for "this is live", not a new animation invented for one spot. */
+	animation: breathe 1.1s ease-in-out infinite;
+}
+/* A turn's reasoning once it is archived into the step list, rather than still streaming
+   in. The pulsing cursor above means "a token could land any moment"; nothing here is
+   still arriving, so it is dropped rather than left pulsing over a block that finished
+   turns ago. */
+.thinkingText.archived::after {
+	content: none;
+	animation: none;
 }
 
 .failure {
 	margin: 6px 0;
 	color: var(--bad);
 	white-space: pre-wrap;
+	/* An error string is exactly as likely to carry an unbroken path or URL as any other tool
+	   output, and this is the one block a person most needs to actually read. */
+	overflow-wrap: anywhere;
 }
 
 .step {
 	margin-top: 6px;
+	/* A step this narrow panel cannot show in full (a step whose title still overflows once
+	   `.title` below has done everything it can to wrap) scrolls inside itself rather than
+	   forcing `.stepHead`'s flex row wider than the panel — see the incident noted at the
+	   top of this file. Content, not the panel, moves. */
+	overflow-x: auto;
 }
 .stepHead {
 	display: flex;
@@ -585,13 +1225,52 @@ body.resizing {
 }
 .title {
 	color: var(--text);
+	/* `.stepHead` is a flex row, and a flex item's default minimum width is its own content's
+	   — the full width of the longest unbroken run in the title, a `git clone` URL included.
+	   Without `min-width: 0` that minimum wins over the panel's actual width and the row is
+	   forced wider than `.step`, which is exactly how a command like
+	   `git clone https://github.com/facebookresearch/faiss.wiki.git` rendered as
+	   `...faiss.wiki.gi` with the rest gone: nothing clipped it, but nothing could reach past
+	   the panel's edge to read it either. `overflow-wrap: anywhere` is the other half — it lets
+	   a token with no spaces in it break at all, using the width the row now shrinks to have. */
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 .preview {
 	color: var(--dim);
 	padding-left: 18px;
 	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 	max-height: 3.2em;
-	overflow: hidden;
+	/* `overflow: hidden` clipped both axes. The vertical clamp is deliberate — three lines,
+	   with "show the rest" underneath for the rest — but the horizontal half of it was not: a
+	   tool result with one long unbroken run (a stringified byte count, a path) simply had its
+	   tail cut off past the panel's width, with no scrollbar and no way to read it that did not
+	   involve devtools. `overflow-wrap: anywhere` now wraps that run across the three lines the
+	   clamp already budgets; `overflow-x: auto` is the backstop for whatever still does not fit,
+	   so the worst case is a result you scroll to read, never one that is simply gone. */
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+
+/* The affordance a truncated preview offers, and what it opens into. Indented with the
+   preview it sits under rather than the step row above, so it reads as "more of that text"
+   and not as a second action on the step itself. */
+.stepFullToggle {
+	display: block;
+	margin: 2px 0 0 18px;
+}
+.stepFullText {
+	margin: 4px 0 0 18px;
+	padding: 6px 8px;
+	color: var(--text);
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	max-height: 320px;
+	overflow: auto;
 }
 
 /* Delegation: down and to the right, because it comes back. */
@@ -685,7 +1364,6 @@ body.resizing {
 	padding: 8px;
 	font: inherit;
 }
-.composer select,
 .composer button {
 	background: var(--bg);
 	color: var(--text);
@@ -792,6 +1470,10 @@ body.resizing {
 		animation: none;
 		opacity: 1;
 	}
+	.stepHead.running .mark {
+		animation: none;
+		opacity: 1;
+	}
 }
 
 /* A folded run of identical calls. The marker is the disclosure triangle the browser
@@ -879,22 +1561,99 @@ body.resizing {
 .prose a {
 	color: var(--accent);
 }
+/* A table's own row wraps in `white-space: pre-wrap` from `.prose` above; without resetting
+   it here every cell's wrapped text reads as one run-on line inside a column too narrow for
+   it. The scroll wrapper is what keeps a wide table from pushing the whole page sideways —
+   see the CSV preview's identical wrapper below, which shares this same table styling. */
+.tableScroll {
+	overflow-x: auto;
+}
+.tableScroll table,
+.filePreviewCsv table {
+	border-collapse: collapse;
+	white-space: normal;
+	font-size: 12px;
+	min-width: 100%;
+}
+.tableScroll th,
+.tableScroll td,
+.filePreviewCsv th,
+.filePreviewCsv td {
+	border: 1px solid var(--line);
+	padding: 4px 8px;
+	text-align: left;
+	vertical-align: top;
+}
+.tableScroll th,
+.filePreviewCsv th {
+	background: var(--panel);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+/* A formula. `overflow-x: auto` on both is the same guard the table above has, for the same
+   incident (see the note at the top of this file): a long sum or a wide matrix is exactly as
+   able to push the page sideways as a wide table is, and KaTeX lays a formula out at its
+   natural width regardless of the column it lands in. Display math also gets its own line
+   and a little air around it, the way a formula set apart from a sentence reads on a page;
+   inline math takes neither, so `$x^2$` sits inside its sentence like the rest of the words
+   around it. Colour is deliberately absent here — KaTeX's own stylesheet paints every part of
+   a formula in `currentColor`, so it already reads in this page's text colour with nothing
+   added on top. */
+.mathDisplay {
+	display: block;
+	overflow-x: auto;
+	margin: 8px 0;
+	text-align: center;
+}
+.mathInline {
+	display: inline-block;
+	max-width: 100%;
+	overflow-x: auto;
+	vertical-align: middle;
+}
 
 /* A place in the repository. The one thing every agent is told to quote, and the one thing
-   in an answer a person acts on, so it is the one thing given a shape of its own. */
+   in an answer a person acts on, so it is the one thing given a shape of its own.
+
+   Deliberately not styled like `.prose a` above: that is a real link, this only copies the
+   path, and a person who has learned "blue and underlined means it opens something" clicks
+   this expecting the same and gets nothing. A dashed underline in the dim tone, not the
+   accent, says "this does something" without saying "this navigates". */
 .ref {
 	font: inherit;
 	background: none;
 	border: none;
-	border-bottom: 1px solid var(--accent);
+	border-bottom: 1px dashed var(--dim);
 	border-radius: 0;
-	color: var(--accent);
+	color: var(--dim);
 	padding: 0;
 	cursor: pointer;
 }
 .ref:hover {
-	background: var(--bg);
+	color: var(--text);
+	border-bottom-color: var(--text);
 }
-.ref.copied {
+/* A ref that actually opens something, rather than only copying it — see `resolveInWorkspace`
+   in `Prose.tsx`. Solid and colored, the way `.link` and every real link on this page reads,
+   so the two behaviors this element can have are told apart before the click, not learned by
+   trying it and getting a clipboard toast instead of an open file. */
+.ref.open {
+	border-bottom-style: solid;
+	border-bottom-color: var(--accent);
 	color: var(--accent);
+}
+.ref.open:hover {
+	color: var(--text);
+	border-bottom-color: var(--text);
+}
+/* The copy itself needs to say so, not just change color — a flash a person can blink
+   through is not feedback. The path stays on screen; the state is what changes. */
+.ref.copied {
+	color: var(--ok);
+	border-bottom-color: var(--ok);
+}
+.ref.copied::after {
+	content: " (copied)";
+	color: var(--ok);
 }

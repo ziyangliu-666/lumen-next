@@ -1,13 +1,17 @@
 /**
- * The two custom tools, checked against a stub runtime.
+ * The custom tools, checked against a stub runtime.
  *
- * Both are small, and both decide something the rest of the system then obeys: whether a
- * driven run stops, and whether an agent may spend. Neither needs a model to be wrong.
+ * All three are small, and each decides something the rest of the system then obeys:
+ * whether a driven run stops, whether an agent may spend, and what lands in the findings
+ * graph. None of them needs a model to be wrong.
  */
 
 import { describe, expect, it } from "vitest";
+import { Value } from "typebox/value";
+import { createDiscoverTool } from "../src/tools/discover.ts";
 import { createFinishTool } from "../src/tools/finish.ts";
 import { createSubagentTool } from "../src/tools/subagent.ts";
+import type { Idea } from "../src/ideas.ts";
 import type { Line } from "../src/line.ts";
 import type { Runtime } from "../src/runtime.ts";
 
@@ -85,5 +89,122 @@ describe("subagent", () => {
 
 		expect(result.isError).toBe(true);
 		expect(textOf(result)).toContain("exactly one of");
+	});
+});
+
+/** Just enough Runtime for `discover`: a trace to check citations against, and an idea store. */
+function fakeIdeaRuntime(knownNodeIds: string[]) {
+	const stored: Idea[] = [];
+	const byId = new Map<string, Idea>();
+	let counter = 0;
+	const runtime = {
+		trace: {
+			node(id: string) {
+				if (!knownNodeIds.includes(id)) throw new Error(`unknown trace node: ${id}`);
+				return { id };
+			},
+		},
+		ideas: {
+			get(id: string) {
+				return byId.get(id);
+			},
+			add(input: { title: string; summary: string; nodeId: string; parentId: string | null; citedNodeIds: string[] }) {
+				counter += 1;
+				const idea = { id: `i-${counter}`, createdAt: 0, ...input } as Idea;
+				byId.set(idea.id, idea);
+				stored.push(idea);
+				return idea;
+			},
+		},
+	} as unknown as Runtime;
+	return { runtime, stored };
+}
+
+describe("discover", () => {
+	it("adds an idea located at the calling line's current node", async () => {
+		const { runtime, stored } = fakeIdeaRuntime(["n-1"]);
+		const discoverLine = { id: "l-1", currentNodeId: "n-1", depth: 0 } as unknown as Line;
+		const tool = createDiscoverTool({ runtime, line: discoverLine });
+
+		const result: any = await tool.execute("t1", {
+			title: "found it",
+			summary: "a real result",
+			kind: "finding",
+		});
+
+		expect(result.isError).toBeUndefined();
+		expect(stored).toHaveLength(1);
+		expect(stored[0].nodeId).toBe("n-1");
+		expect(stored[0].parentId).toBeNull();
+		expect(textOf(result)).toContain(stored[0].id);
+	});
+
+	it("extracts only citations that name a point that actually exists", async () => {
+		const { runtime, stored } = fakeIdeaRuntime(["n-1"]);
+		const discoverLine = { id: "l-1", currentNodeId: "n-1", depth: 0 } as unknown as Line;
+		const tool = createDiscoverTool({ runtime, line: discoverLine });
+
+		await tool.execute("t1", {
+			title: "found it",
+			summary: "backed by @n-1 and supposedly @n-99",
+			kind: "finding",
+		});
+
+		expect(stored[0].citedNodeIds).toEqual(["n-1"]);
+	});
+
+	it("refuses an unknown parent and adds nothing", async () => {
+		const { runtime, stored } = fakeIdeaRuntime(["n-1"]);
+		const discoverLine = { id: "l-1", currentNodeId: "n-1", depth: 0 } as unknown as Line;
+		const tool = createDiscoverTool({ runtime, line: discoverLine });
+
+		const result: any = await tool.execute("t1", {
+			title: "found it",
+			summary: "a real result",
+			kind: "finding",
+			parent: "i-nope",
+		});
+
+		expect(result.isError).toBe(true);
+		expect(textOf(result)).toContain("No such idea");
+		expect(stored).toHaveLength(0);
+	});
+
+	it("links to a valid parent", async () => {
+		const { runtime, stored } = fakeIdeaRuntime(["n-1"]);
+		const discoverLine = { id: "l-1", currentNodeId: "n-1", depth: 0 } as unknown as Line;
+		const tool = createDiscoverTool({ runtime, line: discoverLine });
+
+		const first: any = await tool.execute("t1", { title: "root", summary: "a first result", kind: "direction" });
+		const second: any = await tool.execute("t2", {
+			title: "grows from it",
+			summary: "a second result",
+			kind: "finding",
+			parent: first.details.id,
+		});
+
+		expect(second.isError).toBeUndefined();
+		expect(stored[1].parentId).toBe(first.details.id);
+	});
+
+	it("passes kind straight through from the call to the stored idea", async () => {
+		const { runtime, stored } = fakeIdeaRuntime(["n-1"]);
+		const discoverLine = { id: "l-1", currentNodeId: "n-1", depth: 0 } as unknown as Line;
+		const tool = createDiscoverTool({ runtime, line: discoverLine });
+
+		await tool.execute("t1", { title: "a path worth trying", summary: "worth a look", kind: "direction" });
+
+		expect(stored[0].kind).toBe("direction");
+	});
+
+	it("rejects a missing or invalid kind at the schema, the same as any other malformed call", () => {
+		const { runtime } = fakeIdeaRuntime(["n-1"]);
+		const discoverLine = { id: "l-1", currentNodeId: "n-1", depth: 0 } as unknown as Line;
+		const tool = createDiscoverTool({ runtime, line: discoverLine });
+
+		const base = { title: "found it", summary: "a real result" };
+		expect(Value.Check(tool.parameters, { ...base, kind: "finding" })).toBe(true);
+		expect(Value.Check(tool.parameters, base)).toBe(false);
+		expect(Value.Check(tool.parameters, { ...base, kind: "guess" })).toBe(false);
 	});
 });

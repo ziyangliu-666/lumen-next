@@ -9,10 +9,14 @@
  * that the arithmetic can be checked against a clock the test owns.
  */
 
-import { describe, expect, it } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Meter } from "../src/compute/meter.ts";
+import { createCollectTool } from "../src/tools/collect.ts";
 import { createRunTool } from "../src/tools/run.ts";
-import type { Machine } from "../src/compute/types.ts";
+import type { Machine, PullResult } from "../src/compute/types.ts";
 import { emptyUsage, type Usage } from "../src/trace/types.ts";
 
 const MINUTE = 60_000;
@@ -68,6 +72,14 @@ function fakeMachine(over: Partial<Machine> & { spend?: number } = {}): Machine 
 		async exec(command: string) {
 			commands.push(command);
 			return { code: 0, stdout: "ok", stderr: "", ms: 12 };
+		},
+		// The real machine writes the bytes itself (`copyToLocal`, in `modal.ts`); this
+		// stand-in does the same so a test asserting on the file `collect` left behind is
+		// checking the same thing a real pull would have produced, not a mock's shortcut.
+		async pull(_remotePath: string, localPath: string): Promise<PullResult> {
+			const bytes = Buffer.from("fake bytes pulled from the machine");
+			fs.writeFileSync(localPath, bytes);
+			return { ok: true, bytes: bytes.length };
 		},
 		takeSpend() {
 			const owed = spend;
@@ -182,6 +194,84 @@ describe("run tool", () => {
 
 		expect(result.content[0].text).toContain("THE ACTUAL ERROR");
 		expect(result.content[0].text).toContain("cut from the middle");
+	});
+});
+
+describe("collect tool", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = fs.mkdtempSync(path.join(os.tmpdir(), "lumen-collect-"));
+	});
+
+	afterEach(() => {
+		fs.rmSync(root, { recursive: true, force: true });
+	});
+
+	it("writes what the machine pulled into the conversation's own directory", async () => {
+		const charged: Usage[] = [];
+		const machine = fakeMachine({ spend: 0.01 });
+		const tool = createCollectTool({ runtime: fakeRuntime(machine, charged), line, root });
+
+		const result: any = await tool.execute("c1", { from: "/work/plot.png", path: "plot.png" });
+
+		expect(result.isError).toBeUndefined();
+		expect(fs.existsSync(path.join(root, "plot.png"))).toBe(true);
+		expect(result.details.bytes).toBeGreaterThan(0);
+		expect(result.details.replaced).toBe(false);
+		// The same billing door `run` uses — a pull holds the machine alive too.
+		expect(charged).toHaveLength(1);
+		expect(charged[0].cost.total).toBeCloseTo(0.01, 10);
+	});
+
+	it("refuses a destination that climbs out of the conversation's directory", async () => {
+		const machine = fakeMachine();
+		const tool = createCollectTool({ runtime: fakeRuntime(machine, []), line, root });
+
+		const result: any = await tool.execute("c1", { from: "/work/plot.png", path: "../escape.png" });
+
+		expect(result.isError).toBe(true);
+		expect(fs.existsSync(path.join(path.dirname(root), "escape.png"))).toBe(false);
+	});
+
+	it("says plainly when there is no machine, and writes nothing", async () => {
+		const tool = createCollectTool({ runtime: fakeRuntime(null, []), line, root });
+
+		const result: any = await tool.execute("c1", { from: "/work/plot.png", path: "plot.png" });
+
+		expect(result.isError).toBe(true);
+		expect(result.content[0].text).toContain("no machine");
+		expect(fs.existsSync(path.join(root, "plot.png"))).toBe(false);
+	});
+
+	it("removes the file and refuses when it is over the size this tool keeps", async () => {
+		const machine = fakeMachine({
+			async pull(_remotePath: string, localPath: string): Promise<PullResult> {
+				fs.writeFileSync(localPath, Buffer.alloc(10));
+				return { ok: true, bytes: 999_999_999 };
+			},
+		});
+		const tool = createCollectTool({ runtime: fakeRuntime(machine, []), line, root, maxBytes: 100 });
+
+		const result: any = await tool.execute("c1", { from: "/work/huge.bin", path: "huge.bin" });
+
+		expect(result.isError).toBe(true);
+		expect(fs.existsSync(path.join(root, "huge.bin"))).toBe(false);
+	});
+
+	it("passes the machine's own refusal back as the reason, and charges nothing was written", async () => {
+		const machine = fakeMachine({
+			async pull(): Promise<PullResult> {
+				return { ok: false, message: "no such file" };
+			},
+		});
+		const tool = createCollectTool({ runtime: fakeRuntime(machine, []), line, root });
+
+		const result: any = await tool.execute("c1", { from: "/work/missing.png", path: "missing.png" });
+
+		expect(result.isError).toBe(true);
+		expect(result.content[0].text).toContain("no such file");
+		expect(fs.existsSync(path.join(root, "missing.png"))).toBe(false);
 	});
 });
 

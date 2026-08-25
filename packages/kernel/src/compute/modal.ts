@@ -17,8 +17,9 @@
  * agent can read, rather than at startup of a feature nobody used.
  */
 
+import * as fs from "node:fs";
 import { Meter } from "./meter.ts";
-import type { Compute, ExecResult, Machine } from "./types.ts";
+import type { Compute, ExecResult, Machine, PullResult } from "./types.ts";
 
 /**
  * Modal's published price for Sandboxes, in dollars per second, read on 2026-08-24 from
@@ -192,6 +193,36 @@ class ModalMachine implements Machine {
 				stderr: `${stderr}\nThe machine stopped: ${describeError(error)}`.trim(),
 				ms,
 			};
+		}
+	}
+
+	/**
+	 * `SandboxFilesystem.copyToLocal` does the actual transfer — Modal's own SDK method for
+	 * "one file, off the sandbox, onto this disk" — so there is no byte buffer of the whole
+	 * file held in this process at any point, only whatever Modal streams to the path
+	 * `collect.ts` already resolved.
+	 */
+	async pull(remotePath: string, localPath: string): Promise<PullResult> {
+		const fresh = await this.ensureUp();
+		if (fresh) {
+			// The sandbox that ran whatever produced this file is gone; the one that just
+			// opened has an empty disk. Saying so beats the confusing error Modal would
+			// otherwise give for a path that, from its point of view, never existed.
+			return {
+				ok: false,
+				message:
+					"The machine had already gone and a new one just opened with an empty disk, " +
+					"so nothing from before survived, including this file.",
+			};
+		}
+		this.meter?.touch(Date.now());
+		try {
+			await this.sandbox.filesystem.copyToLocal(remotePath, localPath);
+			this.meter?.touch(Date.now());
+			return { ok: true, bytes: fs.statSync(localPath).size };
+		} catch (error) {
+			this.meter?.touch(Date.now());
+			return { ok: false, message: describeError(error) };
 		}
 	}
 

@@ -60,6 +60,13 @@ export function createRunTool(options: RunToolOptions) {
 			"Work in `/work`. Files stay there between commands, so one command can clone a",
 			"repository and the next can run it.",
 			"",
+			"A file written here stays here until `collect` copies it into this conversation's",
+			"own directory, where a person can actually see it — this machine and that",
+			"directory are different filesystems, and `save` cannot reach this one at all. Made",
+			"a plot, a checkpoint, or anything else that is not text printed to the screen?",
+			"`collect` it, or say plainly that you did not, rather than leaving someone to",
+			"notice its absence on their own.",
+			"",
 			"The machine belongs to this conversation and not to you. Another agent may have",
 			"already cloned what you are about to clone, so look before you fetch.",
 			"",
@@ -142,8 +149,13 @@ export function createRunTool(options: RunToolOptions) {
  *
  * Charged to the window that ran the command, not to the root. A person clicking a point
  * asks what that window cost, and a machine's seconds were spent on that window's work.
+ *
+ * Exported for `tools/collect.ts`, which touches the same machine and owes the same rule:
+ * whatever it ran up — a `pull` holds the machine alive too, and is billed the same as any
+ * other second it stays up — is charged to the window that asked, not left to the next tool
+ * that happens to read `takeSpend()` and collect a second call's dollars as its own.
  */
-function charge(runtime: Runtime, line: Line, machine: Machine): void {
+export function charge(runtime: Runtime, line: Line, machine: Machine): void {
 	const dollars = machine.takeSpend();
 	if (dollars <= 0) return;
 	const usage = emptyUsage();

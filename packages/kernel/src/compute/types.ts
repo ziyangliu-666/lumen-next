@@ -19,10 +19,17 @@
  * are three different providers, and none of them should change what the agents are told.
  * Nothing here names Modal, and nothing here is aware that a GPU exists.
  *
- * The methods are the ones that have a caller. There is no `pull` and no `push`, so an
- * artifact comes back the way any long result comes back — an agent reads it and `save`s
- * it, which works for text and not for a plot. Adding the method before the tool that
- * calls it would be an interface promising something no code keeps.
+ * The methods are the ones that have a caller. There is still no `push`: nothing here needs
+ * to put a local file onto the machine, only take one off it, so that half of the interface
+ * stays unpromised until something actually calls it.
+ *
+ * `pull` is the one exception, and it exists because a real gap sat behind its absence. A
+ * plot `run` produced had no way back into this conversation's own directory — `save` writes
+ * text a model composed, not bytes a command already wrote to a file, and the two machines
+ * involved (the sandbox and whatever hosts this process) share no filesystem. `pull` is
+ * `tools/collect.ts`'s whole reason to exist: it copies one file, named by its path on the
+ * machine, to a path on this process's own disk that the caller — always `collect`, always
+ * after `resolveInside` has vetted it — already decided is safe to write.
  */
 
 /** What one command did. Always all four fields: a command that failed still ran. */
@@ -43,6 +50,9 @@ export interface ExecResult {
 	restarted?: boolean;
 }
 
+/** Whether `pull` reached the file, and how big it turned out to be, or why not. */
+export type PullResult = { ok: true; bytes: number } | { ok: false; message: string };
+
 /** A machine that is up, with a filesystem that persists between commands. */
 export interface Machine {
 	/**
@@ -53,6 +63,21 @@ export interface Machine {
 	 * ceiling is a turn that never ends, and nothing on screen would say why.
 	 */
 	exec(command: string, options?: { minutes?: number }): Promise<ExecResult>;
+	/**
+	 * Copy one file off the machine and onto this process's own disk.
+	 *
+	 * `remotePath` is the file's own path on the machine — absolute, since a command may
+	 * have written it anywhere under `/work` or beyond. `localPath` is absolute here too,
+	 * and this trusts it completely: it is `tools/collect.ts`'s job, not this method's, to
+	 * make sure that path is safe to write to before calling this at all — the same split
+	 * `exec` already keeps with the command it is handed, and `save`'s own doc comment keeps
+	 * for the same reason: a boundary checked in two places is a boundary that can drift.
+	 *
+	 * Refuses rather than throws when the remote file is missing, is a directory, or the
+	 * machine has been replaced since anything last wrote to it — an agent's next turn reads
+	 * `message` and can act on it, where a thrown error would only end the turn.
+	 */
+	pull(remotePath: string, localPath: string): Promise<PullResult>;
 	/**
 	 * Dollars this machine has run up since the last call. Reading clears the total.
 	 *

@@ -6,7 +6,14 @@
  * translating them into a second vocabulary would mean two things to keep in step.
  */
 
-import type { AgentSpec, AutopilotStop, TraceEvent, TraceSnapshot } from "@lumen/kernel";
+import type {
+	AgentSpec,
+	AutopilotStop,
+	IdeaEvent,
+	IdeaSnapshot,
+	TraceEvent,
+	TraceSnapshot,
+} from "@lumen/kernel";
 
 /**
  * Where the user's sentence goes, and therefore how much of the conversation goes with it.
@@ -120,6 +127,64 @@ export interface Fixed {
 	port: number;
 	/** Every model the operator has credentials for. */
 	models: { id: string; name: string }[];
+	/**
+	 * Whether this is a saved record, read back after the process that ran it is gone, rather
+	 * than a conversation actually running now.
+	 *
+	 * The one fact in this object that is not really "fixed for the life of the conversation"
+	 * so much as "fixed for the life of the page" — it cannot become false partway through a
+	 * connection, because there is no live `Runtime` behind a restored conversation for
+	 * anything to attach to. Named here, in `Fixed`, rather than as a one-off `notice`: a
+	 * notice scrolls off after a few messages (see `state.ts`'s `messages.slice(-3)`), and
+	 * this has to stay true on screen for as long as the page does.
+	 */
+	restored: boolean;
+}
+
+/**
+ * One conversation as it looks from outside itself: enough to show in a list and enough to
+ * open it again, nothing more. Sent only on request — see `conversations.list` below —
+ * because building it walks every node of every conversation the caller can see, and that
+ * cost has no reason to be paid by a socket that never asks.
+ *
+ * `kind` is the one field that says which of two different things this row is. Every other
+ * field keeps the same meaning for both: a `"live"` row reads it off the running `Runtime`,
+ * a `"history"` row reads it off the saved record, but `spend` is still "everything spent",
+ * `nodeCount` is still "how many windows exist", and so on. Opening either kind goes through
+ * the same restore path — a live conversation is just found already in memory instead of
+ * read off disk.
+ */
+export interface ConversationSummary {
+	/** The `?s=` value that reaches this conversation again. Never namespaced: a client only
+	 * ever holds its own raw key, the same one `lumen.session` already stores. */
+	key: string;
+	/**
+	 * Whether this conversation is still running, or only a saved record of one that ended.
+	 *
+	 * `"live"` means its process still holds it: it can be talked to, it can be stopped, and
+	 * its spend is still climbing. `"history"` means the process that ran it is gone; what is
+	 * left is exactly what `persist.ts` wrote before it ended, and opening it is read-only —
+	 * see `Fixed.restored` for what that looks like once inside.
+	 */
+	kind: "live" | "history";
+	/**
+	 * Everything spent so far. For `"live"` this is the running total and will keep climbing;
+	 * for `"history"` it is the total as of the last save, and will not — see `kind`.
+	 */
+	spend: number;
+	/** Whether it is currently running itself, unattended or not. Always false for `"history"`:
+	 * there is no process left to be running one. */
+	auto: boolean;
+	/** How many windows are doing something right now, as opposed to sitting idle. Always 0
+	 * for `"history"`, for the same reason `auto` is always false. */
+	busyCount: number;
+	/** How many windows exist at all — a rough size, so an empty one and a sprawling one
+	 * do not look the same in a list. */
+	nodeCount: number;
+	/** When its root window opened, so a list can be read oldest or newest first. */
+	startedAt: number;
+	/** Whether a socket is attached to it right now — a conversation nobody is orphaning. */
+	attached: boolean;
 }
 
 export type ClientFrame =
@@ -134,6 +199,42 @@ export type ClientFrame =
 	| { type: "auto"; on: boolean }
 	/** Change some settings. Anything left out of the patch is left as it is. */
 	| { type: "settings"; patch: Partial<Settings> }
+	/**
+	 * List one directory inside this conversation's own directory (`Fixed.workspace`).
+	 *
+	 * `path` is relative to that directory, never absolute — `""` asks for the directory
+	 * itself. Read-only: there is no frame that uploads, edits, or deletes anything here, and
+	 * the server enforces that by calling functions that only know how to read.
+	 */
+	| { type: "files.list"; path: string }
+	/**
+	 * Read one file's whole content from the same directory.
+	 *
+	 * Refused if it is too large or, for a file with no recognized preview extension, not
+	 * UTF-8 text — see `files.ts`'s `readFile` for the two size caps and which extensions
+	 * read as an image or a PDF instead of text.
+	 */
+	| { type: "files.read"; path: string }
+	/**
+	 * Ask for one step's whole result, past what its `preview` shows.
+	 *
+	 * Offered only for a step whose `truncated` is true — see `Step.truncated` in
+	 * `@lumen/kernel`'s trace types for why that flag, and not a scan of the preview text, is
+	 * what the browser trusts. `nodeId` names which node's step list `stepId` came from, the
+	 * way a step is always reached in the trace tree; the lookup itself is by `stepId` alone
+	 * (step ids are unique across the whole run), so the client can key its cache the same way.
+	 */
+	| { type: "step.full"; nodeId: string; stepId: string }
+	/**
+	 * List every other conversation this operator can see (or, once `LUMEN_BASIC_AUTH` names
+	 * more than one person, that this authenticated user alone can see): every one this server
+	 * still holds live, plus every saved record on disk that is not one of those.
+	 *
+	 * On request rather than pushed, the same choice as `files.list`: it is a per-tab "let me
+	 * see" rather than a fact every attached socket needs pushed to it the moment another
+	 * conversation opens, closes, or finishes saving elsewhere.
+	 */
+	| { type: "conversations.list" }
 	/**
 	 * Done with this conversation: stop driving it, close its windows, forget it.
 	 *
@@ -150,6 +251,8 @@ export type ServerFrame =
 			type: "hello";
 			agents: AgentSpec[];
 			snapshot: TraceSnapshot;
+			/** The findings graph, the same way `snapshot` is the call tree. */
+			ideas: IdeaSnapshot;
 			rootNodeId: string | null;
 			/**
 			 * What the person typed, by the point that received it. The trace only records
@@ -161,6 +264,13 @@ export type ServerFrame =
 			auto: AutoState;
 			settings: Settings;
 			fixed: Fixed;
+			/**
+			 * How many *other* conversations this server still holds for this operator, right
+			 * now. Just the count, not the list: cheap enough to send unconditionally, so a tab
+			 * that opens onto an empty conversation can say at once that it is not the only one
+			 * running, before anybody has to think to ask.
+			 */
+			otherConversations: number;
 	  }
 	/** Something went wrong handling a frame. Shown to the person, not thrown away. */
 	| { type: "error"; message: string }
@@ -184,7 +294,45 @@ export type ServerFrame =
 	| { type: "auto"; state: AutoState }
 	/** The settings as they now stand, after any change, to every attached tab. */
 	| { type: "settings"; settings: Settings }
-	| TraceEvent;
+	/**
+	 * One directory's immediate children, answering a `files.list` frame. Sent only to the
+	 * tab that asked — the tree is a per-tab UI concern, not shared run state every attached
+	 * tab needs to hear about, unlike the trace and idea events below.
+	 */
+	| {
+			type: "files.tree";
+			path: string;
+			entries: { name: string; kind: "file" | "dir" }[];
+	  }
+	/**
+	 * One file's whole content, answering a `files.read` frame. Sent only to the tab that
+	 * asked.
+	 *
+	 * `text` is the common case — an agent's own notes, a report, a log. `binary` is an image
+	 * or a PDF, base64-encoded with its MIME type: see `files.ts`'s `FileContent` for exactly
+	 * which extensions take this path and the size cap that governs each kind.
+	 */
+	| {
+			type: "files.content";
+			path: string;
+			content: { kind: "text"; text: string } | { kind: "binary"; mime: string; base64: string };
+	  }
+	/**
+	 * One step's whole result, answering a `step.full` frame. Sent only to the tab that asked
+	 * — the same reason `files.content` is, and not a shared trace event: a person expanding
+	 * one long tool result is not a fact about the run every attached tab needs pushed to it.
+	 *
+	 * `truncated` is the trace's own cap talking, not the preview's: it is true only when the
+	 * result was so long that even the stored copy had to be cut short — see `FULL_RESULT_CAP`
+	 * in `@lumen/kernel`'s `record.ts`. A step whose preview was truncated but whose full
+	 * result fit under that cap answers with `truncated: false` here, honestly, because what
+	 * came back this time really is everything.
+	 */
+	| { type: "step.content"; stepId: string; text: string; truncated: boolean }
+	/** Answers `conversations.list`. Sent only to the tab that asked. */
+	| { type: "conversations.list"; conversations: ConversationSummary[] }
+	| TraceEvent
+	| IdeaEvent;
 
 /**
  * What the switch is doing. Deliberately not what it is allowed to spend: that is

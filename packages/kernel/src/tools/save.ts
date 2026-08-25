@@ -24,6 +24,14 @@
  *
  * What this can and cannot promise about symlinks is written above `resolveInside`. Read it
  * before trusting the boundary: it is a check, not a lock.
+ *
+ * `resolveInside` and `splitPath` are exported for one reason: a second place in this
+ * repository needs the same containment guarantee, for reading rather than writing. The
+ * server's read-only file browser calls them directly rather than writing a second
+ * escape check, because a security boundary is worth having in exactly one place. What
+ * `resolveInside` does not decide is what to do with an existing file or directory at the
+ * destination — that answer differs for a write and a read, so each caller checks it after
+ * the boundary has already said the path is honest.
  */
 
 import * as fs from "node:fs";
@@ -44,8 +52,11 @@ export interface SaveToolOptions {
  * an agent that loops, rewriting a file that grows each pass. That agent should meet a wall
  * in this process, where the refusal is a tool result it can read and act on. The wall the
  * filesystem gives it instead is a full disk, shared with everything else on the machine.
+ *
+ * Exported so a reader of the same directory can refuse a file too large to send to a
+ * browser tab, using the same number rather than a second one that could drift from it.
  */
-const DEFAULT_MAX_BYTES = 256 * 1024;
+export const DEFAULT_MAX_BYTES = 256 * 1024;
 
 /**
  * One shape for both outcomes, written down rather than inferred.
@@ -127,6 +138,22 @@ export function createSaveTool(options: SaveToolOptions) {
 				const resolved = resolveInside(realRoot, named);
 				if (!resolved.ok) return errorResult(resolved.message);
 
+				// The boundary is honest about where `resolved.target` sits, but says nothing
+				// about what already stands there — that is a question about writing, not about
+				// containment, so it is asked here rather than inside `resolveInside`.
+				const existing = lstatOrNull(resolved.target);
+				if (existing?.isSymbolicLink()) {
+					return errorResult(
+						`\`${relative}\` is already a symbolic link. Writing through it would put the bytes ` +
+							"wherever it points, which may be outside this conversation's directory. Use another name.",
+					);
+				}
+				if (existing?.isDirectory()) {
+					return errorResult(
+						`\`${relative}\` is already a directory, so it cannot be written as a file. Give a file name inside it.`,
+					);
+				}
+
 				const replaced = fs.existsSync(resolved.target);
 				fs.mkdirSync(path.dirname(resolved.target), { recursive: true });
 				fs.writeFileSync(resolved.target, text, "utf8");
@@ -156,14 +183,22 @@ export function createSaveTool(options: SaveToolOptions) {
 }
 
 /**
- * Split the path the model gave into the segments it actually names, or say why it is refused.
+ * Split a path someone else gave us into the segments it actually names, or say why it is
+ * refused. Shared by every caller that trusts a relative path against this root, whichever
+ * direction the bytes are about to move: a write and a read both climb out of the root the
+ * same way, with `..` or a symlink, so the check that stops one stops the other.
  *
  * Backslash counts as a separator alongside `/`. It is one on Windows, and treating it as a
  * plain character here would let `notes\..\..\escape.md` through the `..` check on Linux and
  * then act as an escape wherever the file is later read on Windows. The cost is that a file
  * name cannot contain a literal backslash, which no agent needs.
+ *
+ * An empty result is not refused here: `""`, `.`, and a path that is only separators all
+ * resolve to the root itself, which is a real directory a reader may legitimately ask to
+ * list. Whether that is a valid answer is for the caller to decide — `readSegments` below
+ * refuses it, because a write needs a file, not the directory it lands in.
  */
-function readSegments(given: string): string[] | string {
+export function splitPath(given: string): string[] | string {
 	if (given.includes("\0")) {
 		// Node throws on a null byte rather than returning an error, and a thrown tool call
 		// tells the model nothing. It is also the oldest way to make one layer see a path that
@@ -172,7 +207,7 @@ function readSegments(given: string): string[] | string {
 	}
 	if (path.isAbsolute(given)) {
 		return (
-			`\`${given}\` is an absolute path, and this tool writes only inside this conversation's ` +
+			`\`${given}\` is an absolute path, and this reaches only inside this conversation's ` +
 			"directory. Give a path relative to it, like `notes/findings.md`."
 		);
 	}
@@ -180,7 +215,7 @@ function readSegments(given: string): string[] | string {
 		// pi's own resolver expands `~`, so a model that learned the habit there would otherwise
 		// get a directory literally called `~` inside the root and never know which happened.
 		return (
-			`\`${given}\` starts with \`~\`, which this tool does not expand to a home directory. ` +
+			`\`${given}\` starts with \`~\`, which is not expanded to a home directory here. ` +
 			"Give a path relative to this conversation's directory, like `notes/findings.md`."
 		);
 	}
@@ -196,8 +231,17 @@ function readSegments(given: string): string[] | string {
 		);
 	}
 
-	const named = segments.filter((segment) => segment !== "" && segment !== ".");
-	if (named.length === 0) {
+	return segments.filter((segment) => segment !== "" && segment !== ".");
+}
+
+/**
+ * `splitPath`, plus the one rule that is specific to writing: a path that names no file, only
+ * the directory it would land in, is refused rather than treated as "the root itself".
+ */
+function readSegments(given: string): string[] | string {
+	const segments = splitPath(given);
+	if (typeof segments === "string") return segments;
+	if (segments.length === 0) {
 		// Covers the empty string, `.`, and a path that is only separators. Each of these
 		// resolves to the directory itself, and a write to a directory is not a file.
 		return (
@@ -205,26 +249,33 @@ function readSegments(given: string): string[] | string {
 			"like `notes/findings.md`."
 		);
 	}
-	return named;
+	return segments;
 }
 
 /**
- * Resolve the destination, and refuse anything that leaves the root once symlinks count.
+ * Resolve `named` against `realRoot`, and refuse anything that leaves it once symlinks count.
+ * This is the whole of the boundary: every caller that reaches a path on disk from a name it
+ * was handed — writing here, reading elsewhere — is trusting this one function to say whether
+ * the name is honest, and nowhere else re-derives that answer.
  *
  * What is checked. The deepest part of the chain that already exists is handed to the
  * operating system, which says where it really is. A directory inside the root that is a
- * symlink pointing out of it is the failure this guards: every check in `readSegments` passes,
- * `notes/` reads as a child, and the bytes land wherever the link goes. The destination itself
- * is checked too, and a symlink there is refused outright rather than followed, because
- * writing through it writes to its target.
+ * symlink pointing out of it is the failure this guards: every check in `splitPath` passes,
+ * `notes/` reads as a child, and the path resolves wherever the link goes.
  *
- * What is not promised. This is a check, not a lock. Node offers no rooted write here, so
- * between the check and `writeFileSync` another process could swap a directory in the chain
- * for a symlink, and the write would follow it. It does hold against the realistic case, an
- * agent that creates a link and then writes through it, because that second write comes back
- * through this same function.
+ * What is not checked, on purpose. Whether something already stands at the destination, and
+ * whether that is a problem, is not this function's question — a write refuses a directory
+ * there and a symlink there, a listing requires exactly a directory there, and a file read
+ * requires exactly a file there. Those are different rules for the same fact, so each caller
+ * asks it themselves once this function has said the path is contained.
+ *
+ * What is not promised. This is a check, not a lock. Node offers no rooted open here, so
+ * between the check and whatever the caller does next, another process could swap a directory
+ * in the chain for a symlink, and that next step would follow it. It does hold against the
+ * realistic case, an agent that creates a link and then reaches through it, because that
+ * second call comes back through this same function.
  */
-function resolveInside(realRoot: string, named: string[]): Resolved {
+export function resolveInside(realRoot: string, named: string[]): Resolved {
 	const relative = named.join("/");
 	const target = path.join(realRoot, ...named);
 
@@ -255,24 +306,12 @@ function resolveInside(realRoot: string, named: string[]): Resolved {
 		if (real !== realRoot && !real.startsWith(realRoot + path.sep)) {
 			return refuse(
 				`\`${relative}\` goes through a symbolic link that leaves this conversation's ` +
-					"directory, so writing it would put the file outside. Choose a path that stays inside.",
+					"directory, so it reaches outside no matter what this is used for. Choose a path that stays inside.",
 			);
 		}
 		break;
 	}
 
-	const existing = lstatOrNull(target);
-	if (existing?.isSymbolicLink()) {
-		return refuse(
-			`\`${relative}\` is already a symbolic link. Writing through it would put the bytes ` +
-				"wherever it points, which may be outside this conversation's directory. Use another name.",
-		);
-	}
-	if (existing?.isDirectory()) {
-		return refuse(
-			`\`${relative}\` is already a directory, so it cannot be written as a file. Give a file name inside it.`,
-		);
-	}
 	return { ok: true, target };
 }
 
@@ -282,7 +321,7 @@ function resolveInside(realRoot: string, named: string[]): Resolved {
  * Both halves carry a string, so returning the message on its own would make the two
  * indistinguishable at the call site: an escaping path would read as a destination.
  */
-type Resolved = { ok: true; target: string } | { ok: false; message: string };
+export type Resolved = { ok: true; target: string } | { ok: false; message: string };
 
 function refuse(message: string): Resolved {
 	return { ok: false, message };

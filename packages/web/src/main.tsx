@@ -13,6 +13,18 @@ import { initialState, reduce } from "./state.ts";
 import "./app.css";
 
 /**
+ * The floors on the two halves of the graphs column, in pixels.
+ *
+ * Not the same number, because they fail differently. Findings are cards in a list: at 120px
+ * one card and the pane's own heading still read, and a list that has to be scrolled is a
+ * list, not a broken pane. The call graph is a canvas you pan and zoom, and a canvas shorter
+ * than a couple of node boxes is not a small graph — it is a strip with nothing legible in
+ * it, which is the failure a minimum is supposed to prevent rather than merely postpone.
+ */
+const FINDINGS_MIN = 120;
+const CALL_GRAPH_MIN = 180;
+
+/**
  * `<main>`'s four columns, measured at 1440px with the files pane open and the graphs
  * column at its default width: files 220px | reading 895px | handle 5px | graphs 320px.
  * Three reviewers at this width independently named the same complaint — the conversation,
@@ -75,7 +87,34 @@ function App() {
 		const saved = Number(localStorage.getItem("lumen.panel"));
 		return Number.isFinite(saved) && saved >= 320 ? saved : 320;
 	});
+	/**
+	 * How tall the findings half of the graphs column is, in pixels.
+	 *
+	 * This split was a fixed `minmax(120px, 30%)` in the stylesheet, which meant the call
+	 * graph always took the rest and there was no way to give it less — the one boundary on
+	 * screen a person could see and could not move. Which half wants the room is not a thing
+	 * this layout can know: a run with two findings and a wide delegation tree wants the
+	 * opposite of a run with twenty findings and one worker.
+	 *
+	 * A pixel height rather than a fraction, so dragging it moves a divider rather than
+	 * nudging a ratio, and so the floors below can be stated in the terms each half actually
+	 * needs — a card's worth of findings, and enough canvas to be worth panning.
+	 */
+	const [findings, setFindings] = useState(() => {
+		const saved = Number(localStorage.getItem("lumen.findings"));
+		return Number.isFinite(saved) && saved >= FINDINGS_MIN ? saved : 240;
+	});
 	const dragging = useRef(false);
+	/**
+	 * The graphs column's top edge while its divider is being dragged.
+	 *
+	 * Captured on mousedown rather than measured on every move: the divider is inside the
+	 * column it resizes, so reading its position mid-drag would read a box that has already
+	 * moved because of the drag, and the pane would chase the pointer instead of following
+	 * it. The column's top does not move while a drag is going, so one reading is enough.
+	 */
+	const rowDragTop = useRef<number | null>(null);
+	const graphsRef = useRef<HTMLDivElement | null>(null);
 	const socket = useRef<WebSocket | null>(null);
 
 	const nodeCount = Object.keys(state.nodes).length;
@@ -108,14 +147,29 @@ function App() {
 	// as a broken control.
 	useEffect(() => {
 		const move = (event: MouseEvent) => {
-			if (!dragging.current) return;
+			if (dragging.current) {
+				event.preventDefault();
+				const from = window.innerWidth - event.clientX;
+				setPanel(Math.round(Math.min(Math.max(320, from), window.innerWidth * 0.7)));
+				return;
+			}
+			// The other divider, the horizontal one inside the graphs column. Same listener,
+			// because the reason these live on the window rather than on the control — a
+			// pointer outrunning React — is the same reason for both.
+			const top = rowDragTop.current;
+			if (top === null) return;
 			event.preventDefault();
-			const from = window.innerWidth - event.clientX;
-			setPanel(Math.round(Math.min(Math.max(320, from), window.innerWidth * 0.7)));
+			const height = graphsRef.current?.getBoundingClientRect().height ?? 0;
+			// The floor for the call graph is what caps findings, so the two constraints are
+			// one expression and cannot disagree about who owns the last pixel.
+			const ceiling = Math.max(FINDINGS_MIN, height - CALL_GRAPH_MIN);
+			setFindings(Math.round(Math.min(Math.max(FINDINGS_MIN, event.clientY - top), ceiling)));
 		};
 		const up = () => {
 			dragging.current = false;
+			rowDragTop.current = null;
 			document.body.classList.remove("resizing");
+			document.body.classList.remove("resizingRow");
 		};
 		window.addEventListener("mousemove", move);
 		window.addEventListener("mouseup", up);
@@ -128,6 +182,26 @@ function App() {
 	useEffect(() => {
 		localStorage.setItem("lumen.panel", String(panel));
 	}, [panel]);
+
+	useEffect(() => {
+		localStorage.setItem("lumen.findings", String(findings));
+	}, [findings]);
+
+	// A height saved from a tall window, read back into a short one, is the same problem the
+	// width clamp below solves and needs the same answer: re-run the drag's own ceiling
+	// against the column as it actually is now, so a number from a 27-inch monitor cannot
+	// leave a laptop with a call graph too short to draw anything in.
+	useEffect(() => {
+		const clamp = () => {
+			const height = graphsRef.current?.getBoundingClientRect().height ?? 0;
+			if (height === 0) return;
+			const ceiling = Math.max(FINDINGS_MIN, height - CALL_GRAPH_MIN);
+			setFindings((current) => Math.round(Math.min(Math.max(FINDINGS_MIN, current), ceiling)));
+		};
+		clamp();
+		window.addEventListener("resize", clamp);
+		return () => window.removeEventListener("resize", clamp);
+	}, []);
 
 	// A width saved from a wide window can be wider than a window it is then read back into
 	// — nobody dragged anything, the window just changed shape (or a saved width from before
@@ -428,7 +502,11 @@ function App() {
 				{/* The findings graph and the call graph, stacked rather than toggled — see the
 				    layout comment above `App` for why a shared column split this way, instead
 				    of a tab strip, is what lets both stay visible while a run is going. */}
-				<div className="graphs">
+				<div
+					className="graphs"
+					ref={graphsRef}
+					style={{ gridTemplateRows: `${findings}px 5px minmax(0, 1fr)` }}
+				>
 					<div className="findingsPane">
 						<div className="paneHead">findings</div>
 						{state.rootId ? (
@@ -437,6 +515,29 @@ function App() {
 							<p className="hint">waiting for the run to open…</p>
 						)}
 					</div>
+					{/* The same control as the vertical handle, turned ninety degrees — and it
+					    exists for the same reason: which of these two halves deserves the room
+					    depends on the run, and only the person watching it knows. */}
+					<div
+						className="handle row"
+						role="separator"
+						aria-orientation="horizontal"
+						aria-label="height of the findings pane"
+						tabIndex={0}
+						onMouseDown={(event) => {
+							rowDragTop.current = graphsRef.current?.getBoundingClientRect().top ?? null;
+							document.body.classList.add("resizing");
+							document.body.classList.add("resizingRow");
+							event.preventDefault();
+						}}
+						onKeyDown={(event) => {
+							const step = event.shiftKey ? 80 : 20;
+							const height = graphsRef.current?.getBoundingClientRect().height ?? 0;
+							const ceiling = Math.max(FINDINGS_MIN, height - CALL_GRAPH_MIN);
+							if (event.key === "ArrowUp") setFindings((h) => Math.max(FINDINGS_MIN, h - step));
+							if (event.key === "ArrowDown") setFindings((h) => Math.min(ceiling, h + step));
+						}}
+					/>
 					<div className="callPane">
 						<div className="paneHead">call graph</div>
 						{state.rootId ? (

@@ -166,6 +166,7 @@ prints; it proxies the socket to the server.
 | `LUMEN_HOST` | `127.0.0.1` | move it off loopback and the server refuses to start unless `LUMEN_BASIC_AUTH` is set |
 | `LUMEN_BASIC_AUTH` | none | `user:password`; required once `LUMEN_HOST` is not loopback, ignored otherwise |
 | `LUMEN_SESSIONS` | `~/.lumen/sessions` | where each conversation's own directory is made |
+| `LUMEN_STATE` | `~/.lumen/state` | where each conversation's durable record — its trace, its findings, what was typed — is written |
 | `LUMEN_MATERIAL` | none | a folder for the agents to study, if every conversation on this server is about the same one |
 | `LUMEN_AUTO_BUDGET` | `2` | dollars one run may spend while it runs itself |
 | `LUMEN_MAX_DEPTH` | `3` | how deep delegation may go |
@@ -173,6 +174,17 @@ prints; it proxies the socket to the server.
 | `LUMEN_KEEP_RECENT_TOKENS` | pi's default (20k) | set to a few hundred to watch a line compact without holding a long conversation first |
 | `LUMEN_EXTENSIONS` | `node_modules/pi-web-access` | pi extensions to load by path; set empty to run without the web tools |
 | `LUMEN_COMPUTE` | `modal` | where `run` sends commands; set empty and agents cannot run anything |
+
+`pi-web-access` runs with no search provider configured out of the box, and falls back to
+whichever one it can reach with nothing set up. Bring your own by setting the matching
+environment variable before starting lumen — `pi-web-access` reads it directly, nothing in
+lumen has to know about it: `TAVILY_API_KEY`, `BRAVE_API_KEY`, `EXA_API_KEY`,
+`OPENAI_API_KEY` (for its search mode), `PERPLEXITY_API_KEY`, `JINA_API_KEY`, `KAGI_API_KEY`,
+and others — one file per provider under `node_modules/pi-web-access/`, each named for the
+variable it reads, is the source of truth for exactly which one and what it is called.
+`pi-web-access` also accepts a `~/.pi/agent/web-search.json` file for the same keys, and for
+providers a bare environment variable does not cover (`brightdataApiKey`, `serpbaseApiKey`,
+and a few more) — that file is the only way to set those.
 
 ## Where a conversation lives
 
@@ -201,6 +213,20 @@ absolute path anywhere on the disk, so an agent given it in a session directory 
 confined to that directory at all — the boundary would live in a sentence in a prompt, which
 is the one thing this project says not to rely on. `save` resolves paths itself, against the
 conversation's directory, and refuses anything that climbs out.
+
+## Killing the server does not lose the run
+
+A conversation's trace, its findings graph, and what you typed are written to
+`~/.lumen/state` — a separate tree from `~/.lumen/sessions`, on purpose: `save` is rooted at
+the conversation's own directory under `sessions`, so an agent's own tool call could never be
+made to overwrite lumen's record of it if the two lived in the same place. The write is
+debounced (a couple of seconds behind whatever just happened) and unconditional on a clean
+shutdown, so restarting the server and reconnecting with the same key brings the conversation
+back — read only. Every agent's actual context window is `pi`'s, held only in this process's
+memory, and it does not come back; a node still `running` when the process ended is shown
+stopped, honestly, rather than with a spinner nothing will ever clear. The conversation's own
+directory under `sessions` is untouched by any of this, so the files it produced are still
+there and still linked from the points that made them.
 
 The same is not true in the other direction, and it is worth saying plainly: pi's `read`,
 `grep`, `find` and `ls` resolve absolute paths too. **material is a default and a statement
@@ -234,9 +260,13 @@ under a name that looks like ours. `save` carries the same warning about `write`
 | the machine | a container elsewhere, `/work`, empty, network, shared by every agent on the run |
 | the conversation's directory | on your disk, where `save` writes, what `read` sees |
 
-**The two do not share a filesystem.** Nothing copies between them. An agent that wants a
-result to survive prints it and saves it, which works for text and not for a plot. A tool
-that pulls a file back is the obvious next thing and is not written.
+**The two do not share a filesystem, but one narrow tool crosses between them.** An agent
+that wants text to survive prints it and `save`s it, the same as always. For anything else —
+a plot, a checkpoint, a generated document — `collect` copies exactly one named file from the
+machine into the conversation's own directory, and nothing wider than that: no listing the
+machine's disk from here, no wildcard, no directory copy. It needs both `run` and `save`
+already, since it has nothing to collect without the first and nowhere to put it without the
+second, so it costs no permission of its own.
 
 One machine per conversation, not one per agent. It is the same reason the conversation has
 one directory: one worker clones the repository and a second runs the tests against that

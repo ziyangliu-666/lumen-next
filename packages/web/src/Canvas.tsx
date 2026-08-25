@@ -152,7 +152,7 @@ function Point({
 	const live = isLive(node);
 	const selected = state.selected === node.id;
 	const spend = rollup(state, node.id);
-	const tools = node.steps.filter((step) => !step.childIds?.length).length;
+	const tools = node.steps.filter((step) => step.kind !== "thinking" && !step.childIds?.length).length;
 
 	return (
 		<div

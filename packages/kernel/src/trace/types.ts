@@ -73,6 +73,11 @@ export function addUsage(into: Usage, from: Usage | undefined): Usage {
  * `aborted` is kept apart from `failed` on purpose. A user pressing stop and a tool
  * throwing are billed and retried differently, and a single word for both makes the
  * run's failure count a measure of how often the user changed their mind.
+ *
+ * `aborted` is also what a `running` node in a *saved* trace becomes once it is read back
+ * after the process holding it is gone — see `endInterruptedNodes` in `persist.ts`. Nobody
+ * pressed stop, but the reasoning still applies: the window was ended from outside itself,
+ * not by something going wrong inside it, and that is a stop, not a failure.
  */
 export type NodeState = "running" | "done" | "failed" | "aborted";
 
@@ -85,6 +90,30 @@ export type NodeState = "running" | "done" | "failed" | "aborted";
  */
 export type StepState = "running" | "done" | "failed" | "aborted";
 
+/**
+ * What a step records.
+ *
+ * A node's steps used to be tool calls and nothing else, so the field did not exist and
+ * every reader assumed `"tool"` without asking. It stays that way: `kind` is optional,
+ * absent means `"tool"`, and every reader written before this field existed keeps working
+ * unchanged. `"thinking"` is a turn's reasoning, archived into the same ordered list once
+ * the turn ends (see `record.ts`), so the interleaving of thought and action on screen
+ * matches the order they actually happened in. `"reply"` is the same archiving for a
+ * turn's own text: `TraceNode.summary` holds only the *last* reply, overwritten every turn
+ * it changes, so a node that answered, called a tool, and answered again on the strength
+ * of that tool's result used to have its first answer destroyed the moment the second one
+ * landed — not hidden, gone, with nothing in the trace left to recover it from. A `"reply"`
+ * step is that answer kept.
+ *
+ * `"you"` is the last thing that was not in this order. What a person types was kept in a
+ * list of its own and drawn as one block above the log, so two sentences said an hour apart,
+ * with a whole delegation between them, stacked together at the top as if they had been said
+ * at once — and the answer to the first sat below the second. A `"you"` step puts the
+ * person's own words on the same timeline as everything else, which is the only place they
+ * were ever actually said.
+ */
+export type StepKind = "tool" | "thinking" | "reply" | "you";
+
 /** One tool call inside a node. Ordered, because the order is the reasoning. */
 export interface Step {
 	id: string;
@@ -95,14 +124,39 @@ export interface Step {
 	endedAt?: number;
 	/** One line for the collapsed view: `$ pytest -q`, `read src/main.ts:1-40`. */
 	title: string;
-	/** First part of the result, for the collapsed view. The full result is in the session. */
+	/**
+	 * First part of the result, for the collapsed view. The full result is in the session.
+	 *
+	 * For a `"thinking"` or `"reply"` step this holds the reasoning or the reply text
+	 * itself, in full, rather than a tool's result: neither kind of step has a result to
+	 * preview, and the shape a reader wants back — "the text this step is about" — is the
+	 * same field either way. A second field carrying the same kind of thing under a
+	 * different name would be two places a reader has to know to check. Unlike a tool
+	 * result's preview, this is never cut short: a reply is the thing this feature exists
+	 * to stop losing, so it is kept whole here rather than clipped like a `bash` log nobody
+	 * reads past the first screen.
+	 */
 	preview?: string;
+	/**
+	 * Whether `preview` is less than the step's whole result.
+	 *
+	 * Set by the recorder, never inferred on the reading side. A preview that happens to end
+	 * in "..." because the tool's own output ended that way would fool a check that looked for
+	 * the marker in the text; this field is the honest fact the recorder already knows —
+	 * whether it cut the text short — rather than a guess reconstructed from what the cut
+	 * looks like. Absent (not `false`) on a step recorded before this field existed, which
+	 * reads the same as `false`: no affordance to fetch more, because there is nothing on file
+	 * to fetch. See `Trace.fullResult` for where the rest of the text, if any, is kept.
+	 */
+	truncated?: boolean;
 	/**
 	 * Nodes this step opened. Set only when the tool spawns agents. This is the single
 	 * link that turns a flat list of tool calls into a call tree, and it is written by
 	 * the spawning tool rather than inferred from the tool name.
 	 */
 	childIds?: string[];
+	/** See `StepKind`. Absent means `"tool"`, the historical and overwhelming default. */
+	kind?: StepKind;
 }
 
 /**

@@ -129,6 +129,32 @@ describe("trace", () => {
 		expect(trace.node(node.id).summary).toBe("the answer is 3");
 	});
 
+	it("archives every reply a node ever produced, not only the last one", () => {
+		// The bug this guards: `summary` is a single string, overwritten at the end of every
+		// turn. A node that answered, called a tool on the strength of a question, and then
+		// answered again had its first answer destroyed the instant the second one landed —
+		// not hidden, gone, with nothing left in the trace to recover it from. The fix
+		// archives every reply into `steps`, the same permanent record `thinking` already
+		// gets, while `summary` keeps meaning exactly what it always meant: the last one.
+		const trace = new Trace("run-1");
+		const node = openRoot(trace);
+		const session = new FakeSession();
+		record(trace, session, { nodeId: () => node.id });
+
+		session.say("here is a first answer", usage(10, 5, 0.01));
+		session.callTool("t1", "read", { path: "a.ts" }, { content: [{ type: "text", text: "ok" }] });
+		session.say("and here is a second, once the file was read", usage(10, 5, 0.01));
+
+		const steps = trace.node(node.id).steps;
+		expect(steps.map((step) => step.kind ?? "tool")).toEqual(["reply", "tool", "reply"]);
+		expect(steps.map((step) => step.preview)).toEqual([
+			"here is a first answer",
+			"ok",
+			"and here is a second, once the file was read",
+		]);
+		expect(trace.node(node.id).summary).toBe("and here is a second, once the file was read");
+	});
+
 	it("streams reasoning apart from the answer, and never into the summary", () => {
 		// Reasoning arrives before the text and is the work, not the product. It must reach
 		// the interface on its own event so it can be drawn beside the answer, and it must
@@ -144,6 +170,80 @@ describe("trace", () => {
 
 		expect(events.some((event) => event.type === "thinking" && event.delta === "let me work this out")).toBe(true);
 		expect(trace.node(node.id).summary).toBe("the answer is 3");
+	});
+
+	it("archives a turn's reasoning and reply into steps, interleaved in the order it happened", () => {
+		// The bug this guards: `state.thinking` in the browser is a scratchpad that the next
+		// turn overwrites, so a node with many turns kept every tool call but lost all but
+		// the last turn's reasoning. The fix is that reasoning becomes a step, in the same
+		// permanent, ordered list the tool calls live in — thinking before the tool calls it
+		// led to, every turn, not just the last one. `summary` has the identical bug for a
+		// turn's own text, so a reply archives the same way, right after the reasoning that
+		// produced it and still ahead of the tool calls that turn asked for.
+		const trace = new Trace("run-1");
+		const node = openRoot(trace);
+		const session = new FakeSession();
+		record(trace, session, { nodeId: () => node.id });
+
+		session.think("first pass reasoning", "let me check something", usage(10, 5, 0.01));
+		session.callTool("t1", "read", { path: "a.ts" }, { content: [{ type: "text", text: "ok" }] });
+		session.think("second pass reasoning", "the answer is 3", usage(10, 5, 0.01));
+		session.callTool("t2", "bash", { command: "pytest -q" }, { content: [] });
+
+		const steps = trace.node(node.id).steps;
+		expect(steps).toHaveLength(6);
+		expect(steps.map((step) => step.kind ?? "tool")).toEqual([
+			"thinking",
+			"reply",
+			"tool",
+			"thinking",
+			"reply",
+			"tool",
+		]);
+		expect(steps.map((step) => step.preview ?? step.title)).toEqual([
+			"first pass reasoning",
+			"let me check something",
+			"ok",
+			"second pass reasoning",
+			"the answer is 3",
+			"",
+		]);
+		// Neither a thinking step nor a reply step is a tool call: neither ever ran
+		// anything, so both are `done` the instant they are archived rather than passing
+		// through `running`.
+		expect(
+			steps
+				.filter((step) => step.kind === "thinking" || step.kind === "reply")
+				.every((step) => step.state === "done"),
+		).toBe(true);
+	});
+
+	it("still streams thinking deltas live, exactly as before archiving was added", () => {
+		const trace = new Trace("run-1");
+		const events: TraceEvent[] = [];
+		trace.subscribe((event) => events.push(event));
+		const node = openRoot(trace);
+		const session = new FakeSession();
+		record(trace, session, { nodeId: () => node.id });
+
+		session.think("let me work this out", "the answer is 3", usage(10, 5, 0.01));
+
+		const thinkingEvents = events.filter((event) => event.type === "thinking");
+		expect(thinkingEvents).toHaveLength(1);
+		expect(thinkingEvents[0]).toMatchObject({ delta: "let me work this out", nodeId: node.id });
+	});
+
+	it("does not archive a thinking step for a turn that reasoned nothing", () => {
+		const trace = new Trace("run-1");
+		const node = openRoot(trace);
+		const session = new FakeSession();
+		record(trace, session, { nodeId: () => node.id });
+
+		session.say("no reasoning here", usage(10, 5, 0.01));
+
+		// The turn still said something, so it still archives a reply — just no thinking.
+		expect(trace.node(node.id).steps.filter((step) => step.kind === "thinking")).toHaveLength(0);
+		expect(trace.node(node.id).steps.map((step) => step.kind)).toEqual(["reply"]);
 	});
 
 	it("emits turn_start on every assistant turn, not only the first", () => {

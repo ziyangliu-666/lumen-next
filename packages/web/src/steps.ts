@@ -31,6 +31,28 @@ export interface StepRun {
  * the rows that carry the shape, so folding them away spends the thing the panel is for.
  */
 function standsAlone(step: Step): boolean {
+	// It is reasoning, not a tool call. A run's title and count describe calls to one tool,
+	// and a thinking step has no tool in that sense — grouping it with its neighbours would
+	// either lie about what ran or hide the one row a person reads before the calls that
+	// followed it. It always gets its own row, which also means it can never join a run in
+	// progress and never gets joined into one: the check below this one only fires when
+	// `open` is still set, and standing alone is what clears `open`.
+	if (step.kind === "thinking") return true;
+
+	// It is something a person said, which is never a call and never one of a run. Two
+	// sentences typed a minute apart, with a delegation between them, must not fold into
+	// "2 you calls" — the whole reason these are steps at all is to sit in their own place
+	// in time.
+	if (step.kind === "you") return true;
+
+	// It is a reply, not a tool call, for the same reason as reasoning above — and the same
+	// grouping would actually happen more often here than it does for thinking. A window that
+	// answers one question, then later answers another in the same context with no tool call
+	// between them, produces two consecutive reply steps; folding them into "2 reply calls"
+	// would hide the second answer behind a click, which is the opposite of what archiving
+	// every reply was for.
+	if (step.kind === "reply") return true;
+
 	// It opened windows, so it is the tree. The renderer hangs a line per child under this
 	// row, and the kernel writes `childIds` precisely to turn a flat list of calls into a
 	// call tree. Inside "7 subagent calls" that tree has nowhere to be drawn.

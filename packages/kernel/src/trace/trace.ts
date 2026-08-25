@@ -39,6 +39,17 @@ export class Trace {
 	private readonly childIds = new Map<string, string[]>();
 	private readonly listeners = new Set<(event: TraceEvent) => void>();
 	private root: string | null = null;
+	/**
+	 * The whole text behind each step's `preview`, keyed by step id.
+	 *
+	 * Kept apart from `TraceNode` on purpose. A node's snapshot crosses the wire on every
+	 * `hello` and rides along with every `structuredClone` in `snapshot()`; a long-running
+	 * conversation with hundreds of tool calls would multiply a full-result field by every one
+	 * of those, for text almost nobody asks to see. This map is read only on demand, one step
+	 * at a time, by whoever calls `fullResult` — see `record.ts` for where it is filled in and
+	 * the cap it is filled in under.
+	 */
+	private readonly fullResults = new Map<string, { text: string; truncated: boolean }>();
 
 	constructor(runId: string) {
 		this.runId = runId;
@@ -174,13 +185,37 @@ export class Trace {
 		this.emit({ type: "step_update", nodeId, stepId, patch });
 	}
 
-	closeStep(nodeId: string, stepId: string, state: StepStateArg, preview?: string): void {
+	closeStep(
+		nodeId: string,
+		stepId: string,
+		state: StepStateArg,
+		preview?: string,
+		truncated?: boolean,
+	): void {
 		const step = this.node(nodeId).steps.find((candidate) => candidate.id === stepId);
 		if (!step) return;
 		step.state = state;
 		step.endedAt = Date.now();
 		if (preview !== undefined) step.preview = preview;
+		if (truncated !== undefined) step.truncated = truncated;
 		this.emit({ type: "step_close", nodeId, stepId, step });
+	}
+
+	/**
+	 * Record the whole text behind one step's preview. Called once, when the step closes —
+	 * see `record.ts`'s `tool_execution_end` handling for the cap this is filled in under and
+	 * why a result past it is itself cut short rather than held in full.
+	 */
+	setFullResult(stepId: string, text: string, truncated: boolean): void {
+		this.fullResults.set(stepId, { text, truncated });
+	}
+
+	/**
+	 * The whole text stored for one step, or `undefined` if none was ever recorded — a
+	 * thinking step, a step that never closed, or an id nothing here knows.
+	 */
+	fullResult(stepId: string): { text: string; truncated: boolean } | undefined {
+		return this.fullResults.get(stepId);
 	}
 
 	/**

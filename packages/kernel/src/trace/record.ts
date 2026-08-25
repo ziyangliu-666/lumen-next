@@ -107,9 +107,27 @@ function textOf(content: unknown): string {
 		.join("");
 }
 
-function previewOf(result: any, limit = 400): string {
-	const text = textOf(result?.content).trim();
-	return text.length > limit ? `${text.slice(0, limit)}...` : text;
+/** How much of a tool result the collapsed view shows before the rest waits behind a click. */
+const PREVIEW_LIMIT = 400;
+
+/**
+ * How much of a tool result this trace keeps in full, addressable later through
+ * `Trace.fullResult`.
+ *
+ * A number, not "as much as arrives". A `bash` command piping a build log or a `web_search`
+ * with a page of results can run to megabytes, and holding every one of those in full for the
+ * life of the conversation would grow the process's memory for output almost nobody asks to
+ * see past the preview. One megabyte is enough for the runs a person actually opens — a long
+ * file, a few hundred lines of test output — without one pathological command exhausting the
+ * process. Past this cap the stored copy is itself cut short, and
+ * `Trace.fullResult`'s `truncated` flag says so: the response tells the truth about being
+ * incomplete rather than quietly handing back a torso and calling it the whole result.
+ */
+const FULL_RESULT_CAP = 1_000_000;
+
+/** Whether `text` fits within `limit`, and the slice of it that does. */
+function clip(text: string, limit: number): { text: string; truncated: boolean } {
+	return text.length > limit ? { text: text.slice(0, limit), truncated: true } : { text, truncated: false };
 }
 
 /**
@@ -125,6 +143,11 @@ export function record(
 	options: RecordOptions,
 ): () => void {
 	let assistantText = "";
+	// The current turn's reasoning, accumulated the same way `assistantText` is. Streamed
+	// live via the `thinking` event exactly as before; archived into the node's permanent
+	// `steps` on `message_end` (below) so it survives the turn that produced it instead of
+	// being overwritten by the next one.
+	let thinkingText = "";
 
 	return session.subscribe((event: any) => {
 		const nodeId = options.nodeId();
@@ -132,6 +155,7 @@ export function record(
 			case "message_start": {
 				if (event.message?.role === "assistant") {
 					assistantText = "";
+					thinkingText = "";
 					trace.emit({ type: "turn_start", nodeId });
 				}
 				return;
@@ -145,6 +169,7 @@ export function record(
 					// Reasoning streams ahead of the answer and is not part of it. Forwarded on
 					// its own event rather than folded into `text`, so the two can be drawn apart:
 					// the thinking is the work, the text is what the parent actually receives.
+					thinkingText += inner.delta;
 					trace.emit({ type: "thinking", nodeId, delta: inner.delta });
 				}
 				return;
@@ -157,10 +182,49 @@ export function record(
 				const text = textOf(message.content).trim();
 				// The last assistant text is what the parent receives, so it is the summary.
 				// Keeping the previous one when this turn was tool calls only stops the
-				// summary flickering to empty every time the agent picks up a tool.
-				if (text) trace.updateNode(nodeId, { summary: text });
-				else if (assistantText.trim()) {
-					trace.updateNode(nodeId, { summary: assistantText.trim() });
+				// summary flickering to empty every time the agent picks up a tool. It is
+				// computed once and reused below for the archived step, so `summary` and the
+				// step it is drawn from can never read two different strings for the same turn.
+				const replyText = text || assistantText.trim();
+				if (replyText) trace.updateNode(nodeId, { summary: replyText });
+				// The turn is over: archive what it reasoned and what it said before this
+				// node's steps move on to whatever tool calls it decided on. This has to
+				// happen here, and not in `message_update`, because a step is a finished
+				// thing and streaming deltas are not done arriving until `message_end` says
+				// so. It also has to happen before this function returns to the event loop:
+				// `tool_execution_start` for this same turn's tool calls is the very next
+				// event on this subscription (pi finalises the assistant message before it
+				// executes anything the message asked for), so pushing these steps now,
+				// synchronously, is what puts them ahead of those tool steps in `node.steps`
+				// rather than after them.
+				//
+				// Reasoning archives before the reply, matching the order the model actually
+				// produced them in within one turn: it thinks, then it writes, and only then
+				// does whatever it decided on get carried out. That gives the interleaving
+				// this fix exists for across turns too: a turn that is tool calls only
+				// archives no reply here at all, so the reply from before it stays the last
+				// one on screen until a later turn, having seen the tool's result, adds its
+				// own: reasoning, tool calls, reply, in the order they happened, every turn,
+				// not only the last one.
+				if (thinkingText.trim()) {
+					const step = trace.openStep(nodeId, {
+						id: `think-${crypto.randomUUID()}`,
+						tool: "thinking",
+						args: undefined,
+						title: "thinking",
+						kind: "thinking",
+					});
+					trace.closeStep(nodeId, step.id, "done", thinkingText.trim());
+				}
+				if (replyText) {
+					const step = trace.openStep(nodeId, {
+						id: `reply-${crypto.randomUUID()}`,
+						tool: "reply",
+						args: undefined,
+						title: "reply",
+						kind: "reply",
+					});
+					trace.closeStep(nodeId, step.id, "done", replyText);
 				}
 				return;
 			}
@@ -198,7 +262,21 @@ export function record(
 							? "aborted"
 							: "failed"
 						: "done";
-				trace.closeStep(nodeId, event.toolCallId, stepState, previewOf(event.result));
+				const text = textOf(event.result?.content).trim();
+				const preview = clip(text, PREVIEW_LIMIT);
+				// The step keeps the short version for the collapsed view; the trace keeps the
+				// rest, if there is any, for the on-demand fetch this preview's `truncated` flag
+				// invites the browser to make. See `FULL_RESULT_CAP` for why a very long result
+				// is cut a second time, further out, rather than kept whole.
+				trace.closeStep(
+					nodeId,
+					event.toolCallId,
+					stepState,
+					preview.truncated ? `${preview.text}...` : preview.text,
+					preview.truncated,
+				);
+				const full = clip(text, FULL_RESULT_CAP);
+				trace.setFullResult(event.toolCallId, full.text, full.truncated);
 				// A tool that ran nested model work reports it here, and adding it keeps the
 				// node's own line honest. But a spawning tool's children are trace nodes
 				// that already carry their own spend, and `rollupUsage` walks them. Adding

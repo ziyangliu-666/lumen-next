@@ -17,9 +17,23 @@
  *
  * It is deliberately small. The input is agent prose written to a house style, not
  * arbitrary user markdown, so this supports the subset the agents actually write and stops
- * there. Tables, images, footnotes, reference links, setext headings and inline HTML are
- * absent on purpose. A general engine would be more code, more corners, and every extra
- * corner is another place where someone would be tempted to pass markup through.
+ * there. Images, footnotes, reference links, setext headings and inline HTML are absent on
+ * purpose. A general engine would be more code, more corners, and every extra corner is
+ * another place where someone would be tempted to pass markup through.
+ *
+ * Pipe tables are the one addition past that line, because they are not a prose feature —
+ * they are how an agent's `save`d report presents rows and columns, the same job a CSV
+ * preview does elsewhere in this app, and a table an agent wrote for that reason was landing
+ * on screen as a wall of literal `|` characters instead. The same rule still holds: a table
+ * becomes a data node with cells of `Inline[]`, never a string of HTML, so a hostile page
+ * quoted inside a cell is exactly as inert here as it is inside a paragraph.
+ *
+ * Math is the other addition, for the same kind of reason: this app is aimed at mathematical
+ * research, agents write LaTeX in nearly every answer, and `$x^2$` was landing on screen as
+ * the literal characters `$x^2$`. A `math` node carries the TeX source as a plain string,
+ * nothing more — this file never touches a LaTeX engine, so it cannot know whether the TeX
+ * inside is even valid. Turning that string into a formula is `Prose.tsx`'s job, and it does
+ * so through a path that never builds an HTML string either, for the reason explained there.
  */
 
 export type Inline =
@@ -29,7 +43,12 @@ export type Inline =
 	| { kind: "em"; children: Inline[] }
 	| { kind: "link"; href: string; children: Inline[] }
 	/** A place in the repository the agent is pointing at: `src/x.ts:36`. */
-	| { kind: "ref"; path: string; line?: number; text: string };
+	| { kind: "ref"; path: string; line?: number; text: string }
+	/** A formula. `display` is `$$…$$` (its own centered line) versus `$…$` (sits in a sentence). */
+	| { kind: "math"; tex: string; display: boolean };
+
+/** Where a column's text sits, read off its delimiter cell. `null` is the browser's own default. */
+export type Align = "left" | "center" | "right" | null;
 
 export type Block =
 	| { kind: "para"; children: Inline[] }
@@ -37,7 +56,8 @@ export type Block =
 	| { kind: "list"; ordered: boolean; items: Inline[][] }
 	| { kind: "code"; lang?: string; text: string }
 	| { kind: "quote"; children: Block[] }
-	| { kind: "rule" };
+	| { kind: "rule" }
+	| { kind: "table"; align: Align[]; header: Inline[][]; rows: Inline[][][] };
 
 /**
  * Extensions that make a bare word a repository path.
@@ -120,6 +140,65 @@ const QUOTE = /^\s{0,3}>/;
 const BULLET = /^(\s*)[-*+]\s+(.*)$/;
 const ORDERED = /^(\s*)\d+[.)]\s+(.*)$/;
 
+/** One cell of a table's delimiter row: dashes, with an optional colon on either side for alignment. */
+const TABLE_DELIM_CELL = /^:?-+:?$/;
+
+/**
+ * Split one row of a pipe table into its cells.
+ *
+ * A leading and trailing `|` are the usual style and are dropped rather than read as empty
+ * outer cells; a backslash-escaped `\|` is kept as a literal pipe inside a cell instead of
+ * ending it, which matters for any cell quoting a path or a shell pipeline.
+ */
+function splitTableRow(line: string): string[] {
+	let body = line.trim();
+	if (body.startsWith("|")) body = body.slice(1);
+	if (body.endsWith("|") && !body.endsWith("\\|")) body = body.slice(0, -1);
+
+	const cells: string[] = [];
+	let cell = "";
+	for (let i = 0; i < body.length; i += 1) {
+		if (body[i] === "\\" && body[i + 1] === "|") {
+			cell += "|";
+			i += 1;
+			continue;
+		}
+		if (body[i] === "|") {
+			cells.push(cell.trim());
+			cell = "";
+			continue;
+		}
+		cell += body[i];
+	}
+	cells.push(cell.trim());
+	return cells;
+}
+
+/**
+ * Whether `line` opens a table, given the line right after it.
+ *
+ * A table is told apart from an ordinary line containing a stray `|` only by what follows
+ * it: a delimiter row of dash cells, one per column. Requiring a `|` on the header line too
+ * keeps a single-column table (no pipes anywhere, just a dashed line under a word) out of
+ * scope — that shape is indistinguishable from `RULE` and from the setext headings this
+ * parser already leaves out on purpose.
+ */
+function isTableStart(line: string, next: string | undefined): boolean {
+	if (next === undefined || !line.includes("|")) return false;
+	const delimCells = splitTableRow(next);
+	return delimCells.length > 0 && delimCells.every((cell) => TABLE_DELIM_CELL.test(cell));
+}
+
+/** A delimiter cell's colons, read as the alignment its whole column takes. */
+function alignOf(cell: string): Align {
+	const left = cell.startsWith(":");
+	const right = cell.endsWith(":");
+	if (left && right) return "center";
+	if (right) return "right";
+	if (left) return "left";
+	return null;
+}
+
 export function parse(markdown: string): Block[] {
 	const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
 	const blocks: Block[] = [];
@@ -170,6 +249,24 @@ export function parse(markdown: string): Block[] {
 			continue;
 		}
 
+		if (isTableStart(line, lines[at + 1])) {
+			const align = splitTableRow(lines[at + 1]).map(alignOf);
+			const header = splitTableRow(line).map((cell) => parseInline(cell));
+			at += 2;
+			const rows: Inline[][][] = [];
+			// A row stops the table the same way a paragraph line stops: a blank line, or the
+			// start of something else this parser already knows. Unlike the header, a body row
+			// needs no `|` of its own — GFM pads a row with fewer cells than the header — but in
+			// practice every row an agent writes carries one, and requiring it keeps a plain
+			// sentence that follows the table from being read as a one-cell row.
+			while (at < lines.length && lines[at].trim() !== "" && lines[at].includes("|") && !startsBlock(lines[at])) {
+				rows.push(splitTableRow(lines[at]).map((cell) => parseInline(cell)));
+				at += 1;
+			}
+			blocks.push({ kind: "table", align, header, rows });
+			continue;
+		}
+
 		if (QUOTE.test(line)) {
 			const quoted: string[] = [];
 			while (at < lines.length && QUOTE.test(lines[at])) {
@@ -199,7 +296,12 @@ export function parse(markdown: string): Block[] {
 		}
 
 		const paragraph: string[] = [];
-		while (at < lines.length && lines[at].trim() !== "" && !startsBlock(lines[at])) {
+		while (
+			at < lines.length &&
+			lines[at].trim() !== "" &&
+			!startsBlock(lines[at]) &&
+			!isTableStart(lines[at], lines[at + 1])
+		) {
 			paragraph.push(lines[at].trim());
 			at += 1;
 		}
@@ -250,6 +352,38 @@ function parseInline(source: string): Inline[] {
 			if (close > at + 1) {
 				flush();
 				out.push(codeOrRef(source.slice(at + 1, close)));
+				at = close + 1;
+				continue;
+			}
+			plain += ch;
+			at += 1;
+			continue;
+		}
+
+		if (ch === "$" && source.startsWith("$$", at)) {
+			// `$$…$$` on one line is display math wherever it sits — inside a sentence or
+			// alone as a paragraph of its own. There is no separate block-level scan for
+			// it: a lone `$$…$$` paragraph reaches this function the same way any other
+			// paragraph does, newlines and all, because the paragraph loop joins lines with
+			// `\n` rather than a space (see the comment where it does that), and a display
+			// formula's own body is just more characters inside that string.
+			const close = source.indexOf("$$", at + 2);
+			if (close > at + 2) {
+				flush();
+				out.push({ kind: "math", tex: source.slice(at + 2, close).trim(), display: true });
+				at = close + 2;
+				continue;
+			}
+			plain += "$$";
+			at += 2;
+			continue;
+		}
+
+		if (ch === "$") {
+			const close = findInlineMathClose(source, at);
+			if (close !== -1) {
+				flush();
+				out.push({ kind: "math", tex: source.slice(at + 1, close), display: false });
 				at = close + 1;
 				continue;
 			}
@@ -354,6 +488,30 @@ function makeRef(raw: string): Inline {
 	const numbered = /^(.*):(\d+)$/.exec(raw);
 	if (numbered) return { kind: "ref", path: numbered[1], line: Number(numbered[2]), text: raw };
 	return { kind: "ref", path: raw, text: raw };
+}
+
+/**
+ * Find the `$` that closes inline math, or -1.
+ *
+ * A dollar sign is also currency, so a naive scan would read `$20,000 and $30,000` as one
+ * formula stretching between the two prices. This follows the same rule Pandoc uses for its
+ * own `$…$` math: the opener must hug its content (no space right after the `$`), the closer
+ * must hug its content too (no space right before it), and the character right after the
+ * closer must not be a digit — the detail that tells a second price apart from the end of a
+ * formula and keeps the two prices separate.
+ */
+function findInlineMathClose(source: string, open: number): number {
+	const after = source[open + 1] ?? "";
+	if (after === "" || /\s/.test(after) || after === "$") return -1;
+
+	let close = source.indexOf("$", open + 1);
+	while (close !== -1) {
+		const before = source[close - 1];
+		const next = source[close + 1] ?? "";
+		if (!/\s/.test(before) && !/\d/.test(next)) return close;
+		close = source.indexOf("$", close + 1);
+	}
+	return -1;
 }
 
 /**

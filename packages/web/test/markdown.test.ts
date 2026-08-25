@@ -127,6 +127,163 @@ describe("blocks", () => {
 	});
 });
 
+describe("tables", () => {
+	it("reads a pipe table into a header, its alignment, and its rows", () => {
+		expect(parse("| Name | Cost |\n| :--- | ---: |\n| a | $1 |\n| b | $2 |")).toEqual([
+			{
+				kind: "table",
+				align: ["left", "right"],
+				header: [[{ kind: "text", text: "Name" }], [{ kind: "text", text: "Cost" }]],
+				rows: [
+					[[{ kind: "text", text: "a" }], [{ kind: "text", text: "$1" }]],
+					[[{ kind: "text", text: "b" }], [{ kind: "text", text: "$2" }]],
+				],
+			},
+		]);
+	});
+
+	it("reads a table with no leading or trailing pipes", () => {
+		expect(parse("Name | Cost\n--- | ---\na | 1")).toEqual([
+			{
+				kind: "table",
+				align: [null, null],
+				header: [[{ kind: "text", text: "Name" }], [{ kind: "text", text: "Cost" }]],
+				rows: [[[{ kind: "text", text: "a" }], [{ kind: "text", text: "1" }]]],
+			},
+		]);
+	});
+
+	it("ends a table at the first blank line", () => {
+		const blocks = parse("| a |\n| --- |\n| 1 |\n\nafter");
+		expect(blocks).toHaveLength(2);
+		expect(blocks[0].kind).toBe("table");
+		expect(blocks[1]).toEqual({ kind: "para", children: [{ kind: "text", text: "after" }] });
+	});
+
+	it("ends a paragraph at a table that follows it with no blank line", () => {
+		// GFM lets a table interrupt a paragraph; without this a report's sentence right
+		// before its own table would swallow the header row as more prose.
+		const blocks = parse("see below\n| a |\n| --- |\n| 1 |");
+		expect(blocks).toEqual([
+			{ kind: "para", children: [{ kind: "text", text: "see below" }] },
+			{ kind: "table", align: [null], header: [[{ kind: "text", text: "a" }]], rows: [[[{ kind: "text", text: "1" }]]] },
+		]);
+	});
+
+	it("does not read a rule or an ordinary line with one stray pipe as a table", () => {
+		expect(parse("---")).toEqual([{ kind: "rule" }]);
+		expect(parse("cost: $5 | still one sentence")).toEqual([
+			{ kind: "para", children: [{ kind: "text", text: "cost: $5 | still one sentence" }] },
+		]);
+	});
+
+	it("keeps an escaped pipe inside one cell instead of splitting on it", () => {
+		expect(parse("| cmd |\n| --- |\n| a \\| b |")).toEqual([
+			{
+				kind: "table",
+				align: [null],
+				header: [[{ kind: "text", text: "cmd" }]],
+				rows: [[[{ kind: "text", text: "a | b" }]]],
+			},
+		]);
+	});
+
+	it("runs inline rules over a cell, refs included", () => {
+		const blocks = parse("| file | note |\n| --- | --- |\n| `a.ts:12` | **bad** |");
+		expect(blocks).toEqual([
+			{
+				kind: "table",
+				align: [null, null],
+				header: [[{ kind: "text", text: "file" }], [{ kind: "text", text: "note" }]],
+				rows: [
+					[
+						[{ kind: "ref", path: "a.ts", line: 12, text: "a.ts:12" }],
+						[{ kind: "strong", children: [{ kind: "text", text: "bad" }] }],
+					],
+				],
+			},
+		]);
+	});
+});
+
+describe("math", () => {
+	it("reads inline math inside a sentence", () => {
+		expect(para("the area is $x^2$ square units")).toEqual([
+			{ kind: "text", text: "the area is " },
+			{ kind: "math", tex: "x^2", display: false },
+			{ kind: "text", text: " square units" },
+		]);
+	});
+
+	it("reads a display formula, on its own line, as one math node", () => {
+		expect(parse("$$\\sum_{i=1}^n x_i$$")).toEqual([
+			{ kind: "para", children: [{ kind: "math", tex: "\\sum_{i=1}^n x_i", display: true }] },
+		]);
+	});
+
+	it("reads a display formula spanning several lines", () => {
+		expect(parse("$$\n\\sum_{i=1}^n x_i\n$$")).toEqual([
+			{ kind: "para", children: [{ kind: "math", tex: "\\sum_{i=1}^n x_i", display: true }] },
+		]);
+	});
+
+	it("reads display math that sits inside a sentence", () => {
+		expect(para("note that $$x^2$$ is the square")).toEqual([
+			{ kind: "text", text: "note that " },
+			{ kind: "math", tex: "x^2", display: true },
+			{ kind: "text", text: " is the square" },
+		]);
+	});
+
+	it("does not read a lone currency amount as unterminated math", () => {
+		expect(para("it costs $5")).toEqual([{ kind: "text", text: "it costs $5" }]);
+	});
+
+	it("does not read two separate prices as one formula between them", () => {
+		// Without the "not followed by a digit" rule, the first `$` would open and the `$`
+		// right before "30,000" would look like a valid close, turning the words between two
+		// prices into a formula.
+		expect(para("it was $20,000 and now $30,000")).toEqual([
+			{ kind: "text", text: "it was $20,000 and now $30,000" },
+		]);
+	});
+
+	it("keeps the text of an unterminated inline math marker", () => {
+		expect(para("run rate is $x with no close")).toEqual([
+			{ kind: "text", text: "run rate is $x with no close" },
+		]);
+	});
+
+	it("keeps the text of an unterminated display math marker without swallowing what follows", () => {
+		const blocks = parse("$$\nx^2 with no close\n\nafter");
+		expect(blocks).toHaveLength(2);
+		expect(blocks[0]).toEqual({
+			kind: "para",
+			children: [{ kind: "text", text: "$$\nx^2 with no close" }],
+		});
+		expect(blocks[1]).toEqual({ kind: "para", children: [{ kind: "text", text: "after" }] });
+	});
+
+	it("runs math through a table cell like any other inline content", () => {
+		const blocks = parse("| formula |\n| --- |\n| $x^2$ |");
+		expect(blocks).toEqual([
+			{
+				kind: "table",
+				align: [null],
+				header: [[{ kind: "text", text: "formula" }]],
+				rows: [[[{ kind: "math", tex: "x^2", display: false }]]],
+			},
+		]);
+	});
+
+	it("lets a code span win over a dollar sign inside it", () => {
+		expect(para("run `echo $x`")).toEqual([
+			{ kind: "text", text: "run " },
+			{ kind: "code", text: "echo $x" },
+		]);
+	});
+});
+
 describe("inline", () => {
 	it("reads the line shape agents actually write", () => {
 		// One assertion for the house style: a bullet, a bolded name, a cited place, and a

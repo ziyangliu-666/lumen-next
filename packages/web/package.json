@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@lumen/kernel": "*",
+    "katex": "^0.18.4",
+    "prism-react-renderer": "^2.4.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

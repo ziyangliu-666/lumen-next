@@ -84,6 +84,13 @@ function nextId(): string {
 	return `i-${counter.toString(36)}`;
 }
 
+/** If `id` is one `nextId` could have minted, make sure `nextId` never mints it again. */
+function bumpCounterPast(id: string): void {
+	if (!id.startsWith("i-")) return;
+	const value = Number.parseInt(id.slice(2), 36);
+	if (Number.isFinite(value) && value > counter) counter = value;
+}
+
 export class IdeaGraph {
 	readonly runId: string;
 	private readonly ideasById = new Map<string, Idea>();
@@ -143,6 +150,23 @@ export class IdeaGraph {
 				[...this.childIds.entries()].map(([id, ids]) => [id, [...ids]]),
 			),
 		};
+	}
+
+	/**
+	 * Seed this graph from a snapshot read off disk, keeping every id exactly as it was —
+	 * see `Trace.restore`'s own comment for why identity, not just content, is the point.
+	 * Call this once, on an `IdeaGraph` fresh out of its constructor.
+	 */
+	restore(snapshot: IdeaSnapshot): void {
+		this.ideasById.clear();
+		this.childIds.clear();
+		for (const [id, idea] of Object.entries(snapshot.ideas)) {
+			this.ideasById.set(id, structuredClone(idea));
+			bumpCounterPast(id);
+		}
+		for (const [id, ids] of Object.entries(snapshot.children)) {
+			this.childIds.set(id, [...ids]);
+		}
 	}
 
 	emit(event: IdeaEvent): void {

@@ -80,7 +80,7 @@ function runtimeWithLine() {
 		depth: 0,
 		stop: () => {},
 	};
-	(runtime as unknown as { lines: Map<string, Line> }).lines.set(line.id, line);
+	(runtime as unknown as { linesById: Map<string, Line> }).linesById.set(line.id, line);
 	return { runtime, session, line, nodeId: node.id };
 }
 

@@ -8,11 +8,15 @@
  * already in front of it, and no password is asked for because none is needed.
  *
  * There is persistence, and it is narrower than that boundary rather than a way around it: a
- * conversation's own record — its trace, its findings, what the person typed — is written to
- * `~/.lumen/state`, debounced, by `Conversation.persist` below, and read back by
- * `HistoricalConversation` for a key whose process has ended. What is never written back is
- * any agent's actual context window; see `SessionManager.inMemory()`'s doc comment in
- * `runtime.ts` for why a restored conversation is history to read, not a run to resume.
+ * conversation's own record — its trace, its findings, what the person typed, and a pointer
+ * to each live line's own pi session file — is written to `~/.lumen/state`, debounced, by
+ * `Conversation.persist` below. The session files themselves sit beside that record, one
+ * directory per key; see `RuntimeOptions.sessionsDir` in `runtime.ts`. A key whose process
+ * has ended is read back by whichever of two things its record can honestly support: a
+ * record carrying at least one reopenable line becomes a real `Conversation` again —
+ * `Conversation.resume`, below — with its runtime rebuilt from those pi sessions rather than
+ * opened fresh; one that cannot (an older record, or every line's session file gone) reads
+ * back as a `HistoricalConversation`, history to look at rather than a run to continue.
  *
  * `LUMEN_HOST` moves that boundary, and `LUMEN_BASIC_AUTH` is what replaces it when it
  * moves. The two are checked together, once, at startup: a non-loopback host with no
@@ -37,16 +41,24 @@ import {
 	endInterruptedNodes,
 	modalCompute,
 	money,
+	reconcileResumedTrace,
 	Runtime,
 	SCHEMA_VERSION,
 	type AutopilotStop,
 	type ConversationRecord,
+	type ConversationRecordV2,
+	type Line,
 } from "@lumen/kernel";
 import { WebSocketServer, type WebSocket } from "ws";
 import { AGENTS } from "./agents.ts";
 import { LOCAL_NAMESPACE, matchCredential, namespacedKey, parseCredentials } from "./auth.ts";
 import { listDir, readFile } from "./files.ts";
-import { listConversationRecords, readConversationRecord, writeConversationRecord } from "./persist.ts";
+import {
+	conversationSessionsDir,
+	listConversationRecords,
+	readConversationRecord,
+	writeConversationRecord,
+} from "./persist.ts";
 import type {
 	AutoState,
 	ClientFrame,
@@ -187,6 +199,12 @@ if (!model) {
 	);
 }
 
+/** `provider/id` to whatever `modelRuntime` has credentials for, or `undefined` if none. */
+function resolveModel(id: string) {
+	const [provider, ...rest] = id.split("/");
+	return modelRuntime.getModel(provider, rest.join("/"));
+}
+
 /**
  * What the page shows and cannot change, worked out once.
  *
@@ -237,9 +255,18 @@ function sanitizeKey(key: string): string {
 interface ConversationLike {
 	attach(socket: WebSocket, otherConversations: number): void;
 	detach(socket: WebSocket): void;
+	/**
+	 * The point a bare `start` frame should be addressed to, or `null` when nothing here can
+	 * be addressed at all — a `HistoricalConversation`, whose process is gone and so has no
+	 * live point to send anything to. See the connection handler's `start` handling below,
+	 * the only caller: everywhere else reaches a node id through the trace or through
+	 * `attach`'s own `hello`, and neither needs this before a real `say` frame exists to
+	 * carry one.
+	 */
+	rootNodeId(): string | null;
 	summarize(rawKey: string): ConversationSummary;
 	handle(
-		frame: Exclude<ClientFrame, { type: "close" } | { type: "conversations.list" }>,
+		frame: Exclude<ClientFrame, { type: "close" } | { type: "conversations.list" } | { type: "start" }>,
 		socket: WebSocket,
 	): Promise<void> | void;
 	close(): Promise<void> | void;
@@ -292,8 +319,12 @@ class Conversation implements ConversationLike {
 		maxConcurrent: MAX_CONCURRENT,
 		material: MATERIAL,
 	};
-	/** When this conversation was opened, for `summarize()`'s listing. */
-	private readonly startedAt = Date.now();
+	/**
+	 * When this conversation was opened, for `summarize()`'s listing. `resume()` moves this
+	 * back to the saved record's own `startedAt` — a resumed conversation did not just begin,
+	 * and a list sorted "most recent first" should not treat it as though it had.
+	 */
+	private startedAt = Date.now();
 	/** This conversation's own directory. Its working directory, and where its files land. */
 	private readonly workspace: string;
 	/** Where its agents' commands run, if anywhere. Held so the panel can name it. */
@@ -332,8 +363,15 @@ class Conversation implements ConversationLike {
 	 * operator this server defaults to keeps the flat directory layout it always had. Passing
 	 * `LOCAL_NAMESPACE` here instead would put every default conversation one directory deeper
 	 * than before, which is exactly the regression this distinction exists to avoid.
+	 *
+	 * `resuming` is true only for a conversation about to have `resume()` called on it — see
+	 * that method. It changes nothing about how the runtime is built (a resumed line and a
+	 * fresh one are constructed identically; see `Runtime.reopenLine`'s own comment), and only
+	 * two things here: the compute provider is told its previous machine, if any, is already
+	 * gone (see `ModalComputeOptions.resumed`), and `settings.model` starts from nothing yet,
+	 * since `resume()` is what actually knows what model the saved record used.
 	 */
-	constructor(namespace: string | null, key: string) {
+	constructor(namespace: string | null, key: string, resuming = false) {
 		runCounter += 1;
 		// The key comes off a query string, so it reaches this line as text a browser chose. It
 		// is about to become a directory name: anything but letters, digits, dash and
@@ -346,7 +384,7 @@ class Conversation implements ConversationLike {
 		mkdirSync(this.workspace, { recursive: true });
 		// Named after the conversation, so a machine left running is findable in Modal's own
 		// dashboard under the same name this conversation has here.
-		this.compute = COMPUTE === "modal" ? modalCompute({ label: safe }) : undefined;
+		this.compute = COMPUTE === "modal" ? modalCompute({ label: safe, resumed: resuming }) : undefined;
 		this.runtime = new Runtime({
 			runId: `run-${runCounter}`,
 			registry: new AgentRegistry(AGENTS),
@@ -358,6 +396,10 @@ class Conversation implements ConversationLike {
 			compaction: KEEP_RECENT === undefined ? undefined : { keepRecentTokens: KEEP_RECENT },
 			extensions: EXTENSIONS,
 			compute: this.compute,
+			// Beside this conversation's durable record, never inside `this.workspace`: see
+			// `RuntimeOptions.sessionsDir` and `conversationSessionsDir`'s own doc comment for
+			// why the two can never be the same directory.
+			sessionsDir: conversationSessionsDir(namespace, safe),
 		});
 		this.runtime.place = this.describePlace();
 	}
@@ -396,10 +438,95 @@ class Conversation implements ConversationLike {
 
 	async start(): Promise<void> {
 		const root = await this.runtime.openRoot(this.runtime.registry.get("lead"), "");
-		this.leadLineId = root.id;
+		this.wireUp(root.id);
+	}
+
+	/**
+	 * Rebuild this conversation from a saved record instead of opening a fresh root: every
+	 * line the record named, reopened from the pi session it wrote before this process
+	 * existed, wired to the trace node it was pointed at when it was saved — see
+	 * `Runtime.reopenLine`. `record.trace` is then reconciled against what actually came
+	 * back (`reconcileResumedTrace`, in the kernel's `persist.ts`) rather than restored as
+	 * written: a line that reopened stays a live point with its busy flag honestly cleared,
+	 * and a line that could not says so on the point itself instead of just going quiet.
+	 *
+	 * Returns `false` when the line the person was actually talking to did not come back.
+	 * "Actually talking to" is found by `tracesToRoot`: of every line that did reopen, the
+	 * one whose window traces back to the conversation's own root rather than to a
+	 * `subagent` call or a branch someone clicked. A record with lines is not a guarantee
+	 * that line survives — its session file can be exactly as missing as any other's — and
+	 * a resume that came back with only a subagent's line reopened has nothing a socket
+	 * could type into as *this* conversation. On that outcome, whatever did reopen is closed
+	 * again before returning: a live pi session, and the model connection behind it, must
+	 * not be left running unseen once the caller falls back to reading history instead — see
+	 * the connection handler in this same file.
+	 */
+	async resume(record: ConversationRecordV2): Promise<boolean> {
+		this.startedAt = record.startedAt;
+		const resolved = resolveModel(record.model);
+		if (resolved) {
+			this.settings.model = record.model;
+			this.runtime.setModel(resolved);
+		}
+
+		const outcomes = new Map<string, string | null>();
+		const opened: Line[] = [];
+		for (const lineRecord of record.lines) {
+			try {
+				opened.push(await this.runtime.reopenLine(lineRecord));
+				outcomes.set(lineRecord.nodeId, null);
+			} catch (cause) {
+				outcomes.set(
+					lineRecord.nodeId,
+					`This line could not be reopened: ${cause instanceof Error ? cause.message : String(cause)}.`,
+				);
+			}
+		}
+
+		this.runtime.trace.restore(reconcileResumedTrace(record.trace, record.savedAt, outcomes));
+		this.runtime.ideas.restore(record.ideas);
+		for (const [nodeId, said] of Object.entries(record.said)) this.said.set(nodeId, said);
+
+		const lead = opened.find((line) => this.tracesToRoot(line.currentNodeId));
+		if (!lead) {
+			this.runtime.closeAll("aborted");
+			return false;
+		}
+
+		this.wireUp(lead.id);
+		return true;
+	}
+
+	/**
+	 * Whether `nodeId`'s own line began at this conversation's root, rather than at a
+	 * `subagent` call or a branch a person clicked open. Walks backward past every
+	 * `compact`/`handoff` origin — the same window continuing under a new node id after
+	 * compaction or a handoff, never a different line — and reads the first origin that is
+	 * neither: `root` means this line *is* the conversation continuing; `delegate` or
+	 * `branch` means it is work the conversation sent out, not the conversation itself.
+	 */
+	private tracesToRoot(nodeId: string): boolean {
+		let node = this.runtime.trace.node(nodeId);
+		while (node.origin.kind === "compact" || node.origin.kind === "handoff") {
+			if (!node.parentId) break;
+			node = this.runtime.trace.node(node.parentId);
+		}
+		return node.origin.kind === "root";
+	}
+
+	/**
+	 * Wire a lead line into the pieces that turn a `Runtime` into a conversation a socket
+	 * can attach to: the autopilot loop, and the subscriptions that both push events to
+	 * whichever socket is attached and, independently, keep the durable record from
+	 * drifting behind. Shared by `start()`, which is handed a line it just opened, and
+	 * `resume()`, which is handed one it just reopened — both need exactly this and nothing
+	 * else once they have a lead line id in hand.
+	 */
+	private wireUp(leadLineId: string): void {
+		this.leadLineId = leadLineId;
 		this.autopilot = new Autopilot({
 			host: this.runtime,
-			lineId: root.id,
+			lineId: leadLineId,
 			budget: this.settings.autoBudget,
 			onTurn: () => this.send({ type: "auto", state: this.autoState() }),
 			onStop: (stop) => {
@@ -497,12 +624,16 @@ class Conversation implements ConversationLike {
 		this.sockets.delete(socket);
 	}
 
+	rootNodeId(): string {
+		return this.leadNodeId;
+	}
+
 	/**
 	 * This conversation, described for a list rather than for the tab actually inside it.
 	 *
 	 * `key` is deliberately the raw, un-namespaced key: it is what a client puts back into
-	 * `lumen.session` and its own `?s=`, and a client only ever holds its own namespace, never
-	 * another's, so there is nothing to strip on the way back out.
+	 * its own `/c/<key>` URL and its `?s=`, and a client only ever holds its own namespace,
+	 * never another's, so there is nothing to strip on the way back out.
 	 */
 	summarize(rawKey: string): ConversationSummary {
 		const { nodes } = this.runtime.trace.snapshot();
@@ -577,6 +708,7 @@ class Conversation implements ConversationLike {
 				trace: this.runtime.trace.snapshot(),
 				ideas: this.runtime.ideas.snapshot(),
 				said: Object.fromEntries(this.said),
+				lines: this.runtime.lines(),
 			});
 		} catch (error) {
 			// The same rule `Trace.emit` already states for a listener that throws: a failed
@@ -694,7 +826,7 @@ class Conversation implements ConversationLike {
 	}
 
 	async handle(
-		frame: Exclude<ClientFrame, { type: "close" } | { type: "conversations.list" }>,
+		frame: Exclude<ClientFrame, { type: "close" } | { type: "conversations.list" } | { type: "start" }>,
 		socket: WebSocket,
 	): Promise<void> {
 		if (frame.type === "settings") {
@@ -988,13 +1120,18 @@ function summarizeRecord(rawKey: string, record: ConversationRecord, attached: b
 }
 
 /**
- * A conversation whose process ended, read back from its saved record.
+ * A conversation whose process ended, read back from its saved record, for the cases
+ * `Conversation.resume` cannot honestly turn back into a live run: a record from before
+ * `record.lines` existed, one saved by a caller with no `sessionsDir` at all (`lines: []`,
+ * same as a version-1 record), or one where the specific line the person was talking to
+ * named a session file that could not be reopened — see `resume`'s own comment on why that
+ * last case falls all the way back to this rather than resuming a conversation with no line
+ * to stand on. The connection handler below is what decides which of the two a saved key
+ * gets; this class does not know or care why it was the one chosen.
  *
- * Not a `Conversation`, and deliberately thin: there is no `Runtime` here, because a
- * `Runtime` is a live pi session and every session behind it died with the process that held
- * it (`SessionManager.inMemory()` — see the comment above it in `runtime.ts`). This class owns
- * nothing that can be talked to. It can show what was saved, and it can still read the files a
- * saved point produced — the conversation's own directory outlives the process same as its
+ * Not a `Conversation`, and deliberately thin: there is no `Runtime` here. This class owns
+ * nothing that can be talked to. It can show what was saved, and it can still read the files
+ * a saved point produced — the conversation's own directory outlives the process same as its
  * record does — but `handle` refuses everything that would act on a live agent, because there
  * is not one.
  *
@@ -1051,12 +1188,17 @@ class HistoricalConversation implements ConversationLike {
 		this.sockets.delete(socket);
 	}
 
+	/** Nothing here is live, so there is no point a `start` frame could be addressed to. */
+	rootNodeId(): null {
+		return null;
+	}
+
 	summarize(rawKey: string): ConversationSummary {
 		return summarizeRecord(rawKey, this.record, this.sockets.size > 0);
 	}
 
 	handle(
-		frame: Exclude<ClientFrame, { type: "close" } | { type: "conversations.list" }>,
+		frame: Exclude<ClientFrame, { type: "close" } | { type: "conversations.list" } | { type: "start" }>,
 		socket: WebSocket,
 	): void {
 		// Reading the conversation's own directory still works exactly as it does for a live
@@ -1196,15 +1338,19 @@ const conversations = new Map<string, ConversationLike>();
  * key while the first is still starting now awaits the same promise instead of starting a
  * second one.
  *
- * Only a live `Conversation` goes through this. Building a `HistoricalConversation` is a
- * synchronous read of a JSON file with no side effect worth racing over, so it needs none of
- * this machinery — see the connection handler below.
+ * Building a plain, read-only `HistoricalConversation` is a synchronous read of a JSON file
+ * with no side effect worth racing over, so it never goes through this. Resuming a
+ * `Conversation` from a saved record does: it reopens a real pi session per line, which is
+ * exactly the kind of side effect two racing connections must not both cause — so it is
+ * reserved here the same way a fresh `Conversation` always has been, and may still finish by
+ * handing back a `HistoricalConversation` after all, if the line the person was actually
+ * talking to could not be reopened. See the connection handler below.
  */
-const starting = new Map<string, Promise<Conversation>>();
+const starting = new Map<string, Promise<ConversationLike>>();
 
 /**
  * Every conversation this server holds that `username` may see, as the raw key a client would
- * put back into `lumen.session` paired with the `ConversationLike` it names.
+ * put back into its own `/c/<key>` URL paired with the `ConversationLike` it names.
  *
  * Filtered by namespace prefix rather than by asking each conversation who it belongs to: the
  * map key already encodes that (see `namespacedKey`), and reading it back out here keeps the
@@ -1246,38 +1392,59 @@ sockets.on("connection", async (socket, request) => {
 		// through building — that connection is the one that should attach.
 		if (!build) {
 			const safeKey = sanitizeKey(rawKey);
-			// A key with nothing to look up (see `sanitizeKey`) skips straight to starting
-			// fresh, the same as a key that sanitises fine but was simply never saved.
+			// A key with nothing to look up (see `sanitizeKey`) skips straight to treating
+			// this as a genuinely empty key, the same as a key that sanitises fine but was
+			// simply never saved.
 			const saved = safeKey ? readConversationRecord(namespace, safeKey) : null;
-			if (saved) {
+			if (saved && saved.version === 2 && saved.lines.length > 0) {
+				// Worth trying to resume into something a person can actually type into —
+				// see `Conversation.resume`. `record` rather than reusing `saved` from here
+				// on: the closure below runs after this block, by which point TypeScript can
+				// no longer see the narrowing `saved.version === 2` proved just above.
+				const record = saved;
+				const resuming = new Conversation(multiUser ? username : null, rawKey, true);
+				build = resuming
+					.resume(record)
+					// A record with lines does not guarantee the one line that mattered came
+					// back — `resume` says so honestly rather than this pretending it did.
+					.then((ok): ConversationLike => (ok ? resuming : new HistoricalConversation(namespace, safeKey, record)))
+					.then((result) => {
+						conversations.set(key, result);
+						return result;
+					})
+					.finally(() => starting.delete(key));
+				starting.set(key, build);
+			} else if (saved) {
 				const restored = new HistoricalConversation(namespace, safeKey, saved);
 				conversations.set(key, restored);
 				conversation = restored;
 			}
+			// Neither live, starting, nor saved: nobody has ever said anything under this
+			// key. `conversation` and `build` are both left unset on purpose — see the doc
+			// comment above `Conversation` and the `start` handling below. A socket that
+			// connects to an empty key is a person looking at an empty page, and a person
+			// looking at an empty page has created nothing yet: no `Conversation`, no
+			// directory, no saved record. That is the fix for the root problem this whole
+			// feature exists for — a page load used to build a `Conversation`, on disk,
+			// whether or not anyone ever said a word to it.
 		}
-		if (!conversation) {
-			if (!build) {
-				const created = new Conversation(multiUser ? username : null, rawKey);
-				build = created
-					.start()
-					.then(() => {
-						conversations.set(key, created);
-						return created;
-					})
-					.finally(() => starting.delete(key));
-				starting.set(key, build);
-			}
+		if (!conversation && build) {
 			try {
 				conversation = await build;
 			} catch (cause) {
-				socket.send(JSON.stringify({ type: "error", message: String(cause) }));
+				socket.send(JSON.stringify({ type: "error", message: String(cause) } satisfies ServerFrame));
 				socket.close();
 				return;
 			}
 		}
 	}
-	const otherConversations = conversationsFor(multiUser, username).filter(({ rawKey: k }) => k !== rawKey).length;
-	conversation.attach(socket, otherConversations);
+	if (conversation) {
+		const otherConversations = conversationsFor(multiUser, username).filter(({ rawKey: k }) => k !== rawKey).length;
+		conversation.attach(socket, otherConversations);
+	}
+	// Else: attach nothing. There is nothing yet for this socket to be a view onto — see the
+	// comment above. It sits connected and idle until either `start` creates something to
+	// attach to, or the tab navigates away and this connection closes with nothing to detach.
 
 	socket.on("message", async (raw) => {
 		let frame: ClientFrame;
@@ -1289,14 +1456,21 @@ sockets.on("connection", async (socket, request) => {
 		// Ending a conversation is the map's business rather than the conversation's: it is the
 		// only thing here that holds the key. Everything else the conversation answers itself.
 		if (frame.type === "close") {
-			await conversation.close();
-			conversations.delete(key);
+			if (conversation) {
+				await conversation.close();
+				conversations.delete(key);
+			}
+			// An empty key has nothing to close — there was never anything to end, only a
+			// tab to send back to the list.
 			socket.close();
 			return;
 		}
 
 		// Same reason: naming every conversation a person can see means walking the map this
-		// one socket cannot reach from inside `Conversation`, which knows only itself.
+		// one socket cannot reach from inside `Conversation`, which knows only itself. Answered
+		// the same way whether or not this socket's own key has anything behind it yet — the
+		// landing page asks this over a socket that is never going to become a conversation at
+		// all, and it still needs the list.
 		if (frame.type === "conversations.list") {
 			// Whatever this process still holds — live, or a saved record already read back
 			// because some tab opened it earlier this process's life. `summarize` on either
@@ -1322,6 +1496,71 @@ sockets.on("connection", async (socket, request) => {
 			return;
 		}
 
+		if (!conversation) {
+			if (frame.type !== "start") {
+				// Everything else presupposes a conversation already exists to hold a node,
+				// a switch, or a settings object. There is nothing here yet to say, stop, or
+				// change — see the comment above this connection's attach step.
+				socket.send(JSON.stringify({
+					type: "notice",
+					message: "Nothing has been said in this conversation yet.",
+				} satisfies ServerFrame));
+				return;
+			}
+			// The moment this key becomes real: open the root, and only now is there a
+			// directory, a runtime, and — once the debounced save fires — a record on disk.
+			// Guarded by `starting` the same way a resumed conversation always has been: two
+			// sockets racing to be first on the same brand-new key must not both open a root.
+			let build = starting.get(key) as Promise<Conversation> | undefined;
+			if (!build) {
+				const created = new Conversation(multiUser ? username : null, rawKey);
+				build = created
+					.start()
+					.then(() => created)
+					.finally(() => starting.delete(key));
+				starting.set(key, build);
+			}
+			let created: Conversation;
+			try {
+				created = await build;
+			} catch (cause) {
+				socket.send(JSON.stringify({ type: "error", message: String(cause) } satisfies ServerFrame));
+				return;
+			}
+			conversations.set(key, created);
+			conversation = created;
+			const otherConversations = conversationsFor(multiUser, username).filter(({ rawKey: k }) => k !== rawKey).length;
+			conversation.attach(socket, otherConversations);
+			// Reuses the ordinary `say`/`continue` path rather than a second copy of what it
+			// does — remembering the sentence, quoting citations, delivering it to the line —
+			// now that a root, and therefore a node id, actually exists to address it to.
+			await conversation.handle(
+				{ type: "say", nodeId: created.rootNodeId(), text: frame.text, target: { kind: "continue" } },
+				socket,
+			);
+			return;
+		}
+
+		if (frame.type === "start") {
+			// A conversation already exists for this key. Reached only by a race — two
+			// sockets each sending the very first `start` for the same brand-new key at
+			// once — never by the ordinary flow, since a client stops sending `start` the
+			// moment its first `hello` comes back. Whatever the person typed still deserves
+			// to be sent rather than silently dropped, so it goes in as a normal message.
+			const nodeId = conversation.rootNodeId();
+			if (nodeId === null) {
+				socket.send(JSON.stringify({
+					type: "notice",
+					message:
+						"This is a saved record of a conversation whose process ended — nothing " +
+						"can be sent to it.",
+				} satisfies ServerFrame));
+				return;
+			}
+			await conversation.handle({ type: "say", nodeId, text: frame.text, target: { kind: "continue" } }, socket);
+			return;
+		}
+
 		try {
 			await conversation.handle(frame, socket);
 		} catch (cause) {
@@ -1333,8 +1572,10 @@ sockets.on("connection", async (socket, request) => {
 	});
 
 	// Detach, do not close. The runtime keeps working and the graph is still there when
-	// the person comes back; a refresh must not be the same thing as ending the run.
-	socket.on("close", () => conversation.detach(socket));
+	// the person comes back; a refresh must not be the same thing as ending the run. An
+	// empty key that was never `start`-ed has nothing to detach — `conversation` is still
+	// unset, and this is a no-op.
+	socket.on("close", () => conversation?.detach(socket));
 });
 
 /**

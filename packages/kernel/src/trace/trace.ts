@@ -24,6 +24,13 @@ function nextId(prefix: string): string {
 	return `${prefix}-${counter.toString(36)}`;
 }
 
+/** If `id` is one `nextId` could have minted, make sure `nextId` never mints it again. */
+function bumpCounterPast(id: string, prefix: string): void {
+	if (!id.startsWith(`${prefix}-`)) return;
+	const value = Number.parseInt(id.slice(prefix.length + 1), 36);
+	if (Number.isFinite(value) && value > counter) counter = value;
+}
+
 export interface OpenNodeOptions {
 	parentId: string | null;
 	agent: string;
@@ -293,6 +300,34 @@ export class Trace {
 				[...this.childIds.entries()].map(([id, ids]) => [id, [...ids]]),
 			),
 		};
+	}
+
+	/**
+	 * Seed this trace from a snapshot read off disk, keeping every id exactly as it was.
+	 *
+	 * Call this once, on a `Trace` fresh out of its constructor and before anything has
+	 * opened a node on it — a resumed conversation's whole reason for restoring rather than
+	 * replaying is that `nodeId`s in a saved `LineRecord`, in `said`, and in an idea's own
+	 * `nodeId` all have to keep pointing at the same point they always named. `openNode`
+	 * mints a fresh id per call and would renumber every one of them.
+	 *
+	 * Also moves this module's own id counter (see `nextId` above) past the highest suffix
+	 * the snapshot used, so the very next `openNode` this trace calls — the resumed
+	 * conversation's next turn — cannot mint an id a restored node already holds. Silent
+	 * collision here would be two different windows sharing one id, which is not a state
+	 * this file's readers, or `packages/web`'s, have any way to draw.
+	 */
+	restore(snapshot: TraceSnapshot): void {
+		this.root = snapshot.rootId;
+		this.nodes.clear();
+		this.childIds.clear();
+		for (const [id, node] of Object.entries(snapshot.nodes)) {
+			this.nodes.set(id, structuredClone(node));
+			bumpCounterPast(id, "n");
+		}
+		for (const [id, ids] of Object.entries(snapshot.children)) {
+			this.childIds.set(id, [...ids]);
+		}
 	}
 
 	emit(event: TraceEvent): void {

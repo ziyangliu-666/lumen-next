@@ -16,22 +16,37 @@
  * the thing worth calling ugly, not the choice this file used to offer.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Target } from "@lumen/server/protocol";
 import { describeTarget, frontierOf, isLive, quotable, type State } from "./state.ts";
+import { applySuggestion, suggestionsFor, triggerAt, type Suggestion } from "./complete.ts";
 
 export function Composer({
 	state,
 	onSend,
 	onAbort,
 	onSelect,
+	onCommand,
 }: {
 	state: State;
 	onSend: (text: string, target: Target) => void;
 	onAbort: () => void;
 	onSelect: (nodeId: string) => void;
+	/** Runs a `/` command. The composer knows what was typed; only `main.tsx` can act on it. */
+	onCommand: (command: NonNullable<Suggestion["command"]>) => void;
 }) {
 	const [text, setText] = useState("");
+	const box = useRef<HTMLTextAreaElement | null>(null);
+	/**
+	 * Where the caret was at the last keystroke.
+	 *
+	 * Read from the element rather than tracked in state on every change: React does not
+	 * re-render between a keydown and the browser moving the caret, so state would always be
+	 * one keystroke behind exactly when the menu needs to be right.
+	 */
+	const [caret, setCaret] = useState(0);
+	/** Which row the arrow keys are on. Reset whenever the list itself changes. */
+	const [active, setActive] = useState(0);
 	/**
 	 * Whether the stop button has been clicked and is waiting on the server to confirm it.
 	 *
@@ -55,6 +70,7 @@ export function Composer({
 		setStopping(false);
 	}, [node?.id, busy]);
 	const cites = quotable(state);
+
 	// Where this line actually is now, if you are standing on a window it has left behind.
 	const ahead = node && !live ? frontierOf(state, node.id) : null;
 	// Teach a reference that exists. Ids are a base-36 counter, so the one in the old
@@ -79,6 +95,32 @@ export function Composer({
 
 	const blocked = !live || !state.connected;
 
+	// Recomputed every render rather than kept in state: it is a pure function of the text
+	// and the caret, and a second copy in state is a second thing that can be stale at the
+	// exact moment the menu is on screen.
+	const trigger = blocked ? null : triggerAt(text, caret);
+	const suggestions = trigger ? suggestionsFor(trigger, Object.values(state.nodes)) : [];
+	const open = suggestions.length > 0;
+	const chosen = suggestions[Math.min(active, suggestions.length - 1)];
+
+	function accept(suggestion: Suggestion) {
+		if (suggestion.command) {
+			setText("");
+			onCommand(suggestion.command);
+			return;
+		}
+		if (!trigger) return;
+		const next = applySuggestion(text, trigger, suggestion);
+		setText(next.text);
+		setActive(0);
+		// After React has written the new value, or the browser puts the caret at the end of
+		// it — which for a reference inserted mid-sentence is the wrong end.
+		requestAnimationFrame(() => {
+			box.current?.setSelectionRange(next.caret, next.caret);
+			setCaret(next.caret);
+		});
+	}
+
 	function send() {
 		const trimmed = text.trim();
 		if (!trimmed || blocked) return;
@@ -88,37 +130,27 @@ export function Composer({
 
 	return (
 		<div className="composer">
-			{node && !live && (
+			{/* No sentence explaining why this window cannot be typed into — the textarea's own
+			    placeholder already says it, in the place a person is looking when they try.
+			    What stays is the way out: the point this line actually moved on to. */}
+			{node && !live && ahead && (
 				<div className="row">
-					<span className="warn">
-						{state.fixed?.restored
-							? "This conversation is history: the process that ran it has ended, so none of its windows can be typed into."
-							: "You are reading a window that has ended. It cannot be typed into."}
-					</span>
-					{ahead && (
-						<button type="button" onClick={() => onSelect(ahead)}>
-							go to the live point ({state.nodes[ahead]?.agent})
-						</button>
-					)}
+					<button type="button" onClick={() => onSelect(ahead)}>
+						go to the live point ({state.nodes[ahead]?.agent})
+					</button>
 				</div>
 			)}
 
-			<div className="row">
-				{/* One send button, always. There used to be a real question here while a
-				    point was busy — wait, or cut in — and a select earned its place for it.
-				    That choice is gone: it always cuts in now, so idle and busy both get a
-				    plain label; only the words differ. */}
-				{busy ? (
+			{/* Only while it is working. Idle needs no label: the box you are typing into is
+			    the box, and naming its recipient above every keystroke captions something
+			    already on screen. Busy is the one moment there is news here, and the stop
+			    button belongs beside that news rather than on its own line. */}
+			{busy && (
+				<div className="row">
 					<span className="hint">
 						{node?.agent ?? "it"} ({node?.id ?? "…"}) is working
 					</span>
-				) : (
-					<span className="target">
-						talk to {node?.agent ?? "…"} {node && <span className="meta id">{node.id}</span>}
-					</span>
-				)}
-				<span className="hint targetHint">{describeTarget(target)}</span>
-				{busy && (
+					<span className="hint targetHint">{describeTarget(target)}</span>
 					<button
 						type="button"
 						className="stop"
@@ -130,50 +162,102 @@ export function Composer({
 					>
 						{stopping ? "stopping…" : "stop"}
 					</button>
-				)}
-			</div>
+				</div>
+			)}
+
+			{/* Above the box, not below it: the box sits at the bottom of the window, and a
+			    menu drawn under it would open off-screen. */}
+			{open && (
+				<div className="complete">
+					{suggestions.map((suggestion, index) => (
+						<button
+							type="button"
+							key={suggestion.id}
+							className={`completeRow${suggestion === chosen ? " active" : ""}`}
+							// `onMouseDown`, not `onClick`: a click moves focus out of the textarea
+							// first, which closes the menu before the click ever lands.
+							onMouseDown={(event) => {
+								event.preventDefault();
+								accept(suggestion);
+							}}
+							onMouseEnter={() => setActive(index)}
+						>
+							<span className="completeLabel">{suggestion.label}</span>
+							<span className="completeDetail">{suggestion.detail}</span>
+						</button>
+					))}
+				</div>
+			)}
 
 			<textarea
+				ref={box}
 				value={text}
 				placeholder={
 					!state.connected
 						? "not connected"
-						: state.fixed?.restored
-							? "this conversation ended when its process stopped — nothing can be sent to it"
-							: !live
-								? `this window is ${node?.state === "aborted" ? "stopped" : node?.state === "failed" ? "failed" : "closed"} — nothing can be sent to it`
-								: busy
-									? `${node?.agent} is working — this reaches it before its next thought`
-									: exampleId
-										? `say something. @${exampleId} pastes in what that point currently says`
-										: "say something"
+						: !state.rootId
+							? "starting this conversation…"
+							: state.fixed?.restored
+								? "this conversation ended when its process stopped — nothing can be sent to it"
+								: !live
+									? `this window is ${node?.state === "aborted" ? "stopped" : node?.state === "failed" ? "failed" : "closed"} — nothing can be sent to it`
+									: busy
+										? `${node?.agent} is working — this reaches it before its next thought`
+										: exampleId
+											? `say something — enter sends, shift+enter for a new line. @${exampleId} quotes that point`
+											: "say something — enter sends, shift+enter for a new line"
 				}
 				disabled={blocked}
-				onChange={(event) => setText(event.target.value)}
+				onChange={(event) => {
+					setText(event.target.value);
+					setCaret(event.target.selectionStart ?? event.target.value.length);
+					setActive(0);
+				}}
+				// Every way the caret can move without the text changing — arrows, clicks,
+				// Home/End. Without this the menu keeps offering completions for a token the
+				// caret has already left.
+				onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? 0)}
+				onBlur={() => setCaret(-1)}
 				onKeyDown={(event) => {
-					if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+					// While the menu is open it owns the keys it needs, and only those. Enter
+					// is the one that matters: it means "take this row" here and "send" the
+					// rest of the time, and getting that backwards either sends a half-typed
+					// `@n` or makes the menu impossible to accept from the keyboard.
+					if (open && !event.nativeEvent.isComposing) {
+						if (event.key === "ArrowDown") {
+							event.preventDefault();
+							setActive((index) => (index + 1) % suggestions.length);
+							return;
+						}
+						if (event.key === "ArrowUp") {
+							event.preventDefault();
+							setActive((index) => (index - 1 + suggestions.length) % suggestions.length);
+							return;
+						}
+						if (event.key === "Enter" || event.key === "Tab") {
+							event.preventDefault();
+							if (chosen) accept(chosen);
+							return;
+						}
+						if (event.key === "Escape") {
+							event.preventDefault();
+							// Closes the menu without touching the text: the token stays, so a
+							// person who meant to type a literal `@` can carry on typing it.
+							setCaret(-1);
+							return;
+						}
+					}
+					// Enter sends; Shift+Enter (and the IME's own Enter, which arrives with
+					// `isComposing` set while a person is still picking characters) does not.
+					// Guarding on `isComposing` matters here specifically: without it, typing
+					// Chinese or Japanese fires a send on the Enter that only meant "accept
+					// this candidate", mid-word.
+					if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
 						event.preventDefault();
 						send();
 					}
 				}}
 			/>
-
-			{cites.length > 0 && (
-				<div className="row cites">
-					<span className="hint">quote:</span>
-					{cites.slice(-6).map((cite) => (
-						<button
-							type="button"
-							key={cite.id}
-							className="cite"
-							title={cite.summary?.slice(0, 200)}
-							onClick={() => setText((current) => `${current}${current ? " " : ""}@${cite.id} `)}
-						>
-							@{cite.id} {cite.agent}
-						</button>
-					))}
-				</div>
-			)}
 
 			{unknown.length > 0 && (
 				<div className="row">
@@ -182,13 +266,6 @@ export function Composer({
 					</span>
 				</div>
 			)}
-
-			<div className="row">
-				<button type="button" onClick={send} disabled={blocked || !text.trim()}>
-					send
-				</button>
-				<span className="hint">⌘↵</span>
-			</div>
 		</div>
 	);
 }

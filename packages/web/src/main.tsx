@@ -2,7 +2,7 @@ import { StrictMode, useCallback, useEffect, useReducer, useRef, useState } from
 import { createRoot } from "react-dom/client";
 import type { ClientFrame, ServerFrame, Target } from "@lumen/server/protocol";
 import { Composer } from "./Composer.tsx";
-import { Canvas } from "./Canvas.tsx";
+import { CallTree } from "./CallTree.tsx";
 import { Files } from "./Files.tsx";
 import { IdeaGraph } from "./IdeaGraph.tsx";
 import { Detail } from "./Detail.tsx";
@@ -23,6 +23,169 @@ import "./app.css";
  */
 const FINDINGS_MIN = 120;
 const CALL_GRAPH_MIN = 180;
+
+/**
+ * Where a conversation lives, read from the one place that has ever been true: the address
+ * bar. `/` is the list of every conversation this operator can reach — see `Landing` below.
+ * `/c/<key>` is one conversation, and `<key>` is exactly the string that used to live only in
+ * `lumen.session` and a `?s=` nobody read back — see this file's own history for why that was
+ * the bug. Anything else (a stray path, a link copied wrong) falls back to the list rather
+ * than erroring: `serveStatic` on the server already answers every unrecognised path with
+ * `index.html` so a hard reload survives, and this is the same forgiveness on the client side
+ * of that same fallback.
+ */
+type Route = { kind: "list" } | { kind: "conversation"; key: string };
+
+function parseRoute(pathname: string): Route {
+	const match = pathname.match(/^\/c\/([^/]+)\/?$/);
+	return match ? { kind: "conversation", key: decodeURIComponent(match[1]) } : { kind: "list" };
+}
+
+/**
+ * A fresh identity for a conversation that does not exist yet, chosen in the browser. The
+ * server never hands one out — see `packages/server/src/index.ts`'s connection handler and
+ * its `start` frame — so whoever begins a conversation is whoever names it, the same way a
+ * `lumen.session` id used to be minted the first time a tab needed one.
+ */
+function generateKey(): string {
+	return `s-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+}
+
+/**
+ * The whole app is routing plus exactly one of two pages: `Landing` at `/`, or one
+ * `Conversation` at `/c/<key>`. No router dependency — this package has almost none, and two
+ * paths do not need one — just `history.pushState` and a `popstate` listener, both here.
+ *
+ * `pendingFirstMessage` is the one piece of state routing alone cannot carry: `Landing`'s own
+ * composer types a sentence before any key exists to send it to, mints the key, and pushes
+ * straight to `/c/<key>` — the sentence has to ride along outside the URL for that one hop,
+ * from `Landing` to the `Conversation` that is about to open a socket for the same key. Every
+ * other way of reaching a conversation (rejoining one, following a link, pressing back) passes
+ * none, which is what stops a stale draft from ever being replayed against a conversation it
+ * was never meant for.
+ */
+function App() {
+	const [route, setRoute] = useState<Route>(() => parseRoute(location.pathname));
+	const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
+
+	// Back and forward move between whatever routes are already in history — including two
+	// different conversations — and this is the one thing that has to notice: `history` itself
+	// already changed `location.pathname`, so there is nothing to push, only to read.
+	useEffect(() => {
+		const onPopState = () => {
+			setRoute(parseRoute(location.pathname));
+			setPendingFirstMessage(null);
+		};
+		window.addEventListener("popstate", onPopState);
+		return () => window.removeEventListener("popstate", onPopState);
+	}, []);
+
+	/** The one place a URL changes on purpose. See this function's own doc comment for why
+	 * `firstMessage` is the exception rather than the rule. */
+	const navigate = useCallback((path: string, firstMessage?: string) => {
+		history.pushState(null, "", path);
+		setRoute(parseRoute(path));
+		setPendingFirstMessage(firstMessage ?? null);
+	}, []);
+
+	if (route.kind === "list") {
+		return <Landing onNavigate={navigate} />;
+	}
+
+	// `key={route.key}`: React unmounts and remounts `Conversation` whenever the key itself
+	// changes, instead of patching the same instance onto a different conversation. That is
+	// exactly what switching conversations needs — a fresh socket, a fresh reducer, nothing
+	// left over from whichever conversation was open a moment ago — and it is what makes back
+	// and forward between two conversations work with no extra code at all: `popstate` above
+	// already updates `route`, and the key change does the rest.
+	return (
+		<Conversation
+			key={route.key}
+			routeKey={route.key}
+			initialMessage={pendingFirstMessage}
+			onNavigate={navigate}
+		/>
+	);
+}
+
+/**
+ * `/`: every conversation this operator can reach, and a place to start one. This used to be
+ * a modal reached from inside a conversation — see `Conversations.tsx`, whose `page` prop is
+ * what lets the same component be both — and it is the landing page now because there was
+ * never anywhere else to land: opening the app used to drop you straight into a conversation
+ * a page load had just minted on the server, whether or not you ever said a word to it.
+ *
+ * Its own socket, separate from any `Conversation`'s: this one carries no `?s=` at all, so the
+ * server's connection handler falls back to an anonymous key nothing is ever created under
+ * (see that handler's own comment) — this page only ever sends `conversations.list`, never
+ * `start`, so lazy creation holds here exactly as it does everywhere else.
+ */
+function Landing({ onNavigate }: { onNavigate: (path: string, firstMessage?: string) => void }) {
+	const [state, dispatch] = useReducer(reduce, initialState);
+	const socket = useRef<WebSocket | null>(null);
+	const [text, setText] = useState("");
+
+	useEffect(() => {
+		const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+		const ws = new WebSocket(url);
+		socket.current = ws;
+		ws.onopen = () => {
+			dispatch({ kind: "connection", connected: true });
+			ws.send(JSON.stringify({ type: "conversations.list" } satisfies ClientFrame));
+		};
+		ws.onclose = () => dispatch({ kind: "connection", connected: false });
+		ws.onmessage = (event) =>
+			dispatch({ kind: "frame", frame: JSON.parse(event.data) as ServerFrame });
+		return () => ws.close();
+	}, []);
+
+	function start() {
+		const trimmed = text.trim();
+		if (!trimmed || !state.connected) return;
+		onNavigate(`/c/${encodeURIComponent(generateKey())}`, trimmed);
+	}
+
+	return (
+		<div className="app">
+			<header>
+				<strong>lumen</strong>
+				<span className="hint">a point is one context window — click one to talk to it</span>
+				<span className={`dot ${state.connected ? "on" : "off"}`} />
+			</header>
+			<div className="landing">
+				<div className="composer landingComposer">
+					<textarea
+						value={text}
+						placeholder="say something to start a new conversation — enter sends, shift+enter for a new line"
+						onChange={(event) => setText(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+								event.preventDefault();
+								start();
+							}
+						}}
+					/>
+					<div className="row">
+						<button type="button" disabled={!text.trim() || !state.connected} onClick={start}>
+							start a new conversation
+						</button>
+					</div>
+				</div>
+				<div className="landingBody">
+					<Conversations
+						page
+						conversations={state.conversations}
+						onRequest={() =>
+							socket.current?.send(JSON.stringify({ type: "conversations.list" } satisfies ClientFrame))
+						}
+						onRejoin={(key) => onNavigate(`/c/${encodeURIComponent(key)}`)}
+						onClose={() => {}}
+					/>
+				</div>
+			</div>
+		</div>
+	);
+}
 
 /**
  * `<main>`'s four columns, measured at 1440px with the files pane open and the graphs
@@ -57,7 +220,20 @@ const CALL_GRAPH_MIN = 180;
  *
  * The files pane keeps its own collapse toggle, unchanged, as the leading column.
  */
-function App() {
+function Conversation({
+	routeKey,
+	initialMessage,
+	onNavigate,
+}: {
+	/** This conversation's identity — the `<key>` in `/c/<key>` and the socket's own `?s=`. */
+	routeKey: string;
+	/** The sentence typed on `Landing`'s own composer, for a conversation that does not exist
+	 * on the server yet — sent as `start` the instant this component's socket opens, then
+	 * never again; see this file's `App` for why every other way of reaching a conversation
+	 * passes `null` here instead. */
+	initialMessage: string | null;
+	onNavigate: (path: string, firstMessage?: string) => void;
+}) {
 	const [state, dispatch] = useReducer(reduce, initialState);
 	const [showSettings, setShowSettings] = useState(false);
 	const [showConversations, setShowConversations] = useState(false);
@@ -67,7 +243,7 @@ function App() {
 	 * How wide the graphs column (the findings graph stacked over the call graph) is.
 	 *
 	 * It was a third of the window and belonged to the reading pane; the reading pane is now
-	 * `1fr` and dominant by construction (see the layout comment above `App`), and this
+	 * `1fr` and dominant by construction (see the layout comment above `Conversation`), and this
 	 * measurement moved to the column beside it. The name and the storage key stay as they
 	 * were — this is still "the width of whichever column sits right of the handle", just a
 	 * different column's content now — so a person's saved width carries over instead of
@@ -116,6 +292,11 @@ function App() {
 	const rowDragTop = useRef<number | null>(null);
 	const graphsRef = useRef<HTMLDivElement | null>(null);
 	const socket = useRef<WebSocket | null>(null);
+	// Read once, at construction: `App`'s `key={route.key}` remounts this component fresh for
+	// every conversation, so a ref captured here already holds exactly the value this mount
+	// was handed, with no risk of a later, unrelated `navigate()` call changing it out from
+	// under an effect that has already run.
+	const initialMessageRef = useRef(initialMessage);
 
 	const nodeCount = Object.keys(state.nodes).length;
 	// Every point's figure is inclusive of what is under it, so adding the column up
@@ -124,23 +305,31 @@ function App() {
 	const empty = nodeCount <= 1 && !state.nodes[state.rootId ?? ""]?.summary;
 
 	useEffect(() => {
-		// A stable id, kept in the browser, is what makes a refresh survivable: the server
-		// hands back the same conversation instead of starting an empty one. Without it,
-		// reloading silently threw away the whole graph — including lines still running.
-		let key = localStorage.getItem("lumen.session");
-		if (!key) {
-			key = `s-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
-			localStorage.setItem("lumen.session", key);
-		}
-		const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?s=${key}`;
+		// The identity of this conversation is `routeKey` — the `<key>` in this page's own
+		// `/c/<key>` URL — not anything read from storage. A refresh survives because the URL
+		// does, the same way it always has for every other page on the web; see `App`'s own
+		// doc comment for why a *different* key is a remount rather than a value this effect
+		// has to react to.
+		const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?s=${encodeURIComponent(routeKey)}`;
 		const ws = new WebSocket(url);
 		socket.current = ws;
-		ws.onopen = () => dispatch({ kind: "connection", connected: true });
+		ws.onopen = () => {
+			dispatch({ kind: "connection", connected: true });
+			// The one frame this socket may send before it has ever heard a `hello`: the
+			// sentence typed on `Landing`, for the key `Landing` just invented. The server has
+			// created nothing for this key yet — see its connection handler's own comment on
+			// lazy creation — and this is the frame that asks it to. Every message after this
+			// one goes through `say`, once a real node id exists for it to carry.
+			if (initialMessageRef.current !== null) {
+				ws.send(JSON.stringify({ type: "start", text: initialMessageRef.current } satisfies ClientFrame));
+				initialMessageRef.current = null;
+			}
+		};
 		ws.onclose = () => dispatch({ kind: "connection", connected: false });
 		ws.onmessage = (event) =>
 			dispatch({ kind: "frame", frame: JSON.parse(event.data) as ServerFrame });
 		return () => ws.close();
-	}, []);
+	}, [routeKey]);
 
 	// On the window rather than on the handle: a pointer moving faster than React re-renders
 	// leaves the handle behind, and a drag that stops the moment the cursor outruns it reads
@@ -266,42 +455,24 @@ function App() {
 	);
 
 	/**
-	 * Close this conversation and come back to an empty page.
+	 * Close this conversation and come back to the list.
 	 *
-	 * The reload has to wait for the socket to go, not fire beside it. A frame sent into a
-	 * page that is already navigating away is a frame the server never reads, and the
+	 * Navigating away has to wait for the socket to go, not fire beside it. A frame sent into
+	 * a page that is already navigating away is a frame the server never reads, and the
 	 * conversation it was supposed to close would keep its lines open — and, if it was
 	 * running by itself, keep spending in a window nobody can reach any more.
 	 */
 	const newConversation = useCallback(() => {
 		const ws = socket.current;
-		localStorage.removeItem("lumen.session");
 		localStorage.removeItem("lumen.selected");
-		const reload = () => location.reload();
-		if (!ws || ws.readyState !== WebSocket.OPEN) return reload();
-		ws.addEventListener("close", reload, { once: true });
-		// The fallback, for a socket that dies without closing cleanly. Better a fresh page
-		// than a button that does nothing.
-		setTimeout(reload, 1000);
+		const home = () => onNavigate("/");
+		if (!ws || ws.readyState !== WebSocket.OPEN) return home();
+		ws.addEventListener("close", home, { once: true });
+		// The fallback, for a socket that dies without closing cleanly. Better the list than
+		// a button that does nothing.
+		setTimeout(home, 1000);
 		ws.send(JSON.stringify({ type: "close" } satisfies ClientFrame));
-	}, []);
-
-	/**
-	 * Leave this conversation for a different one the server already holds, without ending
-	 * either. See `Conversations.tsx` for why this exists: a tab with no memory of a running
-	 * conversation has to be able to reach it some way other than guessing its key.
-	 *
-	 * No `close` frame goes out, deliberately — that is what `newConversation` sends, and it
-	 * ends the conversation it is called on. Leaving one tab's view of a conversation is not
-	 * the same act as ending the conversation, and this reload is a plain refresh in every
-	 * way but which key it reads: the socket that closes on navigation only detaches the
-	 * conversation this tab was looking at, exactly as a reload without a target key does.
-	 */
-	const switchTo = useCallback((key: string) => {
-		localStorage.setItem("lumen.session", key);
-		localStorage.removeItem("lumen.selected");
-		location.reload();
-	}, []);
+	}, [onNavigate]);
 
 	const abort = useCallback(() => {
 		if (state.selected) send({ type: "abort", nodeId: state.selected });
@@ -329,7 +500,11 @@ function App() {
 	return (
 		<div className="app">
 			<header>
-				<strong>lumen</strong>
+				{/* The one way back to the list from inside a conversation, besides the browser's
+				    own back button — see `App`'s `navigate` and `Landing` above. */}
+				<button type="button" className="brand" onClick={() => onNavigate("/")}>
+					lumen
+				</button>
 				<span className="hint">a point is one context window — click one to talk to it</span>
 				{/* The glyphs carry the only distinction that matters while work is running,
 				    and two of them differ by a few pixels at this size. Spell them out. */}
@@ -390,7 +565,17 @@ function App() {
 				<Conversations
 					conversations={state.conversations}
 					onRequest={() => send({ type: "conversations.list" })}
-					onRejoin={switchTo}
+					onRejoin={(key) => {
+						// See `Conversations.tsx` for why this exists: a tab with no memory of a
+						// running conversation has to be able to reach it some way other than
+						// guessing its key. No `close` frame goes out — that is what
+						// `newConversation` sends, and it ends the conversation it is called on;
+						// leaving one tab's view of a conversation for another is not the same
+						// act as ending either of them.
+						localStorage.removeItem("lumen.selected");
+						onNavigate(`/c/${encodeURIComponent(key)}`);
+						setShowConversations(false);
+					}}
 					onClose={() => setShowConversations(false)}
 				/>
 			)}
@@ -401,7 +586,7 @@ function App() {
 					// removed, so the column the toggle controls still exists to be reopened
 					// without the grid itself changing shape underneath the person's cursor.
 					// Below 900px app.css takes this over with `!important` media rules — see
-					// the layout comment above `App` — so this value only governs the width
+					// the layout comment above `Conversation` — so this value only governs the width
 					// this component's own drag handle and toggle actually control.
 					gridTemplateColumns: `${filesOpen ? "220px" : "0px"} 1fr 5px ${panel}px`,
 				}}
@@ -421,11 +606,6 @@ function App() {
 					    process that ran it ended, not a run this page can continue. */}
 					{state.fixed?.restored && (
 						<div className="historyNotice">
-							<span>
-								This is a saved record of a conversation whose process ended. Its agents no
-								longer exist, so nothing here can be sent, stopped, or changed — but everything
-								it did, including the files it produced, can still be read.
-							</span>
 							<button type="button" className="link" onClick={newConversation}>
 								start a fresh conversation
 							</button>
@@ -451,17 +631,6 @@ function App() {
 						</div>
 					)}
 
-					{empty && (
-						<div className="blank">
-							Ask for something that has parts, and watch the work spread out. Each box is
-							one agent's context window: a drop is work sent out, a run to the right is
-							one conversation continuing. Turn on <em>run by itself</em> once you have
-							asked, and the lead keeps going — delegating, reading what came back,
-							deciding what is still missing — until it says it is done or the budget stops
-							it.
-						</div>
-					)}
-
 					{state.messages.length > 0 && (
 						<div className="messages">
 							{state.messages.slice(-3).map((message, index) => (
@@ -477,6 +646,15 @@ function App() {
 						onSend={say}
 						onAbort={abort}
 						onSelect={(nodeId) => dispatch({ kind: "select", nodeId })}
+						onCommand={(command) => {
+							// Each of these is otherwise a control the composer cannot reach —
+							// two of them behind a modal, one only visible while something is
+							// running. Nothing here shadows a button that is already on screen.
+							if (command === "new") newConversation();
+							if (command === "stop") abort();
+							if (command === "settings") setShowSettings(true);
+							if (command === "conversations") setShowConversations(true);
+						}}
 					/>
 				</div>
 
@@ -500,7 +678,7 @@ function App() {
 				/>
 
 				{/* The findings graph and the call graph, stacked rather than toggled — see the
-				    layout comment above `App` for why a shared column split this way, instead
+				    layout comment above `Conversation` for why a shared column split this way, instead
 				    of a tab strip, is what lets both stay visible while a run is going. */}
 				<div
 					className="graphs"
@@ -540,8 +718,11 @@ function App() {
 					/>
 					<div className="callPane">
 						<div className="paneHead">call graph</div>
+						{/* Rows, not the canvas — see `CallTree.tsx` for why a 320px column is the
+						    wrong place for a thing you pan. `Canvas.tsx` is untouched and still
+						    reads the same state, for whoever wants the shape back. */}
 						{state.rootId ? (
-							<Canvas state={state} onSelect={(nodeId) => dispatch({ kind: "select", nodeId })} />
+							<CallTree state={state} onSelect={(nodeId) => dispatch({ kind: "select", nodeId })} />
 						) : (
 							<p className="hint">waiting for the run to open…</p>
 						)}

@@ -14,12 +14,13 @@ import {
 	SCHEMA_VERSION,
 	endInterruptedNodes,
 	parseConversationRecord,
-	type ConversationRecord,
+	reconcileResumedTrace,
+	type ConversationRecordV2,
 } from "../src/persist.ts";
 import { Trace } from "../src/trace/trace.ts";
 
 /** A record with a node of every kind of step, a delegated child, and two linked ideas. */
-function buildRecord(): ConversationRecord {
+function buildRecord(): ConversationRecordV2 {
 	const trace = new Trace("run-1");
 	const root = trace.openNode({
 		parentId: null,
@@ -83,6 +84,7 @@ function buildRecord(): ConversationRecord {
 		trace: trace.snapshot(),
 		ideas: ideas.snapshot(),
 		said: { [root.id]: ["go look for it"] },
+		lines: [{ id: "l-1", agent: "root", depth: 0, nodeId: root.id, sessionFile: "/tmp/x.jsonl" }],
 	};
 }
 
@@ -146,8 +148,115 @@ describe("conversation record", () => {
 		expect(parseConversationRecord({ ...record, version: 999 })).toBeNull();
 	});
 
+	it("still reads back a version-1 record with no line records at all", () => {
+		const { lines: _dropped, ...v1 } = buildRecord();
+		const record = { ...v1, version: 1 as const };
+
+		expect(parseConversationRecord(record)).toEqual(record);
+	});
+
+	it("refuses a version-2 record whose `lines` is missing or not an array", () => {
+		const { lines: _dropped, ...withoutLines } = buildRecord();
+		expect(parseConversationRecord(withoutLines)).toBeNull();
+		expect(parseConversationRecord({ ...buildRecord(), lines: "not an array" })).toBeNull();
+	});
+
 	it("refuses a record missing a required field even under today's version", () => {
 		const { trace: _dropped, ...withoutTrace } = buildRecord();
 		expect(parseConversationRecord(withoutTrace)).toBeNull();
+	});
+});
+
+describe("reconcileResumedTrace", () => {
+	it("keeps a reachable line's window open, but clears the busy stretch nobody is finishing", () => {
+		const trace = new Trace("run-1");
+		const root = trace.openNode({
+			parentId: null,
+			agent: "root",
+			task: "go",
+			origin: { kind: "root" },
+			depth: 0,
+		});
+		trace.setBusy(root.id, true);
+		trace.openStep(root.id, { id: "t1", tool: "bash", args: {}, title: "$ sleep 999" });
+
+		const reconciled = reconcileResumedTrace(trace.snapshot(), 5_000, new Map([[root.id, null]]));
+
+		// Still a live point: this is the one difference from `endInterruptedNodes`, which
+		// has no way to know the line came back and closes every `running` node it sees.
+		expect(reconciled.nodes[root.id].state).toBe("running");
+		expect(reconciled.nodes[root.id].busy).toBe(false);
+		expect(reconciled.nodes[root.id].busySince).toBeNull();
+		expect(reconciled.nodes[root.id].steps[0].state).toBe("aborted");
+		expect(reconciled.nodes[root.id].endedAt).toBeUndefined();
+	});
+
+	it("closes an unreachable line's window to failed, carrying why on the point itself", () => {
+		const trace = new Trace("run-1");
+		const root = trace.openNode({
+			parentId: null,
+			agent: "root",
+			task: "go",
+			origin: { kind: "root" },
+			depth: 0,
+		});
+
+		const reconciled = reconcileResumedTrace(
+			trace.snapshot(),
+			5_000,
+			new Map([[root.id, "its saved session file is gone: /tmp/x.jsonl"]]),
+		);
+
+		expect(reconciled.nodes[root.id].state).toBe("failed");
+		expect(reconciled.nodes[root.id].error).toBe("its saved session file is gone: /tmp/x.jsonl");
+		expect(reconciled.nodes[root.id].busy).toBe(false);
+	});
+
+	it("closes a running node no outcome accounts for, the same way endInterruptedNodes would", () => {
+		const trace = new Trace("run-1");
+		const root = trace.openNode({
+			parentId: null,
+			agent: "root",
+			task: "go",
+			origin: { kind: "root" },
+			depth: 0,
+		});
+
+		const reconciled = reconcileResumedTrace(trace.snapshot(), 5_000, new Map());
+
+		expect(reconciled.nodes[root.id].state).toBe("aborted");
+	});
+
+	it("leaves a node that already finished untouched", () => {
+		const trace = new Trace("run-1");
+		const root = trace.openNode({
+			parentId: null,
+			agent: "root",
+			task: "go",
+			origin: { kind: "root" },
+			depth: 0,
+		});
+		trace.closeNode(root.id, "done", { summary: "ok" });
+		const before = trace.snapshot();
+
+		const reconciled = reconcileResumedTrace(before, 5_000, new Map([[root.id, null]]));
+
+		expect(reconciled).toEqual(before);
+	});
+
+	it("leaves a reachable, idle window untouched when nothing was caught mid-flight", () => {
+		const trace = new Trace("run-1");
+		const root = trace.openNode({
+			parentId: null,
+			agent: "root",
+			task: "go",
+			origin: { kind: "root" },
+			depth: 0,
+		});
+		const before = trace.snapshot();
+
+		const reconciled = reconcileResumedTrace(before, 5_000, new Map([[root.id, null]]));
+
+		expect(reconciled).toEqual(before);
 	});
 });

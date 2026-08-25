@@ -727,6 +727,56 @@ describe("branches", () => {
 	});
 });
 
+describe("Trace.restore", () => {
+	it("brings back a node under the exact id it was saved with", () => {
+		const original = new Trace("run-1");
+		const root = openRoot(original);
+		const snapshot = original.snapshot();
+
+		const revived = new Trace("run-2");
+		revived.restore(snapshot);
+
+		expect(revived.rootId).toBe(root.id);
+		expect(revived.node(root.id)).toEqual(snapshot.nodes[root.id]);
+		expect(revived.children(root.id)).toEqual([]);
+	});
+
+	it("keeps the id a child node is filed under, in `children` too", () => {
+		const original = new Trace("run-1");
+		const root = openRoot(original);
+		original.openStep(root.id, { id: "t1", tool: "subagent", args: {}, title: "sent a scout" });
+		const child = original.openNode({
+			parentId: root.id,
+			agent: "scout",
+			task: "look",
+			origin: { kind: "delegate", stepId: "t1" },
+			depth: 1,
+		});
+		original.linkChild(root.id, "t1", child.id);
+
+		const revived = new Trace("run-2");
+		revived.restore(original.snapshot());
+
+		expect(revived.children(root.id).map((node) => node.id)).toEqual([child.id]);
+	});
+
+	it("never mints an id a restored node already holds", () => {
+		// If `openNode` after a restore reused a counter that started back at zero, its
+		// first new node would collide with whichever restored id happened to sit at that
+		// same count — two different windows on screen sharing one id.
+		const original = new Trace("run-1");
+		for (let i = 0; i < 5; i += 1) openRoot(original, `agent-${i}`);
+		const snapshot = original.snapshot();
+		const restoredIds = new Set(Object.keys(snapshot.nodes));
+
+		const revived = new Trace("run-2");
+		revived.restore(snapshot);
+		const fresh = openRoot(revived, "agent-fresh");
+
+		expect(restoredIds.has(fresh.id)).toBe(false);
+	});
+});
+
 describe("stepTitle", () => {
 	it("says what the tool call actually does", () => {
 		expect(stepTitle("bash", { command: "npm test\n--watch" })).toBe("$ npm test");

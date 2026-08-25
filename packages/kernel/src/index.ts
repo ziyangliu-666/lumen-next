@@ -26,8 +26,11 @@ export {
 	SCHEMA_VERSION,
 	endInterruptedNodes,
 	parseConversationRecord,
+	reconcileResumedTrace,
 	type ConversationRecord,
 	type ConversationRecordV1,
+	type ConversationRecordV2,
+	type LineRecord,
 } from "./persist.ts";
 export { createCollectTool, DEFAULT_MAX_PULL_BYTES, type CollectToolOptions } from "./tools/collect.ts";
 export { createDiscoverTool, type DiscoverToolOptions } from "./tools/discover.ts";

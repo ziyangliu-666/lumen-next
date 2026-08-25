@@ -96,10 +96,7 @@ export function IdeaGraph({ state, onSelect }: { state: State; onSelect: (nodeId
 
 	if (roots.length === 0) {
 		return (
-			<div className="ideaEmpty">
-				Nothing has been discovered yet. Once an agent calls <code>discover</code> on a real
-				finding, it appears here as a point in the graph, not just a line in an answer.
-			</div>
+			<div className="ideaEmpty">Nothing has been discovered yet.</div>
 		);
 	}
 
@@ -170,7 +167,9 @@ function IdeaCard({
 	const hasMore = summary.length > 0 && summary !== flatten(idea.title);
 
 	return (
-		<div className={`idea${selected ? " selected" : ""}${justArrived ? " justArrived" : ""}`}>
+		<div
+			className={`idea kind-${idea.kind}${selected ? " selected" : ""}${justArrived ? " justArrived" : ""}`}
+		>
 			<div className="ideaRow">
 				<button
 					type="button"
@@ -183,9 +182,10 @@ function IdeaCard({
 					<span className="ideaMark">
 						{hasMore ? (expanded ? DISCLOSURE.open : DISCLOSURE.closed) : DISCLOSURE.none}
 					</span>
-					<span className={`ideaKind ${idea.kind}`}>{idea.kind}</span>
 					{busy && <span className="mark running">{BUSY}</span>}
-					<span className="ideaTitle">{idea.title}</span>
+					<span className="ideaTitle" title={idea.title}>
+						{idea.title}
+					</span>
 				</button>
 				<button
 					type="button"

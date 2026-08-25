@@ -21,7 +21,9 @@ import type { ConversationRecord } from "@lumen/kernel";
 const STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "lumen-state-"));
 process.env.LUMEN_STATE = STATE_DIR;
 
-const { listConversationRecords, writeConversationRecord } = await import("../src/persist.ts");
+const { conversationSessionsDir, listConversationRecords, writeConversationRecord } = await import(
+	"../src/persist.ts"
+);
 
 afterAll(() => {
 	fs.rmSync(STATE_DIR, { recursive: true, force: true });
@@ -77,5 +79,30 @@ describe("listConversationRecords", () => {
 			.sort();
 
 		expect(keys).toEqual(["one-raw", "two-raw"]);
+	});
+});
+
+describe("conversationSessionsDir", () => {
+	it("sits beside the record's own path, never inside it", () => {
+		const dir = conversationSessionsDir(null, "some-key");
+
+		expect(dir).toBe(path.join(STATE_DIR, "some-key.sessions"));
+		expect(dir.startsWith(STATE_DIR)).toBe(true);
+	});
+
+	it("is namespaced the same way the record path is", () => {
+		expect(conversationSessionsDir("alice", "a1")).toBe(path.join(STATE_DIR, "alice", "a1.sessions"));
+	});
+
+	it("never collides with a real conversation record, however it is named", () => {
+		writeConversationRecord(null, "shared-name", record("shared-raw"));
+		fs.mkdirSync(conversationSessionsDir(null, "shared-name"), { recursive: true });
+		fs.writeFileSync(path.join(conversationSessionsDir(null, "shared-name"), "not-a-record.jsonl"), "{}", "utf8");
+
+		// The sessions directory shares a prefix with the record's own filename but not its
+		// `.json` suffix, so a listing built by filtering on that suffix reads the record once
+		// and never mistakes the directory sitting beside it for a second one.
+		const keys = listConversationRecords(null).filter((r) => r.key === "shared-raw");
+		expect(keys).toHaveLength(1);
 	});
 });

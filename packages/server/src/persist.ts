@@ -18,6 +18,13 @@
  * means "do not nest," keeping the single-operator layout flat) holds here too: user A's
  * record and user B's sit under different directories, and a reader only ever asks for its
  * own authenticated namespace's.
+ *
+ * A conversation's pi sessions live here too, one directory per key beside its `.json`
+ * record — `<key>.sessions/` (namespaced the same way) — for exactly the reason the record
+ * itself does: `SessionManager.create` needs a real directory to write into, and the one
+ * directory an agent's own tools can reach (`SESSIONS`, `Conversation.workspace`) is the one
+ * directory a session file must never sit in. See `RuntimeOptions.sessionsDir` for the other
+ * half of that boundary, on the kernel side.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -30,6 +37,18 @@ const STATE = process.env.LUMEN_STATE ?? join(homedir(), ".lumen", "state");
 
 function recordPath(namespace: string | null, safeKey: string): string {
 	return namespace ? join(STATE, namespace, `${safeKey}.json`) : join(STATE, `${safeKey}.json`);
+}
+
+/**
+ * Where this conversation's own pi sessions are written.
+ *
+ * `.sessions` rather than a bare `<key>/`, so the directory sits beside `<key>.json` without
+ * ever colliding with it or with another key that happens to prefix this one. `readdirSync`
+ * in `listConversationRecords` below already only looks at `.json` names, so a listing never
+ * mistakes this for a second, malformed record.
+ */
+export function conversationSessionsDir(namespace: string | null, safeKey: string): string {
+	return namespace ? join(STATE, namespace, `${safeKey}.sessions`) : join(STATE, `${safeKey}.sessions`);
 }
 
 /**

@@ -480,7 +480,7 @@ export function chatChain(state: State, id: string): TraceNode[] {
 export function describeTarget(target: Target): string {
 	switch (target.kind) {
 		case "continue":
-			return "keeps everything it already knows";
+			return "";
 		case "queue":
 			return "it finishes what it is doing, then reads this";
 		case "cutIn":

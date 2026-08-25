@@ -129,3 +129,61 @@ describe("IdeaGraph", () => {
 		).not.toThrow();
 	});
 });
+
+describe("IdeaGraph.restore", () => {
+	it("brings back an idea under the exact id it was saved with, parent link included", () => {
+		const original = new IdeaGraph("run-1");
+		const root = original.add({
+			title: "root finding",
+			summary: "s1",
+			kind: "finding",
+			nodeId: "n-1",
+			parentId: null,
+			citedNodeIds: [],
+		});
+		const child = original.add({
+			title: "a direction",
+			summary: "s2",
+			kind: "direction",
+			nodeId: "n-2",
+			parentId: root.id,
+			citedNodeIds: [],
+		});
+
+		const revived = new IdeaGraph("run-2");
+		revived.restore(original.snapshot());
+
+		expect(revived.get(root.id)).toEqual(root);
+		expect(revived.get(child.id)).toEqual(child);
+		expect(revived.snapshot().children[root.id]).toEqual([child.id]);
+	});
+
+	it("never mints an id a restored idea already holds", () => {
+		const original = new IdeaGraph("run-1");
+		for (let i = 0; i < 5; i += 1) {
+			original.add({
+				title: `t${i}`,
+				summary: "s",
+				kind: "idea",
+				nodeId: "n-1",
+				parentId: null,
+				citedNodeIds: [],
+			});
+		}
+		const snapshot = original.snapshot();
+		const restoredIds = new Set(Object.keys(snapshot.ideas));
+
+		const revived = new IdeaGraph("run-2");
+		revived.restore(snapshot);
+		const fresh = revived.add({
+			title: "fresh",
+			summary: "s",
+			kind: "idea",
+			nodeId: "n-1",
+			parentId: null,
+			citedNodeIds: [],
+		});
+
+		expect(restoredIds.has(fresh.id)).toBe(false);
+	});
+});

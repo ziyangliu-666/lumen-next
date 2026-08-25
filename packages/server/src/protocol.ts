@@ -155,8 +155,8 @@ export interface Fixed {
  * read off disk.
  */
 export interface ConversationSummary {
-	/** The `?s=` value that reaches this conversation again. Never namespaced: a client only
-	 * ever holds its own raw key, the same one `lumen.session` already stores. */
+	/** The `?s=` value that reaches this conversation again — the same key that names it in
+	 * its own URL, `/c/<key>`. Never namespaced: a client only ever holds its own raw key. */
 	key: string;
 	/**
 	 * Whether this conversation is still running, or only a saved record of one that ended.
@@ -189,6 +189,15 @@ export interface ConversationSummary {
 
 export type ClientFrame =
 	| { type: "say"; nodeId: string; text: string; target: Target }
+	/**
+	 * The very first message of a conversation that does not exist yet: a key the server has
+	 * never seen, no live `Conversation`, nothing saved to disk. `say` cannot carry this —
+	 * every `say` names the node its sentence goes to, and before this frame arrives no node
+	 * has ever been opened for this key to name. Sending `start` is what opens it: the server
+	 * builds the conversation, opens its root, and addresses `text` to it as the first thing
+	 * said. Every message after this one, for the same key, is a normal `say`.
+	 */
+	| { type: "start"; text: string }
 	| { type: "abort"; nodeId: string }
 	/**
 	 * The switch that makes the lead carry on by itself.

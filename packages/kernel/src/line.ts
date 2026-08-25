@@ -75,6 +75,13 @@ export interface Line {
 	/** Unsubscribe the recorder. Call before disposing the session. */
 	stop: () => void;
 	/**
+	 * Where pi wrote this line's own session, if the runtime that opened it was given a
+	 * `sessionsDir`. Stable across compaction: `rotate` moves `currentNodeId` to the window's
+	 * successor, but it is the same pi session continuing, so the file underneath does not
+	 * change. Absent for a line whose session ran in memory — see `RuntimeOptions.sessionsDir`.
+	 */
+	sessionFile?: string;
+	/**
 	 * Set while a handoff is borrowing the compactor to write its farewell note.
 	 *
 	 * A handoff needs the same thing compaction produces — a self-contained summary — so it

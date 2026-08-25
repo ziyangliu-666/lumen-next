@@ -22,6 +22,7 @@
  * a timer would eventually kill the line someone was reading.
  */
 
+import { existsSync } from "node:fs";
 import {
 	createAgentSession,
 	DefaultResourceLoader,
@@ -34,6 +35,7 @@ import type { AgentRegistry, AgentSpec } from "./agents/types.ts";
 import type { Compute, Machine } from "./compute/types.ts";
 import { IdeaGraph } from "./ideas.ts";
 import type { Line, LineSession } from "./line.ts";
+import type { LineRecord } from "./persist.ts";
 import { record } from "./trace/record.ts";
 import { Trace } from "./trace/trace.ts";
 import { money } from "./trace/types.ts";
@@ -87,6 +89,22 @@ export interface RuntimeOptions {
 	 * which it can act on, instead of meeting a crash.
 	 */
 	compute?: Compute;
+	/**
+	 * Where each line's own pi session is written, if anywhere.
+	 *
+	 * Absent by default, and absent is a working configuration: the kernel's own tests build
+	 * a `Runtime` many times a run and must not start writing files, and a caller that does
+	 * not care about durability should not have to either. See `createSession`'s own comment
+	 * for what changes when this is set, and `persist.ts`'s `LineRecord` for what a caller
+	 * that does set it is expected to do with the result: write it down.
+	 *
+	 * Deliberately not the conversation's own working directory (`cwd` above). That directory
+	 * is the root an agent's own tools are confined to (`createSaveTool({ root: cwd })`
+	 * below), so a session file living inside it would be a file an agent's own `save` call
+	 * could resolve a path onto and overwrite: its own transcript, or another line's. This
+	 * belongs outside every root a tool call is ever checked against.
+	 */
+	sessionsDir?: string;
 }
 
 export interface SpawnRequest {
@@ -119,6 +137,13 @@ export interface OpenLineOptions {
 }
 
 let lineCounter = 0;
+
+/** If `id` is one `openLine` could have minted, make sure it never mints it again. */
+function bumpLineCounterPast(id: string): void {
+	if (!id.startsWith("l-")) return;
+	const value = Number.parseInt(id.slice(2), 36);
+	if (Number.isFinite(value) && value > lineCounter) lineCounter = value;
+}
 
 export class Runtime {
 	readonly trace: Trace;
@@ -180,7 +205,7 @@ export class Runtime {
 	private model: RuntimeOptions["model"];
 	private compaction: RuntimeOptions["compaction"];
 	private readonly options: RuntimeOptions;
-	private readonly lines = new Map<string, Line>();
+	private readonly linesById = new Map<string, Line>();
 	/** Lines whose agent has said its work is complete, by the reason it gave. */
 	private readonly finished = new Map<string, string>();
 
@@ -206,17 +231,42 @@ export class Runtime {
 	}
 
 	line(id: string): Line {
-		const found = this.lines.get(id);
+		const found = this.linesById.get(id);
 		if (!found) throw new Error(`unknown line: ${id}`);
 		return found;
 	}
 
 	/** The line whose current window is this node, if that window is still live. */
 	lineAt(nodeId: string): Line | undefined {
-		for (const line of this.lines.values()) {
+		for (const line of this.linesById.values()) {
 			if (line.currentNodeId === nodeId) return line;
 		}
 		return undefined;
+	}
+
+	/**
+	 * Every live line, as plain data a durable record can hold without holding the session
+	 * itself: its id, its agent, its depth, the window it currently points at, and where pi
+	 * wrote its session file. See `persist.ts`'s `LineRecord` for why each of those five is
+	 * there.
+	 *
+	 * A line built with no `sessionsDir` has no file to point at and is left out entirely —
+	 * there is nothing durable to say about it, and a caller writing this into a record wants
+	 * exactly the lines it could later reopen, not a placeholder for the ones it can't.
+	 */
+	lines(): LineRecord[] {
+		const records: LineRecord[] = [];
+		for (const line of this.linesById.values()) {
+			if (!line.sessionFile) continue;
+			records.push({
+				id: line.id,
+				agent: line.spec.name,
+				depth: line.depth,
+				nodeId: line.currentNodeId,
+				sessionFile: line.sessionFile,
+			});
+		}
+		return records;
 	}
 
 	/**
@@ -249,14 +299,73 @@ export class Runtime {
 			session: undefined as unknown as LineSession,
 			stop: () => {},
 		} satisfies Line as Line;
-		this.lines.set(line.id, line);
+		this.linesById.set(line.id, line);
 
 		try {
-			line.session = (await this.createSession(options.spec, line)) as unknown as LineSession;
+			const built = await this.createSession(options.spec, line);
+			line.session = built.session as unknown as LineSession;
+			line.sessionFile = built.sessionFile;
 		} catch (cause) {
 			const error = cause instanceof Error ? cause.message : String(cause);
 			this.trace.closeNode(node.id, "failed", { error });
-			this.lines.delete(line.id);
+			this.linesById.delete(line.id);
+			throw cause;
+		}
+
+		line.stop = record(this.trace, line.session, {
+			nodeId: () => line.currentNodeId,
+			onCompaction: (report) => this.rotate(line, report.reason, report.summary),
+		});
+		return line;
+	}
+
+	/**
+	 * Rebuild one line from a `LineRecord` a saved conversation wrote before this process
+	 * existed: the same pi session it always was, reopened from the file it wrote to disk,
+	 * pointed back at the window it was standing on.
+	 *
+	 * Everything `createSession` builds for a fresh line — the resource loader with its
+	 * `noExtensions`/`noSkills`/`noContextFiles` flags, the tool allowlist, the model, the
+	 * compaction thresholds — it builds identically here; see `createSession`'s own comment
+	 * for what each of those flags is protecting against, and why a restored agent must not
+	 * quietly pick up more power than it had before the restart. The one difference is the
+	 * session manager: `SessionManager.open(saved.sessionFile)` in place of `.create()`, so
+	 * pi reads the conversation this session actually had rather than starting empty.
+	 *
+	 * Unlike `openLine`, this opens no node: it only has to point the line at the one it was
+	 * already standing on. Nothing here touches `this.trace` itself — the recorder this
+	 * wires up at the end reads and writes the node only when the reopened session actually
+	 * does something, which cannot happen before this returns — so it makes no difference
+	 * whether the caller restores the trace this node lives in before or after calling this.
+	 * The resume path in `packages/server/src/index.ts` does it after, once per record
+	 * rather than once per line, for reasons that belong to that file and not this one.
+	 *
+	 * Throws rather than returning a failure the caller has to remember to check, for the
+	 * same reason `openLine`'s own session construction does: an agent name this registry no
+	 * longer has (the process that resumes a record need not be the one that wrote it), or a
+	 * session file that has gone missing since it was written. The caller — the resume path
+	 * in `packages/server/src/index.ts` — decides what one line's failure means for the rest
+	 * of the conversation; a single unreachable line must not take the others down with it.
+	 */
+	async reopenLine(saved: LineRecord): Promise<Line> {
+		const spec = this.registry.get(saved.agent);
+		bumpLineCounterPast(saved.id);
+		const line = {
+			id: saved.id,
+			spec,
+			currentNodeId: saved.nodeId,
+			depth: saved.depth,
+			session: undefined as unknown as LineSession,
+			stop: () => {},
+		} satisfies Line as Line;
+		this.linesById.set(line.id, line);
+
+		try {
+			const built = await this.createSession(spec, line, saved.sessionFile);
+			line.session = built.session as unknown as LineSession;
+			line.sessionFile = built.sessionFile;
+		} catch (cause) {
+			this.linesById.delete(line.id);
 			throw cause;
 		}
 
@@ -725,7 +834,7 @@ export class Runtime {
 		// so tear it down without letting `closeLine` close the node a second time.
 		line.stop();
 		line.session.dispose();
-		this.lines.delete(line.id);
+		this.linesById.delete(line.id);
 
 		const next = await this.openLine({
 			spec,
@@ -744,19 +853,36 @@ export class Runtime {
 
 	/** Stop recording, close the live window, and dispose the session. */
 	closeLine(lineId: string, state: NodeState = "done"): void {
-		const line = this.lines.get(lineId);
+		const line = this.linesById.get(lineId);
 		if (!line) return;
 		line.stop();
 		this.trace.closeNode(line.currentNodeId, state);
 		line.session.dispose();
-		this.lines.delete(lineId);
+		this.linesById.delete(lineId);
 	}
 
 	closeAll(state: NodeState = "done"): void {
-		for (const id of [...this.lines.keys()]) this.closeLine(id, state);
+		for (const id of [...this.linesById.keys()]) this.closeLine(id, state);
 	}
 
-	private async createSession(spec: AgentSpec, line: Line) {
+	/**
+	 * `reopen`, when given, is a saved line's own session file: `reopenLine` calls this to
+	 * rebuild the identical session `openLine` would have, except pi reads it from that file
+	 * instead of starting empty. See `reopenLine`'s own comment for what that changes and
+	 * what it deliberately does not.
+	 */
+	private async createSession(spec: AgentSpec, line: Line, reopen?: string) {
+		// Checked before anything else, and deliberately: pi's own `SessionManager.open`
+		// does not throw for a file that is not there. It reads a header only when no
+		// `cwdOverride` is given — this call always gives one, below — so with one missing
+		// it silently builds a session with no entries at all, as though the line were
+		// starting fresh rather than continuing. That is exactly the failure `reopenLine`'s
+		// caller has to tell apart from "reopened fine": a line whose file moved, was
+		// deleted, or never existed in this process's `sessionsDir` at all must come back as
+		// unreachable, not as an agent quietly missing its own memory.
+		if (reopen && !existsSync(reopen)) {
+			throw new Error(`its saved session file is gone: ${reopen}`);
+		}
 		// Imported here rather than at the top because the tools need the runtime, and a
 		// top-level import would make runtime.ts and these a cycle.
 		const { createSubagentTool } = await import("./tools/subagent.ts");
@@ -814,18 +940,32 @@ export class Runtime {
 			model: this.model,
 			modelRuntime: this.options.modelRuntime,
 			resourceLoader,
-			// In memory: a subagent's transcript belongs to this run's trace, not to a
-			// separate session file the user would have to find and correlate by hand.
-			// That is still true, and still means pi's own per-session JSONL stays off —
-			// the actual context window this builds dies with the process either way, and
-			// a raw session file on disk would only be a second, harder-to-read copy of
-			// work the trace already describes. It does not mean nothing here survives the
-			// process: `Trace.snapshot()` and `IdeaGraph.snapshot()` are already the
-			// correlated record — keyed by point, not by a filename someone has to guess —
-			// and the server persists exactly those, debounced, to `persist.ts`. See that
-			// file and `endInterruptedNodes` for what a saved run honestly claims once this
-			// session, and every other one on the run, is gone.
-			sessionManager: SessionManager.inMemory(),
+			// A real file on disk when the caller wants durability, in memory otherwise.
+			//
+			// This used to be in memory unconditionally, on the reasoning that a subagent's
+			// transcript should not become "a separate session file the user would have to
+			// find and correlate by hand." That reasoning is void: the trace is exactly the
+			// index that correlates a window with its file — `Runtime.lines()` below, written
+			// into the durable record under `persist.ts`'s `LineRecord` — and the trace is
+			// itself durable now, not just a picture drawn for the browser while the process
+			// lives. What was true, and is still true when `sessionsDir` is absent (the
+			// kernel's own tests, or any caller that has not asked for this), is narrower:
+			// the real context window this builds dies with the process either way, and nothing
+			// here changes that fact by itself. Handing pi a real directory changes what
+			// happens *next* — the window behind a point can be reopened at all, rather than
+			// only read about — which is the entire reason a caller would set `sessionsDir`.
+			//
+			// `reopen` takes this over entirely when given: `SessionManager.open` in place of
+			// `.create()`, pointed at the exact file this line wrote before this process
+			// existed, with `cwd` passed as the override so the session reopens rooted at
+			// this conversation's own directory rather than trusting whatever the file's own
+			// header happened to record. `existsSync` above has already refused a missing
+			// file by this point.
+			sessionManager: reopen
+				? SessionManager.open(reopen, this.options.sessionsDir, cwd)
+				: this.options.sessionsDir
+					? SessionManager.create(cwd, this.options.sessionsDir)
+					: SessionManager.inMemory(),
 			// Only when asked. Left unset, pi reads the operator's own settings file, which
 			// is what they expect their thresholds to mean.
 			...(this.compaction
@@ -834,7 +974,9 @@ export class Runtime {
 			...toolSelection(spec, customTools.map((tool) => tool.name)),
 			customTools,
 		});
-		return session;
+		// `undefined` when `sessionManager` above was built with `inMemory()`: pi never
+		// assigns a session a file to write unless it was told to persist one.
+		return { session, sessionFile: session.sessionManager.getSessionFile() };
 	}
 }
 

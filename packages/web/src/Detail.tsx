@@ -540,6 +540,30 @@ export function Detail({
 	// conversation actually started; everything from there to `node` reads as one exchange.
 	const chain = chatChain(state, node.id);
 	const oldest = chain[0] ?? node;
+	/**
+	 * A conversation nobody has said anything to yet.
+	 *
+	 * Not `nodeCount <= 1`: that asks about the graph, and the graph has a root node from the
+	 * moment the socket opens. This asks the only question a person cares about here — has
+	 * anything happened — so a window that has been spoken to, or has spoken, or has done
+	 * something, all fail it, and a freshly opened one does not.
+	 */
+	const untouched =
+		chain.length <= 1 &&
+		node.steps.length === 0 &&
+		(state.saidBy[node.id] ?? []).length === 0 &&
+		!node.summary &&
+		!node.busy;
+
+	if (untouched) {
+		return (
+			<aside className="detail" ref={container}>
+				<div className="detailBody">
+					<div className="firstWord">Ask for something with parts to it.</div>
+				</div>
+			</aside>
+		);
+	}
 
 	return (
 		<aside
@@ -562,7 +586,12 @@ export function Detail({
 			    div is what actually grows. */}
 			<div className="detailBody" ref={body}>
 				<div className="detailHead">
-					<span className={`mark ${node.state}`}>{node.busy ? "◍" : MARK[node.state]}</span>
+					{/* Only while it is working. A tick in front of a window that is merely
+					    closed says "this succeeded" about something that often just stopped,
+					    and it says it on every single point of a restored conversation — the
+					    word beside it ("window closed", "stopped", "failed") already carries
+					    the fact, without a green mark claiming an outcome. */}
+					{node.busy && <span className="mark running">◍</span>}
 					<strong>{node.agent}</strong>
 					<span className="meta id">{node.id}</span>
 					{!live && <span className={`meta closedTag ${node.state}`}>{ENDED[node.state]}</span>}

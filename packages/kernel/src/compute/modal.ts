@@ -84,6 +84,19 @@ export interface ModalComputeOptions {
 	app?: string;
 	/** Names this conversation's sandbox inside that app. */
 	label: string;
+	/**
+	 * This conversation is being resumed from a saved record, not opened for the first time.
+	 *
+	 * The sandbox this conversation had before is not coming back — see `runtime.ts`'s own
+	 * comment on why a pi session can be reopened from disk and a remote container cannot —
+	 * so the very next command a resumed agent runs opens a brand new machine with an empty
+	 * `/work`, the same as any machine opened after the idle timeout takes one away. Without
+	 * this flag that first command would report `restarted: false`: a fresh `ModalMachine`
+	 * has never opened a sandbox of its own before, so the ordinary "the old one is gone"
+	 * check has nothing to compare against, and an agent that cloned a repository before the
+	 * restart would be told nothing changed.
+	 */
+	resumed?: boolean;
 }
 
 export function modalCompute(options: ModalComputeOptions): Compute {
@@ -135,10 +148,17 @@ class ModalMachine implements Machine {
 	private owed = 0;
 	/** True when the last command had to open a new sandbox. Read once, by the next result. */
 	private restarted = false;
+	/**
+	 * True until this machine's first boot, when `options.resumed` says the conversation's
+	 * own previous machine is gone even though this particular object has never opened one.
+	 * `boot()` folds it into `restarted` on that first call and never consults it again.
+	 */
+	private assumeGone: boolean;
 	private opening: Promise<void> | null = null;
 
 	constructor(options: ModalComputeOptions) {
 		this.options = options;
+		this.assumeGone = options.resumed === true;
 	}
 
 	async exec(command: string, options?: { minutes?: number }): Promise<ExecResult> {
@@ -265,7 +285,8 @@ class ModalMachine implements Machine {
 	private async boot(): Promise<void> {
 		// Written before the awaits below, so a second caller waiting on this same promise
 		// reads the answer rather than racing the assignment that follows it.
-		this.restarted = this.sandbox !== null || this.meter !== null;
+		this.restarted = this.sandbox !== null || this.meter !== null || this.assumeGone;
+		this.assumeGone = false;
 		if (this.meter) this.owed += this.meter.stop(Date.now());
 		await this.discard();
 

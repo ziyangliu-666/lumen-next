@@ -1,12 +1,18 @@
 /**
  * One process, one person, one machine — or one process, one password, if you say so.
  *
- * No sandbox, no persistence. Those are not oversights: the agents here run commands and
- * write files with the operator's own permissions (or a machine's, for `run`), so reaching
- * this process at all is reaching everything it can do — read files, spend money, reach the
- * network. By default that boundary is physical: the server binds to loopback, so the only
- * way in is the keyboard already in front of it, and no password is asked for because none
- * is needed.
+ * No sandbox. That is not an oversight: the agents here run commands and write files with
+ * the operator's own permissions (or a machine's, for `run`), so reaching this process at all
+ * is reaching everything it can do — read files, spend money, reach the network. By default
+ * that boundary is physical: the server binds to loopback, so the only way in is the keyboard
+ * already in front of it, and no password is asked for because none is needed.
+ *
+ * There is persistence, and it is narrower than that boundary rather than a way around it: a
+ * conversation's own record — its trace, its findings, what the person typed — is written to
+ * `~/.lumen/state`, debounced, by `Conversation.persist` below, and read back by
+ * `HistoricalConversation` for a key whose process has ended. What is never written back is
+ * any agent's actual context window; see `SessionManager.inMemory()`'s doc comment in
+ * `runtime.ts` for why a restored conversation is history to read, not a run to resume.
  *
  * `LUMEN_HOST` moves that boundary, and `LUMEN_BASIC_AUTH` is what replaces it when it
  * moves. The two are checked together, once, at startup: a non-loopback host with no
@@ -18,7 +24,6 @@
  * share nothing, which is isolation for free and the reason there is no scheduling here.
  */
 
-import { createHash, timingSafeEqual } from "node:crypto";
 import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { homedir } from "node:os";
@@ -29,14 +34,27 @@ import {
 	AgentRegistry,
 	Autopilot,
 	emptyUsage,
+	endInterruptedNodes,
 	modalCompute,
 	money,
 	Runtime,
+	SCHEMA_VERSION,
 	type AutopilotStop,
+	type ConversationRecord,
 } from "@lumen/kernel";
 import { WebSocketServer, type WebSocket } from "ws";
 import { AGENTS } from "./agents.ts";
-import type { AutoState, ClientFrame, Fixed, ServerFrame, Settings } from "./protocol.ts";
+import { LOCAL_NAMESPACE, matchCredential, namespacedKey, parseCredentials } from "./auth.ts";
+import { listDir, readFile } from "./files.ts";
+import { listConversationRecords, readConversationRecord, writeConversationRecord } from "./persist.ts";
+import type {
+	AutoState,
+	ClientFrame,
+	ConversationSummary,
+	Fixed,
+	ServerFrame,
+	Settings,
+} from "./protocol.ts";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const WEB_DIST = resolve(HERE, "../../web/dist");
@@ -46,18 +64,14 @@ const PORT = Number(process.env.LUMEN_PORT ?? 4173);
 const HOST = process.env.LUMEN_HOST ?? "127.0.0.1";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 /**
- * `user:password`, or unset. Checked on every request once `HOST` is not loopback.
- *
- * Read once, hashed once, and compared with `timingSafeEqual` rather than `===`: `===`
- * returns the moment the first differing byte is found, so how long a wrong guess takes
- * says something about how much of it was right. A hash first, because the two strings
- * being compared then have equal length regardless of what was typed, which is what
- * `timingSafeEqual` requires and what stops the credential's actual length leaking too.
+ * `user:password`, one per line, or unset. Checked on every request once `HOST` is not
+ * loopback. See `./auth.ts` for how a line becomes a credential and a header becomes a
+ * username.
  */
 const BASIC_AUTH = process.env.LUMEN_BASIC_AUTH;
-const BASIC_AUTH_HASH = BASIC_AUTH ? createHash("sha256").update(BASIC_AUTH).digest() : undefined;
+const CREDENTIALS = parseCredentials(BASIC_AUTH);
 
-if (!LOOPBACK_HOSTS.has(HOST) && !BASIC_AUTH) {
+if (!LOOPBACK_HOSTS.has(HOST) && CREDENTIALS.size === 0) {
 	console.error(
 		`LUMEN_HOST=${HOST} is not loopback, and LUMEN_BASIC_AUTH is not set.\n` +
 			"Refusing to start: every agent's file access, its spending, and its reach to the\n" +
@@ -67,20 +81,19 @@ if (!LOOPBACK_HOSTS.has(HOST) && !BASIC_AUTH) {
 	process.exit(1);
 }
 
-/** Whether this request carries the password. Always true when none is configured. */
-function authorized(request: IncomingMessage): boolean {
-	if (!BASIC_AUTH_HASH) return true;
-	const header = request.headers.authorization ?? "";
-	const [scheme, encoded] = header.split(" ");
-	if (scheme !== "Basic" || !encoded) return false;
-	let given: string;
-	try {
-		given = Buffer.from(encoded, "base64").toString("utf8");
-	} catch {
-		return false;
-	}
-	const givenHash = createHash("sha256").update(given).digest();
-	return timingSafeEqual(givenHash, BASIC_AUTH_HASH);
+/**
+ * The authenticated username behind this request, or `null` if it does not carry a password
+ * that matches one of the configured credentials.
+ *
+ * When no credentials are configured this always succeeds, and returns `LOCAL_NAMESPACE`
+ * rather than a real username: there is no login in that mode, so there is no name to give.
+ * Callers that build a filesystem path from the result must not nest under that name — see
+ * `Conversation`, which nests only when `CREDENTIALS.size > 0`, so the default single-operator
+ * layout on disk stays exactly as it was.
+ */
+function authorized(request: IncomingMessage): string | null {
+	if (CREDENTIALS.size === 0) return LOCAL_NAMESPACE;
+	return matchCredential(request.headers.authorization ?? "", CREDENTIALS);
 }
 
 function requireAuth(response: ServerResponse): void {
@@ -187,6 +200,57 @@ const MODELS = AVAILABLE.map((model) => ({ id: `${model.provider}/${model.id}`, 
 let runCounter = 0;
 
 /**
+ * How long a conversation's durable record may lag behind what actually happened.
+ *
+ * A write per trace event would mean one per streamed token during a busy turn — hundreds a
+ * second on a fan-out — for a file nobody reads until the process is gone. Debounced to this
+ * instead: `Conversation.scheduleSave` coalesces every change inside one window into a single
+ * write, and only `close()` and process shutdown write unconditionally, past this delay.
+ */
+const SAVE_INTERVAL_MS = 2_000;
+
+/**
+ * Turn a key a browser chose into the name it is stored under, on disk and nowhere else.
+ *
+ * Shared by `Conversation`'s constructor, which builds a workspace directory from it, and the
+ * connection handler below, which has to check for a saved record *before* a `Conversation`
+ * exists to ask. Both need the identical name for the same raw key, so there is exactly one
+ * function that computes it.
+ *
+ * Unlike `Conversation`, this never falls back to a counter-based name for a key that
+ * sanitises to nothing: that fallback exists so an empty-or-invalid key still gets a directory,
+ * but the name it picks depends on how many conversations this process has already started,
+ * which is not a value a later process restart could ever reproduce. A key with nothing left
+ * after sanitising could not have named a deterministic file to begin with, so there is nothing
+ * honest to look up — callers get `""` back and treat it as "no saved record."
+ */
+function sanitizeKey(key: string): string {
+	return key.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
+}
+
+/**
+ * What both a live `Conversation` and a `HistoricalConversation` answer to, so the server's
+ * connection handling and its `conversations` map do not need to know which one they hold.
+ * `HistoricalConversation` is the honest degradation of every one of these once the process
+ * that ran the original conversation is gone — see its own doc comment.
+ */
+interface ConversationLike {
+	attach(socket: WebSocket, otherConversations: number): void;
+	detach(socket: WebSocket): void;
+	summarize(rawKey: string): ConversationSummary;
+	handle(
+		frame: Exclude<ClientFrame, { type: "close" } | { type: "conversations.list" }>,
+		socket: WebSocket,
+	): Promise<void> | void;
+	close(): Promise<void> | void;
+}
+
+/** Send one frame to one socket, swallowing a socket that is not open rather than throwing. */
+function sendFrame(socket: WebSocket, frame: ServerFrame): void {
+	if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frame));
+}
+
+/**
  * One conversation: its own runtime, its own trace, its own lines.
  *
  * It outlives the socket. A browser refresh opens a new connection, and if the runtime
@@ -198,7 +262,7 @@ let runCounter = 0;
  * honest trade: a reaper would eventually collect the line someone had left running on
  * purpose, and that is a worse failure than holding memory.
  */
-class Conversation {
+class Conversation implements ConversationLike {
 	readonly runtime: Runtime;
 	/**
 	 * The line holding the conversation, by id rather than by object.
@@ -228,6 +292,8 @@ class Conversation {
 		maxConcurrent: MAX_CONCURRENT,
 		material: MATERIAL,
 	};
+	/** When this conversation was opened, for `summarize()`'s listing. */
+	private readonly startedAt = Date.now();
 	/** This conversation's own directory. Its working directory, and where its files land. */
 	private readonly workspace: string;
 	/** Where its agents' commands run, if anywhere. Held so the panel can name it. */
@@ -245,14 +311,38 @@ class Conversation {
 	 * reload brings back a conversation missing one side of itself.
 	 */
 	private readonly said = new Map<string, string[]>();
+	/**
+	 * The raw `?s=` key, kept for the record's own header — see `persist()`. Not namespaced,
+	 * for the same reason `ConversationSummary.key` never is: a client only ever holds its own.
+	 */
+	private readonly rawKey: string;
+	/** Sanitised the same way `sanitizeKey` always does. Names this conversation's saved record. */
+	private readonly safeKey: string;
+	/** `null` outside multi-user mode. See the constructor's own doc comment for what that means. */
+	private readonly namespace: string | null;
+	/**
+	 * Pending debounced save, or `null` while none is scheduled. See `scheduleSave` and
+	 * `SAVE_INTERVAL_MS`.
+	 */
+	private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-	constructor(key: string) {
+	/**
+	 * `namespace` is the authenticated username, or `null` when no `LUMEN_BASIC_AUTH` is
+	 * configured at all. `null` is not `LOCAL_NAMESPACE`: it means "do not nest," so the one
+	 * operator this server defaults to keeps the flat directory layout it always had. Passing
+	 * `LOCAL_NAMESPACE` here instead would put every default conversation one directory deeper
+	 * than before, which is exactly the regression this distinction exists to avoid.
+	 */
+	constructor(namespace: string | null, key: string) {
 		runCounter += 1;
 		// The key comes off a query string, so it reaches this line as text a browser chose. It
 		// is about to become a directory name: anything but letters, digits, dash and
 		// underscore is dropped, so `?s=../../etc` cannot climb anywhere.
-		const safe = key.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64) || `run-${runCounter}`;
-		this.workspace = join(SESSIONS, safe);
+		const safe = sanitizeKey(key) || `run-${runCounter}`;
+		this.rawKey = key;
+		this.safeKey = safe;
+		this.namespace = namespace;
+		this.workspace = namespace ? join(SESSIONS, namespace, safe) : join(SESSIONS, safe);
 		mkdirSync(this.workspace, { recursive: true });
 		// Named after the conversation, so a machine left running is findable in Modal's own
 		// dashboard under the same name this conversation has here.
@@ -321,6 +411,13 @@ class Conversation {
 		// Subscribed once, for the life of the conversation. Events go to whichever socket
 		// is attached, or nowhere while none is.
 		this.runtime.trace.subscribe((event) => this.send(event));
+		this.runtime.ideas.subscribe((event) => this.send(event));
+		// A second, independent subscription to the same two stores, for the same reason
+		// `attach` sends a fresh snapshot rather than replaying events: the durable record is
+		// a picture of current state, and every trace or idea event is a change to that
+		// picture, whether or not any socket is attached to hear about it.
+		this.runtime.trace.subscribe(() => this.scheduleSave());
+		this.runtime.ideas.subscribe(() => this.scheduleSave());
 	}
 
 	private autoState(): AutoState {
@@ -366,13 +463,20 @@ class Conversation {
 		);
 	}
 
-	/** Point this conversation at a socket and bring it up to date. */
-	attach(socket: WebSocket): void {
+	/**
+	 * Point this conversation at a socket and bring it up to date.
+	 *
+	 * `otherConversations` is a count handed in from outside rather than worked out here: this
+	 * object only knows about itself, and the map of every conversation this server holds
+	 * lives at module scope, one level up.
+	 */
+	attach(socket: WebSocket, otherConversations: number): void {
 		this.sockets.add(socket);
 		this.sendTo(socket, {
 			type: "hello",
 			agents: this.runtime.registry.list(),
 			snapshot: this.runtime.trace.snapshot(),
+			ideas: this.runtime.ideas.snapshot(),
 			rootNodeId: this.leadNodeId,
 			said: Object.fromEntries(this.said),
 			auto: this.autoState(),
@@ -383,7 +487,9 @@ class Conversation {
 				compute: this.compute?.describe ?? null,
 				port: PORT,
 				models: MODELS,
+				restored: false,
 			},
+			otherConversations,
 		});
 	}
 
@@ -391,8 +497,93 @@ class Conversation {
 		this.sockets.delete(socket);
 	}
 
+	/**
+	 * This conversation, described for a list rather than for the tab actually inside it.
+	 *
+	 * `key` is deliberately the raw, un-namespaced key: it is what a client puts back into
+	 * `lumen.session` and its own `?s=`, and a client only ever holds its own namespace, never
+	 * another's, so there is nothing to strip on the way back out.
+	 */
+	summarize(rawKey: string): ConversationSummary {
+		const { nodes } = this.runtime.trace.snapshot();
+		const nodeList = Object.values(nodes);
+		return {
+			key: rawKey,
+			kind: "live",
+			spend: this.runtime.totalCost(),
+			auto: this.autopilot.running,
+			busyCount: nodeList.filter((node) => node.busy === true).length,
+			nodeCount: nodeList.length,
+			startedAt: this.startedAt,
+			attached: this.sockets.size > 0,
+		};
+	}
+
 	private remember(nodeId: string, text: string): void {
 		this.said.set(nodeId, [...(this.said.get(nodeId) ?? []), text]);
+		// Also as a step, so it lands in the same ordered stream the agent's own thinking and
+		// replies land in. `said` stays as it is: it is what a reconnecting page is handed in
+		// `hello` before any step has arrived, and what a restored conversation reads back.
+		// The step is what puts the sentence in its place in time.
+		const step = this.runtime.trace.openStep(nodeId, {
+			id: `you-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+			tool: "you",
+			args: undefined,
+			title: "you",
+			kind: "you",
+		});
+		this.runtime.trace.closeStep(nodeId, step.id, "done", text);
+		// `said` has no trace event of its own to piggyback a save on — the trace only records
+		// what agents did — so this is the one place that changes it schedules one directly.
+		this.scheduleSave();
+	}
+
+	/**
+	 * Mark this conversation's durable record stale, and write it once, a couple of seconds
+	 * from now, rather than once per change. A burst of streamed events schedules only the
+	 * first save in the burst; everything after it until the timer fires is free.
+	 */
+	private scheduleSave(): void {
+		if (this.saveTimer) return;
+		this.saveTimer = setTimeout(() => {
+			this.saveTimer = null;
+			this.persist();
+		}, SAVE_INTERVAL_MS);
+	}
+
+	/**
+	 * Write this conversation's durable record now, whether or not a debounced save was
+	 * already pending. Called by that debounce when it fires, and again — after cancelling
+	 * any still-pending timer, so a slow shutdown does not race its own scheduled write —
+	 * from `close()` and from the process's own shutdown handling below.
+	 */
+	private persist(): void {
+		if (this.saveTimer) {
+			clearTimeout(this.saveTimer);
+			this.saveTimer = null;
+		}
+		// An unnamed conversation (an empty or fully-invalid raw key) has no file a later
+		// process could deterministically find again — see `sanitizeKey` — so there is
+		// nothing honest to write.
+		if (!this.safeKey) return;
+		try {
+			writeConversationRecord(this.namespace, this.safeKey, {
+				version: SCHEMA_VERSION,
+				key: this.rawKey,
+				startedAt: this.startedAt,
+				savedAt: Date.now(),
+				spend: this.runtime.totalCost(),
+				model: this.settings.model,
+				trace: this.runtime.trace.snapshot(),
+				ideas: this.runtime.ideas.snapshot(),
+				said: Object.fromEntries(this.said),
+			});
+		} catch (error) {
+			// The same rule `Trace.emit` already states for a listener that throws: a failed
+			// save must not take the run down with it. The person can keep working; the worst
+			// case is losing the last couple of seconds if the process then dies too.
+			console.error(`could not save conversation ${this.safeKey}:`, error);
+		}
 	}
 
 	/**
@@ -502,9 +693,55 @@ class Conversation {
 		this.send({ type: "settings", settings: this.settings });
 	}
 
-	async handle(frame: Exclude<ClientFrame, { type: "close" }>): Promise<void> {
+	async handle(
+		frame: Exclude<ClientFrame, { type: "close" } | { type: "conversations.list" }>,
+		socket: WebSocket,
+	): Promise<void> {
 		if (frame.type === "settings") {
 			this.applySettings(frame.patch);
+			return;
+		}
+
+		// Both read this conversation's own directory and answer only the tab that asked, via
+		// `sendTo` rather than `send`: a directory listing is a thing one open tab is looking
+		// at, not a fact about the run every attached tab needs pushed to it.
+		if (frame.type === "files.list") {
+			const result = listDir(this.workspace, frame.path);
+			if ("error" in result) {
+				this.sendTo(socket, { type: "error", message: result.error });
+			} else {
+				this.sendTo(socket, { type: "files.tree", path: frame.path, entries: result });
+			}
+			return;
+		}
+
+		if (frame.type === "files.read") {
+			const result = readFile(this.workspace, frame.path);
+			if ("error" in result) {
+				this.sendTo(socket, { type: "error", message: result.error });
+			} else {
+				this.sendTo(socket, { type: "files.content", path: frame.path, content: result.content });
+			}
+			return;
+		}
+
+		// Answered only to the tab that asked, the same as the two frames above: expanding one
+		// step's result is a per-tab read, not a fact the whole run needs pushed to it.
+		if (frame.type === "step.full") {
+			const found = this.runtime.trace.fullResult(frame.stepId);
+			if (!found) {
+				this.sendTo(socket, {
+					type: "error",
+					message: `No stored result for step ${frame.stepId}. It may predate this conversation's connection, or never carried one.`,
+				});
+			} else {
+				this.sendTo(socket, {
+					type: "step.content",
+					stepId: frame.stepId,
+					text: found.text,
+					truncated: found.truncated,
+				});
+			}
 			return;
 		}
 
@@ -520,6 +757,23 @@ class Conversation {
 						message:
 							"Ask for something first. There is nothing in this window to carry on from, " +
 							"and it would keep asking itself until the budget ran out.",
+					});
+					this.send({ type: "auto", state: this.autoState() });
+					return;
+				}
+				// The lead already said it was done, and nothing has happened since to
+				// supersede that. Starting the loop just to have its first check say the same
+				// thing back flips the switch on and straight back off — to a person watching,
+				// that reads as the switch failing, not as the loop declining to repeat
+				// itself. Say it once instead, without ever starting.
+				const declared = this.runtime.peekFinish(this.leadLineId);
+				if (declared !== undefined) {
+					this.send({
+						type: "notice",
+						message: describeStop(
+							{ reason: "declared", turns: 0, spent: this.runtime.totalCost(), note: declared },
+							this.settings.autoBudget,
+						),
 					});
 					this.send({ type: "auto", state: this.autoState() });
 					return;
@@ -694,18 +948,156 @@ class Conversation {
 			this.runtime.trace.addUsage(this.runtime.line(this.leadLineId).currentNodeId, usage);
 		}
 		this.runtime.closeAll("done");
+		// Unconditionally, past whatever the debounce would otherwise have waited out — this is
+		// the run's last word, written after `closeAll` so nothing in it still reads `running`
+		// for a conversation that closed cleanly. A conversation that instead disappears with
+		// the process (a crash, `kill -9`) has no `close()` call to reach this line, which is
+		// exactly the case `endInterruptedNodes` exists to make honest on the way back in.
+		this.persist();
 	}
 
 	private send(frame: ServerFrame): void {
-		const payload = JSON.stringify(frame);
-		for (const socket of this.sockets) {
-			if (socket.readyState === socket.OPEN) socket.send(payload);
-		}
+		for (const socket of this.sockets) sendFrame(socket, frame);
 	}
 
 	private sendTo(socket: WebSocket, frame: ServerFrame): void {
-		if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frame));
+		sendFrame(socket, frame);
 	}
+}
+
+/**
+ * A saved record, described the same way `ConversationSummary` describes a live one.
+ *
+ * Shared between `HistoricalConversation.summarize` (a record this process already read back,
+ * because a tab is attached to it or was earlier) and the plain-disk listing in
+ * `conversations.list` below (a record nothing in this process has opened yet). Both are the
+ * same fact — a saved conversation, described for a list — so there is exactly one place that
+ * turns a `ConversationRecord` into a `ConversationSummary`.
+ */
+function summarizeRecord(rawKey: string, record: ConversationRecord, attached: boolean): ConversationSummary {
+	return {
+		key: rawKey,
+		kind: "history",
+		spend: record.spend,
+		auto: false,
+		busyCount: 0,
+		nodeCount: Object.keys(record.trace.nodes).length,
+		startedAt: record.startedAt,
+		attached,
+	};
+}
+
+/**
+ * A conversation whose process ended, read back from its saved record.
+ *
+ * Not a `Conversation`, and deliberately thin: there is no `Runtime` here, because a
+ * `Runtime` is a live pi session and every session behind it died with the process that held
+ * it (`SessionManager.inMemory()` — see the comment above it in `runtime.ts`). This class owns
+ * nothing that can be talked to. It can show what was saved, and it can still read the files a
+ * saved point produced — the conversation's own directory outlives the process same as its
+ * record does — but `handle` refuses everything that would act on a live agent, because there
+ * is not one.
+ *
+ * `attach` sends the same `hello` shape a live `Conversation` sends, so the browser's one
+ * `hello`-reducing code path (`state.ts`'s `applyFrame`) needs no second case for this — with
+ * every previously-`running` node rewritten by `endInterruptedNodes` first, and
+ * `fixed.restored: true` so the page can say so plainly rather than let a person discover it
+ * by noticing that nothing responds.
+ */
+class HistoricalConversation implements ConversationLike {
+	readonly workspace: string;
+	private readonly record: ConversationRecord;
+	private readonly sockets = new Set<WebSocket>();
+
+	constructor(namespace: string | null, safeKey: string, record: ConversationRecord) {
+		this.record = record;
+		this.workspace = namespace ? join(SESSIONS, namespace, safeKey) : join(SESSIONS, safeKey);
+	}
+
+	attach(socket: WebSocket, otherConversations: number): void {
+		this.sockets.add(socket);
+		const trace = endInterruptedNodes(this.record.trace, this.record.savedAt);
+		sendFrame(socket, {
+			type: "hello",
+			// No agents to offer: nothing here can open a window, so a registry list would
+			// only invite a click that `handle` is about to refuse anyway.
+			agents: [],
+			snapshot: trace,
+			ideas: this.record.ideas,
+			rootNodeId: trace.rootId,
+			said: this.record.said,
+			auto: { on: false, turns: 0 },
+			settings: {
+				autoBudget: AUTO_BUDGET,
+				model: this.record.model,
+				keepRecentTokens: KEEP_RECENT ?? null,
+				maxDepth: MAX_DEPTH,
+				maxConcurrent: MAX_CONCURRENT,
+				material: MATERIAL,
+			},
+			fixed: {
+				workspace: this.workspace,
+				extensions: EXTENSIONS,
+				compute: null,
+				port: PORT,
+				models: MODELS,
+				restored: true,
+			},
+			otherConversations,
+		});
+	}
+
+	detach(socket: WebSocket): void {
+		this.sockets.delete(socket);
+	}
+
+	summarize(rawKey: string): ConversationSummary {
+		return summarizeRecord(rawKey, this.record, this.sockets.size > 0);
+	}
+
+	handle(
+		frame: Exclude<ClientFrame, { type: "close" } | { type: "conversations.list" }>,
+		socket: WebSocket,
+	): void {
+		// Reading the conversation's own directory still works exactly as it does for a live
+		// one — the directory outlives the process, and nothing about listing or reading a
+		// file touches the `Runtime` that is gone. See `files.ts`.
+		if (frame.type === "files.list") {
+			const result = listDir(this.workspace, frame.path);
+			if ("error" in result) sendFrame(socket, { type: "error", message: result.error });
+			else sendFrame(socket, { type: "files.tree", path: frame.path, entries: result });
+			return;
+		}
+		if (frame.type === "files.read") {
+			const result = readFile(this.workspace, frame.path);
+			if ("error" in result) sendFrame(socket, { type: "error", message: result.error });
+			else sendFrame(socket, { type: "files.content", path: frame.path, content: result.content });
+			return;
+		}
+		if (frame.type === "step.full") {
+			// Only the snapshot was ever saved — see `persist.ts`'s own doc comment on why a
+			// step's full result, unlike its preview, is not part of what gets written.
+			sendFrame(socket, {
+				type: "error",
+				message:
+					"This is a saved record. Only each step's short preview was kept, not the full " +
+					"result behind it.",
+			});
+			return;
+		}
+		// `say`, `abort`, `auto`, `settings`: every one of them acts on a live agent, and there
+		// is not one. One message for all four, because the reason is identical for each.
+		sendFrame(socket, {
+			type: "notice",
+			message:
+				"This is a saved record of a conversation whose process ended — its agents no " +
+				"longer exist, so nothing here can be sent, stopped, or changed. Start a fresh " +
+				"conversation to keep working.",
+		});
+	}
+
+	/** Nothing here is live, so there is nothing to stop. The record on disk is untouched. */
+	close(): void {}
 }
 
 /**
@@ -760,7 +1152,7 @@ function serveStatic(request: IncomingMessage, response: ServerResponse): void {
 }
 
 const http = createServer((request, response) => {
-	if (!authorized(request)) {
+	if (authorized(request) === null) {
 		requireAuth(response);
 		return;
 	}
@@ -772,8 +1164,12 @@ const http = createServer((request, response) => {
 // then handing the upgrade to `ws` is the only order that actually gates it.
 const sockets = new WebSocketServer({ noServer: true, path: "/ws" });
 
+/** The username `authorized()` found for this request, carried from the upgrade to the connection. */
+type AuthedRequest = IncomingMessage & { lumenUser?: string };
+
 http.on("upgrade", (request, socket, head) => {
-	if (!authorized(request)) {
+	const username = authorized(request);
+	if (username === null) {
 		socket.write('HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm="lumen"\r\n\r\n');
 		socket.destroy();
 		return;
@@ -782,28 +1178,106 @@ http.on("upgrade", (request, socket, head) => {
 		socket.destroy();
 		return;
 	}
+	(request as AuthedRequest).lumenUser = username;
 	sockets.handleUpgrade(request, socket, head, (ws) => {
 		sockets.emit("connection", ws, request);
 	});
 });
 
-const conversations = new Map<string, Conversation>();
+const conversations = new Map<string, ConversationLike>();
+/**
+ * A conversation being built, keyed the same way `conversations` is.
+ *
+ * `conversations.get` then, after an `await`, `conversations.set` left a window open: two
+ * connections for a key neither map held yet both saw it missing, both built a
+ * `Conversation`, and the second's `set` silently replaced the first in the map — orphaning
+ * it mid-build, still running, reachable by nothing once its own socket closed. Reserving a
+ * promise here before the first `await` closes that window: a second connection for the same
+ * key while the first is still starting now awaits the same promise instead of starting a
+ * second one.
+ *
+ * Only a live `Conversation` goes through this. Building a `HistoricalConversation` is a
+ * synchronous read of a JSON file with no side effect worth racing over, so it needs none of
+ * this machinery — see the connection handler below.
+ */
+const starting = new Map<string, Promise<Conversation>>();
+
+/**
+ * Every conversation this server holds that `username` may see, as the raw key a client would
+ * put back into `lumen.session` paired with the `ConversationLike` it names.
+ *
+ * Filtered by namespace prefix rather than by asking each conversation who it belongs to: the
+ * map key already encodes that (see `namespacedKey`), and reading it back out here keeps the
+ * ownership check in the one place a key is ever turned into or out of that form.
+ */
+function conversationsFor(multiUser: boolean, username: string): { rawKey: string; convo: ConversationLike }[] {
+	const prefix = multiUser ? namespacedKey(username, "") : null;
+	const found: { rawKey: string; convo: ConversationLike }[] = [];
+	for (const [mapKey, convo] of conversations) {
+		if (prefix === null) {
+			found.push({ rawKey: mapKey, convo });
+		} else if (mapKey.startsWith(prefix)) {
+			found.push({ rawKey: mapKey.slice(prefix.length), convo });
+		}
+	}
+	return found;
+}
 
 sockets.on("connection", async (socket, request) => {
-	const key = new URL(request.url ?? "/", "http://x").searchParams.get("s") ?? `anon-${++runCounter}`;
+	// Set on the request during the upgrade, right after `authorized()` ran. Falling back to
+	// `LOCAL_NAMESPACE` here only guards a request that somehow skipped that check; it never
+	// happens on the path `http.on("upgrade")` actually takes.
+	const username = (request as AuthedRequest).lumenUser ?? LOCAL_NAMESPACE;
+	const rawKey = new URL(request.url ?? "/", "http://x").searchParams.get("s") ?? `anon-${++runCounter}`;
+	// No credentials configured: this is the one-operator default, and both the map key and
+	// the directory on disk stay exactly what they always were — no username in either.
+	const multiUser = CREDENTIALS.size > 0;
+	const key = multiUser ? namespacedKey(username, rawKey) : rawKey;
+	// Mirrors `Conversation`'s own `namespace` convention exactly — see its constructor's doc
+	// comment — because this is the same fact read a second time, before a `Conversation`
+	// necessarily exists to ask: `null` outside multi-user mode, so a saved record is looked
+	// up (and later written) at the same flat path a single operator has always used.
+	const namespace = multiUser ? username : null;
 	let conversation = conversations.get(key);
 	if (!conversation) {
-		conversation = new Conversation(key);
-		try {
-			await conversation.start();
-		} catch (cause) {
-			socket.send(JSON.stringify({ type: "error", message: String(cause) }));
-			socket.close();
-			return;
+		let build = starting.get(key);
+		// Only when nothing is already live or already starting: a saved record must never
+		// win a race against a `Conversation` this process still remembers or is mid-way
+		// through building — that connection is the one that should attach.
+		if (!build) {
+			const safeKey = sanitizeKey(rawKey);
+			// A key with nothing to look up (see `sanitizeKey`) skips straight to starting
+			// fresh, the same as a key that sanitises fine but was simply never saved.
+			const saved = safeKey ? readConversationRecord(namespace, safeKey) : null;
+			if (saved) {
+				const restored = new HistoricalConversation(namespace, safeKey, saved);
+				conversations.set(key, restored);
+				conversation = restored;
+			}
 		}
-		conversations.set(key, conversation);
+		if (!conversation) {
+			if (!build) {
+				const created = new Conversation(multiUser ? username : null, rawKey);
+				build = created
+					.start()
+					.then(() => {
+						conversations.set(key, created);
+						return created;
+					})
+					.finally(() => starting.delete(key));
+				starting.set(key, build);
+			}
+			try {
+				conversation = await build;
+			} catch (cause) {
+				socket.send(JSON.stringify({ type: "error", message: String(cause) }));
+				socket.close();
+				return;
+			}
+		}
 	}
-	conversation.attach(socket);
+	const otherConversations = conversationsFor(multiUser, username).filter(({ rawKey: k }) => k !== rawKey).length;
+	conversation.attach(socket, otherConversations);
 
 	socket.on("message", async (raw) => {
 		let frame: ClientFrame;
@@ -821,8 +1295,35 @@ sockets.on("connection", async (socket, request) => {
 			return;
 		}
 
+		// Same reason: naming every conversation a person can see means walking the map this
+		// one socket cannot reach from inside `Conversation`, which knows only itself.
+		if (frame.type === "conversations.list") {
+			// Whatever this process still holds — live, or a saved record already read back
+			// because some tab opened it earlier this process's life. `summarize` on either
+			// kind already reports `kind` correctly; this list has both mixed in together.
+			const held = conversationsFor(multiUser, username)
+				.filter(({ rawKey: k }) => k !== rawKey)
+				.map(({ rawKey: k, convo }) => convo.summarize(k));
+			const heldKeys = new Set(held.map((c) => c.key));
+			// Every other saved record on disk, for the ones nothing in this process has
+			// touched yet. `record.key` is the browser's own raw key — see `ConversationRecordV1`
+			// — so it compares directly against `held`'s keys and against this socket's own,
+			// with no namespace stripping needed on either side.
+			const fromDisk = listConversationRecords(namespace)
+				.filter((record) => record.key !== rawKey && !heldKeys.has(record.key))
+				.map((record) => summarizeRecord(record.key, record, false));
+			// Live first — they are the ones still costing money and still answerable — then
+			// history, and most recent first within each group.
+			const list = [...held, ...fromDisk].sort((a, b) => {
+				if (a.kind !== b.kind) return a.kind === "live" ? -1 : 1;
+				return b.startedAt - a.startedAt;
+			});
+			socket.send(JSON.stringify({ type: "conversations.list", conversations: list } satisfies ServerFrame));
+			return;
+		}
+
 		try {
-			await conversation.handle(frame);
+			await conversation.handle(frame, socket);
 		} catch (cause) {
 			// A failed turn must not take the socket down with it. The person can read the
 			// reason and try something else; a dropped connection loses the whole graph.
@@ -861,9 +1362,17 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 
 http.listen(PORT, HOST, () => {
 	const keep = KEEP_RECENT === undefined ? "pi default" : `${KEEP_RECENT} tok`;
+	// One credential prints as it always did. More than one names a count, not the
+	// credentials themselves, so a shared log or terminal does not carry them.
+	const auth =
+		CREDENTIALS.size === 0
+			? "none — reachable only from this machine"
+			: CREDENTIALS.size === 1
+				? "required (LUMEN_BASIC_AUTH set)"
+				: `required (${CREDENTIALS.size} users configured)`;
 	console.log(
 		`lumen server on http://${HOST}:${PORT}\n` +
-			`  auth       ${BASIC_AUTH_HASH ? "required (LUMEN_BASIC_AUTH set)" : "none — reachable only from this machine"}\n` +
+			`  auth       ${auth}\n` +
 			`  model      ${PROVIDER}/${MODEL_ID}\n` +
 			`  sessions   ${SESSIONS}\n` +
 			`  material   ${MATERIAL ?? "none — set one per conversation in the panel"}\n` +

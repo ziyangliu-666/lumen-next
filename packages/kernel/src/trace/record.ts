@@ -226,6 +226,10 @@ export function record(
 					});
 					trace.closeStep(nodeId, step.id, "done", replyText);
 				}
+				// Last, after both archives: the interface may now drop its live copy of what
+				// this turn said, because the steps above are holding it. Emitting this before
+				// the archiving would leave a gap where the text is in neither place.
+				trace.emit({ type: "turn_end", nodeId });
 				return;
 			}
 			case "tool_execution_start": {

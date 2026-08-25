@@ -269,6 +269,31 @@ describe("trace", () => {
 		);
 	});
 
+	it("closes a turn after archiving it, so the live copy is never the second one on screen", () => {
+		// The bug this pins: `message_end` archives a turn's reasoning and reply as steps,
+		// and the interface keeps its own live buffer of the same text to stream. Nothing
+		// used to tell it that buffer was now redundant, so both were drawn — the same
+		// paragraph twice, the second still carrying a cursor — until the *next* turn began.
+		// For a turn ending in a long tool call that is however long the call takes; one
+		// measured case sat like that for thirty-eight minutes.
+		const trace = new Trace("run-1");
+		const events: TraceEvent[] = [];
+		trace.subscribe((event) => events.push(event));
+		const node = openRoot(trace);
+		const session = new FakeSession();
+		record(trace, session, { nodeId: () => node.id });
+
+		session.think("reasoning for this turn", "and the answer", usage(10, 5, 0.01));
+
+		const kinds = events.map((event) => event.type);
+		const end = kinds.lastIndexOf("turn_end");
+		expect(end).toBeGreaterThan(-1);
+		// After the archiving, never before: the browser must already hold the steps by the
+		// time it is told to drop the live text, or the turn is briefly in neither place.
+		const lastArchive = Math.max(kinds.lastIndexOf("step_open"), kinds.lastIndexOf("step_close"));
+		expect(end).toBeGreaterThan(lastArchive);
+	});
+
 	it("does not blank the summary on a turn that was tool calls only", () => {
 		const trace = new Trace("run-1");
 		const node = openRoot(trace);

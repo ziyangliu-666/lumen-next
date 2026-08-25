@@ -292,4 +292,20 @@ export type TraceEvent =
 	 * interface has no way to know a fresh turn started, and keeps appending `text` and
 	 * `thinking` deltas onto whatever the previous turn already left on screen.
 	 */
-	| { type: "turn_start"; nodeId: string };
+	| { type: "turn_start"; nodeId: string }
+	/**
+	 * The assistant turn is over and what it produced has been archived as steps.
+	 *
+	 * The interface keeps a live buffer per node so a reply can be drawn as it streams. Once
+	 * `message_end` has turned that same text into `"thinking"` and `"reply"` steps, the
+	 * buffer holds a second copy of something already on screen — and it used to sit there
+	 * until the *next* turn cleared it, which for a turn that ends in a long tool call is
+	 * however long that call takes. A thirty-eight-minute command left a whole turn's
+	 * reasoning and answer drawn twice, the second copy still carrying a streaming cursor as
+	 * if it were arriving.
+	 *
+	 * Emitted after the archiving, never before: the events travel in order, so the browser
+	 * always has the steps in hand before it is told to drop the live copy, and the text is
+	 * never absent from both at once.
+	 */
+	| { type: "turn_end"; nodeId: string };

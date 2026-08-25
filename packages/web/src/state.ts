@@ -374,9 +374,16 @@ function applyFrame(state: State, frame: ServerFrame): State {
 			};
 
 		case "turn_start":
-			// A fresh assistant turn started on a node that may already be mid-session.
-			// Clear both buffers so the next deltas do not run on from a turn that already
-			// finished and is still sitting on screen.
+		// A fresh assistant turn started on a node that may already be mid-session.
+		// Clear both buffers so the next deltas do not run on from a turn that already
+		// finished and is still sitting on screen.
+		case "turn_end":
+			// And again the moment a turn ends, because by then `record.ts` has archived what
+			// it said as `"thinking"` and `"reply"` steps: keeping the live copy too draws the
+			// same paragraph twice, the second one still wearing a streaming cursor. Waiting
+			// for the next `turn_start` to do it is what made that visible — a turn ending in
+			// a long tool call leaves minutes, or in one measured case thirty-eight of them,
+			// between the two events.
 			return {
 				...state,
 				live: { ...state.live, [frame.nodeId]: "" },

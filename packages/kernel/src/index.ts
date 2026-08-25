@@ -20,10 +20,27 @@ export {
 } from "./runtime.ts";
 export { Meter, type MeterOptions } from "./compute/meter.ts";
 export { modalCompute, type ModalComputeOptions } from "./compute/modal.ts";
-export type { Compute, ExecResult, Machine } from "./compute/types.ts";
+export type { Compute, ExecResult, Machine, PullResult } from "./compute/types.ts";
+export { IdeaGraph, type Idea, type IdeaEvent, type IdeaKind, type IdeaSnapshot } from "./ideas.ts";
+export {
+	SCHEMA_VERSION,
+	endInterruptedNodes,
+	parseConversationRecord,
+	type ConversationRecord,
+	type ConversationRecordV1,
+} from "./persist.ts";
+export { createCollectTool, DEFAULT_MAX_PULL_BYTES, type CollectToolOptions } from "./tools/collect.ts";
+export { createDiscoverTool, type DiscoverToolOptions } from "./tools/discover.ts";
 export { createFinishTool, type FinishToolOptions } from "./tools/finish.ts";
 export { createRunTool, type RunToolOptions } from "./tools/run.ts";
-export { createSaveTool, type SaveToolOptions } from "./tools/save.ts";
+export {
+	createSaveTool,
+	DEFAULT_MAX_BYTES,
+	resolveInside,
+	splitPath,
+	type Resolved,
+	type SaveToolOptions,
+} from "./tools/save.ts";
 export { createSubagentTool, type SubagentToolOptions } from "./tools/subagent.ts";
 export {
 	record,
@@ -40,6 +57,7 @@ export {
 	type NodeOrigin,
 	type NodeState,
 	type Step,
+	type StepKind,
 	type StepState,
 	type TraceEvent,
 	type TraceNode,

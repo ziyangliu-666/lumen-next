@@ -57,6 +57,16 @@ export interface AgentSpec {
 	 */
 	canRun?: boolean;
 	/**
+	 * Whether this agent may declare a finding with `discover`.
+	 *
+	 * Unlike `canRun` and `canSave`, this is not a permission worth keeping scarce: declaring
+	 * a finding costs nothing beyond the turn that calls it, and it is not a way to damage
+	 * anything or spend money nobody agreed to. It is likely to end up `true` for every agent
+	 * in practice. It stays an explicit flag anyway, so the same rule holds for this as for
+	 * every other capability here — what an agent can do is read from its spec, not assumed.
+	 */
+	canDiscover?: boolean;
+	/**
 	 * Whether other agents may be handed work as this one. On by default.
 	 *
 	 * Off for the agent that holds the conversation. Once workers can delegate, the catalogue

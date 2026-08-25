@@ -32,6 +32,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { AgentRegistry, AgentSpec } from "./agents/types.ts";
 import type { Compute, Machine } from "./compute/types.ts";
+import { IdeaGraph } from "./ideas.ts";
 import type { Line, LineSession } from "./line.ts";
 import { record } from "./trace/record.ts";
 import { Trace } from "./trace/trace.ts";
@@ -121,6 +122,7 @@ let lineCounter = 0;
 
 export class Runtime {
 	readonly trace: Trace;
+	readonly ideas: IdeaGraph;
 	readonly registry: AgentRegistry;
 	/**
 	 * How deep delegation may go, and how many children one call may run at once.
@@ -186,6 +188,7 @@ export class Runtime {
 		this.options = options;
 		this.registry = options.registry;
 		this.trace = new Trace(options.runId);
+		this.ideas = new IdeaGraph(options.runId);
 		this.maxDepth = options.maxDepth ?? 3;
 		this.maxConcurrent = options.maxConcurrent ?? 4;
 		this.model = options.model;
@@ -456,6 +459,19 @@ export class Runtime {
 		const reason = this.finished.get(lineId);
 		this.finished.delete(lineId);
 		return reason;
+	}
+
+	/**
+	 * Look at the declaration without clearing it.
+	 *
+	 * For a caller that has to decide whether to start driving at all — starting only to stop
+	 * on the very first check reads, to a person watching the switch, as the switch failing.
+	 * Seeing it first and not starting is silent by comparison. `takeFinish` stays the one
+	 * place the declaration is actually consumed, so a real turn still supersedes it exactly
+	 * as before.
+	 */
+	peekFinish(lineId: string): string | undefined {
+		return this.finished.get(lineId);
 	}
 
 	/** The refusal every spend-related message quotes, so they cannot disagree with each other. */
@@ -747,6 +763,8 @@ export class Runtime {
 		const { createFinishTool } = await import("./tools/finish.ts");
 		const { createSaveTool } = await import("./tools/save.ts");
 		const { createRunTool } = await import("./tools/run.ts");
+		const { createCollectTool } = await import("./tools/collect.ts");
+		const { createDiscoverTool } = await import("./tools/discover.ts");
 
 		const cwd = this.options.cwd ?? process.cwd();
 		const customTools = [
@@ -761,6 +779,13 @@ export class Runtime {
 			// would leave the model calling a name that does not exist, which pi returns as
 			// an error with nothing in it a model can act on.
 			...(spec.canRun ? [createRunTool({ runtime: this, line })] : []),
+			// Both permissions, not a third flag of its own: an agent that cannot run has
+			// nothing on a machine worth collecting, and one that cannot save has nowhere to
+			// put it. `collect` is strictly narrower than the two capabilities it composes,
+			// so gating it on a scarce permission neither of them already is would be asking
+			// the operator to hand out a name for "both of the other two."
+			...(spec.canRun && spec.canSave ? [createCollectTool({ runtime: this, line, root: cwd })] : []),
+			...(spec.canDiscover ? [createDiscoverTool({ runtime: this, line })] : []),
 		];
 		// Extensions, skills and context files are all discovered from the working
 		// directory, and the working directory is full of the user's own material. An
@@ -791,6 +816,15 @@ export class Runtime {
 			resourceLoader,
 			// In memory: a subagent's transcript belongs to this run's trace, not to a
 			// separate session file the user would have to find and correlate by hand.
+			// That is still true, and still means pi's own per-session JSONL stays off —
+			// the actual context window this builds dies with the process either way, and
+			// a raw session file on disk would only be a second, harder-to-read copy of
+			// work the trace already describes. It does not mean nothing here survives the
+			// process: `Trace.snapshot()` and `IdeaGraph.snapshot()` are already the
+			// correlated record — keyed by point, not by a filename someone has to guess —
+			// and the server persists exactly those, debounced, to `persist.ts`. See that
+			// file and `endInterruptedNodes` for what a saved run honestly claims once this
+			// session, and every other one on the run, is gone.
 			sessionManager: SessionManager.inMemory(),
 			// Only when asked. Left unset, pi reads the operator's own settings file, which
 			// is what they expect their thresholds to mean.

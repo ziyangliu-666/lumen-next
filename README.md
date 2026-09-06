@@ -1,5 +1,3 @@
-# lumen
-
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/logo-dark.png">
@@ -7,6 +5,7 @@
   </picture>
 </div>
 
+<br>
 
 一个网页应用：多个 AI agent 互相委派任务，它们之间的调用关系实时画成一张图。
 你可以点进任意一个节点看它在干什么，也能中途插话、改它的方向。这是我们 SWE5006
@@ -36,13 +35,12 @@ apps/web             React 前端，每个页面一个目录
 
 ![lumen 分工与模块](docs/slices.svg)
 
-界面设计（每个屏幕标了归属）：线上 [ziy.bio/lumen-next](https://ziy.bio/lumen-next/)，源文件在 [docs/spec/index.html](docs/spec/index.html)。
-
-新人先看 [docs/ONBOARDING.md](docs/ONBOARDING.md)，讲的是怎么配合 agent 干活。
-每条功能线的具体边界看 [docs/SLICES.md](docs/SLICES.md)，怎样算做完看
-[docs/DOD.md](docs/DOD.md)，代码规范看
-[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md)，哪个目录归谁看
-[CODEOWNERS](CODEOWNERS)。
+- 界面设计（每个屏幕标了归属）：[线上 ziy.bio/lumen-next](https://ziy.bio/lumen-next/) · [源文件 docs/spec/index.html](docs/spec/index.html)
+- 怎么配合 agent 干活（新人先看）：[docs/ONBOARDING.md](docs/ONBOARDING.md)
+- 每条功能线的具体边界：[docs/SLICES.md](docs/SLICES.md)
+- 怎样算做完：[docs/DOD.md](docs/DOD.md)
+- 代码规范：[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md)
+- 哪个目录归谁：[CODEOWNERS](CODEOWNERS)
 
 ## 本地跑起来
 

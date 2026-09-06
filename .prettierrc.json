@@ -3,5 +3,8 @@
   "singleQuote": true,
   "semi": true,
   "trailingComma": "all",
-  "arrowParens": "always"
+  "arrowParens": "always",
+  "plugins": ["prettier-plugin-tailwindcss"],
+  "tailwindStylesheet": "./apps/web/src/styles/theme.css",
+  "tailwindFunctions": ["cn", "cva"]
 }

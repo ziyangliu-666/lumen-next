@@ -1,14 +1,26 @@
 // Flat config. One rule set for the whole workspace.
-// The import-boundary rule is the load-bearing one: a slice module may use another
-// slice only through its public barrel (modules/<name>/index.ts), never by reaching
-// into its internals. This keeps the monolith modular and keeps five agents from
-// colliding inside one another's folders.
+// Two rules are load-bearing, one per side of the wire.
+// Server: a slice module may use another slice only through its public barrel
+// (modules/<name>/index.ts), never by reaching into its internals.
+// Web: a page may only build from `src/ui` and `src/core`, using theme tokens.
+// Both exist for the same reason — five people and five agents write here at the
+// same time, and neither collisions nor five private colour schemes are wanted.
 import js from '@eslint/js';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
+import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/coverage/**', '**/*.config.*', 'apps/web/**', '.claude/**'],
+    ignores: [
+      '**/dist/**',
+      '**/coverage/**',
+      '**/*.config.*',
+      '.claude/**',
+      // Vendored shadcn/ui sources. They are updated by `npx shadcn add`, not by
+      // hand, so our house rules would only fight the generator.
+      'apps/web/src/ui/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -33,6 +45,49 @@ export default tseslint.config(
               group: ['**/modules/*/*', '!**/modules/*/index.js', '!**/modules/*/index.ts'],
               message:
                 'Import a slice only through its public index (modules/<name>), not its internals.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // The web app: React rules, accessibility, and the theme.
+  {
+    files: ['apps/web/src/**/*.{ts,tsx}'],
+    extends: [reactHooks.configs.flat.recommended, jsxA11y.flatConfigs.recommended],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'JSXAttribute[name.name="style"]',
+          message:
+            'No inline styles. Use a Tailwind utility built from the theme, or add a variant to the component in src/ui.',
+        },
+        {
+          selector: 'Literal[value=/\\[#[0-9a-fA-F]{3}/]',
+          message:
+            'No hex colour in a class name. Use a theme colour (bg-surface, text-muted-foreground, text-keep, …) from src/styles/theme.css.',
+        },
+        {
+          selector: 'TemplateElement[value.raw=/\\[#[0-9a-fA-F]{3}/]',
+          message:
+            'No hex colour in a class name. Use a theme colour (bg-surface, text-muted-foreground, text-keep, …) from src/styles/theme.css.',
+        },
+      ],
+    },
+  },
+  // A page owns its own folder and nothing else.
+  {
+    files: ['apps/web/src/pages/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/pages/*', '**/pages/*/*'],
+              message:
+                'A page may not import another page. Share it through @/ui (a component) or @/core (the shell), and ask that owner first.',
             },
           ],
         },

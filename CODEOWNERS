@@ -6,6 +6,14 @@
 /packages/contracts/            @ziyangliu-666
 /apps/server/src/core/          @ziyangliu-666
 
+# The web app's shell, theme and shared components. Six pages, one look; see
+# docs/UI.md. A page owner writes their page, not the frame around it.
+/apps/web/src/core/             @ziyangliu-666
+/apps/web/src/ui/               @ziyangliu-666
+/apps/web/src/styles/           @ziyangliu-666
+/apps/web/package.json          @ziyangliu-666
+/apps/web/components.json       @ziyangliu-666
+
 # UC1 Identity — LU YI
 /apps/server/src/modules/identity/   @youayouly
 /apps/web/src/pages/signin/          @youayouly

@@ -35,6 +35,7 @@ apps/web             React 前端，每个页面一个目录
 - 每条功能线的具体边界：[docs/SLICES.md](docs/SLICES.md)
 - 怎样算做完：[docs/DOD.md](docs/DOD.md)
 - 代码规范：[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md)
+- 前端只有一套外观：[docs/UI.md](docs/UI.md)
 - 哪个目录归谁：[CODEOWNERS](CODEOWNERS)
 
 ## 本地跑起来

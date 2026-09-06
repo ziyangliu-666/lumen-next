@@ -7,7 +7,9 @@
     "moduleResolution": "Bundler",
     "module": "ESNext",
     "noEmit": true,
-    "types": []
+    "types": [],
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

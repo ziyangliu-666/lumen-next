@@ -3,3 +3,6 @@ coverage
 node_modules
 *.md
 package-lock.json
+# A generated, self-contained page. Prettier cannot parse it, and reformatting it
+# would only produce a diff nobody reads.
+docs/spec/

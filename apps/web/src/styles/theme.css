@@ -1,0 +1,157 @@
+/* The single source of colour, type and radius for the whole web app.
+   The values come from the annotated spec at docs/spec/index.html, so the
+   product and the screens the team reviewed stay the same product.
+
+   Every name below is exposed to Tailwind as a utility: `--color-surface`
+   becomes `bg-surface`, `--color-keep` becomes `text-keep`. Pages use those
+   utilities. A page must never write a hex value of its own — ESLint blocks
+   it — because a hex in a page is a colour that no longer follows the theme
+   when the theme changes. */
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Surfaces, back to front. */
+  --ground: #f6f8fa;
+  --surface: #ffffff;
+  --sunken: #eef1f5;
+
+  /* Text, loudest to quietest. */
+  --ink: #131820;
+  --body: #2b3440;
+  --muted: #59646f;
+  --faint: #8b95a1;
+
+  /* Rules. `rule-strong` is for a border a control needs to look like one. */
+  --rule: #dde3ea;
+  --rule-strong: #c3ccd6;
+
+  /* The one accent. `on-accent` is the text that sits on top of it. */
+  --accent: #1f5f8b;
+  --accent-soft: #e4eef5;
+  --on-accent: #ffffff;
+
+  /* The three meanings a run can carry. Each has a text colour and the tint
+     it sits on: decide = needs a person, gap = failed or missing,
+     keep = finished and kept. */
+  --decide: #8a6008;
+  --decide-soft: #f7efdc;
+  --gap: #9e3a2c;
+  --gap-soft: #f9e8e5;
+  --keep: #2f6a4f;
+  --keep-soft: #e3f0ea;
+
+  /* Owner and series colours, in slice order: session, projects, identity,
+     steering, billing. Use them for charts and ownership chips, never as a
+     second accent. */
+  --series-1: #3b6ea5;
+  --series-2: #4a8f6d;
+  --series-3: #a5506e;
+  --series-4: #7a5aa5;
+  --series-5: #8a5a3b;
+
+  --radius: 0.5rem;
+}
+
+.dark {
+  --ground: #0f1318;
+  --surface: #161c23;
+  --sunken: #1c232b;
+
+  --ink: #e6eaef;
+  --body: #c6ced7;
+  --muted: #8c97a3;
+  --faint: #67717c;
+
+  --rule: #262f39;
+  --rule-strong: #38434f;
+
+  --accent: #62a9d9;
+  --accent-soft: #17303f;
+  --on-accent: #0f1318;
+
+  --decide: #d5a447;
+  --decide-soft: #33290f;
+  --gap: #d97a67;
+  --gap-soft: #38201b;
+  --keep: #6fbf95;
+  --keep-soft: #162a21;
+
+  --series-1: #62a9d9;
+  --series-2: #6fbf95;
+  --series-3: #d98aa8;
+  --series-4: #a992d9;
+  --series-5: #c99a72;
+}
+
+/* The shadcn component sources read the names on the left. Mapping them here,
+   instead of editing the components, is what lets `npx shadcn add <name>` keep
+   working: a component arrives already wearing our palette. */
+@theme inline {
+  --color-background: var(--ground);
+  --color-foreground: var(--body);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--body);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--body);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-secondary: var(--sunken);
+  --color-secondary-foreground: var(--body);
+  --color-muted: var(--sunken);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--accent-soft);
+  --color-accent-foreground: var(--accent);
+  --color-destructive: var(--gap);
+  --color-destructive-foreground: var(--on-accent);
+  --color-border: var(--rule);
+  --color-input: var(--rule-strong);
+  --color-ring: var(--accent);
+
+  /* Ours, on top of the shadcn set. */
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-faint: var(--faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-decide: var(--decide);
+  --color-decide-soft: var(--decide-soft);
+  --color-gap: var(--gap);
+  --color-gap-soft: var(--gap-soft);
+  --color-keep: var(--keep);
+  --color-keep-soft: var(--keep-soft);
+  --color-chart-1: var(--series-1);
+  --color-chart-2: var(--series-2);
+  --color-chart-3: var(--series-3);
+  --color-chart-4: var(--series-4);
+  --color-chart-5: var(--series-5);
+
+  --font-sans: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-ground font-sans text-body antialiased;
+  }
+
+  /* Headings are the one place `ink` is louder than body text. */
+  h1,
+  h2,
+  h3 {
+    @apply text-ink;
+  }
+}

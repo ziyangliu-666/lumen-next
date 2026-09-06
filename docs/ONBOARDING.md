@@ -76,7 +76,7 @@ it.todo('SessionStrategy resolves an existing cookie to its principal');
 ```
 You are working on the `<slice>` vertical slice of the lumen monorepo.
 Read these first: apps/server/src/modules/<slice>/README.md, docs/CODING_STANDARDS.md,
-docs/SLICES.md, packages/contracts/src.
+docs/SLICES.md, docs/UI.md, packages/contracts/src.
 
 Your task: make the next `it.todo(...)` in <slice>.test.ts a real passing test,
 and implement the code it needs. Rules:
@@ -85,6 +85,11 @@ and implement the code it needs. Rules:
 - `npm run verify` must stay green: format, lint, strict typecheck, coverage.
 - Demonstrate the slice's design pattern; document the brute-force version first,
   then the refactor.
+- On the web side, follow docs/UI.md: build from the components in
+  apps/web/src/ui (shadcn/ui), colour only with the theme classes from
+  apps/web/src/styles/theme.css, no inline styles, no hex values, no new UI
+  dependency, and no import from another page. Read the existing page in your
+  folder and match it.
 - Small commits, Conventional Commits, one branch per task.
 Show me the plan before you write code.
 ```
@@ -118,12 +123,15 @@ agent 写的每一段，你都得能讲清楚——不是让它写完就撒手�
 不用背规范。`npm run verify` 绿了就是合规。它一次跑完：格式化（Prettier）、lint
 （ESLint 严格模式 + 边界检查）、类型检查（TypeScript strict）、测试和覆盖率。
 
-细则在 [CODING_STANDARDS.md](CODING_STANDARDS.md)。最要紧的三条：
+细则在 [CODING_STANDARDS.md](CODING_STANDARDS.md)。最要紧的四条：
 
 - **边界**：别人的功能线你只能通过它的 `index.ts` 用，不能直接引它内部的文件。
   引错了 ESLint 直接报错。这是五个人不互相踩脚的关键。
 - **钱一律用整数分**，别用小数。
 - **复杂的类先写测试**（委派引擎、预算链、状态机这些）。琐碎的胶水代码不用测。
+- **前端只有一套外观**：组件从 `apps/web/src/ui/` 里拿，颜色只用
+  `apps/web/src/styles/theme.css` 里的主题类。写死颜色、写 `style={{}}`、引别人的
+  页面，ESLint 都会拦。细则一页纸，在 [UI.md](UI.md)。
 
 ## 7. 提交流程
 

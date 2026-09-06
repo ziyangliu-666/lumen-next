@@ -1,12 +1,14 @@
 import { StrictMode, type JSX } from 'react';
 import { createRoot } from 'react-dom/client';
-import { useRoute, type Route } from './core/router.js';
+import { renderRoute, useHash, type Route } from './core/router.js';
+import { AppShell } from './core/shell.js';
 import { Landing } from './pages/landing/Landing.js';
 import { SignIn } from './pages/signin/SignIn.js';
 import { Home } from './pages/home/Home.js';
 import { Session } from './pages/session/Session.js';
 import { Settings } from './pages/settings/Settings.js';
 import { Admin } from './pages/admin/Admin.js';
+import './styles/theme.css';
 
 const routes: readonly Route[] = [
   { path: '/', render: () => <Landing /> },
@@ -18,7 +20,14 @@ const routes: readonly Route[] = [
 ];
 
 function App(): JSX.Element {
-  return useRoute(routes, () => <Landing />);
+  const path = useHash();
+  return (
+    <AppShell path={path}>
+      {renderRoute(routes, path, () => (
+        <Landing />
+      ))}
+    </AppShell>
+  );
 }
 
 createRoot(document.getElementById('root')!).render(

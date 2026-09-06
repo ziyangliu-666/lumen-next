@@ -1,5 +1,11 @@
 # lumen
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/logo-dark.png">
+  <img alt="lumen" src="apps/web/public/logo-light.png" width="360">
+</picture>
+
+
 一个网页应用：多个 AI agent 互相委派任务，它们之间的调用关系实时画成一张图。
 你可以点进任意一个节点看它在干什么，也能中途插话、改它的方向。这是我们 SWE5006
 实践模块的项目，Team 1。

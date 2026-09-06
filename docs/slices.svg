@@ -63,6 +63,6 @@
 <text x="808" y="238" font-size="10.5" fill="#94a3b8">是什么</text>
 <text x="808" y="253" font-size="11" fill="#475569">账目、支付 Stripe、密钥保管</text>
 <rect x="20" y="313" width="960" height="64" rx="10" fill="#0f766e"/>
-<text x="36" y="339" font-size="14" font-weight="700" fill="#ffffff">core · contracts　—　公共部分，刘子阳（PM）维护，Sprint 1 后冻结</text>
+<text x="36" y="339" font-size="14" font-weight="700" fill="#ffffff">core · contracts　—　公共部分，Sprint 1 后冻结</text>
 <text x="36" y="361" font-size="12" fill="#ffffff" opacity="0.9">事件协议、领域模型（point / edge）、数据库 schema、HTTP 与鉴权 —— 五条线都对着它写</text>
 </svg>

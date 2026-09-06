@@ -21,7 +21,7 @@
 ```
 packages/contracts   前后端共用的事件协议和数据类型（第一个 sprint 之后锁定）
 apps/server          后端单体
-  src/core           领域模型、事件广播、数据库、HTTP —— 公共部分，PM 维护
+  src/core           领域模型、事件广播、数据库、HTTP —— 公共部分，Sprint 1 后冻结
   src/modules        每条功能线一个目录，各有一个负责人
 apps/web             React 前端，每个页面一个目录
 ```

@@ -5,7 +5,7 @@ behind them, the design problem it solves, and the pipeline jobs for it. The rul
 that keeps five people from colliding: **implementation ownership follows design
 ownership.**
 
-## The shared contract (LIU ZIYANG, PM)
+## The shared contract (LIU ZIYANG)
 
 `packages/contracts` and `apps/server/src/core`. The domain model (point, line,
 four edge kinds), the server→browser event protocol, the base database schema, and

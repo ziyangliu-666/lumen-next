@@ -1,4 +1,4 @@
-# core — shared, owned by LIU ZIYANG (PM)
+# core — shared, frozen after Sprint 1
 
 The contract every slice builds against. Frozen at the end of Sprint 1.
 

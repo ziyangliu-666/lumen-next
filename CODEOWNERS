@@ -2,7 +2,7 @@
 # needs its owner's review. Enable in Settings -> Branches -> Require review
 # from Code Owners.
 
-# Shared contract and core — the PM. Frozen after Sprint 1; changes need review.
+# Shared contract and core. Frozen after Sprint 1; changes need review.
 /packages/contracts/            @ziyangliu-666
 /apps/server/src/core/          @ziyangliu-666
 

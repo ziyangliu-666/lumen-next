@@ -18,7 +18,7 @@ lumen 是一个网页应用：多个 AI agent 互相委派，调用关系画成�
 
 | 你 | 功能线 | 页面 | 后端模块 | 设计模式 |
 |---|---|---|---|---|
-| 刘子阳（PM） | 公共契约 + session | Session 页的图和调用树 | contracts, core, session | Composite |
+| 刘子阳 | 公共契约 + session | Session 页的图和调用树 | contracts, core, session | Composite |
 | 陆毅 | identity | 登录页、设置页的账号 | identity | Strategy + Template Method |
 | 彭徐剑 | projects | 落地页、首页 | projects | State |
 | 李卓阳 | steering | Session 页的输入框和文件面板 | steering | Command + Null Object |
@@ -177,7 +177,7 @@ npm run dev --workspace @lumen/web
 ```
 
 联调断了，通常不是谁写错了，是契约没对齐。回 `packages/contracts` 看是不是少了字段。
-契约在第一个 sprint 之后是锁定的，要改得经 PM review。
+契约在第一个 sprint 之后是锁定的，要改得走 review。
 
 ## 9. 时间线
 
@@ -196,8 +196,8 @@ npm run dev --workspace @lumen/web
 
 ## 10. 卡住了找谁
 
-- 环境、契约、联调、流程的问题 → 找刘子阳（PM）。
+- 环境、契约、联调、流程的问题 → 找刘子阳。
 - 你这条线内部的设计问题 → 先问你的 agent，再拿到群里一起看。
-- 老师要交的东西（报告、DOD、交付物）→ 看 [DOD.md](DOD.md)，还有问题问 PM。
+- 老师要交的东西（报告、DOD、交付物）→ 看 [DOD.md](DOD.md)，还有问题群里问。
 
 先把 `npm run verify` 跑绿，再开始。

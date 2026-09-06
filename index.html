@@ -26,6 +26,16 @@
 .owncard a.pg:hover{border-color:var(--accent);color:var(--accent)}
 .owncard .m{font-family:var(--f-sans);font-size:.72rem;color:var(--body);margin:.28rem 0;line-height:1.35}
 .owncard .m b{color:var(--ink)}
+
+/* module responsibility section */
+.modblock{margin:.7rem 0;padding:.55rem .75rem;border:1px solid var(--rule);border-left:3px solid var(--o,#888);border-radius:6px;background:var(--surface)}
+.modblock h4{margin:0;font-family:var(--f-mono);font-size:.92rem;color:var(--ink)}
+.modblock h4 .who{font-family:var(--f-sans);font-size:.68rem;color:var(--faint);margin-left:.5rem;font-weight:400}
+.modblock ul{margin:.35rem 0 0;padding-left:1.15rem}
+.modblock li{font-family:var(--f-sans);font-size:.78rem;color:var(--body);margin:.16rem 0;line-height:1.45}
+.ownhd{font-family:var(--f-sans);font-weight:700;font-size:1rem;margin:1.2rem 0 .2rem;padding-left:.5rem;border-left:4px solid var(--o,#888)}
+.owncard .m a{color:inherit;text-decoration:none;border-bottom:1px solid var(--rule-strong)}
+.owncard .m a:hover{border-color:currentColor}
 </style>
 </head>
 <body>
@@ -508,13 +518,13 @@ tr.hot:hover td { background: var(--accent-soft); }
 
 <section class="page" id="who" style="border-top:0">
   <h2>按人分工</h2>
-  <p class="job">五条纵切片，一人一条。点页面块跳到对应界面；每个后端模块下面写了归属和作用。</p>
+  <p class="job">五条纵切片，一人一条。点页面块跳到界面，点后端模块跳到它的职责清单（在下面「子模块职责」）。</p>
   <div class="owngrid">
-<div class="owncard"><div class="hd" style="background:#3b6ea5"><b>陆毅 · identity</b><span class="pat">Strategy + Template Method</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p2">02 Sign in</a><a class="pg" href="#p5">05 Account</a><div class="sec">后端模块 · 作用</div><div class="m"><b>identity</b> — 登录与账号：GitHub / Google OAuth、密码、session</div><div class="m"><b>email</b> — 邮件：验证邮件、通知</div></div></div>
-<div class="owncard"><div class="hd" style="background:#4a8f6d"><b>彭徐剑 · projects</b><span class="pat">State</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p1">01 Landing</a><a class="pg" href="#p3">03 Home</a><div class="sec">后端模块 · 作用</div><div class="m"><b>projects</b> — 项目的增删查、四种状态（运行 / 等待 / 完成 / 停止）</div><div class="m"><b>findings</b> — 发现/结论卡片：首页和会话里 agent 报告的结论</div></div></div>
-<div class="owncard"><div class="hd" style="background:#8a5a3b"><b>刘子阳 · session</b><span class="pat">Composite（PM）</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p4">04 Session</a><div class="sec">后端模块 · 作用</div><div class="m"><b>kernel</b> — 委派引擎：point / edge、把任务拆给 worker、预算驱动</div><div class="m"><b>broker</b> — 事件广播：WebSocket 把后端事件推给浏览器</div></div></div>
-<div class="owncard"><div class="hd" style="background:#7a5aa5"><b>李卓阳 · steering</b><span class="pat">Command + Null Object</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p4">04 Session</a><div class="sec">后端模块 · 作用</div><div class="m"><b>worker</b> — agent 运行循环：沙箱里 think → tool → observe</div><div class="m"><b>compute</b> — 沙箱算力：Modal / Docker，跑命令的容器</div><div class="m"><b>storage</b> — 文件存储：项目卷，读写文件</div></div></div>
-<div class="owncard"><div class="hd" style="background:#a5506e"><b>贺融 · billing</b><span class="pat">Chain of Responsibility</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p5">05 Wallet / Keys</a><a class="pg" href="#p6">06 Admin</a><div class="sec">后端模块 · 作用</div><div class="m"><b>ledger</b> — 账目：每笔花费记账、按项目汇总</div><div class="m"><b>billing</b> — 支付：Stripe 充值、发票、月度上限</div><div class="m"><b>secrets</b> — 密钥保管：用户的 API key，写入后不回显</div></div></div>
+<div class="owncard"><div class="hd" style="background:#3b6ea5"><b>陆毅 · identity</b><span class="pat">Strategy + Template Method</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p2">02 Sign in</a><a class="pg" href="#p5">05 Account</a><div class="sec">后端模块（点开看职责）</div><a class="pg" href="#m-identity">identity</a><a class="pg" href="#m-email">email</a></div></div>
+<div class="owncard"><div class="hd" style="background:#4a8f6d"><b>彭徐剑 · projects</b><span class="pat">State</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p1">01 Landing</a><a class="pg" href="#p3">03 Home</a><div class="sec">后端模块（点开看职责）</div><a class="pg" href="#m-projects">projects</a><a class="pg" href="#m-findings">findings</a></div></div>
+<div class="owncard"><div class="hd" style="background:#8a5a3b"><b>刘子阳 · session</b><span class="pat">Composite（PM）</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p4">04 Session</a><div class="sec">后端模块（点开看职责）</div><a class="pg" href="#m-kernel">kernel</a><a class="pg" href="#m-broker">broker</a></div></div>
+<div class="owncard"><div class="hd" style="background:#7a5aa5"><b>李卓阳 · steering</b><span class="pat">Command + Null Object</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p4">04 Session</a><div class="sec">后端模块（点开看职责）</div><a class="pg" href="#m-worker">worker</a><a class="pg" href="#m-compute">compute</a><a class="pg" href="#m-storage">storage</a></div></div>
+<div class="owncard"><div class="hd" style="background:#a5506e"><b>贺融 · billing</b><span class="pat">Chain of Responsibility</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p5">05 Wallet / Keys</a><a class="pg" href="#p6">06 Admin</a><div class="sec">后端模块（点开看职责）</div><a class="pg" href="#m-ledger">ledger</a><a class="pg" href="#m-billing">billing</a><a class="pg" href="#m-secrets">secrets</a><a class="pg" href="#m-admin">admin</a></div></div>
   </div>
 </section>
 
@@ -1045,6 +1055,28 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
   </div>
 
   <div class="demoNav" id="demoNav"></div>
+
+<section class="page" id="modules">
+  <h2>子模块职责</h2>
+  <p class="job">每个人负责的子模块，以及预期要提供的功能。上面「按人分工」里点模块名会跳到这里。</p>
+  <div class="ownhd" style="--o:#3b6ea5">陆毅 · identity</div>
+  <div class="modblock" id="m-identity" style="--o:#3b6ea5"><h4>identity<span class="who">陆毅 · identity</span></h4><ul><li>GitHub OAuth 登录、Google OAuth 登录</li><li>邮箱 + 密码 注册与登录</li><li>session 的签发、校验、续期、登出</li><li>按角色区分 user / staff，登录后按角色跳转（管理员进后台）</li><li>账号信息：改名、改密码、查看已绑定的 GitHub / Google</li></ul></div>
+  <div class="modblock" id="m-email" style="--o:#3b6ea5"><h4>email<span class="who">陆毅 · identity</span></h4><ul><li>注册后发送邮箱验证邮件</li><li>需要用户批准（如高额步骤）时发送通知邮件</li><li>邮件模板与发送</li></ul></div>
+  <div class="ownhd" style="--o:#4a8f6d">彭徐剑 · projects</div>
+  <div class="modblock" id="m-projects" style="--o:#4a8f6d"><h4>projects<span class="who">彭徐剑 · projects</span></h4><ul><li>从落地页输入的问题新建项目</li><li>项目列表，按状态展示：运行 / 等待用户 / 完成 / 停止</li><li>项目卡片的状态机，按 state.live 决定是否轮询刷新</li><li>打开项目进入会话</li></ul></div>
+  <div class="modblock" id="m-findings" style="--o:#4a8f6d"><h4>findings<span class="who">彭徐剑 · projects</span></h4><ul><li>记录 agent 报告的发现 / 结论</li><li>在首页和会话里展示 findings 卡片</li><li>findings 关联到产生它的 point</li></ul></div>
+  <div class="ownhd" style="--o:#8a5a3b">刘子阳 · session</div>
+  <div class="modblock" id="m-kernel" style="--o:#8a5a3b"><h4>kernel<span class="who">刘子阳 · session</span></h4><ul><li>point / edge 模型，四种边：delegate / branch / compact / handover</li><li>委派引擎：把任务拆给 worker、并发扇出、限制深度</li><li>成本沿 delegate 边上卷（Composite）</li><li>预算内自动运行，在三处检查预算（回合前、扇出时、开窗时）</li><li>trace：把每一步按顺序记下来</li></ul></div>
+  <div class="modblock" id="m-broker" style="--o:#8a5a3b"><h4>broker<span class="who">刘子阳 · session</span></h4><ul><li>WebSocket 服务</li><li>事件协议：point.opened / status / cost、step.appended、finding.recorded</li><li>订阅 / 退订、多客户端广播</li><li>断线重连时补发</li></ul></div>
+  <div class="ownhd" style="--o:#7a5aa5">李卓阳 · steering</div>
+  <div class="modblock" id="m-worker" style="--o:#7a5aa5"><h4>worker<span class="who">李卓阳 · steering</span></h4><ul><li>在沙箱里跑 agent 的 think → tool → observe 循环</li><li>产出 step、findings、花费</li><li>worker 崩溃后从 trace 重放继续</li></ul></div>
+  <div class="modblock" id="m-compute" style="--o:#7a5aa5"><h4>compute<span class="who">李卓阳 · steering</span></h4><ul><li>多 provider：Modal / Docker / none</li><li>起容器、跑命令、回传 stdout 和 exitCode</li><li>none provider 返回可读的失败，而不是 null（Null Object）</li></ul></div>
+  <div class="modblock" id="m-storage" style="--o:#7a5aa5"><h4>storage<span class="who">李卓阳 · steering</span></h4><ul><li>项目卷，挂进沙箱</li><li>文件读写；save 工具把路径限制在会话目录内</li><li>会话里文件面板的列表与内容</li><li>用户在会话里插话的排队与落地时机（Command）</li></ul></div>
+  <div class="ownhd" style="--o:#a5506e">贺融 · billing</div>
+  <div class="modblock" id="m-ledger" style="--o:#a5506e"><h4>ledger<span class="who">贺融 · billing</span></h4><ul><li>每笔花费记账（compute 与 models）</li><li>按项目、按 point 汇总</li><li>月度用量与余额显示</li></ul></div>
+  <div class="modblock" id="m-billing" style="--o:#a5506e"><h4>billing<span class="who">贺融 · billing</span></h4><ul><li>Stripe 充值（Checkout）</li><li>发票与账单</li><li>月度上限（cap）</li><li>超额请求升级给用户审批（Chain of Responsibility）</li></ul></div>
+  <div class="modblock" id="m-secrets" style="--o:#a5506e"><h4>secrets<span class="who">贺融 · billing</span></h4><ul><li>保管用户的 API key：Modal、搜索、模型、Hugging Face</li><li>写入后不回显（write-only）</li><li>加密存储</li></ul></div>
+  <div class="modblock" id="m-admin" style="--o:#a5506e"><h4>admin<span class="who">贺融 · billing</span></h4><ul><li>所有账号列表：谁、能做什么、花了多少</li><li>按角色识别管理员</li><li>紧急停止某个失控账号的运行</li></ul></div>
 </section>
 
 <!-- ============ 01 LANDING ============ -->
@@ -1157,7 +1189,7 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
   </div>
 
   <h3>Backend</h3>
-  <div class="backend"><span class="mod isnew" style="border-color:#3b6ea5;color:#3b6ea5;background:var(--surface)">identity</span><span class="mod" style="border-color:#3b6ea5;color:#3b6ea5;background:var(--surface)">email</span></div>
+  <div class="backend"><a class="mod isnew" style="border-color:#3b6ea5;color:#3b6ea5;background:var(--surface);text-decoration:none" href="#m-identity">identity</a><a class="mod" style="border-color:#3b6ea5;color:#3b6ea5;background:var(--surface);text-decoration:none" href="#m-email">email</a></div>
   <div class="guard"><b>Not yet</b>Labs, invites, SSO, 2FA. One account owns everything until someone asks to share.</div>
 </section>
 
@@ -1223,7 +1255,7 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
   </div>
 
   <h3>Backend</h3>
-  <div class="backend"><span class="mod isnew" style="border-color:#4a8f6d;color:#4a8f6d;background:var(--surface)">projects</span><span class="mod isnew" style="border-color:#4a8f6d;color:#4a8f6d;background:var(--surface)">findings</span><span class="mod isnew" style="border-color:#a5506e;color:#a5506e;background:var(--surface)">ledger</span></div>
+  <div class="backend"><a class="mod isnew" style="border-color:#4a8f6d;color:#4a8f6d;background:var(--surface);text-decoration:none" href="#m-projects">projects</a><a class="mod isnew" style="border-color:#4a8f6d;color:#4a8f6d;background:var(--surface);text-decoration:none" href="#m-findings">findings</a><a class="mod isnew" style="border-color:#a5506e;color:#a5506e;background:var(--surface);text-decoration:none" href="#m-ledger">ledger</a></div>
   <div class="guard"><b>Not yet</b>Search, tags, folders. Revisit at forty projects.</div>
 </section>
 
@@ -1405,7 +1437,7 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
   </div>
 
   <h3>Backend</h3>
-  <div class="backend"><span class="mod" style="border-color:#8a5a3b;color:#8a5a3b;background:var(--surface)">kernel</span><span class="mod isnew" style="border-color:#7a5aa5;color:#7a5aa5;background:var(--surface)">worker</span><span class="mod isnew" style="border-color:#8a5a3b;color:#8a5a3b;background:var(--surface)">broker</span><span class="mod isnew" style="border-color:#7a5aa5;color:#7a5aa5;background:var(--surface)">storage</span><span class="mod isnew" style="border-color:#4a8f6d;color:#4a8f6d;background:var(--surface)">findings</span><span class="mod isnew" style="border-color:#a5506e;color:#a5506e;background:var(--surface)">ledger</span><span class="mod isnew" style="border-color:#7a5aa5;color:#7a5aa5;background:var(--surface)">compute</span></div>
+  <div class="backend"><a class="mod" style="border-color:#8a5a3b;color:#8a5a3b;background:var(--surface);text-decoration:none" href="#m-kernel">kernel</a><a class="mod isnew" style="border-color:#7a5aa5;color:#7a5aa5;background:var(--surface);text-decoration:none" href="#m-worker">worker</a><a class="mod isnew" style="border-color:#8a5a3b;color:#8a5a3b;background:var(--surface);text-decoration:none" href="#m-broker">broker</a><a class="mod isnew" style="border-color:#7a5aa5;color:#7a5aa5;background:var(--surface);text-decoration:none" href="#m-storage">storage</a><a class="mod isnew" style="border-color:#4a8f6d;color:#4a8f6d;background:var(--surface);text-decoration:none" href="#m-findings">findings</a><a class="mod isnew" style="border-color:#a5506e;color:#a5506e;background:var(--surface);text-decoration:none" href="#m-ledger">ledger</a><a class="mod isnew" style="border-color:#7a5aa5;color:#7a5aa5;background:var(--surface);text-decoration:none" href="#m-compute">compute</a></div>
   <div class="guard"><b>Not yet</b>Two people typing into one session. Nobody shares anything in v1.</div>
 </section>
 
@@ -1575,7 +1607,7 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
   </div>
 
   <h3>Backend</h3>
-  <div class="backend"><span class="mod isnew" style="border-color:#3b6ea5;color:#3b6ea5;background:var(--surface)">identity</span><span class="mod isnew" style="border-color:#a5506e;color:#a5506e;background:var(--surface)">ledger</span></div>
+  <div class="backend"><a class="mod isnew" style="border-color:#3b6ea5;color:#3b6ea5;background:var(--surface);text-decoration:none" href="#m-identity">identity</a><a class="mod isnew" style="border-color:#a5506e;color:#a5506e;background:var(--surface);text-decoration:none" href="#m-ledger">ledger</a></div>
 
   <div class="guard"><b>Homeless</b>A kill switch for whatever a runaway account has started. Genuinely needed at 3am and genuinely not account administration — it belongs somewhere, and this page is not it.</div>
   <div class="guard"><b>Not yet</b>Charts, an analytics stack, an audit log. Two tables answer what we need.</div>

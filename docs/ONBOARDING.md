@@ -19,10 +19,10 @@ lumen 是一个网页应用：多个 AI agent 互相委派，调用关系画成�
 | 你 | 功能线 | 页面 | 后端模块 | 设计模式 |
 |---|---|---|---|---|
 | 刘子阳（PM） | 公共契约 + session | Session 页的图和调用树 | contracts, core, session | Composite |
-| 陆一 | identity | 登录页、设置页的账号 | identity | Strategy + Template Method |
-| 彭旭建 | projects | 落地页、首页 | projects | State |
+| 陆毅 | identity | 登录页、设置页的账号 | identity | Strategy + Template Method |
+| 彭徐剑 | projects | 落地页、首页 | projects | State |
 | 李卓阳 | steering | Session 页的输入框和文件面板 | steering | Command + Null Object |
-| 何嵘 | billing | 设置页的钱包和密钥、后台 | billing | Chain of Responsibility |
+| 贺融 | billing | 设置页的钱包和密钥、后台 | billing | Chain of Responsibility |
 
 你这条线的后端代码在 `apps/server/src/modules/<你的模块>/`，前端页面在
 `apps/web/src/pages/<你的页面>/`。哪个目录归谁写在 [/CODEOWNERS](../CODEOWNERS) 里。
@@ -63,7 +63,7 @@ it.todo('GithubStrategy exchanges an OAuth code for a verified email');
 it.todo('SessionStrategy resolves an existing cookie to its principal');
 ```
 
-这两行就是陆一第一个 sprint 的两件活。
+这两行就是陆毅第一个 sprint 的两件活。
 
 ## 4. 怎么用 agent 干
 
@@ -108,10 +108,10 @@ agent 写的每一段，你都得能讲清楚——不是让它写完就撒手�
 - **所有人**：把 `npm run verify` 跑绿；读完这份文档和你自己那条线的 README。
 - **刘子阳**：锁定 `packages/contracts` 和 `core`（数据类型、事件协议、基础表结构），
   然后把最小闭环串起来：登录 → 一个项目 → 一个 session → 一个 point，从头渲染到尾。
-- **陆一**：identity 先把密码登录和 session 两条路打通（骨架已经在），OAuth 留着 todo。
-- **彭旭建**：projects 的四态卡片，让卡片根据 `state.live` 决定要不要轮询。
+- **陆毅**：identity 先把密码登录和 session 两条路打通（骨架已经在），OAuth 留着 todo。
+- **彭徐剑**：projects 的四态卡片，让卡片根据 `state.live` 决定要不要轮询。
 - **李卓阳**：steering 的 SteerQueue 接上真实的两个落地时机（本轮结束 / 下一步）。
-- **何嵘**：billing 里超额之后弹审批那条路接起来，Stripe 充值的接口先搭好。
+- **贺融**：billing 里超额之后弹审批那条路接起来，Stripe 充值的接口先搭好。
 
 ## 6. 规范就一条命令
 
@@ -149,8 +149,8 @@ agent 写的每一段，你都得能讲清楚——不是让它写完就撒手�
 三个固定的联调点：
 
 1. **第一个 sprint 结束（9-12）：第一次全员联调，跑通最小闭环。**
-   五个人的骨架串起来走一遍：登录页登录（陆一的桩）→ 首页看到一个项目（彭旭建）
-   → 进 session（刘子阳）→ 一个 point 带着花费渲染出来（何嵘的账目）。这一趟通了，
+   五个人的骨架串起来走一遍：登录页登录（陆毅的桩）→ 首页看到一个项目（彭徐剑）
+   → 进 session（刘子阳）→ 一个 point 带着花费渲染出来（贺融的账目）。这一趟通了，
    第一个 sprint 才算做完。
 
 2. **每个 sprint 的中间，做一次集成检查。**
@@ -160,7 +160,7 @@ agent 写的每一段，你都得能讲清楚——不是让它写完就撒手�
 3. **两条线接头的地方，随时联调。** 已知的接头点：
    - **session 页**：刘子阳的图和李卓阳的输入框在同一页。两人先说好组件之间的边界，
      然后各写各的。
-   - **所有人都依赖 identity**：每条线都需要一个登录用户。陆一的真登录上线之前，
+   - **所有人都依赖 identity**：每条线都需要一个登录用户。陆毅的真登录上线之前，
      大家先用 `core/http/authGuard.ts` 里的桩账号开发；他一上线，全员切过去。
    - **花费的显示**：billing 负责写账目，projects 和 session 负责读出来显示。先把
      读的接口说好，谁先谁后都不卡。

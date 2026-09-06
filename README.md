@@ -28,11 +28,11 @@ apps/web             React 前端，每个页面一个目录
 
 | 功能线 | 负责人 | 用例 | 设计模式 |
 |---|---|---|---|
-| identity | 陆一 | 登录、账号、OAuth | Strategy + Template Method |
-| projects | 彭旭建 | 建项目、看首页 | State |
+| identity | 陆毅 | 登录、账号、OAuth | Strategy + Template Method |
+| projects | 彭徐剑 | 建项目、看首页 | State |
 | session | 刘子阳 | 委派、看调用记录 | Composite |
 | steering | 李卓阳 | 干预运行、执行命令 | Command + Null Object |
-| billing | 何嵘 | 花费上限、后台、Stripe | Chain of Responsibility |
+| billing | 贺融 | 花费上限、后台、Stripe | Chain of Responsibility |
 
 新人先看 [docs/ONBOARDING.md](docs/ONBOARDING.md)，讲的是怎么配合 agent 干活。
 每条功能线的具体边界看 [docs/SLICES.md](docs/SLICES.md)，怎样算做完看

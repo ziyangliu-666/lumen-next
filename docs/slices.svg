@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="397" viewBox="0 0 1000 397" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+<rect width="1000" height="397" rx="14" fill="#f7f8fa"/>
+<text x="20" y="30" font-size="20" font-weight="700" fill="#1e293b">lumen · 分工与模块</text>
+<text x="20" y="50" font-size="12.5" fill="#64748b">五条纵切片，一人一条，从页面到后端；界面设计页里的细模块都归进这五条线。</text>
+<rect x="20" y="64" width="180" height="233" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+<path d="M20,74 q0,-10 10,-10 h160 q10,0 10,10 v42 h-180 z" fill="#3b6ea5"/>
+<text x="32" y="88" font-size="15" font-weight="700" fill="#ffffff">identity</text>
+<text x="32" y="107" font-size="12.5" fill="#ffffff" opacity="0.92">陆毅</text>
+<text x="32" y="136" font-size="10.5" fill="#94a3b8">设计模式</text>
+<text x="32" y="151" font-size="11.5" font-weight="600" fill="#334155">Strategy + Template Meth</text>
+<text x="32" y="166" font-size="11.5" font-weight="600" fill="#334155">od</text>
+<text x="32" y="189" font-size="10.5" fill="#94a3b8">包含模块</text>
+<rect x="32" y="197" width="63" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="64" y="211" font-size="11" fill="#334155" text-anchor="middle">identity</text>
+<rect x="101.28" y="197" width="45" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="124" y="211" font-size="11" fill="#334155" text-anchor="middle">email</text>
+<text x="32" y="229" font-size="10.5" fill="#94a3b8">是什么</text>
+<text x="32" y="244" font-size="11" fill="#475569">登录、账号、OAuth、邮箱验证</text>
+<rect x="214" y="64" width="180" height="233" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+<path d="M214,74 q0,-10 10,-10 h160 q10,0 10,10 v42 h-180 z" fill="#4a8f6d"/>
+<text x="226" y="88" font-size="15" font-weight="700" fill="#ffffff">projects</text>
+<text x="226" y="107" font-size="12.5" fill="#ffffff" opacity="0.92">彭徐剑</text>
+<text x="226" y="136" font-size="10.5" fill="#94a3b8">设计模式</text>
+<text x="226" y="151" font-size="11.5" font-weight="600" fill="#334155">State</text>
+<text x="226" y="174" font-size="10.5" fill="#94a3b8">包含模块</text>
+<rect x="226" y="182" width="63" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="258" y="196" font-size="11" fill="#334155" text-anchor="middle">projects</text>
+<rect x="295.28" y="182" width="63" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="327" y="196" font-size="11" fill="#334155" text-anchor="middle">findings</text>
+<text x="226" y="214" font-size="10.5" fill="#94a3b8">是什么</text>
+<text x="226" y="229" font-size="11" fill="#475569">项目管理、findings 发现/结</text>
+<text x="226" y="244" font-size="11" fill="#475569">论卡片</text>
+<rect x="408" y="64" width="180" height="233" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+<path d="M408,74 q0,-10 10,-10 h160 q10,0 10,10 v42 h-180 z" fill="#8a5a3b"/>
+<text x="420" y="88" font-size="15" font-weight="700" fill="#ffffff">session</text>
+<text x="420" y="107" font-size="12.5" fill="#ffffff" opacity="0.92">刘子阳</text>
+<text x="420" y="136" font-size="10.5" fill="#94a3b8">设计模式</text>
+<text x="420" y="151" font-size="11.5" font-weight="600" fill="#334155">Composite</text>
+<text x="420" y="174" font-size="10.5" fill="#94a3b8">包含模块</text>
+<rect x="420" y="182" width="51" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="445" y="196" font-size="11" fill="#334155" text-anchor="middle">kernel</text>
+<rect x="476.96" y="182" width="51" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="502" y="196" font-size="11" fill="#334155" text-anchor="middle">broker</text>
+<text x="420" y="214" font-size="10.5" fill="#94a3b8">是什么</text>
+<text x="420" y="229" font-size="11" fill="#475569">委派引擎、事件广播、调用树</text>
+<rect x="602" y="64" width="180" height="233" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+<path d="M602,74 q0,-10 10,-10 h160 q10,0 10,10 v42 h-180 z" fill="#7a5aa5"/>
+<text x="614" y="88" font-size="15" font-weight="700" fill="#ffffff">steering</text>
+<text x="614" y="107" font-size="12.5" fill="#ffffff" opacity="0.92">李卓阳</text>
+<text x="614" y="136" font-size="10.5" fill="#94a3b8">设计模式</text>
+<text x="614" y="151" font-size="11.5" font-weight="600" fill="#334155">Command + Null Object</text>
+<text x="614" y="174" font-size="10.5" fill="#94a3b8">包含模块</text>
+<rect x="614" y="182" width="51" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="639" y="196" font-size="11" fill="#334155" text-anchor="middle">worker</text>
+<rect x="670.96" y="182" width="57" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="700" y="196" font-size="11" fill="#334155" text-anchor="middle">compute</text>
+<rect x="614" y="206" width="57" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="643" y="220" font-size="11" fill="#334155" text-anchor="middle">storage</text>
+<text x="614" y="238" font-size="10.5" fill="#94a3b8">是什么</text>
+<text x="614" y="253" font-size="11" fill="#475569">agent 运行、沙箱执行、文件</text>
+<text x="614" y="268" font-size="11" fill="#475569">存储</text>
+<rect x="796" y="64" width="180" height="233" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+<path d="M796,74 q0,-10 10,-10 h160 q10,0 10,10 v42 h-180 z" fill="#a5506e"/>
+<text x="808" y="88" font-size="15" font-weight="700" fill="#ffffff">billing</text>
+<text x="808" y="107" font-size="12.5" fill="#ffffff" opacity="0.92">贺融</text>
+<text x="808" y="136" font-size="10.5" fill="#94a3b8">设计模式</text>
+<text x="808" y="151" font-size="11.5" font-weight="600" fill="#334155">Chain of Responsibility</text>
+<text x="808" y="174" font-size="10.5" fill="#94a3b8">包含模块</text>
+<rect x="808" y="182" width="51" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="833" y="196" font-size="11" fill="#334155" text-anchor="middle">ledger</text>
+<rect x="864.96" y="182" width="57" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="894" y="196" font-size="11" fill="#334155" text-anchor="middle">billing</text>
+<rect x="808" y="206" width="57" height="20" rx="10" fill="#eef1f5" stroke="#d7dde5"/><text x="837" y="220" font-size="11" fill="#334155" text-anchor="middle">secrets</text>
+<text x="808" y="238" font-size="10.5" fill="#94a3b8">是什么</text>
+<text x="808" y="253" font-size="11" fill="#475569">账目、支付 Stripe、密钥保管</text>
+<rect x="20" y="313" width="960" height="64" rx="10" fill="#0f766e"/>
+<text x="36" y="339" font-size="14" font-weight="700" fill="#ffffff">core · contracts　—　公共部分，刘子阳（PM）维护，Sprint 1 后冻结</text>
+<text x="36" y="361" font-size="12" fill="#ffffff" opacity="0.9">事件协议、领域模型（point / edge）、数据库 schema、HTTP 与鉴权 —— 五条线都对着它写</text>
+</svg>

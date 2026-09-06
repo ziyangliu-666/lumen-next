@@ -1,9 +1,11 @@
 # lumen
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/logo-dark.png">
-  <img alt="lumen" src="apps/web/public/logo-light.png" width="360">
-</picture>
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/logo-dark.png">
+    <img alt="lumen" src="apps/web/public/logo-light.png" width="480">
+  </picture>
+</div>
 
 
 一个网页应用：多个 AI agent 互相委派任务，它们之间的调用关系实时画成一张图。

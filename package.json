@@ -1,16 +1,31 @@
 {
-  "name": "lumen-next",
+  "name": "lumen",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
   "engines": {
     "node": ">=22"
   },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc --build --pretty",
+    "test": "vitest run",
+    "test:cov": "vitest run --coverage",
+    "build": "npm run build --workspaces --if-present",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test:cov"
+  },
   "devDependencies": {
-    "@types/node": "^26.2.0",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "@types/node": "22.10.2",
+    "@vitest/coverage-v8": "2.1.8",
+    "eslint": "9.17.0",
+    "prettier": "3.4.2",
+    "typescript": "5.7.2",
+    "typescript-eslint": "8.18.1",
+    "vitest": "2.1.8"
   }
 }

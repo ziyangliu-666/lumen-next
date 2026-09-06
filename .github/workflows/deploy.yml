@@ -1,0 +1,46 @@
+name: Deploy
+
+# Continuous delivery: build a container, deploy to staging, run DAST against it,
+# then a manual approval gate to production.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
+      # - name: Push (enable once GHCR is set up)
+      #   run: |
+      #     echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      #     docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+
+  staging:
+    needs: container
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - run: echo "Deploy ${{ github.sha }} to staging here (Fly / Vercel / Render)."
+
+  dast:
+    needs: staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'https://staging.lumen.example'
+        continue-on-error: true
+
+  production:
+    needs: dast
+    runs-on: ubuntu-latest
+    environment: production # protection rule = manual approval gate
+    steps:
+      - run: echo "Promote ${{ github.sha }} to production after approval."

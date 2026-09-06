@@ -1,0 +1,30 @@
+# Ownership follows the vertical slices. A pull request that touches a slice
+# needs its owner's review. Enable in Settings -> Branches -> Require review
+# from Code Owners.
+
+# Shared contract and core — the PM. Frozen after Sprint 1; changes need review.
+/packages/contracts/            @ziyangliu-666
+/apps/server/src/core/          @ziyangliu-666
+
+# UC1 Identity — LU YI
+/apps/server/src/modules/identity/   @youayouly
+/apps/web/src/pages/signin/          @youayouly
+
+# UC2 Projects — PENG XUJIAN
+/apps/server/src/modules/projects/   @kita80387694
+/apps/web/src/pages/landing/         @kita80387694
+/apps/web/src/pages/home/            @kita80387694
+
+# UC3 Session graph — LIU ZIYANG
+/apps/server/src/modules/session/    @ziyangliu-666
+
+# UC4 Steering + sandbox — LI ZHUOYANG
+/apps/server/src/modules/steering/   @AyinLee987
+
+# UC5 Money + admin — HE RONG
+/apps/server/src/modules/billing/    @Darrenus
+/apps/web/src/pages/settings/        @Darrenus
+/apps/web/src/pages/admin/           @Darrenus
+
+# Session page is shared between UC3 and UC4.
+/apps/web/src/pages/session/         @ziyangliu-666 @AyinLee987

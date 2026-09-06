@@ -1,0 +1,42 @@
+-- One relational database for the whole monolith. Sprint 1 schema.
+-- Slice owners add their own tables here via a numbered migration.
+
+create table if not exists accounts (
+  id           uuid primary key default gen_random_uuid(),
+  email        text unique not null,
+  display_name text not null,
+  role         text not null default 'user' check (role in ('user', 'staff')),
+  created_at   timestamptz not null default now()
+);
+
+create table if not exists projects (
+  id         uuid primary key default gen_random_uuid(),
+  account_id uuid not null references accounts(id),
+  title      text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists sessions (
+  id         uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists points (
+  id         uuid primary key default gen_random_uuid(),
+  session_id uuid not null references sessions(id),
+  parent_id  uuid references points(id),
+  edge       text check (edge in ('delegate', 'branch', 'compact', 'handover')),
+  status     text not null default 'idle',
+  own_cost_cents integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists ledger_entries (
+  id          uuid primary key default gen_random_uuid(),
+  account_id  uuid not null references accounts(id),
+  point_id    uuid references points(id),
+  amount_cents integer not null,
+  reason      text not null,
+  created_at  timestamptz not null default now()
+);

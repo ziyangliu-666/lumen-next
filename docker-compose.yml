@@ -1,0 +1,15 @@
+# Local Postgres for development. The app itself runs on the host during dev.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: lumen
+      POSTGRES_PASSWORD: lumen
+      POSTGRES_DB: lumen
+    ports:
+      - '5432:5432'
+    volumes:
+      - lumen-db:/var/lib/postgresql/data
+
+volumes:
+  lumen-db:

@@ -1,0 +1,32 @@
+name: Security
+
+# Security testing runs every sprint, on every pull request and weekly.
+on:
+  pull_request:
+  schedule:
+    - cron: '0 3 * * 1'
+
+jobs:
+  sca:
+    name: SCA — dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  sast:
+    name: SAST — CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v3

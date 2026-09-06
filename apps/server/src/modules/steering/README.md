@@ -3,6 +3,8 @@
 **Use case:** UC4 — steer a running session, run a command
 **Design pattern:** Command (with Strategy / Null Object for compute)
 
+**Covers（这条线包含的细模块）:** worker, compute, storage — agent 运行、沙箱执行命令、文件存储
+
 A user message is queued and applied at a chosen moment in a running turn, and is undoable before it lands. The compute provider behind the same slice is replaceable, including a provider that does nothing.
 
 ## Boundary

@@ -3,6 +3,8 @@
 **Use case:** UC2 — start a project, review what ran while away
 **Design pattern:** State
 
+**Covers（这条线包含的细模块）:** projects, findings — 项目管理，findings（首页和会话里的发现/结论卡片）
+
 A project is running, waiting on the user, finished or stopped. Each state renders and advances differently. The conditional logic must not scatter across list, card and poller.
 
 ## Boundary

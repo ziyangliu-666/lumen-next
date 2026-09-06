@@ -34,6 +34,18 @@ apps/web             React 前端，每个页面一个目录
 | steering | 李卓阳 | 干预运行、执行命令 | Command + Null Object |
 | billing | 贺融 | 花费上限、后台、Stripe | Chain of Responsibility |
 
+每条功能线里还包含更细的模块（界面设计页里那些名字，都归进了这 5 条线）：
+
+| 功能线 | 负责人 | 包含的细模块 | 是什么 |
+|---|---|---|---|
+| identity | 陆毅 | identity, email | 登录、账号、OAuth、邮箱验证 |
+| projects | 彭徐剑 | projects, **findings** | 项目管理、findings（首页和会话里的发现/结论卡片） |
+| session | 刘子阳 | kernel, broker | 委派引擎、事件广播（调用记录、调用树） |
+| steering | 李卓阳 | worker, compute, storage | agent 运行、沙箱执行命令、文件存储 |
+| billing | 贺融 | ledger, billing, secrets | 账目、支付（Stripe）、密钥保管 |
+
+公共部分 core / contracts（事件协议、领域模型、数据库、HTTP）由刘子阳（PM）维护。
+
 新人先看 [docs/ONBOARDING.md](docs/ONBOARDING.md)，讲的是怎么配合 agent 干活。
 每条功能线的具体边界看 [docs/SLICES.md](docs/SLICES.md)，怎样算做完看
 [docs/DOD.md](docs/DOD.md)，代码规范看

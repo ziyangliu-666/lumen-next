@@ -29,9 +29,10 @@ apps/web             the React client, one folder per page
 | steering | LI ZHUOYANG | Steer a run, run a command | Command + Null Object |
 | billing | HE RONG | Cap spend, admin, Stripe | Chain of Responsibility |
 
-Start with `docs/ONBOARDING.md` (Chinese) for how to pick up work with an agent.
-See `docs/SLICES.md` for the full boundary of each slice, `docs/DOD.md` for the
-Definition of Done, and `docs/CODING_STANDARDS.md` for how we write and test code.
+Start with [docs/ONBOARDING.md](docs/ONBOARDING.md) (Chinese) for how to pick up
+work with an agent. See [docs/SLICES.md](docs/SLICES.md) for the full boundary of
+each slice, [docs/DOD.md](docs/DOD.md) for the Definition of Done, and
+[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) for how we write and test code.
 
 ## Running it
 

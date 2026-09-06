@@ -3,7 +3,7 @@
 这份文档是给团队五个人看的。目标只有一个：你读完之后，知道自己负责什么、
 在哪里领任务、按什么规范写、什么时候和别人联调。
 
-代码、注释、文件名一律英文（见 `docs/CODING_STANDARDS.md`）。这份说明用中文。
+代码、注释、文件名一律英文（见 [CODING_STANDARDS.md](CODING_STANDARDS.md)）。这份说明用中文。
 
 ---
 
@@ -24,7 +24,7 @@ lumen 是一个网页：AI agent 之间互相委派，调用树画成一张你�
 | HE RONG | billing | 05 Wallet/Keys, 06 Admin | billing | Chain of Responsibility |
 
 你的一整片代码在 `apps/server/src/modules/<你的切片>/`，前端页面在
-`apps/web/src/pages/<你的页面>/`。谁负责哪条路径，写在 `/CODEOWNERS` 里。
+`apps/web/src/pages/<你的页面>/`。谁负责哪条路径，写在 [/CODEOWNERS](../CODEOWNERS) 里。
 
 ## 2. 第一天：把环境跑起来
 
@@ -97,7 +97,7 @@ Agent 写的每一段，你都要能解释清楚——不是它写完就不管�
 任务有三个来源，按优先级：
 
 1. **你切片里的 `it.todo(...)`** — 最直接。做完一个划掉一个。
-2. **本 sprint 的目标** — 见 `docs/DOD.md` 的 Sprint DOD 表。每个 sprint 有一个
+2. **本 sprint 的目标** — 见 [DOD.md](DOD.md) 的 Sprint DOD 表。每个 sprint 有一个
    可演示的结果，你的 todo 要往那个结果上凑。
 3. **GitHub Issues / Projects** — 我们把 backlog 放这里。领一个 issue，开一个分支。
 
@@ -117,7 +117,7 @@ Agent 写的每一段，你都要能解释清楚——不是它写完就不管�
 不用背规范。`npm run verify` 绿，就是合规。它检查：格式（Prettier）、lint
 （ESLint 严格 + 边界规则）、类型（TypeScript strict）、测试和覆盖率。
 
-细则在 `docs/CODING_STANDARDS.md`。三条最重要的：
+细则在 [CODING_STANDARDS.md](CODING_STANDARDS.md)。三条最重要的：
 
 - **边界铁律**：你只能通过一个切片的 `index.ts` 用它，不能伸手进它的内部文件。
   ESLint 会直接报错。这是五个人不打架的保证。
@@ -136,7 +136,7 @@ Agent 写的每一段，你都要能解释清楚——不是它写完就不管�
 - PR 要过 `CODEOWNERS` 里对应 owner 的 review，且 CI 绿。模板会提示你勾 DOD。
 - 分支活得短。别攒一大坨再合。
 
-一个 PR 什么时候算 Done，看 `docs/DOD.md` 的 Story DOD。代码写完不算 Done，
+一个 PR 什么时候算 Done，看 [DOD.md](DOD.md) 的 Story DOD。代码写完不算 Done，
 测试证明了行为、CI 绿了、owner 审了，才算 Done。
 
 ## 8. 什么时候联调，怎么联调
@@ -196,6 +196,6 @@ sprint 都跑（Chandra 要求）。
 
 - 环境 / 契约 / 联调 / 流程问题 → LIU ZIYANG（PM）。
 - 你切片内部的设计问题 → 先问你的 agent，再在组里贴出来一起看。
-- 老师要的东西（报告、DOD、交付物）→ 看 `docs/DOD.md`，还有问题问 PM。
+- 老师要的东西（报告、DOD、交付物）→ 看 [DOD.md](DOD.md)，还有问题问 PM。
 
 先把 `npm run verify` 跑绿，再开始。

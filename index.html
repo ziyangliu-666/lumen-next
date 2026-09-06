@@ -12,6 +12,20 @@
 .owns{display:flex;gap:.4rem;flex-wrap:wrap;margin:.55rem 0 .1rem}
 .own{font-size:.72rem;font-weight:600;color:#fff;padding:.16rem .55rem;border-radius:999px;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif;letter-spacing:.01em}
 .owns .lbl{font-size:.68rem;color:var(--muted,#6b7280);align-self:center;margin-right:.15rem}
+
+/* per-person ownership overview */
+.owngrid{display:grid;grid-template-columns:repeat(5,1fr);gap:.7rem;margin:1.1rem 0 .4rem}
+@media(max-width:900px){.owngrid{grid-template-columns:repeat(2,1fr)}}
+.owncard{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--surface);display:flex;flex-direction:column}
+.owncard .hd{padding:.5rem .6rem;color:#fff}
+.owncard .hd b{font-family:var(--f-sans);font-size:.92rem;font-weight:700}
+.owncard .hd .pat{display:block;font-size:.64rem;opacity:.92;margin-top:.12rem}
+.owncard .bd{padding:.5rem .6rem}
+.owncard .sec{font-family:var(--f-sans);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:.45rem 0 .25rem}
+.owncard a.pg{display:inline-block;margin:0 .25rem .25rem 0;padding:.06rem .4rem;border:1px solid var(--rule-strong);border-radius:6px;text-decoration:none;color:var(--body);font-family:var(--f-sans);font-size:.68rem}
+.owncard a.pg:hover{border-color:var(--accent);color:var(--accent)}
+.owncard .m{font-family:var(--f-sans);font-size:.72rem;color:var(--body);margin:.28rem 0;line-height:1.35}
+.owncard .m b{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -491,6 +505,18 @@ tr.hot:hover td { background: var(--accent-soft); }
   <div class="eyebrow">Product spec · live prototypes</div>
   <h1>lumen Page Specs</h1>
 </header>
+
+<section class="page" id="who" style="border-top:0">
+  <h2>按人分工</h2>
+  <p class="job">五条纵切片，一人一条。点页面块跳到对应界面；每个后端模块下面写了归属和作用。</p>
+  <div class="owngrid">
+<div class="owncard"><div class="hd" style="background:#3b6ea5"><b>陆毅 · identity</b><span class="pat">Strategy + Template Method</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p2">02 Sign in</a><a class="pg" href="#p5">05 Account</a><div class="sec">后端模块 · 作用</div><div class="m"><b>identity</b> — 登录与账号：GitHub / Google OAuth、密码、session</div><div class="m"><b>email</b> — 邮件：验证邮件、通知</div></div></div>
+<div class="owncard"><div class="hd" style="background:#4a8f6d"><b>彭徐剑 · projects</b><span class="pat">State</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p1">01 Landing</a><a class="pg" href="#p3">03 Home</a><div class="sec">后端模块 · 作用</div><div class="m"><b>projects</b> — 项目的增删查、四种状态（运行 / 等待 / 完成 / 停止）</div><div class="m"><b>findings</b> — 发现/结论卡片：首页和会话里 agent 报告的结论</div></div></div>
+<div class="owncard"><div class="hd" style="background:#8a5a3b"><b>刘子阳 · session</b><span class="pat">Composite（PM）</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p4">04 Session</a><div class="sec">后端模块 · 作用</div><div class="m"><b>kernel</b> — 委派引擎：point / edge、把任务拆给 worker、预算驱动</div><div class="m"><b>broker</b> — 事件广播：WebSocket 把后端事件推给浏览器</div></div></div>
+<div class="owncard"><div class="hd" style="background:#7a5aa5"><b>李卓阳 · steering</b><span class="pat">Command + Null Object</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p4">04 Session</a><div class="sec">后端模块 · 作用</div><div class="m"><b>worker</b> — agent 运行循环：沙箱里 think → tool → observe</div><div class="m"><b>compute</b> — 沙箱算力：Modal / Docker，跑命令的容器</div><div class="m"><b>storage</b> — 文件存储：项目卷，读写文件</div></div></div>
+<div class="owncard"><div class="hd" style="background:#a5506e"><b>贺融 · billing</b><span class="pat">Chain of Responsibility</span></div><div class="bd"><div class="sec">负责页面（点进去）</div><a class="pg" href="#p5">05 Wallet / Keys</a><a class="pg" href="#p6">06 Admin</a><div class="sec">后端模块 · 作用</div><div class="m"><b>ledger</b> — 账目：每笔花费记账、按项目汇总</div><div class="m"><b>billing</b> — 支付：Stripe 充值、发票、月度上限</div><div class="m"><b>secrets</b> — 密钥保管：用户的 API key，写入后不回显</div></div></div>
+  </div>
+</section>
 
 
 <section class="page" id="walk" style="border-top: 0; margin-top: 1.3rem; padding-top: 0;">
@@ -1131,7 +1157,7 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
   </div>
 
   <h3>Backend</h3>
-  <div class="backend"><span class="mod isnew">identity</span><span class="mod">email</span></div>
+  <div class="backend"><span class="mod isnew" style="border-color:#3b6ea5;color:#3b6ea5;background:var(--surface)">identity</span><span class="mod" style="border-color:#3b6ea5;color:#3b6ea5;background:var(--surface)">email</span></div>
   <div class="guard"><b>Not yet</b>Labs, invites, SSO, 2FA. One account owns everything until someone asks to share.</div>
 </section>
 
@@ -1197,7 +1223,7 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
   </div>
 
   <h3>Backend</h3>
-  <div class="backend"><span class="mod isnew">projects</span><span class="mod isnew">findings</span><span class="mod isnew">ledger</span></div>
+  <div class="backend"><span class="mod isnew" style="border-color:#4a8f6d;color:#4a8f6d;background:var(--surface)">projects</span><span class="mod isnew" style="border-color:#4a8f6d;color:#4a8f6d;background:var(--surface)">findings</span><span class="mod isnew" style="border-color:#a5506e;color:#a5506e;background:var(--surface)">ledger</span></div>
   <div class="guard"><b>Not yet</b>Search, tags, folders. Revisit at forty projects.</div>
 </section>
 
@@ -1379,7 +1405,7 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
   </div>
 
   <h3>Backend</h3>
-  <div class="backend"><span class="mod">kernel</span><span class="mod isnew">worker</span><span class="mod isnew">broker</span><span class="mod isnew">storage</span><span class="mod isnew">findings</span><span class="mod isnew">ledger</span><span class="mod isnew">compute</span></div>
+  <div class="backend"><span class="mod" style="border-color:#8a5a3b;color:#8a5a3b;background:var(--surface)">kernel</span><span class="mod isnew" style="border-color:#7a5aa5;color:#7a5aa5;background:var(--surface)">worker</span><span class="mod isnew" style="border-color:#8a5a3b;color:#8a5a3b;background:var(--surface)">broker</span><span class="mod isnew" style="border-color:#7a5aa5;color:#7a5aa5;background:var(--surface)">storage</span><span class="mod isnew" style="border-color:#4a8f6d;color:#4a8f6d;background:var(--surface)">findings</span><span class="mod isnew" style="border-color:#a5506e;color:#a5506e;background:var(--surface)">ledger</span><span class="mod isnew" style="border-color:#7a5aa5;color:#7a5aa5;background:var(--surface)">compute</span></div>
   <div class="guard"><b>Not yet</b>Two people typing into one session. Nobody shares anything in v1.</div>
 </section>
 
@@ -1549,7 +1575,7 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
   </div>
 
   <h3>Backend</h3>
-  <div class="backend"><span class="mod isnew">identity</span><span class="mod isnew">ledger</span></div>
+  <div class="backend"><span class="mod isnew" style="border-color:#3b6ea5;color:#3b6ea5;background:var(--surface)">identity</span><span class="mod isnew" style="border-color:#a5506e;color:#a5506e;background:var(--surface)">ledger</span></div>
 
   <div class="guard"><b>Homeless</b>A kill switch for whatever a runaway account has started. Genuinely needed at 3am and genuinely not account administration — it belongs somewhere, and this page is not it.</div>
   <div class="guard"><b>Not yet</b>Charts, an analytics stack, an audit log. Two tables answer what we need.</div>

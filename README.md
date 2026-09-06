@@ -28,7 +28,7 @@ apps/web             React 前端，每个页面一个目录
 
 ![lumen 分工与模块](docs/slices.svg)
 
-界面设计（每个屏幕标了归属）：线上 [ziy.bio/lumen-specs](https://ziy.bio/lumen-specs/)，源文件在 [docs/spec/index.html](docs/spec/index.html)。
+界面设计（每个屏幕标了归属）：线上 [ziy.bio/lumen-next](https://ziy.bio/lumen-next/)，源文件在 [docs/spec/index.html](docs/spec/index.html)。
 
 新人先看 [docs/ONBOARDING.md](docs/ONBOARDING.md)，讲的是怎么配合 agent 干活。
 每条功能线的具体边界看 [docs/SLICES.md](docs/SLICES.md)，怎样算做完看

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PointNode } from './index.js';
 
-const c = (cents: number): { cents: number } => ({ cents });
+const c = (dollars: number): { dollars: number } => ({ dollars });
 
 describe('session: Composite', () => {
   it('rolls delegated cost up but ignores branch and compact', () => {
@@ -9,7 +9,7 @@ describe('session: Composite', () => {
     lead.addChild('delegate', new PointNode('worker', c(30)));
     lead.addChild('branch', new PointNode('side', c(100)));
     lead.addChild('compact', new PointNode('cont', c(100)));
-    expect(lead.cost()).toEqual({ cents: 40 });
+    expect(lead.cost()).toEqual({ dollars: 40 });
   });
 
   it('cancels the whole subtree', () => {

@@ -15,7 +15,7 @@ A story is Done when:
 3. No import crosses into another slice's internals.
 4. The change is a reviewed, merged pull request — the slice owner reviewed it and
    the CI pipeline (CI + Security + Deploy build) passed.
-5. Any change to a slice's public barrel is reflected in its README.
+5. Any change to a slice's public public index is reflected in its README.
 
 ## Sprint DOD
 

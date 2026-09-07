@@ -18,7 +18,7 @@ export function makePoint(
     lineId,
     parentId,
     edgeFromParent: edge,
-    status: 'idle' as PointStatus,
+    status: 'queued' as PointStatus,
     ownCost: zero,
     childIds: [],
   };

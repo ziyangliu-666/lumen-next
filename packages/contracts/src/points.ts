@@ -2,11 +2,24 @@
 // Four things open a window, and nothing else does.
 export type EdgeKind = 'delegate' | 'branch' | 'compact' | 'handover';
 
-export type PointStatus = 'idle' | 'running' | 'ended' | 'compacted';
+// Where a point is in its life. A compacted window is an 'ended' point with a
+// 'compact' edge to its successor, so compaction is an edge, not a status.
+export type PointStatus =
+  | 'queued' // delegated, no worker yet
+  | 'running'
+  | 'waiting' // needs the user: a question, or an approval over the cap
+  | 'ended' // finished on its own
+  | 'stopped' // the user stopped it, or the process died under it
+  | 'failed';
 
 export interface Money {
-  /** Whole US cents. Integer maths only; never a float dollar amount. */
-  readonly cents: number;
+  /**
+   * US dollars, as a JS number, for transport and display only. The database
+   * column is numeric(12,6) and every sum happens in SQL, because a float
+   * total drifts. The browser formats to four decimals and never adds: two
+   * decimals once showed a $0.006 cap as "$0.01", a number nobody had set.
+   */
+  readonly dollars: number;
 }
 
 export interface Point {
@@ -19,8 +32,9 @@ export interface Point {
   readonly ownCost: Money;
 }
 
-export const zero: Money = { cents: 0 };
+export const zero: Money = { dollars: 0 };
 
 export function add(a: Money, b: Money): Money {
-  return { cents: a.cents + b.cents };
+  // In-memory only, for a tree already loaded. Durable totals are summed in SQL.
+  return { dollars: a.dollars + b.dollars };
 }

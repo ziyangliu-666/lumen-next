@@ -36,8 +36,9 @@ by themselves, but an agent you drive from somewhere else needs to be told.
   hand-format; run `npm run format`.
 - ESLint (`typescript-eslint` type-checked rules). Floating promises are errors.
   Public functions declare their return type.
-- Names say what a thing is for, from the reader's side. Money is integer cents,
-  never a float.
+- Names say what a thing is for, from the reader's side. Money is dollars: the
+  column is `numeric(12,6)`, sums happen in SQL, the browser formats to four
+  decimals and never adds.
 
 ## The slice boundary (the load-bearing rule)
 

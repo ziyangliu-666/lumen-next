@@ -11,7 +11,7 @@ Read first: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 
 - Server code lives in `apps/server/src/modules/<slice>/`, its page in
   `apps/web/src/pages/<page>/`. Touch those, not another owner's.
-- Use another slice only through its barrel: `modules/<name>`, never
+- Use another slice only through its public index: `modules/<name>`, never
   `modules/<name>/<file>`. A slice may import `core`; `core` imports no slice.
 - Ownership is in [CODEOWNERS](CODEOWNERS).
 

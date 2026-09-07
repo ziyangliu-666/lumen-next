@@ -27,8 +27,9 @@ create table if not exists points (
   session_id uuid not null references sessions(id),
   parent_id  uuid references points(id),
   edge       text check (edge in ('delegate', 'branch', 'compact', 'handover')),
-  status     text not null default 'idle',
-  own_cost_cents integer not null default 0,
+  status     text not null default 'queued'
+               check (status in ('queued', 'running', 'waiting', 'ended', 'stopped', 'failed')),
+  own_cost   numeric(12,6) not null default 0,
   created_at timestamptz not null default now()
 );
 
@@ -36,7 +37,7 @@ create table if not exists ledger_entries (
   id          uuid primary key default gen_random_uuid(),
   account_id  uuid not null references accounts(id),
   point_id    uuid references points(id),
-  amount_cents integer not null,
+  amount      numeric(12,6) not null,
   reason      text not null,
   created_at  timestamptz not null default now()
 );

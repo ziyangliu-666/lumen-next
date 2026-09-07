@@ -29,7 +29,7 @@ export function Settings(): JSX.Element {
             <CardHeader>
               <CardTitle className="text-base">Balance</CardTitle>
             </CardHeader>
-            {/* Money is integer cents in the contract, and always monospace on screen. */}
+            {/* Money is dollars in the contract, four decimals and monospace on screen. */}
             <CardContent className="font-mono text-2xl text-ink">$0.00</CardContent>
           </Card>
         </TabsContent>

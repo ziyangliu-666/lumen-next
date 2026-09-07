@@ -7,8 +7,8 @@ function bootstrap(): void {
   const broker = new Broker();
 
   // Proof of wiring: one lead point, one delegated worker, cost rolled up.
-  const lead = new PointNode('lead', { cents: 0 });
-  lead.addChild('delegate', new PointNode('worker', { cents: 0 }));
+  const lead = new PointNode('lead', { dollars: 0 });
+  lead.addChild('delegate', new PointNode('worker', { dollars: 0 }));
 
   broker.publish({ type: 'point.opened', pointId: lead.id, parentId: null, edge: null });
 

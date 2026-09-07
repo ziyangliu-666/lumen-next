@@ -70,10 +70,10 @@ flowchart TB
   M -- stopAll --> S
 ```
 
-- A slice imports `core` and other slices' **barrels** (`modules/<name>`),
+- A slice imports `core` and other slices' **public indexes** (`modules/<name>`),
   never their files. ESLint blocks the rest.
 - `core` imports no slice.
-- A slice owns its tables. Others read them through its barrel.
+- A slice owns its tables. Others read them through its public index.
 
 | Slice | Pages | Modules inside |
 |---|---|---|
@@ -103,12 +103,12 @@ erDiagram
 
   ACCOUNT { uuid id  text email  text role "user | staff" }
   PROJECT { uuid id  text title  text mode }
-  SESSION { uuid id  uuid root_point_id  int spend_cents }
-  POINT { uuid id  uuid parent_id  text edge  text agent  text task  int depth  text status  int own_cost_cents }
-  STEP { uuid id  int index  text kind  text tool  text title  text state  int cost_cents  text content }
+  SESSION { uuid id  uuid root_point_id  numeric spend }
+  POINT { uuid id  uuid parent_id  text edge  text agent  text task  int depth  text status  numeric own_cost }
+  STEP { uuid id  int index  text kind  text tool  text title  text state  numeric cost  text content }
   FINDING { uuid id  text text }
-  LEDGER_ENTRY { uuid id  int amount_cents  text reason }
-  APPROVAL { uuid id  int amount_cents  text reason  text status }
+  LEDGER_ENTRY { uuid id  numeric amount  text reason }
+  APPROVAL { uuid id  numeric amount  text reason  text status }
   STEER { uuid id  text text  text when  text status }
   SECRET { text provider  bytea value }
 ```
@@ -144,7 +144,7 @@ A compacted window is an `ended` point with a `compact` edge to its successor.
 Frozen 12 Sep. Changes after that are reviewed pull requests.
 
 ```ts
-export interface Money { readonly cents: number }   // integer; see the note below
+export interface Money { readonly dollars: number }  // see the rule below
 
 export type EdgeKind = 'delegate' | 'branch' | 'compact' | 'handover';
 export type PointStatus = 'queued' | 'running' | 'waiting' | 'ended' | 'stopped' | 'failed';
@@ -199,9 +199,9 @@ export type SteerWhen = 'end-of-turn' | 'next-step';
 export interface Steer    { readonly id: string; readonly pointId: string; readonly text: string; readonly when: SteerWhen; readonly status: 'queued' | 'landed' | 'cancelled' }
 ```
 
-**Money, decide before the freeze.** A model call costs a fraction of a cent.
-Recommendation: keep `cents`; billing accumulates sub-cent usage and rounds once
-when a point ends. `ownCost` is final only after `endedAt`.
+**Money is dollars.** Decided 7 Sep. The column is `numeric(12,6)`; every
+sum is done in SQL; the browser formats to four decimals and never adds. A JS
+number carries the value, it does not compute with it.
 
 ---
 
@@ -261,7 +261,7 @@ export type ClientCommand =
   | { type: 'approval.answer'; approvalId: string; approve: boolean };        // billing
 ```
 
-One handler per command type, registered by the owning slice at boot.
+One handler per command type, registered by the owning slice at startup.
 
 ---
 
@@ -302,8 +302,8 @@ classDiagram
   AuthGuard ..|> PrincipalResolver : headerStub
 ```
 
-- **db**: one `pg` pool, migrations applied at boot in name order.
-- **http**: `node:http`, no framework. Each barrel exports
+- **db**: one `pg` pool, migrations applied at startup in name order.
+- **http**: `node:http`, no framework. Each public index exports
   `registerRoutes(router)`; `main.ts` calls the five.
 - **auth**: the router resolves the principal before the handler. Sprint 1 uses
   `headerStub` (`Authorization: stub <id>:<role>`); identity supplies the real
@@ -317,9 +317,9 @@ classDiagram
 classDiagram
   class Worker {
     <<interface>>
-    +run(point, sink, signal) Promise~void~
+    +run(point, report, signal) Promise~void~
   }
-  class WorkerSink {
+  class WorkerReport {
     <<interface>>
     +appendStep(pointId, step) Promise~Step~
     +updateStep(stepId, patch)
@@ -343,7 +343,7 @@ classDiagram
     allow | escalate(approvalId) | deny(reason)
   }
   Kernel --> Worker : runs
-  Kernel ..|> WorkerSink : implements
+  Kernel ..|> WorkerReport : implements
   Kernel --> BudgetGuard : asks at three points
   steering ..|> Worker
   billing ..|> BudgetGuard
@@ -351,7 +351,7 @@ classDiagram
   BudgetGuard --> Decision
 ```
 
-The sink is the only door out of the sandbox. Everything durable passes through
+The report interface is the only door out of the sandbox. Everything durable passes through
 it, so a dead worker loses nothing.
 
 ---
@@ -455,7 +455,7 @@ export function secret(accountId: string, provider: string): Promise<string | nu
 
 ---
 
-## 8. Boot, and the main flow
+## 8. Startup, and the main flow
 
 ```mermaid
 flowchart LR
@@ -485,22 +485,22 @@ sequenceDiagram
   S-->>B: point.opened
   S->>M: check(at: turn)
   M-->>S: allow
-  S->>T: worker.run(root, sink)
-  T->>S: sink.appendStep(thinking) / streamText
+  S->>T: worker.run(root, report)
+  T->>S: report.appendStep(thinking) / streamText
   S-->>B: step.opened, step.text …
-  T->>S: sink.delegate(root, 3 tasks)
+  T->>S: report.delegate(root, 3 tasks)
   S->>M: check(at: fan-out)
   M-->>S: allow
   S->>S: open 3 child points, delegate edges
   S-->>B: point.opened ×3
-  S->>T: worker.run(child, sink) ×3
-  T->>S: sink.addSpend(point, $0.01, "search")
+  S->>T: worker.run(child, report) ×3
+  T->>S: report.addSpend(point, $0.01, "search")
   S->>M: record(...)
   S-->>B: point.cost
-  T->>S: sink.recordFinding(point, text)
+  T->>S: report.recordFinding(point, text)
   S->>P: recordFinding(...)
   S-->>B: finding.recorded
-  T->>S: sink.appendStep(reply), point ends
+  T->>S: report.appendStep(reply), point ends
   S-->>B: point.status ended, session.updated
 ```
 
@@ -564,7 +564,7 @@ classDiagram
   SessionCommands --> Kernel
   Kernel --> Trace : writes through
   Kernel --> Delegation
-  Kernel ..|> WorkerSink
+  Kernel ..|> WorkerReport
   Kernel --> Worker : steering's
   Kernel --> BudgetGuard : billing's
   Kernel --> Broker : publishes
@@ -577,7 +577,7 @@ classDiagram
 
 - **Trace** is the durable record: every point and step written to Postgres as
   it happens, and read back as the snapshot.
-- **Kernel** is the engine. It implements `WorkerSink`, so the worker's every
+- **Kernel** is the engine. It implements `WorkerReport`, so the worker's every
   report lands in the trace and on the socket in one call.
 - **Delegation** fans a `delegate` step out into child points, bounded by depth
   and parallelism.
@@ -641,7 +641,7 @@ sequenceDiagram
   participant M as billing
   participant B as broker
 
-  W->>K: sink.delegate(parentId, tasks)
+  W->>K: report.delegate(parentId, tasks)
   K->>D: fanOut(parent, tasks)
   D->>D: depth < maxDepth ?
   K->>M: check(at: fan-out, estimate)
@@ -652,7 +652,7 @@ sequenceDiagram
   end
   K-->>W: child points
   Note over W,K: later, a child spends
-  W->>K: sink.addSpend(childId, $0.01)
+  W->>K: report.addSpend(childId, $0.01)
   K->>T: addCost(childId)
   K->>M: record(...)
   T-->>B: point.cost(childId)
@@ -666,7 +666,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant P as process boot
+  participant P as process startup
   participant K as Kernel
   participant T as Trace
   participant B as broker
@@ -697,10 +697,10 @@ flowchart TB
       FP[files panel]
     end
   end
-  API[core/api.ts: fetch + socket, one reducer] --> H & G & SL & CT & CP & FP
+  API[core/api.ts: fetch + socket, one state update] --> H & G & SL & CT & CP & FP
 ```
 
-One reducer in `apps/web/src/core/api.ts` applies every `ServerEvent` to one
+One function in `apps/web/src/core/api.ts` applies every `ServerEvent` to one
 state object. Both halves read it; neither restyles the other.
 
 ---
@@ -712,7 +712,7 @@ state object. Both halves read it; neither restyles the other.
 | boundary class (a screen) | a page under `apps/web/src/pages/<page>/` and the routes it calls | the page's owner |
 | control class (the use case's logic) | a service in the slice: `AuthFlow`, `ProjectCards`, `Kernel`, `SteerQueue`, `BudgetChain` | the slice |
 | entity class (a persisted noun) | a type in `packages/contracts` and a table the slice owns | contract + slice |
-| association across slices | a barrel call, or an interface in `core/domain` | never a shared SQL write |
+| association across slices | a public index call, or an interface in `core/domain` | never a shared SQL write |
 | anything the browser sees change live | a `ServerEvent` | contract |
 | the proposal's design problem | the pattern on the control class; brute force kept for the before/after | the slice |
 
@@ -776,7 +776,7 @@ One word, one meaning.
 |---|---|---|
 | slice | one person's vertical: pages, module, tables, pipeline jobs | a layer |
 | module | a slice's server directory, `modules/<name>/` | a folder inside it like `kernel` |
-| barrel | a module's `index.ts`, the only importable file | |
+| public index | a module's `index.ts`, the only importable file | |
 | core | db, http, auth guard, broker; shared by all | a slice |
 | contract | `packages/contracts`: types the browser and every slice share | the routes |
 | principal | the signed-in account as a route sees it: id and role | the account record |
@@ -787,7 +787,7 @@ One word, one meaning.
 | trace | all points and steps of a session, in order, in Postgres | a log file |
 | kernel | the engine in the session slice | the worker |
 | worker | the agent loop in the sandbox; steering's | the kernel |
-| sink | the interface the worker reports through | |
+| report | the interface the worker reports through; its only door out of the sandbox | |
 | broker | carries events out and commands in | a message queue |
 | event | server → browser, a fact | |
 | command | browser → server, a request | |

@@ -13,6 +13,6 @@ describe('core: temporary header account', () => {
   });
 
   it('lets any status be read during sprint 1', () => {
-    expect(canReadStatus('compacted')).toBe(true);
+    expect(canReadStatus('stopped')).toBe(true);
   });
 });

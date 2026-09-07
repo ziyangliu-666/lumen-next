@@ -3,9 +3,15 @@
 Five people and five agents write here at the same time. Everything below exists
 to keep that from turning into five codebases.
 
-Read first: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md), [docs/UI.md](docs/UI.md),
-[docs/SLICES.md](docs/SLICES.md).
+Read first, in this order:
+
+1. [README.md](README.md): what the product is, who owns what.
+2. [docs/ONBOARDING.md](docs/ONBOARDING.md): the team's Chinese vocabulary
+   for slice, contract, core, broker and the rest. Use those words in chat;
+   do not invent a translation.
+3. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/SLICES.md](docs/SLICES.md).
+4. [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md), [docs/UI.md](docs/UI.md),
+   [docs/DOD.md](docs/DOD.md).
 
 ## Stay inside your slice
 
@@ -30,6 +36,10 @@ Read first: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 
 Code, comments, docstrings, test names, commit messages, docs. Team chat is
 Chinese; the repository is not. Write it in English the first time.
+
+Two files are the exception on purpose: [README.md](README.md) and
+[docs/ONBOARDING.md](docs/ONBOARDING.md) are in Chinese because they are the
+team's first read. Do not translate them as a cleanup.
 
 ## Done means the command is green
 

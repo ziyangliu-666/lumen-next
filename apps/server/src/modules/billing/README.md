@@ -5,7 +5,7 @@
 
 ## The design problem (from the proposal, section 6.4)
 
-The spend cap is checked before a turn, when a fan-out arrives, and when a window
+The spend cap is checked before a turn, when a fan-out arrives, and when a task
 opens. A request over the cap must be escalated to the user for approval, not
 refused. A new check point must not change the callers. Stripe checkout and
 invoices live here too.

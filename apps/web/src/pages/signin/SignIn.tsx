@@ -11,7 +11,7 @@ export function SignIn(): JSX.Element {
     <Card className="mx-auto mt-12 w-full max-w-sm">
       <CardHeader>
         <CardTitle>Sign in</CardTitle>
-        <CardDescription>Four ways in, one principal out.</CardDescription>
+        <CardDescription>GitHub, Google, or your email.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">

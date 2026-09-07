@@ -52,8 +52,8 @@ that, a change here is a reviewed pull request, because every slice depends on i
 
 - Pages: 05 Settings → Wallet and Keys, 06 Admin.
 - Module: `modules/billing` (ledger, billing, secrets).
-- Design problem: the spend cap is checked before a turn, at fan-out, and at window
-  open; an over-cap request is escalated to the user, not refused; a new check point
+- Design problem: the spend cap is checked before a turn, at fan-out, and when a
+  task opens; an over-cap request is escalated to the user, not refused; a new check point
   must not change the callers. Candidate pattern (proposal 6.4, the owner confirms
   after comparing candidates): **Chain of Responsibility**.
 - Note (review): a Stripe top-up + invoices page belongs here.

@@ -39,7 +39,7 @@ export function Settings(): JSX.Element {
               <CardTitle className="text-base">API keys</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              A key belongs to one tenant and cannot reach across them.
+              A key belongs to one account and is never shown again after it is saved.
             </CardContent>
           </Card>
         </TabsContent>

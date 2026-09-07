@@ -333,7 +333,7 @@ classDiagram
   class Charge {
     accountId, taskId
     estimate: Money
-    at: turn | fan-out | window-open
+    at: turn | fan-out | task-open
     reason
   }
   class Decision {
@@ -670,11 +670,11 @@ sequenceDiagram
   K->>T: tasks where status in (running, queued, waiting)
   T-->>K: rows
   K->>T: setStatus(each, 'stopped'), close open steps as 'stopped'
-  Note over K: a window that no longer exists cannot be "running"
+  Note over K: a task whose process is gone cannot be "running"
   K-->>B: nothing yet, the next session.open sends a snapshot
 ```
 
-Nobody pressed stop, but the reasoning is the same: the window was ended from
+Nobody pressed stop, but the reasoning is the same: the task was ended from
 outside. `stopped`, not `failed`.
 
 ### The page

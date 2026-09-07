@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read # a private repository needs this for the upload step
       security-events: write
     steps:
       - uses: actions/checkout@v4

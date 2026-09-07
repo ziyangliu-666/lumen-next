@@ -24,7 +24,7 @@ DAST). Each sprint also has one demonstrable outcome.
 
 | Sprint | Dates | Sprint is Done when |
 |---|---|---|
-| 1 | 2–12 Sep | The shared contract (domain model, event protocol, base schema) is frozen and the pipeline skeleton is green. A walking skeleton runs: sign-in stub, one project, one session, one point, rendered end to end. Every slice owner has written their design: use case flow, analysis class diagram, the design problem and the pattern they chose and why. |
+| 1 | 2–12 Sep | The shared contract (domain model, event protocol, base schema) is frozen and the pipeline skeleton is green. A walking skeleton runs: sign-in stub, one project, one session, one task, rendered end to end. Every slice owner has written their design: use case flow, analysis class diagram, the design problem and the pattern they chose and why. |
 | 2 | 15–26 Sep | Slices run in parallel. A question fans out to workers and the tree is readable and costed. Sandbox behind its interface. Wallet shows spend; ledger writes. Container image builds; DAST runs against staging. |
 | 3 | 29 Sep–10 Oct | A session is steerable from the composer and stays inside its cap; an over-cap step escalates for approval. Restore after a restart. GitHub and Google OAuth work. Stripe top-up works in test mode. |
 | 4 | 13–24 Oct | Design-pattern refactors applied and documented (brute force → pattern, before/after). Integration across slices. Hardened. Report and presentation ready. |

@@ -1,4 +1,4 @@
-// Owners: LIU ZIYANG (graph, call tree) and LI ZHUOYANG (composer, files).
+// Owners: LIU ZIYANG (call tree, steps) and LI ZHUOYANG (composer, files).
 // The two halves below are the agreed boundary between them: each owner works
 // inside their own panel and neither restyles the other's.
 import type { JSX } from 'react';
@@ -12,13 +12,13 @@ export function Session(): JSX.Element {
     <>
       <PageHeader title="Session" description="One question, and every agent it reached." />
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        {/* LIU ZIYANG: the graph and the call tree. */}
+        {/* LIU ZIYANG: the call tree and the step list. */}
         <Card className="min-h-96">
           <CardHeader>
-            <CardTitle className="text-base">Call graph</CardTitle>
+            <CardTitle className="text-base">Call tree</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Points and the four edge kinds render here.
+            Tasks and their steps render here.
           </CardContent>
         </Card>
         {/* LI ZHUOYANG: the composer and the files panel. */}

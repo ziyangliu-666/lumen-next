@@ -7,8 +7,8 @@ ownership.**
 
 ## The shared contract (LIU ZIYANG)
 
-`packages/contracts` and `apps/server/src/core`. The domain model (point, line,
-four edge kinds), the server→browser event protocol, the base database schema, and
+`packages/contracts` and `apps/server/src/core`. The domain model (task, step,
+session), the server→browser event protocol, the base database schema, and
 the auth guard every route passes through. Fixed at the end of Sprint 1. After
 that, a change here is a reviewed pull request, because every slice depends on it.
 
@@ -31,12 +31,12 @@ that, a change here is a reviewed pull request, because every slice depends on i
   waiting, finished or stopped; the logic must not scatter. Candidate pattern
   (proposal 6.4, the owner confirms after comparing candidates): **State**.
 
-## UC3 — Session graph (LIU ZIYANG)
+## UC3 — Session (LIU ZIYANG)
 
-- Page: 04 Session — the graph, the call tree, the step list.
+- Page: 04 Session — the call tree, the step list.
 - Module: `modules/session` (kernel + broker).
-- Design problem: a point and a subtree answer cost, cancellation and rendering the
-  same way; cost rolls up along delegate edges only. → **Composite**.
+- Design problem: a task and a subtree of tasks answer cost, cancellation and
+  rendering the same way; cost rolls up through the tree. → **Composite**.
 
 ## UC4 — Steering + sandbox (LI ZHUOYANG)
 

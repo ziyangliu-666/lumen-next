@@ -37,9 +37,9 @@ flowchart LR
 
 Three rules from the proposal.
 
-1. A **point** is one agent context window. Opening a conversation, delegating,
-   compacting, or handing over opens a point. Nothing else does.
-2. Cost rolls up along **delegate** edges only.
+1. A **task** is one agent context window. The session's own run is the root
+   task; a delegation opens a child task. Nothing else opens one.
+2. Cost rolls up from child tasks to their parent.
 3. The worker never touches the database. Everything durable goes through the
    server.
 
@@ -79,7 +79,7 @@ flowchart TB
 |---|---|---|
 | identity | 02 Sign in, 05 Account | identity, email |
 | projects | 01 Landing, 03 Home | projects, findings |
-| session | 04 Session: graph, call tree, steps | kernel, trace |
+| session | 04 Session: call tree, steps | kernel, trace |
 | steering | 04 Session: composer, files | worker, compute, storage |
 | billing | 05 Wallet, 05 Keys, 06 Admin | ledger, billing, secrets, admin |
 
@@ -91,20 +91,20 @@ flowchart TB
 erDiagram
   ACCOUNT ||--o{ PROJECT : owns
   PROJECT ||--o{ SESSION : has
-  SESSION ||--|| POINT : "root"
-  POINT ||--o{ POINT : "edge: delegate | branch | compact | handover"
-  POINT ||--o{ STEP : "ordered"
-  POINT ||--o{ FINDING : produces
-  POINT ||--o{ LEDGER_ENTRY : spends
-  POINT ||--o{ APPROVAL : "over cap"
-  POINT ||--o{ STEER : queued
+  SESSION ||--|| TASK : "root"
+  TASK ||--o{ TASK : "parent of"
+  TASK ||--o{ STEP : "ordered"
+  TASK ||--o{ FINDING : produces
+  TASK ||--o{ LEDGER_ENTRY : spends
+  TASK ||--o{ APPROVAL : "over cap"
+  TASK ||--o{ STEER : queued
   ACCOUNT ||--o{ LEDGER_ENTRY : pays
   ACCOUNT ||--o{ SECRET : holds
 
   ACCOUNT { uuid id  text email  text role "user | staff" }
   PROJECT { uuid id  text title  text mode }
-  SESSION { uuid id  uuid root_point_id  numeric spend }
-  POINT { uuid id  uuid parent_id  text edge  text agent  text task  int depth  text status  numeric own_cost }
+  SESSION { uuid id  uuid root_task_id  numeric spend }
+  TASK { uuid id  uuid parent_id  text agent  text title  int depth  text status  numeric own_cost }
   STEP { uuid id  int index  text kind  text tool  text title  text state  numeric cost  text content }
   FINDING { uuid id  text text }
   LEDGER_ENTRY { uuid id  numeric amount  text reason }
@@ -113,11 +113,11 @@ erDiagram
   SECRET { text provider  bytea value }
 ```
 
-Base tables `accounts`, `projects`, `sessions`, `points`, `steps`, `findings`,
+Base tables `accounts`, `projects`, `sessions`, `tasks`, `steps`, `findings`,
 `ledger_entries` ship in `001_core_base.sql`. A slice adds its own as
 `NNN_<slice>_<what>.sql`.
 
-### Point status
+### Task status
 
 ```mermaid
 stateDiagram-v2
@@ -135,7 +135,6 @@ stateDiagram-v2
   stopped --> [*]
 ```
 
-A compacted window is an `ended` point with a `compact` edge to its successor.
 
 ---
 
@@ -146,18 +145,16 @@ Frozen 12 Sep. Changes after that are reviewed pull requests.
 ```ts
 export interface Money { readonly dollars: number }  // see the rule below
 
-export type EdgeKind = 'delegate' | 'branch' | 'compact' | 'handover';
-export type PointStatus = 'queued' | 'running' | 'waiting' | 'ended' | 'stopped' | 'failed';
+export type TaskStatus = 'queued' | 'running' | 'waiting' | 'ended' | 'stopped' | 'failed';
 
-export interface Point {
+export interface Task {
   readonly id: string;
   readonly sessionId: string;
   readonly parentId: string | null;
-  readonly edgeFromParent: EdgeKind | null;
   readonly agent: string;          // 'lead' | 'reader' | 'compute-perm' …
-  readonly task: string;           // one line, the point's title
+  readonly title: string;          // one line
   readonly depth: number;          // 0 for the root
-  readonly status: PointStatus;
+  readonly status: TaskStatus;
   readonly ownCost: Money;         // excluding children
   readonly startedAt: number;
   readonly endedAt: number | null;
@@ -168,7 +165,7 @@ export type StepState = 'running' | 'done' | 'failed' | 'stopped';
 
 export interface Step {
   readonly id: string;
-  readonly pointId: string;
+  readonly taskId: string;
   readonly index: number;          // the order is the reasoning
   readonly kind: StepKind;
   readonly tool: string | null;    // 'search' | 'run' | 'save' | 'record' …
@@ -178,7 +175,7 @@ export interface Step {
   readonly endedAt: number | null;
   readonly cost: Money | null;
   readonly preview: string | null; // first lines; full text via step.full
-  readonly childPointIds: readonly string[];
+  readonly childTaskIds: readonly string[];
 }
 
 export type SessionMode = 'explore' | 'seed';
@@ -186,17 +183,17 @@ export interface Session {
   readonly id: string;
   readonly projectId: string;
   readonly mode: SessionMode;
-  readonly rootPointId: string;
-  readonly status: PointStatus;    // mirrors the root point
-  readonly spend: Money;           // rolled up over delegate edges
+  readonly rootTaskId: string;
+  readonly status: TaskStatus;     // mirrors the root task
+  readonly spend: Money;           // rolled up from every task
   readonly startedAt: number;
   readonly endedAt: number | null;
 }
 
-export interface Finding  { readonly id: string; readonly sessionId: string; readonly pointId: string; readonly text: string; readonly createdAt: number }
-export interface Approval { readonly id: string; readonly pointId: string; readonly amount: Money; readonly reason: string; readonly status: 'pending' | 'approved' | 'declined'; readonly createdAt: number }
+export interface Finding  { readonly id: string; readonly sessionId: string; readonly taskId: string; readonly text: string; readonly createdAt: number }
+export interface Approval { readonly id: string; readonly taskId: string; readonly amount: Money; readonly reason: string; readonly status: 'pending' | 'approved' | 'declined'; readonly createdAt: number }
 export type SteerWhen = 'end-of-turn' | 'next-step';
-export interface Steer    { readonly id: string; readonly pointId: string; readonly text: string; readonly when: SteerWhen; readonly status: 'queued' | 'landed' | 'cancelled' }
+export interface Steer    { readonly id: string; readonly taskId: string; readonly text: string; readonly when: SteerWhen; readonly status: 'queued' | 'landed' | 'cancelled' }
 ```
 
 **Money is dollars.** Decided 7 Sep. The column is `numeric(12,6)`; every
@@ -220,7 +217,7 @@ sequenceDiagram
   S-->>B: session.snapshot
   loop live
     S->>K: publish(sessionId, event)
-    K-->>B: point.* / step.* / finding.* …
+    K-->>B: task.* / step.* / finding.* …
   end
   Note over B,K: socket drops
   B->>K: session.open again
@@ -231,11 +228,11 @@ No sequence numbers in v1. The snapshot is the durable record read back.
 
 ```ts
 export type ServerEvent =
-  | { type: 'session.snapshot'; session: Session; points: Point[]; steps: Step[]; findings: Finding[]; approvals: Approval[]; steers: Steer[] }
+  | { type: 'session.snapshot'; session: Session; tasks: Task[]; steps: Step[]; findings: Finding[]; approvals: Approval[]; steers: Steer[] }
   | { type: 'session.updated'; sessionId: string; patch: Partial<Session> }
-  | { type: 'point.opened'; point: Point }
-  | { type: 'point.status'; pointId: string; status: PointStatus }
-  | { type: 'point.cost'; pointId: string; ownCost: Money }
+  | { type: 'task.opened'; task: Task }
+  | { type: 'task.status'; taskId: string; status: TaskStatus }
+  | { type: 'task.cost'; taskId: string; ownCost: Money }
   | { type: 'step.opened'; step: Step }
   | { type: 'step.updated'; stepId: string; patch: Partial<Step> }
   | { type: 'step.closed'; step: Step }
@@ -256,7 +253,7 @@ export type ClientCommand =
   | { type: 'session.say'; sessionId: string; text: string }    // new turn on the root
   | { type: 'session.stop'; sessionId: string }
   | { type: 'step.full'; stepId: string }
-  | { type: 'point.steer'; pointId: string; text: string; when: SteerWhen }   // steering
+  | { type: 'task.steer'; taskId: string; text: string; when: SteerWhen }   // steering
   | { type: 'steer.cancel'; steerId: string }
   | { type: 'approval.answer'; approvalId: string; approve: boolean };        // billing
 ```
@@ -317,24 +314,24 @@ classDiagram
 classDiagram
   class Worker {
     <<interface>>
-    +run(point, report, signal) Promise~void~
+    +run(task, report, signal) Promise~void~
   }
   class WorkerReport {
     <<interface>>
-    +appendStep(pointId, step) Promise~Step~
+    +appendStep(taskId, step) Promise~Step~
     +updateStep(stepId, patch)
     +streamText(stepId, delta)
-    +recordFinding(pointId, text) Promise~Finding~
-    +addSpend(pointId, amount, reason)
-    +delegate(pointId, tasks) Promise~Point[]~
-    +ask(pointId, question) Promise~string~
+    +recordFinding(taskId, text) Promise~Finding~
+    +addSpend(taskId, amount, reason)
+    +delegate(taskId, tasks) Promise~Task[]~
+    +ask(taskId, question) Promise~string~
   }
   class BudgetGuard {
     <<interface>>
     +check(charge) Promise~Decision~
   }
   class Charge {
-    accountId, pointId
+    accountId, taskId
     estimate: Money
     at: turn | fan-out | window-open
     reason
@@ -344,7 +341,7 @@ classDiagram
   }
   Kernel --> Worker : runs
   Kernel ..|> WorkerReport : implements
-  Kernel --> BudgetGuard : asks at three points
+  Kernel --> BudgetGuard : asks at three check points
   steering ..|> Worker
   billing ..|> BudgetGuard
   BudgetGuard --> Charge
@@ -390,7 +387,7 @@ Staff sign in on the same page and are routed to `/admin` by role.
 
 ```ts
 export function registerRoutes(router: Router): void;
-export function recordFinding(sessionId: string, pointId: string, text: string): Promise<Finding>;
+export function recordFinding(sessionId: string, taskId: string, text: string): Promise<Finding>;
 export function listFindings(sessionId: string): Promise<Finding[]>;
 export function projectOf(sessionId: string): Promise<{ id: string; accountId: string }>;
 ```
@@ -399,7 +396,7 @@ export function projectOf(sessionId: string): Promise<{ id: string; accountId: s
 
 | Route | Does |
 |---|---|
-| `POST /api/projects/:id/sessions` | `{ text, mode }` → root point opened |
+| `POST /api/projects/:id/sessions` | `{ text, mode }` → root task opened |
 | `GET /api/sessions/:id` | snapshot as JSON |
 | `GET /api/steps/:id/content` | full step output |
 | `POST /api/sessions/:id/stop` | |
@@ -421,7 +418,7 @@ export function stopAll(accountId: string): Promise<number>;   // admin kill swi
 | `GET /api/projects/:id/files`, `GET /api/projects/:id/files/*` | tree, one file |
 | `POST /api/sessions/:id/attach` | the "+" in the composer |
 
-Commands: `point.steer`, `steer.cancel`.
+Commands: `task.steer`, `steer.cancel`.
 
 ```ts
 export function registerRoutes(router: Router): void;
@@ -448,7 +445,7 @@ Command: `approval.answer`.
 export function registerRoutes(router: Router): void;
 export function registerCommands(broker: Broker): void;
 export const budgetGuard: BudgetGuard;                          // for main.ts → kernel
-export function record(e: { accountId: string; pointId: string; amount: Money; reason: string }): Promise<void>;
+export function record(e: { accountId: string; taskId: string; amount: Money; reason: string }): Promise<void>;
 export function monthSpend(accountId: string): Promise<{ spent: Money; cap: Money }>;
 export function secret(accountId: string, provider: string): Promise<string | null>;
 ```
@@ -481,8 +478,8 @@ sequenceDiagram
   U->>L: question, mode
   L->>P: POST /api/projects
   P->>S: start(projectId, text, mode)
-  S->>S: open root point, write it
-  S-->>B: point.opened
+  S->>S: open root task, write it
+  S-->>B: task.opened
   S->>M: check(at: turn)
   M-->>S: allow
   S->>T: worker.run(root, report)
@@ -491,20 +488,20 @@ sequenceDiagram
   T->>S: report.delegate(root, 3 tasks)
   S->>M: check(at: fan-out)
   M-->>S: allow
-  S->>S: open 3 child points, delegate edges
-  S-->>B: point.opened ×3
+  S->>S: open 3 child tasks
+  S-->>B: task.opened ×3
   S->>T: worker.run(child, report) ×3
-  T->>S: report.addSpend(point, $0.01, "search")
+  T->>S: report.addSpend(task, $0.01, "search")
   S->>M: record(...)
-  S-->>B: point.cost
-  T->>S: report.recordFinding(point, text)
+  S-->>B: task.cost
+  T->>S: report.recordFinding(task, text)
   S->>P: recordFinding(...)
   S-->>B: finding.recorded
-  T->>S: report.appendStep(reply), point ends
-  S-->>B: point.status ended, session.updated
+  T->>S: report.appendStep(reply), task ends
+  S-->>B: task.status ended, session.updated
 ```
 
-Over the cap: `check` returns `escalate`, the point goes `waiting`, the browser
+Over the cap: `check` returns `escalate`, the task goes `waiting`, the browser
 gets `approval.requested`, the user answers, the kernel resumes or stops.
 
 Sprint 1 walks this with a worker that emits one fixed step and ends.
@@ -534,17 +531,17 @@ classDiagram
     +restore()
   }
   class Trace {
-    +openPoint(sessionId, parentId, edge, agent, task) Point
-    +setStatus(pointId, status)
-    +addCost(pointId, money)
-    +appendStep(pointId, step) Step
+    +openTask(sessionId, parentId, agent, title) Task
+    +setStatus(taskId, status)
+    +addCost(taskId, money)
+    +appendStep(taskId, step) Step
     +closeStep(stepId, patch)
     +snapshot(sessionId) Snapshot
   }
   class Delegation {
     -maxDepth: int
     -maxParallel: int
-    +fanOut(parent, tasks) Point[]
+    +fanOut(parent, titles) Task[]
   }
   class Node {
     <<interface>>
@@ -552,10 +549,10 @@ classDiagram
     +cancel()
     +size() int
   }
-  class PointNode {
+  class TaskNode {
     -own: Money
-    -children: Edge_Node[]
-    +addChild(edge, node)
+    -children: TaskNode[]
+    +addChild(node)
     +cost() Money
     +cancel()
     +size() int
@@ -570,38 +567,37 @@ classDiagram
   Kernel --> Broker : publishes
   Kernel --> projects : recordFinding
   Kernel --> billing : record
-  PointNode ..|> Node
-  PointNode o-- PointNode : children, each with an edge kind
-  Trace --> PointNode : builds the tree
+  TaskNode ..|> Node
+  TaskNode o-- TaskNode : children
+  Trace --> TaskNode : builds the tree
 ```
 
-- **Trace** is the durable record: every point and step written to Postgres as
+- **Trace** is the durable record: every task and step written to Postgres as
   it happens, and read back as the snapshot.
 - **Kernel** is the engine. It implements `WorkerReport`, so the worker's every
   report lands in the trace and on the socket in one call.
-- **Delegation** fans a `delegate` step out into child points, bounded by depth
+- **Delegation** fans a `delegate` step out into child tasks, bounded by depth
   and parallelism.
-- **PointNode** is the Composite the design problem asks for.
+- **TaskNode** is the Composite the design problem asks for.
 
 ### The design problem: Composite
 
-A point and a subtree must answer cost, cancel and size the same way. Cost rolls
-up along `delegate` edges only.
+A task and a subtree of tasks must answer cost, cancel and size the same way.
 
 Brute force, before:
 
 ```mermaid
 classDiagram
   class Kernel {
-    +costOf(pointId) Money
-    +cancel(pointId)
-    +countBelow(pointId) int
+    +costOf(taskId) Money
+    +cancel(taskId)
+    +countBelow(taskId) int
   }
-  class PointRow {
-    id, parentId, edge, ownCost
+  class TaskRow {
+    id, parentId, ownCost
   }
-  Kernel --> PointRow : walks parent_id by hand, three times
-  note for Kernel "three recursive queries, each with its own if edge == 'delegate'"
+  Kernel --> TaskRow : walks parent_id by hand, three times
+  note for Kernel "three recursive walks, one per operation, each with its own base case"
 ```
 
 With the pattern, after:
@@ -614,21 +610,21 @@ classDiagram
     +cancel()
     +size() int
   }
-  class PointNode {
-    +addChild(edge, node)
+  class TaskNode {
+    +addChild(node)
     +cost() Money
     +cancel()
     +size() int
   }
-  PointNode ..|> Node
-  PointNode o-- "0..*" PointNode : children with edge kind
-  note for PointNode "cost(): own + sum of children where edge == delegate<br/>cancel(): self, then every child<br/>size(): 1 + sum of children"
+  TaskNode ..|> Node
+  TaskNode o-- "0..*" TaskNode : children
+  note for TaskNode "cost(): own + sum of children<br/>cancel(): self, then every child<br/>size(): 1 + sum of children"
 ```
 
-The caller holds one `Node` and does not know whether it is a leaf. The edge
-rule lives in one place. Compared with Visitor (over-general for three
+The caller holds one `Node` and does not know whether it is a leaf. The tree
+walk lives in one place. Compared with Visitor (over-general for three
 operations) and a flat table walk (the brute force). The test that proves it is
-`session.test.ts`: delegate cost counted, branch and compact not.
+`session.test.ts`: a nested subtree's cost reaches the root.
 
 ### Delegation, cost and cancel
 
@@ -648,18 +644,18 @@ sequenceDiagram
   M-->>K: allow
   loop each task
     D->>T: openPoint(parent, 'delegate', agent, task)
-    T-->>B: point.opened
+    T-->>B: task.opened
   end
-  K-->>W: child points
+  K-->>W: child tasks
   Note over W,K: later, a child spends
   W->>K: report.addSpend(childId, $0.01)
   K->>T: addCost(childId)
   K->>M: record(...)
-  T-->>B: point.cost(childId)
-  Note over B: page: parent total = PointNode.cost() over delegate edges
+  T-->>B: task.cost(childId)
+  Note over B: page: parent total = TaskNode.cost()
   Note over K: user presses stop
   K->>T: tree(sessionId).cancel()
-  T-->>B: point.status stopped, for every node
+  T-->>B: task.status stopped, for every node
 ```
 
 ### Restore after a restart
@@ -671,7 +667,7 @@ sequenceDiagram
   participant T as Trace
   participant B as broker
   P->>K: restore()
-  K->>T: points where status in (running, queued, waiting)
+  K->>T: tasks where status in (running, queued, waiting)
   T-->>K: rows
   K->>T: setStatus(each, 'stopped'), close open steps as 'stopped'
   Note over K: a window that no longer exists cannot be "running"
@@ -688,16 +684,15 @@ flowchart TB
   subgraph Session page
     H[header: project / mode · spend · elapsed · status]
     subgraph L[left: LIU ZIYANG]
-      G[call graph]
-      SL[step list of the selected point<br/>you · thinking · tool · delegate · reply]
-      CT[call tree rail]
+      CT[call tree: every task, its agent, status and cost]
+      SL[step list of the selected task<br/>you · thinking · tool · delegate · reply]
     end
     subgraph R[right: LI ZHUOYANG]
       CP[composer: say something, +]
       FP[files panel]
     end
   end
-  API[core/api.ts: fetch + socket, one state update] --> H & G & SL & CT & CP & FP
+  API[core/api.ts: fetch + socket, one state update] --> H & SL & CT & CP & FP
 ```
 
 One function in `apps/web/src/core/api.ts` applies every `ServerEvent` to one
@@ -753,10 +748,10 @@ gantt
 | 6 | walking skeleton, first integration | 1 | 1.0 |
 | 7 | backlog, sprint plan, report 1, burndown | 1 | 0.5 |
 | 8 | UC3 analysis and design diagrams | 1–2 | 2.0 |
-| 9 | Trace + PointNode: persistence, roll-up, cancel, restore | 2 | 1.5 |
+| 9 | Trace + TaskNode: persistence, roll-up, cancel, restore | 2 | 1.5 |
 | 10 | Delegation over the Worker interface | 2 | 1.5 |
 | 11 | Session page: step list, streaming, call tree | 2–3 | 1.5 |
-| 12 | budget checks at three points, waiting and resume | 3 | 1.0 |
+| 12 | budget checks at three check points, waiting and resume | 3 | 1.0 |
 | 13 | design problem write-up, before/after | 3–4 | 1.0 |
 | 14 | pipeline jobs for core and session | 2 | 0.5 |
 | 15 | integration, hardening, report, presentation | 4 | 1.0 |
@@ -781,10 +776,9 @@ One word, one meaning.
 | contract | `packages/contracts`: types the browser and every slice share | the routes |
 | principal | the signed-in account as a route sees it: id and role | the account record |
 | session | one run on one question, under a project | a login |
-| point | one agent context window; a node of the graph | a message |
-| edge | why a point exists: delegate, branch, compact, handover | |
-| step | one row in a point: you, thinking, tool, delegate, reply | |
-| trace | all points and steps of a session, in order, in Postgres | a log file |
+| task | one agent context window: the session's root run, or a delegation under it | a message; the one-line `title` |
+| step | one row in a task: you, thinking, tool, delegate, reply | |
+| trace | all tasks and steps of a session, in order, in Postgres | a log file |
 | kernel | the engine in the session slice | the worker |
 | worker | the agent loop in the sandbox; steering's | the kernel |
 | report | the interface the worker reports through; its only door out of the sandbox | |

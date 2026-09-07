@@ -1,30 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { PointNode } from './index.js';
+import { TaskNode } from './index.js';
 
-const c = (dollars: number): { dollars: number } => ({ dollars });
+const d = (dollars: number): { dollars: number } => ({ dollars });
 
 describe('session: Composite', () => {
-  it('rolls delegated cost up but ignores branch and compact', () => {
-    const lead = new PointNode('lead', c(10));
-    lead.addChild('delegate', new PointNode('worker', c(30)));
-    lead.addChild('branch', new PointNode('side', c(100)));
-    lead.addChild('compact', new PointNode('cont', c(100)));
-    expect(lead.cost()).toEqual({ dollars: 40 });
+  it('rolls child cost up through the tree', () => {
+    const lead = new TaskNode('lead', d(10));
+    const worker = new TaskNode('worker', d(30));
+    worker.addChild(new TaskNode('nested', d(5)));
+    lead.addChild(worker);
+    lead.addChild(new TaskNode('reader', d(1)));
+    expect(lead.cost()).toEqual(d(46));
   });
 
   it('cancels the whole subtree', () => {
-    const lead = new PointNode('lead', c(0));
-    const worker = new PointNode('worker', c(0));
-    lead.addChild('delegate', worker);
+    const lead = new TaskNode('lead', d(0));
+    const worker = new TaskNode('worker', d(0));
+    lead.addChild(worker);
     lead.cancel();
     expect(worker.isCancelled()).toBe(true);
   });
 
-  it('counts every point in the tree once', () => {
-    const lead = new PointNode('lead', c(0));
-    const w = new PointNode('w', c(0));
-    w.addChild('delegate', new PointNode('ww', c(0)));
-    lead.addChild('delegate', w);
+  it('counts every task in the tree once', () => {
+    const lead = new TaskNode('lead', d(0));
+    const w = new TaskNode('w', d(0));
+    w.addChild(new TaskNode('ww', d(0)));
+    lead.addChild(w);
     expect(lead.size()).toBe(3);
   });
 });

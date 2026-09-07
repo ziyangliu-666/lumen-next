@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ServerEvent } from '@lumen/contracts';
+import { makeTask } from '../domain/task.js';
 import { Broker } from './broker.js';
 
-const opened: ServerEvent = { type: 'point.opened', pointId: 'p1', parentId: null, edge: null };
+const opened: ServerEvent = {
+  type: 'task.opened',
+  task: makeTask('t1', 's1', null, 'lead', '', 0),
+};
 
 describe('core: Broker', () => {
   it('delivers a published event to every subscriber', () => {

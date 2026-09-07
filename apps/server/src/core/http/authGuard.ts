@@ -1,4 +1,4 @@
-import type { PointStatus } from '@lumen/contracts';
+import type { TaskStatus } from '@lumen/contracts';
 
 // Every route passes through here. Sprint 1: a stub that trusts a header so the
 // other slices can develop against a known account. LU YI replaces it in the
@@ -16,6 +16,6 @@ export function principalFromHeader(header: string | undefined): Principal | nul
   return { accountId: match[1]!, role: match[2] as 'user' | 'staff' };
 }
 
-export function canReadStatus(_status: PointStatus): boolean {
+export function canReadStatus(_status: TaskStatus): boolean {
   return true;
 }

@@ -9,7 +9,7 @@ export function Landing(): JSX.Element {
         Watch your agents think together
       </h1>
       <p className="mt-4 text-muted-foreground">
-        Agents delegate to agents. lumen draws the call graph, prices every step, and lets you
+        Agents delegate to agents. lumen shows the call tree, prices every step, and lets you
         interrupt a run while it is still running.
       </p>
       <div className="mt-8 flex justify-center gap-3">

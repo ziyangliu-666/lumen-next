@@ -1064,16 +1064,16 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
   <div class="modblock" id="m-email" style="--o:#3b6ea5"><h4>email</h4><ul><li>注册后发送邮箱验证邮件</li><li>需要用户批准（如高额步骤）时发送通知邮件</li><li>邮件模板与发送</li></ul></div>
   <div class="ownhd" style="--o:#4a8f6d">彭徐剑</div>
   <div class="modblock" id="m-projects" style="--o:#4a8f6d"><h4>projects</h4><ul><li>从落地页输入的问题新建项目</li><li>项目列表，按状态展示：运行 / 等待用户 / 完成 / 停止</li><li>项目卡片的状态机，按 state.live 决定是否轮询刷新</li><li>打开项目进入会话</li></ul></div>
-  <div class="modblock" id="m-findings" style="--o:#4a8f6d"><h4>findings</h4><ul><li>记录 agent 报告的发现 / 结论</li><li>在首页和会话里展示 findings 卡片</li><li>findings 关联到产生它的 point</li></ul></div>
+  <div class="modblock" id="m-findings" style="--o:#4a8f6d"><h4>findings</h4><ul><li>记录 agent 报告的发现 / 结论</li><li>在首页和会话里展示 findings 卡片</li><li>findings 关联到产生它的 task</li></ul></div>
   <div class="ownhd" style="--o:#8a5a3b">刘子阳</div>
-  <div class="modblock" id="m-kernel" style="--o:#8a5a3b"><h4>kernel</h4><ul><li>point / edge 模型，四种边：delegate / branch / compact / handover</li><li>委派引擎：把任务拆给 worker、并发扇出、限制深度</li><li>成本沿 delegate 边上卷（Composite）</li><li>预算内自动运行，在三处检查预算（回合前、扇出时、开窗时）</li><li>trace：把每一步按顺序记下来</li></ul></div>
-  <div class="modblock" id="m-broker" style="--o:#8a5a3b"><h4>broker</h4><ul><li>WebSocket 服务</li><li>事件协议：point.opened / status / cost、step.appended、finding.recorded</li><li>订阅 / 退订、多客户端广播</li><li>断线重连时补发</li></ul></div>
+  <div class="modblock" id="m-kernel" style="--o:#8a5a3b"><h4>kernel</h4><ul><li>task 模型：session 的主运行是根 task，每次委派开一个子 task</li><li>委派引擎：把任务拆给 worker、并发扇出、限制深度</li><li>成本沿子 task 上卷（Composite）</li><li>预算内自动运行，在三处检查预算（回合前、扇出时、开窗时）</li><li>trace：把每一步按顺序记下来</li></ul></div>
+  <div class="modblock" id="m-broker" style="--o:#8a5a3b"><h4>broker</h4><ul><li>WebSocket 服务</li><li>事件协议：task.opened / status / cost、step.appended、finding.recorded</li><li>订阅 / 退订、多客户端广播</li><li>断线重连时补发</li></ul></div>
   <div class="ownhd" style="--o:#7a5aa5">李卓阳</div>
   <div class="modblock" id="m-worker" style="--o:#7a5aa5"><h4>worker</h4><ul><li>在沙箱里跑 agent 的 think → tool → observe 循环</li><li>产出 step、findings、花费</li><li>worker 崩溃后从 trace 重放继续</li></ul></div>
   <div class="modblock" id="m-compute" style="--o:#7a5aa5"><h4>compute</h4><ul><li>多 provider：Modal / Docker / none</li><li>起容器、跑命令、回传 stdout 和 exitCode</li><li>none provider 返回可读的失败，而不是 null（Null Object）</li></ul></div>
   <div class="modblock" id="m-storage" style="--o:#7a5aa5"><h4>storage</h4><ul><li>项目卷，挂进沙箱</li><li>文件读写；save 工具把路径限制在会话目录内</li><li>会话里文件面板的列表与内容</li><li>用户在会话里插话的排队与落地时机（Command）</li></ul></div>
   <div class="ownhd" style="--o:#a5506e">贺融</div>
-  <div class="modblock" id="m-ledger" style="--o:#a5506e"><h4>ledger</h4><ul><li>每笔花费记账（compute 与 models）</li><li>按项目、按 point 汇总</li><li>月度用量与余额显示</li></ul></div>
+  <div class="modblock" id="m-ledger" style="--o:#a5506e"><h4>ledger</h4><ul><li>每笔花费记账（compute 与 models）</li><li>按项目、按 task 汇总</li><li>月度用量与余额显示</li></ul></div>
   <div class="modblock" id="m-billing" style="--o:#a5506e"><h4>billing</h4><ul><li>Stripe 充值（Checkout）</li><li>发票与账单</li><li>月度上限（cap）</li><li>超额请求升级给用户审批（Chain of Responsibility）</li></ul></div>
   <div class="modblock" id="m-secrets" style="--o:#a5506e"><h4>secrets</h4><ul><li>保管用户的 API key：Modal、搜索、模型、Hugging Face</li><li>写入后不回显（write-only）</li><li>加密存储</li></ul></div>
   <div class="modblock" id="m-admin" style="--o:#a5506e"><h4>admin</h4><ul><li>所有账号列表：谁、能做什么、花了多少</li><li>按角色识别管理员</li><li>紧急停止某个失控账号的运行</li></ul></div>
@@ -1262,7 +1262,7 @@ identity       #tunnels == n - #returns   holds for every path</div></div>
 <!-- ============ 04 SESSION ============ -->
 <section class="page" id="p4">
   <h2><span class="idx">04</span>Session</h2>
-  <div class="owns"><span class="lbl">谁负责</span><span class="own" style="background:#8a5a3b">session · 刘子阳（图·调用树）</span><span class="own" style="background:#7a5aa5">steering · 李卓阳（composer·文件）</span></div>
+  <div class="owns"><span class="lbl">谁负责</span><span class="own" style="background:#8a5a3b">session · 刘子阳（调用树·步骤）</span><span class="own" style="background:#7a5aa5">steering · 李卓阳（composer·文件）</span></div>
   <p class="job">Watch it work, and steer it mid-thought. Every entry point lands here.</p>
   <div class="strip">
     <span class="k">route</span><span class="v">/p/:project/s/:session</span><span class="sep">·</span>

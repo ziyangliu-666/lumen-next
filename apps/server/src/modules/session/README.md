@@ -5,7 +5,7 @@
 
 **Covers:** kernel, broker — the delegation engine and event fan-out (call records, the call tree). The shared core and contracts are also under this slice
 
-A point and a subtree of points answer cost, cancellation and rendering the same way. Cost rolls up along delegate edges only.
+A task and a subtree of tasks answer cost, cancellation and rendering the same way. Cost rolls up through the tree.
 
 ## Boundary
 Everything this slice exposes to the rest of the monolith is re-exported from

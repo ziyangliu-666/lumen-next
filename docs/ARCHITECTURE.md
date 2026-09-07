@@ -1,15 +1,7 @@
 # Architecture and the shared contract
 
 Owner: LIU ZIYANG. What every slice builds against, and the design of the
-session slice. Diagrams are Mermaid; GitHub renders them in place.
-
-| You are | Read |
-|---|---|
-| any slice owner, first day | 1, 2, 13 |
-| writing your design doc | 3, 4, 10, your part of 7 |
-| building a page or a module | 5, 6, 7, 8 |
-| waiting on core | 11 |
-| LIU ZIYANG | all, and 9, 12 |
+session slice.
 
 ---
 
@@ -716,27 +708,7 @@ are where the patterns live: that is where the conditionals gather.
 
 ---
 
-## 11. What lands when
-
-```mermaid
-gantt
-  title Sprint 1, contract owner
-  dateFormat YYYY-MM-DD
-  axisFormat %d %b
-  section contract and core
-  contract, db, http router, headerStub :a1, 2026-09-08, 1d
-  broker over WebSocket, core/domain interfaces :a2, 2026-09-09, 1d
-  web api client, Session page draws a snapshot :a3, 2026-09-10, 1d
-  walking skeleton end to end :a4, 2026-09-11, 1d
-  freeze and tag contract-v1, integration :milestone, m1, 2026-09-12, 0d
-  section everyone else
-  design doc (API, design, effort) :b1, 2026-09-07, 3d
-  first pattern class and its test, no core needed :b2, 2026-09-09, 3d
-```
-
----
-
-## 12. Effort (LIU ZIYANG)
+## 11. Effort (LIU ZIYANG)
 
 | # | Task | Sprint | Days |
 |---|---|---|---|
@@ -763,7 +735,7 @@ everyone waits on them. Rows 11 and 13 can drop to one day each.
 
 ---
 
-## 13. Glossary
+## 12. Glossary
 
 One word, one meaning.
 

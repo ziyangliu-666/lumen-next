@@ -51,7 +51,9 @@ npm run dev --workspace @lumen/web      # 前端，浏览器开 http://localhost
 
 进你模块的目录，里面只有两样东西：
 
-1. `README.md`：你的用例、你要解决的设计问题、proposal 里提的候选模式。
+1. `README.md`：你的用例、你要解决的设计问题、proposal 里提的候选模式。共用的类型、
+   接口、每个模块对外提供什么，在 [ARCHITECTURE.md](ARCHITECTURE.md)，开头有一张表
+   告诉你该读哪几节。
 2. `index.ts`：空的。你的模块对外提供什么，都从这个文件导出。
 
 没有人替你定好类。你先设计，再写代码。顺序是：
@@ -71,8 +73,9 @@ npm run dev --workspace @lumen/web      # 前端，浏览器开 http://localhost
 
 ```
 You are working on the `<slice>` vertical slice of the lumen monorepo.
-Read these first: apps/server/src/modules/<slice>/README.md, docs/CODING_STANDARDS.md,
-docs/SLICES.md, docs/DOD.md, docs/UI.md, packages/contracts/src.
+Read these first: apps/server/src/modules/<slice>/README.md, docs/ARCHITECTURE.md
+(sections 3 to 7 and your part of 6), docs/CODING_STANDARDS.md, docs/SLICES.md,
+docs/DOD.md, docs/UI.md, packages/contracts/src.
 
 My design for this slice is below. Implement the next story from it:
 <paste the relevant part of your design doc: the classes, the pattern, the story>

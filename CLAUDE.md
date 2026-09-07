@@ -3,8 +3,9 @@
 Five people and five agents write here at the same time. Everything below exists
 to keep that from turning into five codebases.
 
-Read first: [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md),
-[docs/UI.md](docs/UI.md), [docs/SLICES.md](docs/SLICES.md).
+Read first: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md), [docs/UI.md](docs/UI.md),
+[docs/SLICES.md](docs/SLICES.md).
 
 ## Stay inside your slice
 

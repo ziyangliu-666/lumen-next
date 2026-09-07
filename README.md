@@ -32,6 +32,7 @@ apps/web             React 前端，每个页面一个目录
 
 - 界面设计（每个屏幕标了归属）：[线上 ziy.bio/lumen-next](https://ziy.bio/lumen-next/) · [源文件 docs/spec/index.html](docs/spec/index.html)
 - 怎么配合 agent 干活（新人先看）：[docs/ONBOARDING.md](docs/ONBOARDING.md)
+- 系统架构、共用的类型和接口、每个模块对外提供什么：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - 每个模块的具体边界：[docs/SLICES.md](docs/SLICES.md)
 - 怎样算做完：[docs/DOD.md](docs/DOD.md)
 - 代码规范：[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md)

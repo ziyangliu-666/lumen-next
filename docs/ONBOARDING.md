@@ -11,12 +11,13 @@
 ## 0. 项目是什么
 
 lumen 是一个网页应用：多个 AI agent 互相委派，调用关系画成一张能点进去、能插手的
-图。我们拿它当 SWE5006 的实践项目做。整个后端是一个单体——一个进程、一个数据库；
-前端是一个 React 单页应用。代码按功能垂直切分，一人负责一条从页面到后端的完整功能线。
+图。我们拿它当 SWE5006 的实践项目做。整个后端是一个单体：一个进程、一个数据库。
+前端是一个 React 单页应用。代码按功能垂直切分，一个人负责一个模块，从页面一直写到
+后端。
 
-## 1. 你负责哪条线
+## 1. 你负责什么
 
-| 你 | 功能线 | 页面 | 后端模块 | 设计模式 |
+| 你 | 模块 | 页面 | 后端目录 | 设计模式 |
 |---|---|---|---|---|
 | 刘子阳 | 公共契约 + session | Session 页的图和调用树 | contracts, core, session | Composite |
 | 陆毅 | identity | 登录页、设置页的账号 | identity | Strategy + Template Method |
@@ -24,7 +25,7 @@ lumen 是一个网页应用：多个 AI agent 互相委派，调用关系画成�
 | 李卓阳 | steering | Session 页的输入框和文件面板 | steering | Command + Null Object |
 | 贺融 | billing | 设置页的钱包和密钥、后台 | billing | Chain of Responsibility |
 
-你这条线的后端代码在 `apps/server/src/modules/<你的模块>/`，前端页面在
+你的后端代码在 `apps/server/src/modules/<你的模块>/`，前端页面在
 `apps/web/src/pages/<你的页面>/`。哪个目录归谁写在 [/CODEOWNERS](../CODEOWNERS) 里。
 
 ## 2. 第一天：把环境跑起来
@@ -48,12 +49,12 @@ npm run dev --workspace @lumen/web      # 前端，浏览器开 http://localhost
 
 ## 3. 你的活在哪
 
-进你这条线的目录，里面有三样东西：
+进你模块的目录，里面有三样东西：
 
-1. `README.md`——写清你的用例、你要解决的设计问题、你要用的设计模式。
-2. 设计模式的骨架（比如 `pointComposite.ts`、`budgetGuard.ts`）——已经能编译、
+1. `README.md`：写清你的用例、你要解决的设计问题、你要用的设计模式。
+2. 设计模式的初始代码（比如 `pointComposite.ts`、`budgetGuard.ts`）：已经能编译、
    已经带测试。你从这里往下做，不是从空白开始。
-3. `<模块>.test.ts`——里面有几行 `it.todo(...)`。**每一行 todo 就是一件活。**
+3. `<模块>.test.ts`：里面有几行 `it.todo(...)`。**每一行 todo 就是一件活。**
    你要做的，就是把这些 todo 变成真正能跑通的测试。
 
 比如 `identity.test.ts` 里：
@@ -67,7 +68,7 @@ it.todo('SessionStrategy resolves an existing cookie to its principal');
 
 ## 4. 怎么用 agent 干
 
-不用一行行手敲。你指挥一个 AI 编程 agent（Claude Code、Codex 都行），在你这条线的
+不用一行行手敲。你指挥一个 AI 编程 agent（Claude Code、Codex 都行），在你模块的
 目录里干活。步骤：
 
 1. 在你的目录里开一个 agent。
@@ -76,12 +77,14 @@ it.todo('SessionStrategy resolves an existing cookie to its principal');
 ```
 You are working on the `<slice>` vertical slice of the lumen monorepo.
 Read these first: apps/server/src/modules/<slice>/README.md, docs/CODING_STANDARDS.md,
-docs/SLICES.md, docs/UI.md, packages/contracts/src.
+docs/SLICES.md, docs/DOD.md, docs/UI.md, packages/contracts/src.
 
 Your task: make the next `it.todo(...)` in <slice>.test.ts a real passing test,
 and implement the code it needs. Rules:
 - Only touch files inside your slice folder and its web page. Never import another
   slice's internals — import its public index only.
+- The account in core/http/authGuard.ts is temporary: it trusts a header so every
+  slice can work before real sign-in lands. Build against it; do not replace it.
 - `npm run verify` must stay green: format, lint, strict typecheck, coverage.
 - Demonstrate the slice's design pattern; document the brute-force version first,
   then the refactor.
@@ -96,26 +99,26 @@ Show me the plan before you write code.
 
 3. Agent 做完一个 todo，你自己跑一遍 `npm run verify`，把它写的东西看懂，再让它接着下一个。
 
-agent 写的每一段，你都得能讲清楚——不是让它写完就撒手。答辩时老师会盯着你的设计
-问题和设计模式问，这部分是按个人贡献打分的（Chandra 邮件里写明了）。
+agent 写的每一段，你都得能讲清楚，不能让它写完就撒手。答辩时老师会盯着你的设计
+问题和设计模式问，这部分按个人贡献打分（Chandra 邮件里写明了）。
 
 ## 5. 去哪领活
 
 三个地方，按顺序：
 
-1. **你这条线里的 `it.todo(...)`**——最直接，做完一个删掉一个。
-2. **这个 sprint 的目标**——见 [DOD.md](DOD.md) 里的 Sprint DOD 表。每个 sprint
+1. **你模块里的 `it.todo(...)`**：最直接，做完一个删掉一个。
+2. **这个 sprint 的目标**：见 [DOD.md](DOD.md) 里的 Sprint DOD 表。每个 sprint
    有一个能演示的成果，你的 todo 要往那个成果上靠。
-3. **GitHub Issues / Projects**——backlog 放这儿，领一个 issue 开一个分支。
+3. **GitHub Issues / Projects**：backlog 放这儿，领一个 issue 开一个分支。
 
 ### 第一个 sprint（9-2 到 9-12）每人的头几件活
 
-- **所有人**：把 `npm run verify` 跑绿；读完这份文档和你自己那条线的 README。
-- **刘子阳**：锁定 `packages/contracts` 和 `core`（数据类型、事件协议、基础表结构），
+- **所有人**：把 `npm run verify` 跑绿；读完这份文档和你自己模块的 README。
+- **刘子阳**：定稿 `packages/contracts` 和 `core`（数据类型、事件协议、基础表结构），
   然后把最小闭环串起来：登录 → 一个项目 → 一个 session → 一个 point，从头渲染到尾。
-- **陆毅**：identity 先把密码登录和 session 两条路打通（骨架已经在），OAuth 留着 todo。
+- **陆毅**：identity 先把密码登录和 session 两条路打通（初始代码已经在），OAuth 留着 todo。
 - **彭徐剑**：projects 的四态卡片，让卡片根据 `state.live` 决定要不要轮询。
-- **李卓阳**：steering 的 SteerQueue 接上真实的两个落地时机（本轮结束 / 下一步）。
+- **李卓阳**：steering 的 SteerQueue 接上真实的两个生效时机（本轮结束 / 下一步）。
 - **贺融**：billing 里超额之后弹审批那条路接起来，Stripe 充值的接口先搭好。
 
 ## 6. 规范就一条命令
@@ -125,7 +128,7 @@ agent 写的每一段，你都得能讲清楚——不是让它写完就撒手�
 
 细则在 [CODING_STANDARDS.md](CODING_STANDARDS.md)。最要紧的四条：
 
-- **边界**：别人的功能线你只能通过它的 `index.ts` 用，不能直接引它内部的文件。
+- **边界**：别人的模块你只能通过它的 `index.ts` 用，不能直接引它内部的文件。
   引错了 ESLint 直接报错。这是五个人不互相踩脚的关键。
 - **钱一律用整数分**，别用小数。
 - **复杂的类先写测试**（委派引擎、预算链、状态机这些）。琐碎的胶水代码不用测。
@@ -140,24 +143,24 @@ agent 写的每一段，你都得能讲清楚——不是让它写完就撒手�
 → CI 绿 → 合并
 ```
 
-- 分支名：`<功能线>/<简短主题>`，比如 `identity/github-oauth`。
+- 分支名：`<模块>/<简短主题>`，比如 `identity/github-oauth`。
 - 提交信息用 Conventional Commits，比如 `feat(identity): ...`、`fix(billing): ...`。
 - PR 要过 [/CODEOWNERS](../CODEOWNERS) 里对应负责人的 review，而且 CI 得绿。模板会
   提醒你对照 DOD 打勾。
 - 分支别攒太久，写一点合一点。
 
-一个 PR 什么时候算做完，看 [DOD.md](DOD.md) 里的 Story DOD。代码写出来不算完——
+一个 PR 什么时候算做完，看 [DOD.md](DOD.md) 里的 Story DOD。代码写出来不算完。
 测试证明了它对、CI 绿了、owner 也 review 过了，才算完。
 
 ## 8. 什么时候联调，怎么联调
 
-**联调不是留到最后才做的事。** 因为大家都对着同一份 `packages/contracts` 写，联调
+**联调不是留到最后才做的事。** 大家都对着同一份 `packages/contracts` 写，联调
 说白了就是：确认你发出去、收进来的事件和契约对得上。
 
 三个固定的联调点：
 
 1. **第一个 sprint 结束（9-12）：第一次全员联调，跑通最小闭环。**
-   五个人的骨架串起来走一遍：登录页登录（陆毅的桩）→ 首页看到一个项目（彭徐剑）
+   五个人的代码串起来走一遍：登录页登录（陆毅的临时登录）→ 首页看到一个项目（彭徐剑）
    → 进 session（刘子阳）→ 一个 point 带着花费渲染出来（贺融的账目）。这一趟通了，
    第一个 sprint 才算做完。
 
@@ -165,11 +168,11 @@ agent 写的每一段，你都得能讲清楚——不是让它写完就撒手�
    （这是上次 workshop 复盘时定的：别拖到最后一天才集成。）这天所有人把分支合进
    主干，一起跑前后端，把当前 sprint 的主流程走一遍。
 
-3. **两条线接头的地方，随时联调。** 已知的接头点：
+3. **两个模块交界的地方，随时联调。** 已知的交界处：
    - **session 页**：刘子阳的图和李卓阳的输入框在同一页。两人先说好组件之间的边界，
      然后各写各的。
-   - **所有人都依赖 identity**：每条线都需要一个登录用户。陆毅的真登录上线之前，
-     大家先用 `core/http/authGuard.ts` 里的桩账号开发；他一上线，全员切过去。
+   - **所有人都依赖 identity**：每个模块都需要一个登录用户。陆毅的真登录上线之前，
+     大家先用 `core/http/authGuard.ts` 里写死的临时账号开发；他一上线，全员切过去。
    - **花费的显示**：billing 负责写账目，projects 和 session 负责读出来显示。先把
      读的接口说好，谁先谁后都不卡。
 
@@ -185,7 +188,7 @@ npm run dev --workspace @lumen/web
 ```
 
 联调断了，通常不是谁写错了，是契约没对齐。回 `packages/contracts` 看是不是少了字段。
-契约在第一个 sprint 之后是锁定的，要改得走 review。
+契约在第一个 sprint 之后定稿，要改得走 review。
 
 ## 9. 时间线
 
@@ -205,7 +208,7 @@ npm run dev --workspace @lumen/web
 ## 10. 卡住了找谁
 
 - 环境、契约、联调、流程的问题 → 找刘子阳。
-- 你这条线内部的设计问题 → 先问你的 agent，再拿到群里一起看。
+- 你模块内部的设计问题 → 先问你的 agent，再拿到群里一起看。
 - 老师要交的东西（报告、DOD、交付物）→ 看 [DOD.md](DOD.md)，还有问题群里问。
 
 先把 `npm run verify` 跑绿，再开始。

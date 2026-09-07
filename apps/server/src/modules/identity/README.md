@@ -3,7 +3,7 @@
 **Use case:** UC1 — sign up, sign in, manage the account
 **Design pattern:** Strategy + Template Method
 
-**Covers（这条线包含的细模块）:** identity, email — 登录、账号、OAuth、邮箱验证
+**Covers:** identity, email — sign-in, accounts, OAuth, email verification
 
 Four ways to become authenticated (GitHub OAuth, Google OAuth, email + password, an existing session) share one flow and end in one principal. A fifth must not change the flow.
 

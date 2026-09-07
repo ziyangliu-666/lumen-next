@@ -15,14 +15,14 @@
 后端是一个单体：一个进程、一个 Postgres 数据库，模块之间在进程内直接调用，不走
 网络、不拆微服务。前端是一个 React 单页应用。
 
-代码按功能垂直切分，一人负责一条完整的功能线——从页面一直写到后端，而不是分成
+代码按功能垂直切分，一个人负责一个模块，从页面一直写到后端，而不是分成
 前端组和后端组。
 
 ```
 packages/contracts   前后端共用的事件协议和数据类型（第一个 sprint 之后锁定）
 apps/server          后端单体
   src/core           领域模型、事件广播、数据库、HTTP —— 公共部分，Sprint 1 后冻结
-  src/modules        每条功能线一个目录，各有一个负责人
+  src/modules        每个模块一个目录，各有一个负责人
 apps/web             React 前端，每个页面一个目录
 ```
 
@@ -32,7 +32,7 @@ apps/web             React 前端，每个页面一个目录
 
 - 界面设计（每个屏幕标了归属）：[线上 ziy.bio/lumen-next](https://ziy.bio/lumen-next/) · [源文件 docs/spec/index.html](docs/spec/index.html)
 - 怎么配合 agent 干活（新人先看）：[docs/ONBOARDING.md](docs/ONBOARDING.md)
-- 每条功能线的具体边界：[docs/SLICES.md](docs/SLICES.md)
+- 每个模块的具体边界：[docs/SLICES.md](docs/SLICES.md)
 - 怎样算做完：[docs/DOD.md](docs/DOD.md)
 - 代码规范：[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md)
 - 前端只有一套外观：[docs/UI.md](docs/UI.md)

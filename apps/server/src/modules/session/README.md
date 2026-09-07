@@ -3,7 +3,7 @@
 **Use case:** UC3 — delegate work and read the trace
 **Design pattern:** Composite
 
-**Covers（这条线包含的细模块）:** kernel, broker — 委派引擎、事件广播（调用记录、调用树）。共享的 core / contracts 也在这条线名下
+**Covers:** kernel, broker — the delegation engine and event fan-out (call records, the call tree). The shared core and contracts are also under this slice
 
 A point and a subtree of points answer cost, cancellation and rendering the same way. Cost rolls up along delegate edges only.
 

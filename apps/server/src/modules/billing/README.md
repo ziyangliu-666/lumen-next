@@ -3,7 +3,7 @@
 **Use case:** UC5 — cap spend, authorise an expensive step, administer, pay
 **Design pattern:** Chain of Responsibility
 
-**Covers（这条线包含的细模块）:** ledger, billing, secrets — 账目、支付（Stripe）、密钥保管
+**Covers:** ledger, billing, secrets — the ledger, payment (Stripe), secret storage
 
 The spend cap is checked before a turn, when a fan-out arrives, and when a window opens. A request over the cap is escalated to the user, not refused. Stripe checkout and invoices live here too.
 

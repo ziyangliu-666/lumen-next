@@ -31,9 +31,43 @@ export interface RawRequest {
   readonly body: string;
 }
 
-export interface Reply {
-  readonly status: number;
-  readonly body: unknown;
+export interface SetCookie {
+  readonly name: string;
+  readonly value: string;
+  readonly maxAgeSeconds?: number;
+  readonly path?: string;
+  /** Defaults to true. Only a cookie the browser's own JS must read sets this false. */
+  readonly httpOnly?: boolean;
+  readonly secure?: boolean;
+  /** Defaults to 'Lax', which is what a session cookie behind OAuth needs. */
+  readonly sameSite?: 'Strict' | 'Lax' | 'None';
+}
+
+/**
+ * What dispatch() answers, and what a handler returns when a JSON body alone is
+ * not enough — a redirect, a Set-Cookie, a caching header. A handler that needs
+ * none of that returns its value and the router wraps it.
+ */
+export class Reply {
+  constructor(
+    readonly status: number,
+    readonly body: unknown,
+    readonly headers: Readonly<Record<string, string>> = {},
+    readonly cookies: readonly SetCookie[] = [],
+  ) {}
+}
+
+/** 302 by default: the browser repeats the original method on the new URL. */
+export function redirect(location: string, status: 302 | 303 | 307 = 302): Reply {
+  return new Reply(status, null, { location });
+}
+
+/** A JSON body plus whatever headers and cookies go with it. */
+export function json(
+  body: unknown,
+  extra: { status?: number; headers?: Record<string, string>; cookies?: readonly SetCookie[] } = {},
+): Reply {
+  return new Reply(extra.status ?? 200, body, extra.headers ?? {}, extra.cookies ?? []);
 }
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -119,8 +153,8 @@ export class Router {
     // A path that exists under another verb is a 405, not a 404: it tells the
     // caller the URL is right and the method is not.
     return pathExists
-      ? { status: 405, body: { error: 'method not allowed' } }
-      : { status: 404, body: { error: 'no such route' } };
+      ? new Reply(405, { error: 'method not allowed' })
+      : new Reply(404, { error: 'no such route' });
   }
 
   private add(method: Method, path: string, handler: Handler): this {
@@ -139,7 +173,7 @@ export class Router {
       try {
         body = JSON.parse(raw.body);
       } catch {
-        return { status: 400, body: { error: 'body is not JSON' } };
+        return new Reply(400, { error: 'body is not JSON' });
       }
     }
 
@@ -162,10 +196,13 @@ export class Router {
 
     try {
       const result = await route.handler(request);
-      return result === undefined ? { status: 204, body: null } : { status: 200, body: result };
+      // A handler that needs a redirect, a cookie or a header returns a Reply
+      // and it passes through untouched; anything else is a 200 JSON body.
+      if (result instanceof Reply) return result;
+      return result === undefined ? new Reply(204, null) : new Reply(200, result);
     } catch (error) {
       if (error instanceof HttpError) {
-        return { status: error.status, body: { error: error.message } };
+        return new Reply(error.status, { error: error.message });
       }
       // An unexpected throw is this server's bug. The caller gets nothing that
       // describes our internals; the log keeps the detail.

@@ -3,7 +3,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import type { Broker } from '../protocol/broker.js';
 import type { PrincipalResolver } from './authGuard.js';
-import type { Router } from './router.js';
+import type { Reply, Router, SetCookie } from './router.js';
 import { attachEventStream } from './wsBridge.js';
 
 // node:http and nothing else (docs/ARCHITECTURE.md §6). Three things share one
@@ -35,7 +35,17 @@ export interface ServerDeps {
   readonly log?: (message: string) => void;
 }
 
-export function buildServer(deps: ServerDeps): Server {
+/** What buildServer hands back: the listener, and the one way to stop it. */
+export interface HttpServer {
+  readonly server: Server;
+  /** Stop listening, close the event stream, drain, and resolve when gone. */
+  close(graceMs?: number): Promise<void>;
+}
+
+/** How long a shutdown waits for in-flight work before cutting the rest off. */
+const DEFAULT_GRACE_MS = 10_000;
+
+export function buildServer(deps: ServerDeps): HttpServer {
   const log = deps.log ?? ((): void => {});
   const webRoot = deps.webRoot !== undefined ? resolve(deps.webRoot) : null;
 
@@ -48,8 +58,16 @@ export function buildServer(deps: ServerDeps): Server {
     });
   });
 
-  attachEventStream(server, { broker: deps.broker, resolver: deps.resolver, log });
-  return server;
+  const closeStream = attachEventStream(server, {
+    broker: deps.broker,
+    resolver: deps.resolver,
+    log,
+  });
+
+  return {
+    server,
+    close: (graceMs = DEFAULT_GRACE_MS) => closeGracefully(server, closeStream, log, graceMs),
+  };
 }
 
 async function handle(
@@ -72,11 +90,7 @@ async function handle(
       headers: request.headers as Record<string, string | undefined>,
       body,
     });
-    if (reply.status === 204) {
-      response.writeHead(204).end();
-      return;
-    }
-    sendJson(response, reply.status, reply.body);
+    sendReply(response, reply);
     return;
   }
 
@@ -116,6 +130,42 @@ function sendJson(response: ServerResponse, status: number, body: unknown): void
   response.end(payload);
 }
 
+/**
+ * Secure by default: HttpOnly unless a cookie is explicitly for the browser's
+ * own scripts, and SameSite=Lax, which still survives the redirect back from an
+ * OAuth provider.
+ */
+function serializeCookie(cookie: SetCookie): string {
+  const parts = [`${cookie.name}=${encodeURIComponent(cookie.value)}`];
+  parts.push(`Path=${cookie.path ?? '/'}`);
+  if (cookie.maxAgeSeconds !== undefined) parts.push(`Max-Age=${cookie.maxAgeSeconds}`);
+  if (cookie.httpOnly !== false) parts.push('HttpOnly');
+  if (cookie.secure) parts.push('Secure');
+  parts.push(`SameSite=${cookie.sameSite ?? 'Lax'}`);
+  return parts.join('; ');
+}
+
+function sendReply(response: ServerResponse, reply: Reply): void {
+  const headers: Record<string, string | string[] | number> = { ...reply.headers };
+  if (reply.cookies.length > 0) {
+    headers['set-cookie'] = reply.cookies.map(serializeCookie);
+  }
+
+  // 204 carries no body, and a redirect's body is never read. Writing one would
+  // make some proxies and every spec-following client unhappy.
+  const bodyless = reply.status === 204 || (reply.status >= 300 && reply.status < 400);
+  if (bodyless) {
+    response.writeHead(reply.status, headers).end();
+    return;
+  }
+
+  const payload = JSON.stringify(reply.body);
+  headers['content-type'] = 'application/json; charset=utf-8';
+  headers['content-length'] = Buffer.byteLength(payload);
+  response.writeHead(reply.status, headers);
+  response.end(payload);
+}
+
 function sendStatic(response: ServerResponse, root: string, pathname: string): void {
   // The pages use a hash router, so every route lives after the '#' and never
   // reaches here. '/' is the only path that maps to index.html; a switch to
@@ -138,6 +188,37 @@ function sendStatic(response: ServerResponse, root: string, pathname: string): v
     'content-type': CONTENT_TYPES[extname(target).toLowerCase()] ?? 'application/octet-stream',
   });
   createReadStream(target).pipe(response);
+}
+
+/**
+ * Stop listening, let in-flight work finish, and be gone.
+ *
+ * The one that actually hangs a shutdown here is the event stream. `close()`
+ * waits for every open connection, and a WebSocket is never idle, so a single
+ * browser tab watching a session would hold the process open until its
+ * orchestrator lost patience and SIGKILLed it — the abrupt cut that draining
+ * was supposed to avoid. So the stream is closed first, plain idle sockets are
+ * released next, and whatever is still in flight gets `graceMs` and is then cut.
+ */
+function closeGracefully(
+  server: Server,
+  closeStream: () => void,
+  log: (message: string) => void,
+  graceMs: number,
+): Promise<void> {
+  return new Promise((done) => {
+    const forceful = setTimeout(() => {
+      log('shutdown: forcing the remaining connections closed');
+      server.closeAllConnections();
+    }, graceMs);
+
+    closeStream();
+    server.close(() => {
+      clearTimeout(forceful);
+      done();
+    });
+    server.closeIdleConnections();
+  });
 }
 
 /** Where the built SPA lands, relative to the process's working directory. */

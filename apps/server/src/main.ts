@@ -12,6 +12,9 @@ import { Broker } from './core/protocol/broker.js';
 
 const DEFAULT_PORT = 4000;
 
+/** How long a shutdown waits for in-flight work before cutting the rest off. */
+const SHUTDOWN_GRACE_MS = 10_000;
+
 function bootstrap(): void {
   const log = (message: string): void => {
     console.log(message);
@@ -31,10 +34,10 @@ function bootstrap(): void {
   //   registerCommands(broker);
 
   const webRoot = defaultWebRoot();
-  const server = buildServer({ router, broker, resolver, ...(webRoot ? { webRoot } : {}), log });
+  const http = buildServer({ router, broker, resolver, ...(webRoot ? { webRoot } : {}), log });
 
   const port = Number(process.env['LUMEN_PORT'] ?? DEFAULT_PORT);
-  server.listen(port, () => {
+  http.server.listen(port, () => {
     log(`lumen monolith up on :${port}${webRoot ? ` — web app from ${webRoot}` : ''}`);
   });
 
@@ -43,7 +46,10 @@ function bootstrap(): void {
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {
       log(`${signal} received, closing`);
-      server.close(() => process.exit(0));
+      http.close(SHUTDOWN_GRACE_MS).then(
+        () => process.exit(0),
+        () => process.exit(1),
+      );
     });
   }
 }

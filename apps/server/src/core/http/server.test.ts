@@ -1,5 +1,5 @@
 import type { AddressInfo } from 'node:net';
-import type { Server } from 'node:http';
+import { Agent, get } from 'node:http';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,8 +9,8 @@ import type { ClientCommand, ServerEvent } from '@lumen/contracts';
 import { makeTask } from '../domain/task.js';
 import { Broker } from '../protocol/broker.js';
 import { headerStub } from './authGuard.js';
-import { Router } from './router.js';
-import { buildServer } from './server.js';
+import { json, redirect, Router } from './router.js';
+import { buildServer, type HttpServer } from './server.js';
 
 // The whole transport in one process, on a real ephemeral port. The event stream
 // is exercised over a real socket rather than an in-memory duplex, because the
@@ -22,12 +22,12 @@ const opened: ServerEvent = {
   task: makeTask('t1', 's1', null, 'lead', '', 0),
 };
 
-let server: Server | null = null;
+let server: HttpServer | null = null;
 
 afterEach(async () => {
   const running = server;
   server = null;
-  if (running) await new Promise<void>((done) => running.close(() => done()));
+  if (running) await running.close(0);
 });
 
 interface Harness {
@@ -46,6 +46,10 @@ function start(webRoot?: string): Promise<Harness> {
 
   const router = new Router(headerStub);
   router.get('/api/health', () => ({ status: 'ok' }));
+  router.get('/api/go', () => redirect('https://example.invalid/authorize'));
+  router.post('/api/signin', () =>
+    json({ ok: true }, { cookies: [{ name: 'sid', value: 'abc', maxAgeSeconds: 3600 }] }),
+  );
 
   const built = buildServer({
     router,
@@ -56,8 +60,8 @@ function start(webRoot?: string): Promise<Harness> {
   server = built;
 
   return new Promise((done) => {
-    built.listen(0, '127.0.0.1', () => {
-      const { port } = built.address() as AddressInfo;
+    built.server.listen(0, '127.0.0.1', () => {
+      const { port } = built.server.address() as AddressInfo;
       done({
         broker,
         received,
@@ -114,6 +118,28 @@ describe('core: the HTTP server', () => {
     expect(await response.json()).toEqual({ error: 'no such route' });
   });
 
+  it('writes a redirect over the wire with no body', async () => {
+    const { origin } = await start();
+    const response = await fetch(`${origin}/api/go`, { redirect: 'manual' });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('https://example.invalid/authorize');
+    expect(await response.text()).toBe('');
+  });
+
+  it('writes a Set-Cookie that is HttpOnly and SameSite by default', async () => {
+    const { origin } = await start();
+    const response = await fetch(`${origin}/api/signin`, { method: 'POST' });
+
+    const cookie = response.headers.get('set-cookie') ?? '';
+    expect(cookie).toContain('sid=abc');
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('SameSite=Lax');
+    expect(cookie).toContain('Path=/');
+    expect(cookie).toContain('Max-Age=3600');
+    expect(await response.json()).toEqual({ ok: true });
+  });
+
   it('serves the built web app when there is one', async () => {
     const root = mkdtempSync(join(tmpdir(), 'lumen-web-'));
     writeFileSync(join(root, 'index.html'), '<!doctype html><title>lumen</title>');
@@ -123,6 +149,51 @@ describe('core: the HTTP server', () => {
     expect(page.status).toBe(200);
     expect(page.headers.get('content-type')).toContain('text/html');
     expect(await page.text()).toContain('lumen');
+  });
+
+  it('shuts down promptly with an idle keep-alive connection open', async () => {
+    const harness = await start();
+    const running = server;
+    server = null;
+    if (!running) throw new Error('no server');
+
+    const agent = new Agent({ keepAlive: true });
+    await new Promise<void>((done, fail) => {
+      const request = get(`${harness.origin}/api/health`, { agent }, (response) => {
+        response.resume();
+        response.on('end', () => done());
+      });
+      request.on('error', fail);
+    });
+
+    const startedAt = Date.now();
+    await running.close(5000);
+
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+    agent.destroy();
+  });
+
+  it('shuts down promptly with a browser still watching a session', async () => {
+    const harness = await start();
+    const running = server;
+    server = null;
+    if (!running) throw new Error('no server');
+
+    // The real hazard: a WebSocket is never idle, so nothing releases it on its
+    // own. Without the stream being closed first, this would sit here until the
+    // grace period expired and connections were cut.
+    const socket = await connect(harness.wsUrl('s1'), AUTH.headers);
+    await waitUntil(() => harness.broker.subscriberCount('s1') === 1);
+
+    const startedAt = Date.now();
+    await running.close(5000);
+
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+
+    // The close frame is a handshake, so the server's own 'close' handler — and
+    // with it the unsubscribe — lands just after the shutdown resolves.
+    await waitUntil(() => harness.broker.subscriberCount('s1') === 0);
+    socket.terminate();
   });
 
   it('refuses to serve a file outside the web root', async () => {

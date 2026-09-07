@@ -80,7 +80,13 @@ export function attachEventStream(server: Server, deps: EventStreamDeps): () => 
     );
   });
 
-  return () => sockets.close();
+  // Closing the WebSocketServer alone only stops it taking new connections; the
+  // ones already open have to be told to go away, or a watching tab keeps the
+  // process alive through a shutdown.
+  return () => {
+    for (const client of sockets.clients) client.close(1001, 'server shutting down');
+    sockets.close();
+  };
 }
 
 function wire(

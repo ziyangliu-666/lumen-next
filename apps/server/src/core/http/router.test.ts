@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { headerStub, requireStaff, requireUser } from './authGuard.js';
 import { HttpError, notFound } from './httpError.js';
-import { Router, type RawRequest } from './router.js';
+import { json, redirect, Reply, Router, type RawRequest } from './router.js';
 
 // The router is deliberately not bound to a socket, so every route below is
 // exercised without opening a port.
@@ -15,10 +15,9 @@ describe('core: Router', () => {
     const router = new Router(headerStub);
     router.get('/api/health', () => ({ status: 'ok' }));
 
-    expect(await router.dispatch(raw('GET', '/api/health'))).toEqual({
-      status: 200,
-      body: { status: 'ok' },
-    });
+    const reply = await router.dispatch(raw('GET', '/api/health'));
+    expect(reply.status).toBe(200);
+    expect(reply.body).toEqual({ status: 'ok' });
   });
 
   it('captures path parameters and query string', async () => {
@@ -87,7 +86,8 @@ describe('core: Router', () => {
     router.delete('/api/thing', () => undefined);
 
     const missing = await router.dispatch(raw('GET', '/api/missing'));
-    expect(missing).toEqual({ status: 404, body: { error: 'no such task' } });
+    expect(missing.status).toBe(404);
+    expect(missing.body).toEqual({ error: 'no such task' });
     expect((await router.dispatch(raw('DELETE', '/api/thing'))).status).toBe(204);
   });
 
@@ -120,5 +120,60 @@ describe('core: Router', () => {
 
   it('exposes the status on the error it throws', () => {
     expect(new HttpError(418, 'teapot').status).toBe(418);
+  });
+});
+
+// The three things a handler cannot say with a JSON body alone. OAuth needs all
+// three on its first two routes, so they are here before identity starts.
+describe('core: Router replies that are not plain JSON', () => {
+  it('passes a redirect through with its Location and no body', async () => {
+    const router = new Router(headerStub);
+    router.get('/api/auth/github', () => redirect('https://github.com/login/oauth/authorize'));
+
+    const reply = await router.dispatch(raw('GET', '/api/auth/github'));
+
+    expect(reply.status).toBe(302);
+    expect(reply.headers['location']).toBe('https://github.com/login/oauth/authorize');
+    expect(reply.body).toBeNull();
+  });
+
+  it('carries a Set-Cookie alongside a body', async () => {
+    const router = new Router(headerStub);
+    router.post('/api/auth/password', () =>
+      json(
+        { ok: true },
+        { cookies: [{ name: 'sid', value: 'abc', maxAgeSeconds: 3600, secure: true }] },
+      ),
+    );
+
+    const reply = await router.dispatch(raw('POST', '/api/auth/password'));
+
+    expect(reply.body).toEqual({ ok: true });
+    expect(reply.cookies).toEqual([
+      { name: 'sid', value: 'abc', maxAgeSeconds: 3600, secure: true },
+    ]);
+  });
+
+  it('carries an arbitrary header, and a status the helper was given', async () => {
+    const router = new Router(headerStub);
+    router.get('/api/thing', () =>
+      json({ id: 1 }, { status: 201, headers: { 'cache-control': 'no-store' } }),
+    );
+
+    const reply = await router.dispatch(raw('GET', '/api/thing'));
+
+    expect(reply.status).toBe(201);
+    expect(reply.headers['cache-control']).toBe('no-store');
+  });
+
+  it('still wraps a plain value, so existing handlers are unaffected', async () => {
+    const router = new Router(headerStub);
+    router.get('/api/plain', () => ({ a: 1 }));
+
+    const reply = await router.dispatch(raw('GET', '/api/plain'));
+
+    expect(reply).toBeInstanceOf(Reply);
+    expect(reply.headers).toEqual({});
+    expect(reply.cookies).toEqual([]);
   });
 });

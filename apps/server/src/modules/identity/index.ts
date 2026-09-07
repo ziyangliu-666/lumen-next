@@ -1,3 +1,4 @@
 // Public barrel for the identity slice. Owner: LU YI.
-export type { AuthStrategy, Credentials } from './authStrategy.js';
-export { AbstractAuthFlow } from './authStrategy.js';
+// Empty until the owner designs the slice. Everything the rest of the monolith
+// may use from here is re-exported from this file and nowhere else.
+export {};

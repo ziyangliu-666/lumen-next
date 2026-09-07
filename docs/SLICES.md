@@ -18,7 +18,8 @@ that, a change here is a reviewed pull request, because every slice depends on i
 - Module: `modules/identity`. GitHub OAuth, Google OAuth, email + password, and an
   existing session — four ways in, one principal out.
 - Design problem: four exchanges differ, all must end in one session, and a fifth
-  must not change the flow. → **Strategy + Template Method**.
+  must not change the flow. Candidate pattern (proposal 6.4, the owner confirms
+  after comparing candidates): **Strategy + Template Method**.
 - Note (review): admin is not a separate hidden login. A staff account signs in on
   the same page and is routed to `/admin` by role.
 
@@ -27,7 +28,8 @@ that, a change here is a reviewed pull request, because every slice depends on i
 - Pages: 01 Landing, 03 Home.
 - Module: `modules/projects` (+ findings list).
 - Design problem: a project card renders and refreshes differently when running,
-  waiting, finished or stopped; the logic must not scatter. → **State**.
+  waiting, finished or stopped; the logic must not scatter. Candidate pattern
+  (proposal 6.4, the owner confirms after comparing candidates): **State**.
 
 ## UC3 — Session graph (LIU ZIYANG)
 
@@ -42,8 +44,9 @@ that, a change here is a reviewed pull request, because every slice depends on i
 - Module: `modules/steering` (worker, compute, storage).
 - Design problem: a user message is queued and applied at a chosen moment in a
   running turn, undoable before it lands; the compute provider is replaceable,
-  including one that does nothing. → **Command**, compared with Strategy and Null
-  Object.
+  including one that does nothing. Candidate pattern (proposal 6.4, the owner
+  confirms after comparing candidates): **Command**, compared with Strategy and
+  Null Object.
 
 ## UC5 — Money + admin (HE RONG)
 
@@ -51,7 +54,8 @@ that, a change here is a reviewed pull request, because every slice depends on i
 - Module: `modules/billing` (ledger, billing, secrets).
 - Design problem: the spend cap is checked before a turn, at fan-out, and at window
   open; an over-cap request is escalated to the user, not refused; a new check point
-  must not change the callers. → **Chain of Responsibility**.
+  must not change the callers. Candidate pattern (proposal 6.4, the owner confirms
+  after comparing candidates): **Chain of Responsibility**.
 - Note (review): a Stripe top-up + invoices page belongs here.
 
 ## Sequencing

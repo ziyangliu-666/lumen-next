@@ -1,3 +1,4 @@
 // Public barrel for the projects slice. Owner: PENG XUJIAN.
-export type { ProjectState, ProjectEvent, StateName } from './projectState.js';
-export { states } from './projectState.js';
+// Empty until the owner designs the slice. Everything the rest of the monolith
+// may use from here is re-exported from this file and nowhere else.
+export {};

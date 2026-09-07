@@ -47,24 +47,19 @@ npm run dev --workspace @lumen/server   # 后端
 npm run dev --workspace @lumen/web      # 前端，浏览器开 http://localhost:4173
 ```
 
-## 3. 你的活在哪
+## 3. 你的模块是空的，你来设计
 
-进你模块的目录，里面有三样东西：
+进你模块的目录，里面只有两样东西：
 
-1. `README.md`：写清你的用例、你要解决的设计问题、你要用的设计模式。
-2. 设计模式的初始代码（比如 `pointComposite.ts`、`budgetGuard.ts`）：已经能编译、
-   已经带测试。你从这里往下做，不是从空白开始。
-3. `<模块>.test.ts`：里面有几行 `it.todo(...)`。**每一行 todo 就是一件活。**
-   你要做的，就是把这些 todo 变成真正能跑通的测试。
+1. `README.md`：你的用例、你要解决的设计问题、proposal 里提的候选模式。
+2. `index.ts`：空的。你的模块对外提供什么，都从这个文件导出。
 
-比如 `identity.test.ts` 里：
+没有人替你定好类。你先设计，再写代码。顺序是：
 
-```ts
-it.todo('GithubStrategy exchanges an OAuth code for a verified email');
-it.todo('SessionStrategy resolves an existing cookie to its principal');
-```
-
-这两行就是陆毅第一个 sprint 的两件活。
+1. 9-10 晚之前，在自己的 Google 文档里写好设计：用例主流程、分析类图、设计问题、
+   你选的模式和为什么选它。候选模式是 proposal 6.4 里的假设，不是结论，你比较过
+   再定。
+2. 设计定了，再在你的目录里写代码。带模式的类每个都要有单元测试。
 
 ## 4. 怎么用 agent 干
 
@@ -79,15 +74,17 @@ You are working on the `<slice>` vertical slice of the lumen monorepo.
 Read these first: apps/server/src/modules/<slice>/README.md, docs/CODING_STANDARDS.md,
 docs/SLICES.md, docs/DOD.md, docs/UI.md, packages/contracts/src.
 
-Your task: make the next `it.todo(...)` in <slice>.test.ts a real passing test,
-and implement the code it needs. Rules:
+My design for this slice is below. Implement the next story from it:
+<paste the relevant part of your design doc: the classes, the pattern, the story>
+
+Rules:
 - Only touch files inside your slice folder and its web page. Never import another
   slice's internals — import its public index only.
 - The account in core/http/authGuard.ts is temporary: it trusts a header so every
   slice can work before real sign-in lands. Build against it; do not replace it.
+- Write the unit test first for every class that carries the design pattern.
 - `npm run verify` must stay green: format, lint, strict typecheck, coverage.
-- Demonstrate the slice's design pattern; document the brute-force version first,
-  then the refactor.
+- Document the brute-force version first, then the refactor to the pattern.
 - On the web side, follow docs/UI.md: build from the components in
   apps/web/src/ui (shadcn/ui), colour only with the theme classes from
   apps/web/src/styles/theme.css, no inline styles, no hex values, no new UI
@@ -97,7 +94,7 @@ and implement the code it needs. Rules:
 Show me the plan before you write code.
 ```
 
-3. Agent 做完一个 todo，你自己跑一遍 `npm run verify`，把它写的东西看懂，再让它接着下一个。
+3. Agent 做完一个 story，你自己跑一遍 `npm run verify`，把它写的东西看懂，再让它接着下一个。
 
 agent 写的每一段，你都得能讲清楚，不能让它写完就撒手。答辩时老师会盯着你的设计
 问题和设计模式问，这部分按个人贡献打分（Chandra 邮件里写明了）。
@@ -106,23 +103,22 @@ agent 写的每一段，你都得能讲清楚，不能让它写完就撒手。�
 
 三个地方，按顺序：
 
-1. **你模块里的 `it.todo(...)`**：最直接，做完一个删掉一个。
+1. **你自己的设计文档**：设计写好了，里面的每个类、每个流程就是一件件活。
 2. **这个 sprint 的目标**：见 [DOD.md](DOD.md) 里的 Sprint DOD 表。每个 sprint
-   有一个能演示的成果，你的 todo 要往那个成果上靠。
+   有一个能演示的成果，你的活要往那个成果上靠。
 3. **GitHub Issues / Projects**：backlog 放这儿，领一个 issue 开一个分支。
 
 活做了多少，记在你自己的 Google 文档里（入口在协作索引）。每天收工写一行：做了
 什么、工时、卡点。进度报告和燃尽图从这里取，所以不记就等于没做。
 
-### 第一个 sprint（9-2 到 9-12）每人的头几件活
+### 第一个 sprint（9-2 到 9-12）每人的活
 
-- **所有人**：把 `npm run verify` 跑绿；读完这份文档和你自己模块的 README。
+- **所有人**：把 `npm run verify` 跑绿；读完这份文档和你自己模块的 README；9-10 晚
+  之前在自己的 Google 文档里写好 API 接口、系统设计、工作量。
 - **刘子阳**：定稿 `packages/contracts` 和 `core`（数据类型、事件协议、基础表结构），
   然后把最小闭环串起来：登录 → 一个项目 → 一个 session → 一个 point，从头渲染到尾。
-- **陆毅**：identity 先把密码登录和 session 两条路打通（初始代码已经在），OAuth 留着 todo。
-- **彭徐剑**：projects 的四态卡片，让卡片根据 `state.live` 决定要不要轮询。
-- **李卓阳**：steering 的 SteerQueue 接上真实的两个生效时机（本轮结束 / 下一步）。
-- **贺融**：billing 里超额之后弹审批那条路接起来，Stripe 充值的接口先搭好。
+- **其他四个人**：设计定了以后，把带模式的第一个类和它的测试写出来，合一个 PR。
+  这个 sprint 不要求页面和路由，那些等 core 的接口上了再接。
 
 ## 6. 规范就一条命令
 

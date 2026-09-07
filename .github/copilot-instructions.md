@@ -1,49 +1,43 @@
 # Review instructions for this repository
 
 lumen is a modular monolith written by five people and five agents at once.
-Review a pull request against the rules below. They are the team's own rules;
-each one exists to stop five people from producing five codebases.
+Prettier, ESLint, the TypeScript compiler and the test run already check
+formatting, the import boundary between slices, theme colours and types. Do not
+repeat them. Review what a machine cannot see.
 
-Read first, in this order: `docs/ARCHITECTURE.md`, `docs/CODING_STANDARDS.md`,
-`docs/UI.md`, `docs/SLICES.md`, `docs/DOD.md`.
+Read first: `docs/ARCHITECTURE.md` (sections 2, 6, 7 and the glossary),
+`docs/CODING_STANDARDS.md`, `docs/DOD.md`.
 
-## What to check
+## Check these
 
-1. **The slice boundary.** Server code for a slice lives in
-   `apps/server/src/modules/<slice>/`. A slice imports another slice only through
-   its public index (`modules/<name>`), never a file inside it. `core` imports no
-   slice. A pull request that reaches across a boundary is wrong even if it works.
-2. **English only.** Everything git tracks is English: code, comments, test
-   names, error strings, commit messages, docs. The two Chinese documents
-   (`README.md`, `docs/ONBOARDING.md`) are the whole exception. A comment that
-   explains *why* must keep the reason when it is in English.
-3. **One look for the web app.** A page builds from `apps/web/src/ui/` and
-   colours only with the theme classes from `apps/web/src/styles/theme.css`. No
-   hex colour, no `style={{ … }}`, no CSS file per page, no new UI dependency, no
-   import from another page.
-4. **Money is dollars**, a JS number for transport and display. The column is
-   `numeric(12,6)`, sums happen in SQL, the browser formats to four decimals and
-   never adds.
-5. **The contract is shared.** A change under `packages/contracts/` or
-   `apps/server/src/core/` affects every slice. Flag it, and check that the
-   owner of that path is a reviewer.
-6. **Tests prove the pattern.** A class that carries a design pattern (the
-   delegation engine, the budget chain, the state machine, the auth flow) has a
-   unit test that exercises the reason the pattern exists. Trivial glue does not
-   need a test.
-7. **Names from the glossary.** The unit of work is a *task*, shown in a *call
-   tree* as a list of *steps*. Do not accept *point*, *edge*, *graph*, *node*,
-   *tenant* or *barrel* as new vocabulary; see the glossary at the end of
-   `docs/ARCHITECTURE.md`.
-8. **Commits and branches.** Conventional Commits (`feat(session): …`), one
-   branch per story named `<slice>/<topic>`, and the pull request template's
-   Definition of Done boxes ticked honestly.
+1. **Every route checks who is calling.** A handler registered on the router
+   calls `requireUser(req)` or `requireStaff(req)` before it reads or writes
+   anything. A route without one lets anyone read another account's data. Flag it
+   as a blocker.
+2. **SQL stays inside the slice that owns the table.** ESLint blocks imports
+   across slices; it cannot see a query string. A slice reads another slice's
+   table only through that slice's public index. Table ownership is in
+   `docs/ARCHITECTURE.md`, section 3.
+3. **A change to the shared contract is called out.** Anything under
+   `packages/contracts/` or `apps/server/src/core/` affects every slice. Say so
+   in the review and check the pull request explains why.
+4. **The test proves the reason the pattern exists.** A class that carries a
+   design pattern has a test for the behaviour the pattern was chosen for: the
+   budget chain escalates instead of refusing, the project card polls only while
+   live, cancelling a task cancels its subtree. A test that only checks the happy
+   path does not count.
+5. **Comments and names.** English only. A comment that explains why must keep
+   the reason. The unit of work is a *task*, shown in a *call tree* as *steps*;
+   do not accept *point*, *edge*, *graph*, *node* or *tenant* as new words. The
+   glossary is at the end of `docs/ARCHITECTURE.md`.
+6. **Ordinary bugs.** A promise that is not awaited, a null that is not
+   handled, an error caught and dropped, a loop that can run forever, input from
+   the browser used without validation.
 
-## What not to flag
+## Do not flag
 
-- Formatting. Prettier owns it and CI checks it.
+- Formatting, import order, class-name order. Prettier and ESLint own them.
 - Files under `apps/web/src/ui/`. They are vendored shadcn/ui sources.
-- Style preferences that no rule above names.
+- Style preferences no rule above names.
 
-When a finding is a matter of the rules above, quote the rule. When it is a
-judgement call, say so.
+Quote the rule when a finding comes from one. Say so when it is a judgement.

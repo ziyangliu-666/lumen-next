@@ -286,15 +286,24 @@ classDiagram
     +subscribe(sessionId, listener) unsubscribe
     +onCommand(type, handler)
   }
-  Router --> PrincipalResolver : built with one
+  Router --> PrincipalResolver : onRequest hook
   Router --> Request : hands to handlers
   AuthGuard ..|> PrincipalResolver : headerStub
+  note for Router "the Fastify instance, re-exported by core"
+  note for Request "Fastify's request, decorated with the principal"
 ```
 
-- **db**: one `pg` pool, migrations applied at startup in name order.
-- **http**: `node:http`, no framework. Each public index exports
-  `registerRoutes(router)`; `main.ts` calls the five.
-- **auth**: the router resolves the principal before the handler. Sprint 1 uses
+- **db**: one `pg` pool. `node-pg-migrate` runs the migrations at startup: it
+  owns the applied-migrations table, the lock that stops two processes racing,
+  and the transaction around each file. We do not write a migration runner.
+- **http**: Fastify. `@fastify/cookie` for the session cookie, `@fastify/static`
+  for the built SPA, `@fastify/websocket` for the event stream, and
+  `@fastify/multipart` for the upload behind the composer's "+". Each public
+  index exports `registerRoutes(router)`, where `Router` is the Fastify instance
+  that core re-exports; `main.ts` calls the five. Tests use `app.inject()`, so a
+  route is tested without opening a port.
+- **auth**: an `onRequest` hook resolves the principal before any handler runs,
+  so no handler parses a credential and none forgets to. Sprint 1 uses
   `headerStub` (`Authorization: stub <id>:<role>`); identity supplies the real
   resolver and `main.ts` swaps it.
 - **broker**: fans events out to sockets that opened the session; routes
@@ -365,6 +374,9 @@ export function setRole(id: string, role: 'user' | 'staff'): Promise<void>;
 export function suspend(id: string, on: boolean): Promise<void>;
 export function sendMail(to: string, template: MailTemplate): Promise<void>;
 ```
+
+GitHub and Google go through `arctic`, which owns the state parameter, PKCE and
+the token exchange. The Strategy sits above it, not instead of it.
 
 Staff sign in on the same page and are routed to `/admin` by role.
 
@@ -688,7 +700,10 @@ flowchart TB
 ```
 
 One function in `apps/web/src/core/api.ts` applies every `ServerEvent` to one
-state object. Both halves read it; neither restyles the other.
+state object. Both halves read it; neither restyles the other. The REST calls
+around it go through TanStack Query, which owns caching, refetching and request
+de-duplication. `core/api.ts` keeps the socket, the backoff on reconnect and
+that one reducer. We do not write a cache.
 
 ---
 

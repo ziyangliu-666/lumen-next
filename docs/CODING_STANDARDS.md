@@ -40,6 +40,20 @@ by themselves, but an agent you drive from somewhere else needs to be told.
   column is `numeric(12,6)`, sums happen in SQL, the browser formats to four
   decimals and never adds.
 
+## Dependencies
+
+If a mature library does the job, use it. We are marked on the design of the
+five slices, not on a hand-written HTTP router. `docs/ARCHITECTURE.md` names the
+ones core is built on; adopt them rather than reimplement them.
+
+Two limits:
+
+- A new server dependency needs the core owner's review, the way a new UI
+  dependency needs the shell owner's (`docs/UI.md`, rule 4). One library per job.
+- The design pattern your slice owns is still yours to write. A library goes
+  underneath it, never in place of it: `arctic` performs the OAuth exchange, and
+  the Strategy that turns four ways in into one principal is yours.
+
 ## The slice boundary (the load-bearing rule)
 
 - Each slice lives in `apps/server/src/modules/<slice>/`.

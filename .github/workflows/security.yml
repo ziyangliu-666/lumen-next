@@ -31,4 +31,15 @@ jobs:
       - uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
+      # Uploading to code scanning needs GitHub Code Security, which a private
+      # repository does not have. The scan still runs on every pull request; the
+      # SARIF report is kept as a run artifact instead.
       - uses: github/codeql-action/analyze@v3
+        with:
+          upload: never
+          output: sarif-results
+      - name: Keep the SARIF report
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: sarif-results

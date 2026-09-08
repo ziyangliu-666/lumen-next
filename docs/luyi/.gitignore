@@ -1,0 +1,6 @@
+# Word's lock file, present whenever design.docx is open in an editor
+~$*
+
+# Superseded drafts: the .md beside each one is the source and is tracked, so
+# the PDF can be regenerated. Keeping them out saves about 7 MB of binaries.
+archive/*.pdf

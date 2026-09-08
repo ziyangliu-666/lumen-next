@@ -10,6 +10,13 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "@lumen/contracts": "*"
+    "@fastify/cookie": "11.1.2",
+    "@fastify/static": "10.1.3",
+    "@fastify/websocket": "11.3.0",
+    "@lumen/contracts": "*",
+    "fastify": "5.12.3"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1"
   }
 }

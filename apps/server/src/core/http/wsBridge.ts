@@ -3,7 +3,7 @@ import type { WebSocket } from 'ws';
 import type { ServerEvent } from '@lumen/contracts';
 import type { Broker } from '../protocol/broker.js';
 import { parseCommand } from '../protocol/parseCommand.js';
-import type { Principal } from './authGuard.js';
+import type { Principal, SessionAccess } from './authGuard.js';
 
 // The seam between the domain and the wire. Above this file everything speaks
 // ServerEvent and ClientCommand; below it, frames on a socket.
@@ -34,23 +34,34 @@ function toText(raw: unknown): string {
  * grows the `session.open` command that ARCHITECTURE.md §5 describes, this moves
  * into a command and the query parameter goes away; nothing else changes.
  */
-export function registerEventStream(app: FastifyInstance, broker: Broker): void {
+export function registerEventStream(
+  app: FastifyInstance,
+  broker: Broker,
+  access: SessionAccess,
+): void {
   app.get<{ Querystring: StreamQuery }>(
     '/ws',
     {
       websocket: true,
       // preValidation runs before the upgrade, so a request refused here never
-      // becomes a socket and never reaches the broker at all.
-      preValidation: (request, reply, done) => {
+      // becomes a socket, never reaches the broker, and never receives a frame.
+      preValidation: async (request, reply) => {
         if (!request.principal) {
-          void reply.status(401).send({ error: 'sign in first' });
-          return;
+          return reply.status(401).send({ error: 'sign in first' });
         }
-        if (!request.query.session) {
-          void reply.status(400).send({ error: 'session is required' });
-          return;
+        const sessionId = request.query.session;
+        if (!sessionId) {
+          return reply.status(400).send({ error: 'session is required' });
         }
-        done();
+        // Signed in is not the same as entitled. Without this, a session id is
+        // the whole credential: guess one and its live stream is yours.
+        if (!(await access.canWatch(request.principal, sessionId))) {
+          // 404 rather than 403 on purpose. Answering 403 for a session that
+          // exists and 404 for one that does not would turn the status code
+          // into an oracle for which ids are real.
+          return reply.status(404).send({ error: 'no such session' });
+        }
+        return;
       },
     },
     (socket: WebSocket, request) => {
@@ -75,6 +86,17 @@ export function registerEventStream(app: FastifyInstance, broker: Broker): void 
           log.warn('ws: dropped an unparseable frame');
           return;
         }
+        // The session this socket may watch was settled at the upgrade. A
+        // command naming a different one is a bug or an attack, and either way
+        // the client-supplied field does not get to override the checked one.
+        if ('sessionId' in command && command.sessionId !== sessionId) {
+          log.warn('ws: dropped a command naming a session this socket did not open');
+          return;
+        }
+        // A command carrying a taskId instead — task.steer, and steer.cancel
+        // when it lands — is not covered by that check: this layer does not
+        // know which session a task belongs to. The slice that claims such a
+        // command owns that check, and must make it against the principal.
         broker.dispatch(command, principal).then(
           (handled) => {
             if (!handled) log.warn(`ws: no slice owns "${command.type}" yet`);

@@ -34,6 +34,36 @@ export const headerStub: PrincipalResolver = {
   },
 };
 
+// Authenticated is not authorised. A principal says who is asking; this says
+// whether that principal may have what they asked for. The event stream needs
+// the second question answered before it opens a socket, because a session id
+// travels in a URL and is not a credential.
+export interface SessionAccess {
+  canWatch(principal: Principal, sessionId: string): Promise<boolean>;
+}
+
+/**
+ * Sprint 1 only, and a hole for as long as it lasts: this lets any signed-in
+ * principal watch any session, including one they have never opened.
+ *
+ * It is here so the seam is here. `ServerDeps.access` is required, so the
+ * server cannot be built without an answer to "who may watch this?", and the
+ * slice that closes the hole replaces an object rather than remembering to add
+ * a check nobody wrote down. Nothing else can answer today: no session row is
+ * ever written, `projects.projectOf` does not exist yet, and there is no
+ * database connection to ask.
+ *
+ * Replace in main.ts once projects lands:
+ *
+ *   canWatch: async (principal, sessionId) => {
+ *     const project = await projects.projectOf(sessionId);
+ *     return project.accountId === principal.accountId || principal.role === 'staff';
+ *   }
+ */
+export const anySignedInMayWatch: SessionAccess = {
+  canWatch: () => Promise.resolve(true),
+};
+
 // The two lines a handler writes to state who it serves. They take the smallest
 // shape that carries a principal rather than the router's Request, so that
 // authGuard and router do not import each other.

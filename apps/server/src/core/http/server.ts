@@ -5,7 +5,7 @@ import staticFiles from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Broker } from '../protocol/broker.js';
-import type { Principal, PrincipalResolver } from './authGuard.js';
+import type { Principal, PrincipalResolver, SessionAccess } from './authGuard.js';
 import { HttpError } from './httpError.js';
 import { registerEventStream } from './wsBridge.js';
 
@@ -37,6 +37,12 @@ function messageOf(error: unknown): string {
 export interface ServerDeps {
   readonly broker: Broker;
   readonly resolver: PrincipalResolver;
+  /**
+   * Required, not optional, and that is the point: the server cannot be built
+   * without an answer to "who may watch this session?", so no future entry
+   * point can quietly skip the question.
+   */
+  readonly access: SessionAccess;
   /** Where the built SPA lives. Absent in development: Vite serves it instead. */
   readonly webRoot?: string;
   readonly logLevel?: string;
@@ -87,7 +93,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     void reply.status(404).send({ error: 'no such route' });
   });
 
-  registerEventStream(app, deps.broker);
+  registerEventStream(app, deps.broker, deps.access);
 
   if (deps.webRoot !== undefined) {
     // The pages use a hash router, so every route lives after the '#' and never

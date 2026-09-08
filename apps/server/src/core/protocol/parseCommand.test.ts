@@ -43,4 +43,13 @@ describe('core: parseCommand', () => {
     const huge = `{"type":"session.say","sessionId":"s1","text":"${'x'.repeat(70_000)}"}`;
     expect(parseCommand(huge)).toBeNull();
   });
+
+  it('measures the frame in bytes, not in characters', () => {
+    // 30k Chinese characters are 90k bytes of UTF-8 but only 30k code units,
+    // so a length check would wave this through at under half the real cost.
+    const wide = `{"type":"session.say","sessionId":"s1","text":"${'汉'.repeat(30_000)}"}`;
+    expect(wide.length).toBeLessThan(64 * 1024);
+    expect(Buffer.byteLength(wide, 'utf8')).toBeGreaterThan(64 * 1024);
+    expect(parseCommand(wide)).toBeNull();
+  });
 });

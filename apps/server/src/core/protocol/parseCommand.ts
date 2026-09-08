@@ -25,7 +25,9 @@ function when(value: unknown): When | null {
 }
 
 export function parseCommand(raw: string): ClientCommand | null {
-  if (raw.length > MAX_FRAME_BYTES) return null;
+  // Bytes, not characters. `raw.length` counts UTF-16 code units, so a frame
+  // of Chinese text would be measured at a third of what it costs to hold.
+  if (Buffer.byteLength(raw, 'utf8') > MAX_FRAME_BYTES) return null;
 
   let payload: unknown;
   try {

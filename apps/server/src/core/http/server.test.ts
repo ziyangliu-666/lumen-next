@@ -8,7 +8,13 @@ import type { ClientCommand, ServerEvent } from '@lumen/contracts';
 import type { FastifyInstance } from 'fastify';
 import { makeTask } from '../domain/task.js';
 import { Broker } from '../protocol/broker.js';
-import { headerStub, requireStaff, requireUser } from './authGuard.js';
+import {
+  anySignedInMayWatch,
+  headerStub,
+  requireStaff,
+  requireUser,
+  type SessionAccess,
+} from './authGuard.js';
 import { notFound } from './httpError.js';
 import { buildServer } from './server.js';
 
@@ -39,7 +45,10 @@ interface Harness {
   readonly received: ClientCommand[];
 }
 
-async function build(webRoot?: string): Promise<Harness> {
+async function build(
+  webRoot?: string,
+  access: SessionAccess = anySignedInMayWatch,
+): Promise<Harness> {
   const broker = new Broker();
   const received: ClientCommand[] = [];
   broker.onCommand('session.say', (command) => {
@@ -49,6 +58,7 @@ async function build(webRoot?: string): Promise<Harness> {
   const built = await buildServer({
     broker,
     resolver: headerStub,
+    access,
     logLevel: 'silent',
     ...(webRoot === undefined ? {} : { webRoot }),
   });
@@ -312,6 +322,49 @@ describe('core: the event stream', () => {
     socket.terminate();
 
     await waitUntil(() => harness.broker.subscriberCount('s1') === 0);
+  });
+
+  it('refuses a session this principal may not watch, and subscribes to nothing', async () => {
+    const denied: SessionAccess = { canWatch: () => Promise.resolve(false) };
+    const harness = await build(undefined, denied);
+    const origin = await listen(harness);
+
+    // 404 rather than 403: a 403 here would confirm the session exists, which
+    // turns the status code into an oracle for guessing session ids.
+    await expect(connect(`ws://${origin}/ws?session=s1`, AUTH)).rejects.toThrow(/404/);
+
+    // Refused before the upgrade, so nothing was ever subscribed.
+    expect(harness.broker.subscriberCount('s1')).toBe(0);
+  });
+
+  it('asks canWatch with the principal and the session it was given', async () => {
+    const asked: Array<{ accountId: string; sessionId: string }> = [];
+    const recording: SessionAccess = {
+      canWatch: (principal, sessionId) => {
+        asked.push({ accountId: principal.accountId, sessionId });
+        return Promise.resolve(true);
+      },
+    };
+    const harness = await build(undefined, recording);
+    const origin = await listen(harness);
+    const socket = await connect(`ws://${origin}/ws?session=s7`, AUTH);
+
+    expect(asked).toEqual([{ accountId: 'acc-1', sessionId: 's7' }]);
+    socket.terminate();
+  });
+
+  it('drops a command that names a session this socket did not open', async () => {
+    const harness = await build();
+    const origin = await listen(harness);
+    const socket = await connect(`ws://${origin}/ws?session=s1`, AUTH);
+
+    // The client-supplied sessionId does not get to override the checked one.
+    socket.send(JSON.stringify({ type: 'session.say', sessionId: 's2', text: 'not mine' }));
+    socket.send(JSON.stringify({ type: 'session.say', sessionId: 's1', text: 'mine' }));
+    await waitUntil(() => harness.received.length > 0);
+
+    expect(harness.received).toEqual([{ type: 'session.say', sessionId: 's1', text: 'mine' }]);
+    socket.terminate();
   });
 
   it('shuts down promptly with a browser still watching a session', async () => {

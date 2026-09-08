@@ -5,11 +5,22 @@
 // This file is the composition root, and the only place that knows all five
 // slices. It builds what core provides, lets each slice register its routes and
 // claim its commands, then listens.
-import { headerStub } from './core/http/authGuard.js';
+import { anySignedInMayWatch, headerStub } from './core/http/authGuard.js';
 import { buildServer, defaultWebRoot } from './core/http/server.js';
 import { Broker } from './core/protocol/broker.js';
 
 const DEFAULT_PORT = 4000;
+
+/** A misspelt port should say so, not arrive at listen() as NaN. */
+function port(): number {
+  const raw = process.env['LUMEN_PORT'];
+  if (raw === undefined || raw === '') return DEFAULT_PORT;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65535) {
+    throw new Error(`LUMEN_PORT must be a port number, got "${raw}"`);
+  }
+  return parsed;
+}
 
 async function bootstrap(): Promise<void> {
   // Sprint 1 trusts `Authorization: stub <id>:<role>`. Identity swaps the real
@@ -18,7 +29,14 @@ async function bootstrap(): Promise<void> {
   const broker = new Broker();
 
   const webRoot = defaultWebRoot();
-  const app = await buildServer({ broker, resolver, ...(webRoot ? { webRoot } : {}) });
+  const app = await buildServer({
+    broker,
+    resolver,
+    // TODO(sprint 2): replace once projects exports projectOf(sessionId).
+    // See the comment on anySignedInMayWatch for what this does not check.
+    access: anySignedInMayWatch,
+    ...(webRoot ? { webRoot } : {}),
+  });
 
   app.get('/api/health', () => ({ status: 'ok', uptimeSeconds: Math.round(process.uptime()) }));
 
@@ -27,8 +45,7 @@ async function bootstrap(): Promise<void> {
   //   await app.register(registerRoutes);
   //   registerCommands(broker);
 
-  const port = Number(process.env['LUMEN_PORT'] ?? DEFAULT_PORT);
-  await app.listen({ port, host: '0.0.0.0' });
+  await app.listen({ port: port(), host: '0.0.0.0' });
   if (webRoot) app.log.info(`serving the built web app from ${webRoot}`);
 
   // Drain in-flight work before exiting, so a rolling deploy does not cut a

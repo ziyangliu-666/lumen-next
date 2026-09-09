@@ -323,6 +323,27 @@ Three consequences, each answering a clause of the problem statement:
 
 *Table 3 — how the chosen pattern answers the design problem.*
 
+**Considered and rejected.** The proposal's §6.4 names candidate patterns as a
+hypothesis, not a conclusion, so the three nearest alternatives are compared
+here rather than assumed away.
+
+- **Strategy alone, without the template method.** Each of the four strategies
+  implements the whole flow. The varying step is isolated, but nothing then
+  guarantees that "all of them must end in one session": every strategy has to
+  remember to call `onAuthenticated()`, and one that forgets is a login route
+  issuing no session. The fifth way in has to remember it too. The second
+  clause of the problem statement asks for exactly that guarantee, so Strategy
+  on its own does not answer it.
+- **A factory.** It produces the right handler for a `kind`, but it answers only
+  *which one*, never *what stays fixed once one is chosen*. The lookup in
+  `strategies()` already answers *which one*, so a factory above it adds no
+  constraint that the problem statement asks for.
+- **Chain of responsibility.** Four handlers try in turn until one claims the
+  request. It would run, but the semantics are wrong: `kind` is stated by the
+  caller, so nothing needs probing. It also makes "wrong password" hard to
+  separate from "no such kind", which contradicts §3.6, where
+  `invalid_credentials` and `unsupported_kind` are deliberately distinct codes.
+
 A fourth consequence is not in the problem statement but matters for the
 Definition of Done: each `verify()` is a unit that can be tested on its own
 against a stub `AccountRepo`, rather than through the whole login path.

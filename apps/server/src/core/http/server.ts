@@ -66,7 +66,10 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   // onRequest, not preHandler: the event stream has to know who is connecting
   // before the socket is upgraded, and that is earlier than a body is parsed.
   app.addHook('onRequest', async (request) => {
-    request.principal = await deps.resolver.resolve(request.headers.authorization);
+    request.principal = await deps.resolver.resolve({
+      authorization: request.headers.authorization,
+      cookies: request.cookies,
+    });
   });
 
   // The one way a handler says "not 200"; anything else that escapes is a bug,

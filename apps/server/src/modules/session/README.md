@@ -7,6 +7,29 @@
 
 A task and a subtree of tasks answer cost, cancellation and rendering the same way. Cost rolls up through the tree.
 
+## What is here (Sprint 1)
+
+The walking skeleton from the proposal, §8.1: sign in (stub), one project, one
+session, one task, one step, rendered end to end.
+
+| File | Role |
+|---|---|
+| `trace.ts` | The record: sessions, tasks, steps. In memory until `core/db` lands; the kernel does not change when it does. |
+| `kernel.ts` | The engine. Opens the root task, runs the worker, and is the `WorkerReport` the worker writes through. Owns the "who may read this session" answer. |
+| `echoWorker.ts` | The Sprint 1 worker: one fixed step, no model. Steering replaces it behind `core/domain/worker.ts`. |
+| `routes.ts` | `POST /api/projects/:id/sessions`, `GET /api/sessions/:id`, `POST /api/sessions/:id/stop`; commands `session.say`, `session.stop`. |
+| `taskComposite.ts` | The Composite the design problem asks for. Not yet wired to the trace; that is Sprint 2, with delegation. |
+
+## Public index
+
+```ts
+export function createSessionSlice(deps: { broker: Broker; worker?: Worker }): SessionSlice;
+// SessionSlice = { kernel, access, registerRoutes, registerCommands }
+export { TaskNode, type Node, type Kernel };
+```
+
+`main.ts` builds the server with `access` and registers the routes and commands.
+
 ## Boundary
 Everything this slice exposes to the rest of the monolith is re-exported from
 `index.ts`. Other slices import `modules/session`, never a file inside it. You own

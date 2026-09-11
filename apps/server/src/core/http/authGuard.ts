@@ -21,15 +21,33 @@ export function canReadStatus(_status: TaskStatus): boolean {
   return true;
 }
 
+// What a request carries that could identify its sender. The header is what a
+// tool or a test sends; the cookie is what a browser sends, because the
+// WebSocket API cannot set a header and the event stream is authenticated
+// before the upgrade. One resolver reads both, so a route and a socket agree
+// on who is asking.
+export interface Credentials {
+  readonly authorization?: string | undefined;
+  readonly cookies: Readonly<Record<string, string | undefined>>;
+}
+
 // How the router turns a raw credential into a principal. One implementation
 // per way in; the router is built with one and never learns which.
 export interface PrincipalResolver {
-  resolve(raw: string | undefined): Promise<Principal | null>;
+  resolve(from: Credentials): Promise<Principal | null>;
 }
 
-/** Sprint 1's resolver: trusts `Authorization: stub <id>:<role>`. */
+/** The cookie the stub reads. Identity's real cookie has its own name. */
+export const STUB_COOKIE = 'lumen_stub';
+
+/**
+ * Sprint 1's resolver: trusts `Authorization: stub <id>:<role>`, or the same
+ * value in the `lumen_stub` cookie. Anyone can claim any account with it, so
+ * it must never resolve a request that reached a real deployment.
+ */
 export const headerStub: PrincipalResolver = {
-  resolve(raw: string | undefined): Promise<Principal | null> {
+  resolve(from: Credentials): Promise<Principal | null> {
+    const raw = from.authorization ?? from.cookies[STUB_COOKIE];
     return Promise.resolve(principalFromHeader(raw));
   },
 };
@@ -49,16 +67,11 @@ export interface SessionAccess {
  * It is here so the seam is here. `ServerDeps.access` is required, so the
  * server cannot be built without an answer to "who may watch this?", and the
  * slice that closes the hole replaces an object rather than remembering to add
- * a check nobody wrote down. Nothing else can answer today: no session row is
- * ever written, `projects.projectOf` does not exist yet, and there is no
- * database connection to ask.
+ * a check nobody wrote down.
  *
- * Replace in main.ts once projects lands:
- *
- *   canWatch: async (principal, sessionId) => {
- *     const project = await projects.projectOf(sessionId);
- *     return project.accountId === principal.accountId || principal.role === 'staff';
- *   }
+ * main.ts no longer uses it: the session slice answers from its own record of
+ * who opened each session. This stays for tests, and as the shape a slice
+ * implements.
  */
 export const anySignedInMayWatch: SessionAccess = {
   canWatch: () => Promise.resolve(true),

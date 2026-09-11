@@ -5,9 +5,10 @@
 // This file is the composition root, and the only place that knows all five
 // slices. It builds what core provides, lets each slice register its routes and
 // claim its commands, then listens.
-import { anySignedInMayWatch, headerStub } from './core/http/authGuard.js';
+import { headerStub } from './core/http/authGuard.js';
 import { buildServer, defaultWebRoot } from './core/http/server.js';
 import { Broker } from './core/protocol/broker.js';
+import { createSessionSlice } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
 
@@ -27,23 +28,26 @@ async function bootstrap(): Promise<void> {
   // resolver in here, and nothing else in the server changes.
   const resolver = headerStub;
   const broker = new Broker();
+  // Sprint 1 runs the echo worker; steering passes its own here when it lands.
+  const session = createSessionSlice({ broker });
 
   const webRoot = defaultWebRoot();
   const app = await buildServer({
     broker,
     resolver,
-    // TODO(sprint 2): replace once projects exports projectOf(sessionId).
-    // See the comment on anySignedInMayWatch for what this does not check.
-    access: anySignedInMayWatch,
+    // The session slice knows who opened a session, so it answers who may
+    // watch it. Projects' projectOf(sessionId) refines this once it lands.
+    access: session.access,
     ...(webRoot ? { webRoot } : {}),
   });
 
   app.get('/api/health', () => ({ status: 'ok', uptimeSeconds: Math.round(process.uptime()) }));
 
   // Each slice registers itself here once it has routes to serve or commands to
-  // claim — identity, projects, session, steering, billing:
-  //   await app.register(registerRoutes);
-  //   registerCommands(broker);
+  // claim. Session is wired; identity, projects, steering and billing follow
+  // the same two lines.
+  await app.register(session.registerRoutes);
+  session.registerCommands(broker);
 
   await app.listen({ port: port(), host: '0.0.0.0' });
   if (webRoot) app.log.info(`serving the built web app from ${webRoot}`);

@@ -3,3 +3,4 @@
 // because five slices and the web client all depend on these shapes.
 export * from './tasks.js';
 export * from './events.js';
+export * from './sessions.js';

@@ -9,7 +9,10 @@
     "noEmit": true,
     "types": [],
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+      "@lumen/contracts": ["../../packages/contracts/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

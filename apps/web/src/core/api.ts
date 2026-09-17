@@ -1,0 +1,135 @@
+import type { ClientCommand, ServerEvent, SessionSnapshot, Step, Task } from '@lumen/contracts';
+
+// The one door between the pages and the server: the REST calls, the socket,
+// and the single reducer that applies a ServerEvent to the page's state. Both
+// halves of the Session page read the state this produces; neither talks to
+// the wire itself.
+
+/**
+ * Sprint 1 sign-in. The server trusts `stub <id>:<role>` in this cookie; the
+ * real cookie from the identity slice replaces it and the rest of this file
+ * does not change. A cookie rather than a header because the browser's
+ * WebSocket API cannot set headers, and the event stream is authenticated
+ * before the upgrade.
+ */
+const STUB_COOKIE = 'lumen_stub';
+
+export function stubAccount(): string | null {
+  const match = /(?:^|; )lumen_stub=stub ([^:;]+):/.exec(document.cookie);
+  return match ? decodeURIComponent(match[1] ?? '') : null;
+}
+
+export function signInStub(accountId: string): void {
+  const id = encodeURIComponent(accountId.trim());
+  document.cookie = `${STUB_COOKIE}=stub ${id}:user; path=/; SameSite=Lax`;
+}
+
+/** The error body core sends: `{ error: string }`. */
+async function failureOf(response: Response): Promise<Error> {
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    if (typeof body.error === 'string') return new Error(body.error);
+  } catch {
+    // Not JSON; fall through to the status.
+  }
+  return new Error(`request failed with ${response.status}`);
+}
+
+export async function startSession(projectId: string, text: string): Promise<SessionSnapshot> {
+  const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/sessions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!response.ok) throw await failureOf(response);
+  return (await response.json()) as SessionSnapshot;
+}
+
+export async function fetchSession(sessionId: string): Promise<SessionSnapshot> {
+  const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`);
+  if (!response.ok) throw await failureOf(response);
+  return (await response.json()) as SessionSnapshot;
+}
+
+// The page's state: the snapshot, kept current by the events.
+export interface SessionState {
+  readonly snapshot: SessionSnapshot;
+  /** 'open' once the socket is live; the page shows it, nothing else reads it. */
+  readonly stream: 'connecting' | 'open' | 'closed';
+}
+
+/** Apply one event. Unknown events are ignored, so an older page survives a newer server. */
+export function apply(state: SessionState, event: ServerEvent): SessionState {
+  const { snapshot } = state;
+  switch (event.type) {
+    case 'task.opened':
+      return { ...state, snapshot: { ...snapshot, tasks: [...snapshot.tasks, event.task] } };
+    case 'task.status':
+      return {
+        ...state,
+        snapshot: {
+          ...snapshot,
+          tasks: patchTask(snapshot.tasks, event.taskId, { status: event.status }),
+        },
+      };
+    case 'task.cost':
+      return {
+        ...state,
+        snapshot: {
+          ...snapshot,
+          tasks: patchTask(snapshot.tasks, event.taskId, { ownCost: event.ownCost }),
+        },
+      };
+    case 'step.appended': {
+      const step: Step = { taskId: event.taskId, index: event.index, text: event.text };
+      // The snapshot may already hold this step if it was read after the event
+      // was sent; the (task, index) pair says so.
+      const seen = snapshot.steps.some((s) => s.taskId === step.taskId && s.index === step.index);
+      return seen
+        ? state
+        : { ...state, snapshot: { ...snapshot, steps: [...snapshot.steps, step] } };
+    }
+    default:
+      return state;
+  }
+}
+
+function patchTask(tasks: readonly Task[], taskId: string, patch: Partial<Task>): readonly Task[] {
+  return tasks.map((task) => (task.id === taskId ? { ...task, ...patch } : task));
+}
+
+export interface Stream {
+  send(command: ClientCommand): void;
+  close(): void;
+}
+
+/**
+ * Open the event stream for one session. `onEvent` gets every frame; `onState`
+ * the socket's own life. No reconnect yet: Sprint 2 adds the backoff and the
+ * re-read of the snapshot, both inside this function.
+ */
+export function openStream(
+  sessionId: string,
+  onEvent: (event: ServerEvent) => void,
+  onState: (state: SessionState['stream']) => void,
+): Stream {
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const socket = new WebSocket(
+    `${scheme}://${window.location.host}/ws?session=${encodeURIComponent(sessionId)}`,
+  );
+  socket.addEventListener('open', () => onState('open'));
+  socket.addEventListener('close', () => onState('closed'));
+  socket.addEventListener('message', (frame: MessageEvent<string>) => {
+    try {
+      onEvent(JSON.parse(frame.data) as ServerEvent);
+    } catch {
+      // A frame that is not JSON is a server bug, not something the page can act on.
+    }
+  });
+  return {
+    send: (command) => {
+      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(command));
+    },
+    close: () => socket.close(),
+  };
+}

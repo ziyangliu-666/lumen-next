@@ -2,6 +2,12 @@
 
 Owner: LU YI.
 
+For implementation planning, first read [PLAN.md](PLAN.md) for the complete
+UC1 backlog and [CONTEXT.md](CONTEXT.md) for the latest sync checkpoint, team
+responsibilities, reference links and known differences between the submission
+and the shared contract. Incremental implementation evidence is recorded in
+[IMPLEMENTATION.md](IMPLEMENTATION.md).
+
 **Read this: [UC1-Identity-Design-LU-YI.pdf](UC1-Identity-Design-LU-YI.pdf)** — 25
 pages, the current design. `design.docx` is the same document in Word form and is
 what gets submitted.

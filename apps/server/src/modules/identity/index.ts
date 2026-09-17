@@ -1,5 +1,5 @@
 // Public index for the identity slice. Owner: LU YI.
-// Routes and resolver building blocks are not wired into main.ts yet.
+// SQL-backed composition is available; main.ts wiring awaits core database setup.
 // Other slices never import this slice's internal files.
 export {
   AbstractAuthFlow,
@@ -29,6 +29,13 @@ export {
   type ProfilePatch,
 } from './accounts.js';
 export { LoginGate, LoginLimited } from './loginGate.js';
+export { type IdentityDatabase, type IdentitySql } from './identityDatabase.js';
+export { PostgresAccountStore, PostgresAuthSessionStore } from './postgresStores.js';
+export {
+  createIdentitySlice,
+  type IdentitySliceOptions,
+  type IdentitySlice,
+} from './createIdentitySlice.js';
 export {
   identityRoutes,
   type IdentityRouteDeps,

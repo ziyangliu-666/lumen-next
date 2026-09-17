@@ -23,7 +23,8 @@ propagate without issuing a session or trying a different provider.
 
 The public index exports `AbstractAuthFlow`, `AuthStrategy`, `AuthFailure`,
 `AuthFailureCode`, `PasswordStrategy`, `PasswordAccount` and `PasswordAccountStore`.
-These are building blocks, not working authentication routes.
+These remain available as building blocks; createIdentitySlice now composes the
+SQL-backed resolver and route plugin, but main.ts does not mount it yet.
 
 `PasswordStrategy` reads an injected account store, normalizes the email lookup
 key and verifies the password with Node's scrypt. Missing/OAuth-only accounts do
@@ -93,11 +94,32 @@ Signup session-persistence failure leaves the created account intact and returns
 existing sessions alive per the current submission. Email changes require a
 password; OAuth-only reauthentication/email verification remain separate work.
 
-Account deletion, OAuth, mail, concrete storage and production wiring are not
-implemented yet. Immediate socket revocation still needs design and review.
-The development auth stub in main.ts is unchanged. Only tests use in-memory
-adapters. The sign-in page now calls the real endpoint paths but the application
-cannot authenticate durably until the plugin and adapters are wired.
+`PostgresAccountStore` now implements AccountStore and PasswordAccountStore with
+parameterized SQL. `PostgresAuthSessionStore` implements AuthSessionStore.
+`IdentityDatabase` and `IdentitySql` are the injected query/transaction ports;
+core must supply the shared pool, not a private identity database. Signup uses one
+transaction for account + credential, and sensitive writes lock account then
+credential before comparing the verified hash. Current role/suspension is joined
+on session lookup. All these types/classes are exported through index.ts.
+
+`createIdentitySlice(options)` returns `{ principalResolver, registerRoutes }`.
+Its exported `IdentitySliceOptions` requires database, origin, sessionLifetimeMs
+and loginGate, with optional secureCookies; `IdentitySlice` is the return type.
+The factory uses SQL stores only and does not fall back to a development header.
+The migration at `migrations/002_identity_auth.sql` is a review candidate: core
+must assign its final number and apply it transactionally with the shared runner.
+It is not automatically executed and has no destructive down migration.
+
+Account deletion, OAuth, mail and production wiring are not implemented yet.
+Immediate socket revocation still needs design and review. The development auth
+stub in main.ts is unchanged. Only tests use in-memory adapters/engines. The
+sign-in page calls the real endpoint paths, but the application cannot authenticate
+durably until core provides the pool/runner and mounts the factory's plugin.
+
+See [PERSISTENCE.md](../../../../../docs/luyi/PERSISTENCE.md) for the database
+handoff and optional PostgreSQL WASM tests (not multi-connection acceptance).
+[RUNTIME_API.md](../../../../../docs/luyi/RUNTIME_API.md) maps the historical
+submission to the current implementation without claiming team contract approval.
 
 Full backlog and integration prerequisites: [`PLAN.md`](../../../../../docs/luyi/PLAN.md).
 Earlier HTTP increment: [`HTTP_PLAN.md`](../../../../../docs/luyi/HTTP_PLAN.md).

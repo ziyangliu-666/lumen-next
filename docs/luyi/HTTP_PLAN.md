@@ -47,7 +47,8 @@ implementation and expanded for failure cases. Full npm run verify passes:
 
 Tests exercise the actual Fastify core and identity cookie resolver, but stores
 remain test doubles. No core/main/schema edits or dependency additions were
-made. Code is uncommitted and unreviewed; routes are not mounted by main.ts.
+made. Code is committed and pushed to the personal branch (see CONTEXT.md),
+but remains unreviewed; routes are not mounted by main.ts.
 
 ## Excluded
 

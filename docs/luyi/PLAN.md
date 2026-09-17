@@ -7,8 +7,9 @@ and identity-owned mail, plus the reviewed interfaces used by billing and core.
 A story is not done merely because unit tests pass: it needs the durable adapter
 where relevant, UI/API integration, owner review, CI and a merged PR.
 
-The working branch is `identity/auth-flow`. Existing work is uncommitted; preserve
-it. All new server code stays under modules/identity. Sign-in UI stays under
+The working branch is `identity/auth-flow`, published to the personal `mine`
+remote. See CONTEXT.md for the publication checkpoint. All new server code stays
+under modules/identity. Sign-in UI stays under
 pages/signin. Shared core/contracts, main.ts, shared UI and billing's settings
 folder are not silently edited.
 
@@ -104,7 +105,8 @@ folder are not silently edited.
   from server tests and do not prove real persistence/cookie integration.
 - Browser evidence was moved outside the repository so generated MCP files do
   not pollute formatting checks. No shared-core, settings or shell changes.
-- Work remains uncommitted/unreviewed; no push, PR or deployment was performed.
+- Implementation and plans are now committed and pushed to the personal branch.
+  Team review, a PR and deployment have not been performed.
 
 ## Team questions to unblock the remaining work
 

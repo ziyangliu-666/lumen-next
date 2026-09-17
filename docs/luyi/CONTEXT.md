@@ -15,6 +15,18 @@ Persistent project context requested by LU YI. Read this before proposing identi
 - Validation: the first verify attempt failed with unresolved dependency types; after `npm ci`, `npm run verify` passed (63 tests, 96.57% line coverage).
 - Personal remote design branch was `64c7561`; personal remote main was `2c2c691`. No push was performed during this sync.
 
+## Publication checkpoint
+
+The implementation has been committed and pushed to the personal repository:
+https://github.com/youayouly/lumen-next/tree/identity/auth-flow.
+
+Implementation commits: `65078df` (authentication/session foundations), `1f4cc68`
+(account HTTP routes), `41c2dfb` (sign-in/signup UI), and `efe678e` (plans/context).
+Earlier references to uncommitted work describe the pre-publication checkpoints.
+Only `mine/identity/auth-flow` was pushed; no team-remote push, PR, merge or
+production deployment was performed. The durable adapter/main wiring limitations
+still apply. Pre-push verification: 201 passing tests and a successful web build.
+
 ## Reference links and access evidence
 
 1. https://github.com/ziyangliu-666/lumen-next/blob/main/docs/ARCHITECTURE.md

@@ -1,5 +1,11 @@
 # Identity implementation and integration checklist
 
+Publication update: the implementation is now committed and pushed to the
+personal `mine/identity/auth-flow` branch. See CONTEXT.md for commit references.
+The dated-in-sequence checkpoints below describe the state before publication;
+their uncommitted-work remarks are historical. No team PR/review or deployment
+has happened yet.
+
 ## Current story: authentication flow
 
 Branch: `identity/auth-flow`, based on the design branch after merging team main at `40bcdab`.

@@ -6,7 +6,10 @@ For implementation planning, first read [PLAN.md](PLAN.md) for the complete
 UC1 backlog and [CONTEXT.md](CONTEXT.md) for the latest sync checkpoint, team
 responsibilities, reference links and known differences between the submission
 and the shared contract. Incremental implementation evidence is recorded in
-[IMPLEMENTATION.md](IMPLEMENTATION.md).
+[IMPLEMENTATION.md](IMPLEMENTATION.md). The current implemented wire contract is
+[RUNTIME_API.md](RUNTIME_API.md); database integration is described in
+[PERSISTENCE.md](PERSISTENCE.md). The submitted design below is historical and
+has not been regenerated to match those implementation changes.
 
 **Read this: [UC1-Identity-Design-LU-YI.pdf](UC1-Identity-Design-LU-YI.pdf)** — 25
 pages, the current design. `design.docx` is the same document in Word form and is
@@ -25,6 +28,9 @@ what gets submitted.
 | `diagrams/umlkit.py` | The drawing primitives, taken from the 03a Analysis Model submission and extended for the design model: `«interface»` boxes, stereotype-free design classes, and realisation arrows |
 | `Design-Format-Review.docx` | A review of this document's format against the two SWE5006 submissions already accepted. Also supplies the styles `build.sh` builds against, so do not delete it |
 | `API.md` | An earlier plain-text sketch of the HTTP contract, superseded by section 3 of the design |
+| `RUNTIME_API.md` | Current implementation contract and design-to-code mapping; not a claim of production availability |
+| `PERSISTENCE_PLAN.md` | Scope and test-first plan for the PostgreSQL increment |
+| `PERSISTENCE.md` | SQL stores, migration review, factory integration and optional engine-test reproduction |
 | `design-zh.docx` | An earlier Chinese draft, kept for reference |
 | `archive/` | Superseded drafts, newest last. Each `.md` is the source that produced the `.pdf` beside it |
 

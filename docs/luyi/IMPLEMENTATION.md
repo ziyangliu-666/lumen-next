@@ -6,7 +6,36 @@ The dated-in-sequence checkpoints below describe the state before publication;
 their uncommitted-work remarks are historical. No team PR/review or deployment
 has happened yet.
 
-## Current story: authentication flow
+## Latest checkpoint: PostgreSQL persistence and composition
+
+After personal publication at 35f999a, this branch now includes the persistence
+increment for handoff through mine/identity/auth-flow. LU YI requested personal
+repository publication before team coordination. No team PR, owner review, merge
+or deployment has been performed.
+
+- Added IdentityDatabase/IdentitySql, PostgresAccountStore and
+  PostgresAuthSessionStore. Parameterized SQL, transactional signup, named email
+  conflict translation, account-first locks and credential compare-and-set.
+- Added migrations/002_identity_auth.sql as an owner-review candidate, not an
+  applied migration. No shared-core file, pool, runner or dependency was added.
+- Added createIdentitySlice to compose SQL stores, services, cookie-only resolver
+  and routes for later main.ts integration. The actual app still uses headerStub.
+- Wrote tests before store/factory implementations; their initial targeted runs
+  failed because the modules did not exist. The new query/factory suites now
+  contribute 32 passing tests.
+- Ran 7 additional integration tests against an externally installed PGlite 0.5.8
+  PostgreSQL WASM engine: real DDL/constraints/rollback, SQL account/session flows
+  and HTTP signup through password change and signout across fresh app instances.
+  This is not a PostgreSQL 17 service, disk restart or multi-connection lock test.
+- With the optional engine enabled, full npm run verify passes: 240 tests and
+  98.14% line coverage. Workspace build and git diff --check pass. Without the
+  optional external tool the 7 engine tests are skipped (233 regular tests).
+
+Handoff and reproduction: PERSISTENCE.md. Current wire contract and historical
+design differences: RUNTIME_API.md. Core pool/runner/main integration, Account UI,
+OAuth, email, deletion and billing account services remain follow-ups.
+
+## Historical first story: authentication flow
 
 Branch: `identity/auth-flow`, based on the design branch after merging team main at `40bcdab`.
 
@@ -27,7 +56,7 @@ These local changes have not been committed, pushed or reviewed.
 ## Next stories (not shipped by the first story)
 
 1. Password hashing/verification and repository port: implemented locally as `passwordHash.ts` and `passwordStrategy.ts`, with tests. No concrete repository or HTTP route yet.
-2. Durable accounts, credentials and hashed login-session tokens; coordinate migrations with the core owner.
+2. SQL stores and a migration candidate are now implemented (latest checkpoint above); the core pool/runner and deployment remain pending.
 3. Session service, Strategy and cookie resolver implemented against storage ports; tested with expiry, revocation and suspended-account checks. No fallback to the trusted development header. Durable adapter and production wiring remain pending.
 4. Signup/password/signout/signout-all/me/profile/password-change routes implemented as an unmounted Fastify plugin, with validation, exact-origin mutation checks, cookie security and local login admission limits. Account deletion and deployment-wide abuse controls remain pending.
 5. Sign-in/signup UI implemented; real backend integration, owner-reviewed composition-root wiring and coordinated Account tab remain pending.

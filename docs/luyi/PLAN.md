@@ -13,17 +13,30 @@ under modules/identity. Sign-in UI stays under
 pages/signin. Shared core/contracts, main.ts, shared UI and billing's settings
 folder are not silently edited.
 
+## Latest increment: PostgreSQL stores and composition
+
+This branch includes the persistence increment for personal-repository handoff:
+PostgresAccountStore, PostgresAuthSessionStore, createIdentitySlice and a candidate
+migration. Publication target: mine/identity/auth-flow only; no team PR or merge. See PERSISTENCE_PLAN.md, PERSISTENCE.md and RUNTIME_API.md. The historical
+signup/UI checkpoint below is retained as evidence, not the latest state.
+
+Validation with the optional PostgreSQL WASM engine enabled: full verify passes,
+240 tests, 98.14% line coverage; workspace build and diff check pass. Standard
+runs without the external test tool run 233 tests and skip the 7 engine tests.
+No application dependency was added. Core's actual pool/runner, multi-connection
+PostgreSQL acceptance, main.ts wiring, review and deployment remain pending.
+
 ## Full backlog
 
 | Order | Work and deliverable | Current state / dependency |
 |---|---|---|
 | 1 | Strategy + Template Method, password hashing/verification | Implemented and tested locally |
-| 2 | Login-session token issuance, verification, revoke-one/all; cookie resolver | Implemented against store ports; durable adapter pending |
+| 2 | Login-session token issuance, verification, revoke-one/all; cookie resolver | SQL store implemented locally; shared pool/runner and production integration pending |
 | 3 | Password/signout/signout-all/me HTTP, origin checks and local abuse limits | Plugin tested; not mounted in main.ts |
-| 4 | Signup service and POST /api/auth/signup | Implemented/tested locally against an atomic creation port; SQL adapter pending |
+| 4 | Signup service and POST /api/auth/signup | Implemented with transactional SQL adapter and engine rollback test; main wiring pending |
 | 5 | Account service, PATCH /api/me and POST /api/me/password | Implemented/tested locally; sensitive changes require reauthentication and conditional writes |
 | 6 | Sign-in/signup page | Implemented and browser-checked with mocked API; real backend integration pending |
-| 7 | Durable AccountRepo and numbered migrations | Coordinate database/query API and migration runner with LIU ZIYANG first; no competing core/pool |
+| 7 | Durable AccountRepo and numbered migrations | SQL stores and candidate migration implemented; core must review port, assign migration number and provide pool/runner |
 | 8 | Production composition-root wiring | Core owner review; inject real resolver, remove stub dependency, register plugin, configure trusted origin/cookies/lifetime |
 | 9 | Settings Account UI | Coordinate Account component ownership with HE RONG; no cross-page import or unreviewed edit to billing's folder |
 | 10 | GitHub/Google strategies and OAuth routes | arctic dependency/core approval; provider credentials, registered callbacks, state/PKCE lifecycle, verified identity and safe linking policy |
@@ -110,8 +123,9 @@ folder are not silently edited.
 
 ## Team questions to unblock the remaining work
 
-1. LIU ZIYANG: what database query/transaction API and migration directory/runner
-   will core expose? Who reviews normalized email uniqueness and account flags?
+1. LIU ZIYANG: review the IdentityDatabase port, candidate migration, normalized
+   email uniqueness and suspended flag in PERSISTENCE.md. Confirm the shared
+   pool/runner, migration number and composition-root wiring.
 2. HE RONG: can Settings be split into an owner-neutral shell and Account vs
    Wallet/Keys components with matching CODEOWNERS? Confirm admin account types.
 3. LI ZHUOYANG + PENG XUJIAN: latest steering PR and project ownership check?

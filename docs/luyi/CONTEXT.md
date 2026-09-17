@@ -24,8 +24,12 @@ Implementation commits: `65078df` (authentication/session foundations), `1f4cc68
 (account HTTP routes), `41c2dfb` (sign-in/signup UI), and `efe678e` (plans/context).
 Earlier references to uncommitted work describe the pre-publication checkpoints.
 Only `mine/identity/auth-flow` was pushed; no team-remote push, PR, merge or
-production deployment was performed. The durable adapter/main wiring limitations
-still apply. Pre-push verification: 201 passing tests and a successful web build.
+production deployment was performed. Pre-push verification: 201 passing tests and
+a successful web build. This branch now also includes the persistence increment
+for the user-requested handoff through mine/identity/auth-flow. See PERSISTENCE.md
+for tomorrow's core-owner coordination: the shared pool/runner, migration number,
+main.ts wiring and live PostgreSQL acceptance remain pending. No team PR, merge or
+deployment is authorized by this personal-repository publication.
 
 ## Reference links and access evidence
 
@@ -76,10 +80,10 @@ These are responsibilities, not claims of completion. Main has the session walki
 ## Identity design reconciliation needed
 
 - `docs/luyi/README.md` identifies `design.md` as the submission source; `API.md` is an earlier superseded sketch, not an equally authoritative contract.
-- Submission routes (`/api/auth/login`, `/api/account`, etc.) differ from the shared architecture (`/api/auth/password`, `/api/me`, signout/signout-all, etc.). Resolve before implementation.
+- Submission routes (`/api/auth/login`, `/api/account`, etc.) differ from the shared architecture (`/api/auth/password`, `/api/me`, signout/signout-all, etc.). RUNTIME_API.md now records the implemented paths and the mapping; formal team/submission reconciliation is still required.
 - Submission wiring and claims that HTTP/core integration is unavailable are stale after this merge.
-- Identity now has the authentication template, password strategy/scrypt, login-session service/store port, SessionStrategy, cookie-only resolver, SessionAuthFlow, LoginGate, AccountService/AccountStore and routes for signup/password/signout/signout-all/me/profile/password-change. The #/signin page supports login/signup with real endpoint paths; browser checks used mock responses. Full verify passes with 201 tests and 97.79% line coverage (138 identity tests); web build passes. Concrete persistence, account deletion, Settings Account UI, OAuth/email and production wiring are not implemented. The development auth stub in main.ts is unchanged; this is not a runnable production sign-in feature yet.
-- Full remaining-work plan: `docs/luyi/PLAN.md`. New-password minimum is provisionally 15 Unicode code points (1024 UTF-8 byte ceiling), pending team approval. Email changes require current-password proof and adapter-side hash comparison; existing sessions survive password changes per the submission. Signup and account-store writes are port-tested, not SQL-tested.
+- Identity now has the authentication template, password strategy/scrypt, login-session service/store port, SessionStrategy, cookie-only resolver, SessionAuthFlow, LoginGate, AccountService/AccountStore and routes for signup/password/signout/signout-all/me/profile/password-change. The #/signin page supports login/signup with real endpoint paths; browser checks used mock responses. The new local increment adds PostgresAccountStore, PostgresAuthSessionStore, IdentityDatabase/IdentitySql, createIdentitySlice and a candidate migration. Full verify with the optional PostgreSQL WASM suite passes with 240 tests and 98.14% line coverage; workspace build passes. Without the external test tool, 233 regular tests run and 7 engine tests skip. Core pool/runner and production wiring, account deletion, Settings Account UI and OAuth/email are not implemented. The development auth stub in main.ts is unchanged; this is not a runnable production sign-in feature yet.
+- Full remaining-work plan: `docs/luyi/PLAN.md`. New-password minimum is provisionally 15 Unicode code points (1024 UTF-8 byte ceiling), pending team approval. Email changes require current-password proof and adapter-side hash comparison; existing sessions survive password changes per the submission. Signup and account-store writes now have query-contract and actual PostgreSQL WASM SQL tests, including rollback and constraints. Live PostgreSQL 17 driver/multi-connection tests remain pending; see PERSISTENCE.md. These changes are included in this branch's personal-repository handoff, not a team merge.
 - Latest HTTP plan: `docs/luyi/HTTP_PLAN.md`. The plugin requires an exact configured Origin on mutations and secure cookies by default. Its local limiter keys on direct socket peers because core's unconditional trustProxy setting is not safe for trusting arbitrary forwarded addresses.
 - Session plan and rough estimate: `docs/luyi/SESSION_PLAN.md` (7.5 human engineering hours including 25% allowance, excluding database/HTTP/UI). Lifetime is explicitly supplied by the caller; no default duration or renewal policy has been agreed.
 - Site expects signup/signin to preserve the user's initial question/mode, supports GitHub/Google/password, and lists name, email, password and connected providers on Account.

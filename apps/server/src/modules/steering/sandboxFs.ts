@@ -101,11 +101,20 @@ export class SandboxFs {
   private readonly maxFileBytes: number;
   private readonly maxTotalBytes: number;
   private readonly roots: Readonly<Record<Scope, string>>;
+  /** False when constructed with no sessionId — `upload`/`output` only, e.g. the project-level files route. */
+  private readonly hasSession: boolean;
 
+  /**
+   * `sessionId` is optional: a caller that only ever touches `upload`/`output`
+   * (the project-level files endpoint, not a running sandbox) has no session
+   * to name. Any call that resolves to the `workspace` scope without one
+   * fails clearly, from `parse()`, before it can touch a path built from a
+   * project id alone.
+   */
   constructor(
     volumeRoot: string,
     projectId: string,
-    sessionId: string,
+    sessionId?: string,
     options: SandboxFsOptions = {},
   ) {
     // projectId and sessionId become path segments below. Something that is not
@@ -113,16 +122,22 @@ export class SandboxFs {
     // is not a valid uuid either — so this is refused at construction, not at
     // the first call that happens to build a path with it.
     if (!UUID.test(projectId)) throw new SandboxPathError(`not a uuid: projectId "${projectId}"`);
-    if (!UUID.test(sessionId)) throw new SandboxPathError(`not a uuid: sessionId "${sessionId}"`);
+    if (sessionId !== undefined && !UUID.test(sessionId)) {
+      throw new SandboxPathError(`not a uuid: sessionId "${sessionId}"`);
+    }
 
     this.maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
     this.maxTotalBytes = options.maxTotalBytes ?? DEFAULT_MAX_TOTAL_BYTES;
+    this.hasSession = sessionId !== undefined;
 
     const project = resolve(volumeRoot, projectId);
     this.roots = {
       upload: resolve(project, 'upload'),
       output: resolve(project, 'output'),
-      workspace: resolve(project, 'sessions', sessionId, 'workspace'),
+      // Never read when !hasSession (parse() throws first) — resolved anyway
+      // so `roots` stays a plain, fully-populated Record with no null case
+      // for every other method to guard against.
+      workspace: resolve(project, 'sessions', sessionId ?? '(no-session)', 'workspace'),
     };
   }
 
@@ -132,7 +147,10 @@ export class SandboxFs {
   }
 
   async ensureDirectories(): Promise<void> {
-    for (const root of Object.values(this.roots)) await mkdir(root, { recursive: true });
+    const scopes: readonly Scope[] = this.hasSession
+      ? ['upload', 'output', 'workspace']
+      : ['upload', 'output'];
+    for (const scope of scopes) await mkdir(this.roots[scope], { recursive: true });
   }
 
   async list(virtualPath = '/mnt/workspace'): Promise<FileEntry[]> {
@@ -203,6 +221,9 @@ export class SandboxFs {
    * spend are persisted there too.
    */
   async usageBytes(scope: Scope): Promise<number> {
+    if (scope === 'workspace' && !this.hasSession) {
+      throw new SandboxPathError('no session id given, cannot address workspace');
+    }
     return walkSizeBytes(this.roots[scope]);
   }
 
@@ -213,6 +234,9 @@ export class SandboxFs {
     const match = /^\/mnt\/(upload|workspace|output)(\/.*)?$/.exec(virtualPath);
     if (!match) throw new SandboxPathError(`path is outside /mnt: ${virtualPath}`);
     const scope = match[1] as Scope;
+    if (scope === 'workspace' && !this.hasSession) {
+      throw new SandboxPathError('no session id given, cannot address workspace');
+    }
     const rawSub = match[2] ?? '';
     const host = this.resolveWithin(scope, rawSub);
     return { scope, subPath: rawSub.replace(/\/+$/, ''), host };

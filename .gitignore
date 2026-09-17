@@ -10,3 +10,9 @@ coverage/
 *.tsbuildinfo
 /tmp/
 .claude/
+
+# SandboxFs's default local volume (LUMEN_VOLUME_ROOT)
+apps/server/.data/
+
+# personal scratch scripts, not part of any slice
+/test-health.ps1

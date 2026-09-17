@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve as resolvePath } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -55,6 +55,40 @@ describe('SandboxFs: construction', () => {
     expect(mounts.upload).toBe(join(volumeRoot, PROJECT, 'upload'));
     expect(mounts.output).toBe(join(volumeRoot, PROJECT, 'output'));
     expect(mounts.workspace).toBe(join(volumeRoot, PROJECT, 'sessions', SESSION, 'workspace'));
+  });
+
+  it('accepts no session id at all — a project-level caller has none to give', () => {
+    expect(() => new SandboxFs(volumeRoot, PROJECT)).not.toThrow();
+  });
+});
+
+describe('SandboxFs: no session (project-level access, e.g. the files route)', () => {
+  it('reads and lists upload and output with no session id', async () => {
+    const sandbox = new SandboxFs(volumeRoot, PROJECT);
+    await sandbox.ensureDirectories();
+
+    await new SandboxFs(volumeRoot, PROJECT, SESSION).writeFile(
+      '/mnt/output/report.md',
+      Buffer.from('# done'),
+    );
+
+    expect((await sandbox.readFile('/mnt/output/report.md')).toString()).toBe('# done');
+    expect(await sandbox.list('/mnt/output')).toEqual([
+      expect.objectContaining({ name: 'report.md' }),
+    ]);
+  });
+
+  it('refuses to address workspace when no session id was given', async () => {
+    const sandbox = new SandboxFs(volumeRoot, PROJECT);
+    await expect(sandbox.readFile('/mnt/workspace/notes.txt')).rejects.toThrow(SandboxPathError);
+    await expect(sandbox.usageBytes('workspace')).rejects.toThrow(SandboxPathError);
+  });
+
+  it('does not create a workspace directory when no session id was given', async () => {
+    const sandbox = new SandboxFs(volumeRoot, PROJECT);
+    await sandbox.ensureDirectories();
+
+    await expect(access(join(volumeRoot, PROJECT, 'sessions'))).rejects.toThrow();
   });
 });
 

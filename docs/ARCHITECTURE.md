@@ -225,6 +225,7 @@ export type ServerEvent =
   | { type: 'task.opened'; task: Task }
   | { type: 'task.status'; taskId: string; status: TaskStatus }
   | { type: 'task.cost'; taskId: string; ownCost: Money }
+  | { type: 'task.total'; taskId: string; total: Money }        // rolled up; the browser never adds
   | { type: 'step.opened'; step: Step }
   | { type: 'step.updated'; stepId: string; patch: Partial<Step> }
   | { type: 'step.closed'; step: Step }
@@ -706,7 +707,7 @@ sequenceDiagram
   K->>M: check(at: fan-out, estimate)
   M-->>K: allow
   loop each task
-    D->>T: openPoint(parent, 'delegate', agent, task)
+    D->>T: openTask(parent, agent, title)
     T-->>B: task.opened
   end
   K-->>W: child tasks

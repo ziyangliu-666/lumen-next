@@ -1,3 +1,4 @@
+import type { StepKind } from './sessions.js';
 import type { Money, Task, TaskStatus } from './tasks.js';
 
 // Server -> browser. The broker streams these; the web client renders them.
@@ -6,7 +7,10 @@ export type ServerEvent =
   | { type: 'task.opened'; task: Task }
   | { type: 'task.status'; taskId: string; status: TaskStatus }
   | { type: 'task.cost'; taskId: string; ownCost: Money }
-  | { type: 'step.appended'; taskId: string; index: number; text: string }
+  // The task's cost with every descendant rolled up. Sent for the task that
+  // spent and for each of its ancestors, because the browser never adds.
+  | { type: 'task.total'; taskId: string; total: Money }
+  | { type: 'step.appended'; taskId: string; index: number; kind: StepKind; text: string }
   | { type: 'finding.recorded'; taskId: string; findingId: string; text: string };
 
 // Browser -> server.

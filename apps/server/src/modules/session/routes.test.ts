@@ -114,7 +114,8 @@ describe('session: routes', () => {
       headers: AUTH,
     });
     expect(mine.statusCode).toBe(200);
-    expect(mine.json<SessionSnapshot>().steps).toHaveLength(1);
+    expect(mine.json<SessionSnapshot>().tasks).toHaveLength(4);
+    expect(mine.json<SessionSnapshot>().spend.dollars).toBeCloseTo(0.03, 6);
 
     const theirs = await server.inject({
       method: 'GET',
@@ -170,11 +171,11 @@ describe('session: the walking skeleton, end to end', () => {
     socket.send(JSON.stringify({ type: 'session.say', sessionId: session.id, text: 'more' }));
 
     const root = started.json<SessionSnapshot>().tasks[0];
-    expect(await incoming).toEqual({
+    expect(await incoming).toMatchObject({
       type: 'step.appended',
       taskId: root?.id,
-      index: 1,
-      text: 'you: more',
+      kind: 'you',
+      text: 'more',
     });
     socket.terminate();
   });

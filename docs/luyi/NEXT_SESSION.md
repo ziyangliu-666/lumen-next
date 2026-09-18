@@ -1,10 +1,105 @@
 # LU YI: resume here next session
 
-Updated: 2026-09-18 after real verification-mail acceptance and parallel PR review. User request: preserve unfinished tasks and
-continue implementing them next session, not merely produce more design documents.
+Updated: 2026-09-18 after manual account acceptance, local staff promotion and
+an explicit user request to resume admin-page integration in a new conversation.
+Preserve unfinished tasks and continue implementation, not merely more design docs.
 This file is a handoff/checklist, not a background job or an automatic login hook.
 
-## Latest checkpoint: 2026-09-18, user-requested eight-character passwords
+## START HERE: next conversation — admin routing and real page integration
+
+The user's latest request is to connect the administrator redirect/page, replace
+the placeholder with a working UI, and save progress before starting a new chat.
+Do not ask them to repeat this backlog. This section supersedes older checkpoints.
+
+### Current code/publication and acceptance
+
+- Branch: `identity/auth-flow`. Latest implementation commit: `eafeb40` (minimum
+  eight-character passwords); prior `04be76b` fixes deletion by failing closed.
+  Team main `e3937d4` was integrated via `628f897`. These commits were pushed only
+  to `mine` (youayouly/lumen-next), not to a team branch.
+- Personal Draft PR: https://github.com/youayouly/lumen-next/pull/1. At eafeb40,
+  GitHub quality, build-web, dependency audit and CodeQL jobs all succeeded.
+  Copilot request was skipped for Draft; no repo-level COPILOT_REVIEW_TOKEN was
+  listed. Do not mark ready or merge automatically. Remote CI does not enable
+  every optional local suite.
+- Latest full local verify: **405 passed, zero skips**, 90.81% lines. Default:
+  **326 passed / 79 skipped**, 71.04% lines. Build passed. Retention regressions
+  are contained; current schema deliberately refuses ALL account deletions with
+  409, including empty accounts, until owner-reviewed protection exists.
+- Real manual browser acceptance passed on the native-PG/core/identity harness:
+  user-authorized signup (201), /api/me (200), reload persistence, profile display,
+  current-session signout (204) then /api/me (401), password login (200) with
+  #/home redirect. Anonymous/forged stub headers cannot authenticate or elevate
+  the account. Missing/foreign Origin mutations returned 403. No profile or
+  password edits, resets, account deletion or account-database reset were made.
+  Evidence is ignored under tmp/identity-manual-browser-evidence-20260918.
+
+### Manual environment: preserve the user's account
+
+- At this checkpoint health returned 200 at http://127.0.0.1:4001/api/health.
+  Sign-in: http://127.0.0.1:4001/#/signin; admin: /#/admin.
+- Native PostgreSQL listens only on 127.0.0.1:55433; the independent persistent
+  cluster is under ignored tmp/identity-manual-pg. Old tmp/identity-local-db
+  (PGlite) is separate and untouched. Never reset either database to fix startup.
+- Local helper: tmp/identity-pg-tools/dist/manual-identity.mjs. It composes actual
+  core HTTP/Db, identity, session and the shared migration library with a private
+  combined candidate directory. This is NOT production main.ts integration.
+  OAuth/mail are disabled. No autostart or Windows service was installed.
+- The user explicitly confirmed “sign out, not delete” and approved promoting
+  their existing manual account to **staff**. Promotion plus deletion of all of
+  that account's login-session records committed atomically. Account/name/password
+  were preserved; zero login sessions remained immediately afterward. The user
+  needs to log in again. That account's new staff redirect has not yet been
+  manually verified. Do not rerun promotion/revocation without a new need/approval.
+- No password, cookie, token or database connection secret belongs in tracked
+  notes, commands/output or screenshots. Do not inspect private.json; helpers
+  may consume it internally. Ask the user to enter their password in the browser
+  instead of recovering it from old chat logs. Inspect port/process ownership
+  before restarting; running.json contains only local process/address metadata.
+
+### Next implementation sequence (show the plan first)
+
+1. Re-read CLAUDE.md, current CODEOWNERS, docs/UI.md and ADMIN_HANDOFF.md. Inspect
+   the branch and server before changing anything; preserve later work.
+2. Confirm the new staff login via user-entered credentials: /api/me returns
+   staff and signin's existing role branch redirects to #/admin. Ordinary users
+   must not gain access by typing that hash, changing headers or editing UI state.
+3. Establish the cross-owner boundary before implementation: Admin.tsx and
+   billing HTTP routes belong to HE RONG; shared auth/router/shell and main.ts
+   belong to LIU ZIYANG. The user requested the feature, but no explicit owner
+   approval for those paths has been recorded. Ask only for this missing approval,
+   not for the whole task again. Do not silently modify another slice or create
+   an identity-owned duplicate of the admin business interface.
+4. First agreed increment: authenticated read-only admin list/details, wired to
+   identity's public AdminAccounts/listAccounts/getAccount via the composition
+   root. Protect HTTP with requireStaff, independent of the frontend guard.
+   Remove hardcoded sample rows; do not invent spend figures without billing data.
+   Add loading/empty/error/401/403 handling and responsive shared-UI components.
+5. Reviewed shell guard should resolve /api/me, avoid rendering protected content
+   while loading, handle role/account changes and invalidate stale cached data.
+   There is currently no shared auth state or real admin route guard.
+6. Role/suspension controls are a later explicitly reviewed increment: use the
+   public setRole/suspend methods, exact mutation Origin protection and clear
+   confirmation/errors. Last-staff/self-demotion/audit policies remain undecided;
+   don't invent them or enable unsafe irreversible/privileged actions by default.
+7. Validate anonymous/member/staff behavior, direct links, refresh, stale role,
+   signout and session invalidation in HTTP + browser tests. Exercise real APIs,
+   not mocked rows. Keep the known already-open-WebSocket revocation gap visible.
+8. Run full verify/build, record actual results, commit small increments and push
+   only the personal branch to update Draft PR #1. Team publication/merge or any
+   deployment needs separate confirmation.
+
+### Files checked at handoff
+
+- apps/web/src/pages/signin/SignIn.tsx already routes staff to /admin and users to
+  /home after successful password login. Do not rebuild this branch logic.
+- apps/web/src/pages/admin/Admin.tsx is a hardcoded sample email/spend/state table.
+- apps/web/src/core/router.tsx is only a hash router; it does not enforce roles.
+- apps/server/src/modules/billing/index.ts is empty; no real admin HTTP endpoints.
+- apps/server/src/main.ts still uses headerStub. Production wiring is not done.
+- Public identity admin services exist; see ADMIN_HANDOFF.md and RUNTIME_API.md.
+
+## Earlier checkpoint: 2026-09-18, user-requested eight-character passwords
 
 - LU YI asked whether the 15-character rule was required and requested a shorter
   rule if it was locally chosen. PLAN.md recorded it as a provisional local

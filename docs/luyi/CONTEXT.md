@@ -1,6 +1,30 @@
 # LU YI working context
 
-## Resume checkpoint: 2026-09-18
+## Latest resume target: admin routing/page integration (2026-09-18)
+
+The user is starting a new conversation and requested a working administrator
+page with real API/permission integration. Read the **START HERE** section of
+[NEXT_SESSION.md](NEXT_SESSION.md); it records the executable next steps and
+owner boundaries so the user need not restate the task.
+
+- Personal Draft PR #1: https://github.com/youayouly/lumen-next/pull/1.
+  Implementation eafeb40 is published on mine/identity/auth-flow. Its CI quality,
+  web build, dependency audit and CodeQL jobs succeeded; Copilot skipped Draft.
+- Full local verify: 405 passing, zero skips, 90.81% lines; default: 326 passing,
+  79 skips, 71.04% lines. Build passed. Eight-character minimum was user-requested;
+  missing retention constraints safely disable deletion with 409.
+- Native PostgreSQL/core/identity manual site: http://127.0.0.1:4001/#/signin;
+  independent private data under tmp/identity-manual-pg, port 55433. Preserve it.
+  Registration/login/reload/signout/forged-header/Origin acceptance passed.
+- With explicit user confirmation, the existing manual test account was preserved,
+  promoted to staff and all its login sessions revoked. User re-login and its new
+  staff redirect are pending. No password or token is stored in these notes.
+- Staff redirect logic already exists, but Admin.tsx has only a sample row and
+  billing's index is empty. Admin/billing paths belong to HE RONG, shared
+  shell/core/main.ts to LIU ZIYANG; owner approval still needs recording. Do not
+  mistake feature intent for permission to silently cross those boundaries.
+
+## Historical resume checkpoint: 2026-09-18
 
 **Read [NEXT_SESSION.md](NEXT_SESSION.md) first when continuing implementation.**
 The user requested a saved unfinished-task list and implementation next session.

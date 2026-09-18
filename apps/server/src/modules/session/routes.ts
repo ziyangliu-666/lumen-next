@@ -22,9 +22,13 @@ export function sessionRoutes(kernel: Kernel): (app: FastifyInstance) => void {
   return (app) => {
     // The project id is taken on trust in Sprint 1: there is no project store
     // to ask. Projects' `projectOf` closes that when it lands.
-    app.post<{ Params: { id: string } }>('/api/projects/:id/sessions', (request, reply) => {
+    app.post<{ Params: { id: string } }>('/api/projects/:id/sessions', async (request, reply) => {
       const principal = requireUser(request);
-      const snapshot = kernel.start(request.params.id, principal.accountId, textOf(request.body));
+      const snapshot = await kernel.start(
+        request.params.id,
+        principal.accountId,
+        textOf(request.body),
+      );
       return reply.status(201).send(snapshot);
     });
 
@@ -32,8 +36,8 @@ export function sessionRoutes(kernel: Kernel): (app: FastifyInstance) => void {
       kernel.snapshot(request.params.id, requireUser(request)),
     );
 
-    app.post<{ Params: { id: string } }>('/api/sessions/:id/stop', (request, reply) => {
-      kernel.stop(request.params.id, requireUser(request));
+    app.post<{ Params: { id: string } }>('/api/sessions/:id/stop', async (request, reply) => {
+      await kernel.stop(request.params.id, requireUser(request));
       return reply.status(204).send();
     });
   };
@@ -44,8 +48,8 @@ export function sessionCommands(kernel: Kernel): (broker: Broker) => void {
     broker.onCommand('session.say', (command, principal) =>
       kernel.say(command.sessionId, principal, command.text),
     );
-    broker.onCommand('session.stop', (command, principal) => {
-      kernel.stop(command.sessionId, principal);
-    });
+    broker.onCommand('session.stop', (command, principal) =>
+      kernel.stop(command.sessionId, principal),
+    );
   };
 }

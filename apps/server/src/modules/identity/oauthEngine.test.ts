@@ -245,7 +245,7 @@ describe.skipIf(!modulePath)('identity: OAuth and mail SQL/HTTP workflows', () =
     const user = await passwordUser();
     await forgot('mail@example.test');
     const code = deliveredCode();
-    const body = { code, newPassword: 'a replacement mail password' };
+    const body = { code, newPassword: 'newpass8' };
     const reset = await app.inject({
       method: 'POST',
       url: '/api/auth/reset-password',
@@ -267,7 +267,7 @@ describe.skipIf(!modulePath)('identity: OAuth and mail SQL/HTTP workflows', () =
     ).toBe(400);
     for (const [password, status] of [
       ['original mail test password', 401],
-      ['a replacement mail password', 200],
+      ['newpass8', 200],
     ] as const) {
       expect(
         (

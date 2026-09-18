@@ -46,10 +46,10 @@ function nameOf(value: unknown): string {
 }
 
 export function newPasswordOf(value: unknown): string {
-  if (typeof value !== 'string' || !isBoundedPassword(value) || [...value].length < 15) {
+  if (typeof value !== 'string' || !isBoundedPassword(value) || [...value].length < 8) {
     throw new AccountFailure(
       'invalid_body',
-      'Use at least 15 characters and at most 1024 UTF-8 bytes',
+      'Use at least 8 characters and at most 1024 UTF-8 bytes',
     );
   }
   return value;

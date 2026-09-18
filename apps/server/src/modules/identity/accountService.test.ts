@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
-import { AccountService } from './accountService.js';
+import { AccountService, newPasswordOf } from './accountService.js';
 import { AccountFailure, type AccountStore, type AccountView } from './accounts.js';
 import type { PasswordAccount } from './passwordStrategy.js';
 
@@ -86,13 +86,35 @@ describe('identity: account self-service', () => {
     expect(store.createPasswordAccount).not.toHaveBeenCalled();
   });
 
+  it.each([8, 9, 14, 15, 16, 1024])('accepts a new ASCII password of %i characters', (length) => {
+    expect(newPasswordOf('x'.repeat(length))).toBe('x'.repeat(length));
+  });
+
+  it.each(['x'.repeat(7), '🔑'.repeat(7), 'x'.repeat(1025), '🔑'.repeat(257)])(
+    'rejects a password outside the character or UTF-8 byte bounds',
+    (value) => {
+      expect(() => newPasswordOf(value)).toThrow('Use at least 8 characters');
+    },
+  );
+
   it('counts new-password Unicode code points without trimming the secret', async () => {
     const { service, hash } = setup();
     await expect(
-      service.signup({ email: account.email, displayName: 'A', password: '🔑'.repeat(14) }),
+      service.signup({ email: account.email, displayName: 'A', password: '🔑'.repeat(7) }),
     ).rejects.toMatchObject({ code: 'invalid_body' });
-    await service.signup({ email: account.email, displayName: 'A', password: ' 🔑'.repeat(8) });
-    expect(hash).toHaveBeenCalledWith(' 🔑'.repeat(8));
+    await service.signup({ email: account.email, displayName: 'A', password: '🔑'.repeat(8) });
+    expect(hash).toHaveBeenCalledWith('🔑'.repeat(8));
+    await service.signup({ email: account.email, displayName: 'A', password: ' 🔑'.repeat(4) });
+    expect(hash).toHaveBeenCalledWith(' 🔑'.repeat(4));
+  });
+
+  it('accepts eight-character passwords for signup and password changes', async () => {
+    const { service, hash, store } = setup();
+    const next = 'testpass';
+    await service.signup({ email: account.email, displayName: 'A', password: next });
+    await service.changePassword('a', { currentPassword: password, newPassword: next });
+    expect(hash).toHaveBeenCalledWith(next);
+    expect(store.replacePassword).toHaveBeenCalledWith('a', 'old-hash', 'new-hash');
   });
 
   it('preserves uniqueness and infrastructure failures from atomic account creation', async () => {

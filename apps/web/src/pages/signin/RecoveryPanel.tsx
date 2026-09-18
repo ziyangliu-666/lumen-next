@@ -50,11 +50,11 @@ export function RecoveryPanel(): JSX.Element {
       if (
         path.endsWith('/reset-password') &&
         (password !== confirmation ||
-          [...password].length < 15 ||
+          [...password].length < 8 ||
           new TextEncoder().encode(password).length > 1024)
       )
         throw new Error(
-          'Passwords must match and contain at least 15 characters, at most 1024 UTF-8 bytes.',
+          'Passwords must match and contain at least 8 characters, at most 1024 UTF-8 bytes.',
         );
       const response = await fetch(path, {
         method: 'POST',

@@ -109,8 +109,9 @@ AuthSessionStore adapters and signup remain the next integration prerequisites.
 Full backlog: `PLAN.md`. Added AccountService and AccountStore contracts, signup,
 profile and password-change routes. New accounts cannot choose privileges;
 email/password changes require current-password proof and atomic conditional
-writes by the adapter. The provisional new-password minimum is 15 Unicode code
-points. Existing sessions survive password changes per the current design.
+writes by the adapter. This historical increment provisionally used a minimum of
+15 Unicode code points; LU YI later requested 8 on 2026-09-18 (see RUNTIME_API.md).
+Existing sessions survive password changes per the current design.
 
 The existing #/signin page now has sign-in/signup modes, confirmation validation,
 busy/error states and fixed user/staff redirects. OAuth is explicitly disabled.

@@ -71,10 +71,11 @@ PostgreSQL acceptance, main.ts wiring, review and deployment remain pending.
 - Store ports must create account+credential atomically, enforce normalized-email
   uniqueness and return only public account data. New accounts are always users;
   request bodies cannot choose id, role, suspension or timestamps.
-- New-password policy for this implementation: at least 15 Unicode code points,
+- New-password policy for this implementation: at least 8 Unicode code points,
   at most 1024 UTF-8 bytes; no forced character classes, trimming or normalization.
-  This is a provisional local decision pending team review, not a previously
-  agreed shared contract. Existing password login does not impose this new minimum.
+  LU YI requested this on 2026-09-18, replacing the provisional 15-character local
+  decision (which was not an agreed shared contract). Production security review
+  remains required. Existing password login does not impose this new minimum.
 - Name: trimmed, 1..80 characters (UTF-16 code units). Email: normalized as before
   (trim/lowercase), bounded to 320 characters and basic address syntax validation.
   This does not prove email ownership. Verification/linking remains a separate story.

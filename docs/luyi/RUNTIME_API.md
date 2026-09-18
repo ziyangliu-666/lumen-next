@@ -30,11 +30,13 @@ milliseconds. Hashes/tokens are never returned in JSON.
 | PATCH /api/me | displayName and/or email; currentPassword required for email | 200, updated account |
 | POST /api/me/password | currentPassword, newPassword; valid session | 204; other sessions remain valid |
 
-New passwords require at least 15 Unicode code points and at most 1024 UTF-8 bytes,
+New passwords require at least 8 Unicode code points and at most 1024 UTF-8 bytes,
 without trimming/normalization or forced character classes. Existing password
 login does not impose this new minimum. Display names are trimmed to 1..80 UTF-16
 code units. Emails are trimmed/lowercased and bounded to 320 characters; syntax
-validation does not verify mailbox ownership. These policies still need review.
+validation does not verify mailbox ownership. The eight-character minimum was requested by LU YI on 2026-09-18, replacing the
+implementation's provisional 15-character rule. Production security review remains
+required; this is not a claim of password-only NIST policy compliance.
 
 Signup always creates a user; the caller cannot choose an id, role or suspension.
 Account changes target the authenticated account. Email/password writes compare

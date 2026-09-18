@@ -35,7 +35,8 @@ function sqlPort(engine: EngineSql): IdentitySql {
   };
 }
 
-const password = 'a sufficiently long test password';
+// Synthetic eight-character password exercises the accepted minimum over HTTP.
+const password = 'testpass';
 const origin = 'https://lumen.example';
 
 describe.skipIf(!modulePath)('identity: optional PostgreSQL WASM engine acceptance', () => {

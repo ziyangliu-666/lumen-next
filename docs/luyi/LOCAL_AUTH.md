@@ -22,7 +22,7 @@ node apps/server/dist/modules/identity/localPglite.js
 ```
 
 Open **http://localhost:4000/#/signin**. Choose "New here? Create an account".
-Use a test email, name and a password of at least 15 Unicode code points. No
+Use a test email, name and a password of at least 8 Unicode code points. No
 predefined account, seed password or automatic staff grant exists.
 
 Use the exact localhost URL, not 127.0.0.1 or Vite's port 4173: mutating requests

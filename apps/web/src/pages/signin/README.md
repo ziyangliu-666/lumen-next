@@ -19,7 +19,7 @@ that page. No new shell route or shared UI dependency was added.
   It supports profile/password changes, signout-one/all and password-proven
   deletion of accounts without retained resources. The shell owner still needs
   to integrate it into the canonical Settings composition without cross-page imports.
-- The 15-code-point signup minimum mirrors AccountService's provisional policy;
+- The 8-code-point signup minimum mirrors AccountService's user-requested policy;
   existing password login does not impose this new minimum.
 
 The server plugin is not mounted by main.ts. PostgreSQL stores and the separate

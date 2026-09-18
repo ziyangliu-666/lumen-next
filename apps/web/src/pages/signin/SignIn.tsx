@@ -68,10 +68,10 @@ export function SignIn(): JSX.Element {
       showError('The passwords do not match.');
       return;
     }
-    if (new TextEncoder().encode(password).length > 1024 || (signup && [...password].length < 15)) {
+    if (new TextEncoder().encode(password).length > 1024 || (signup && [...password].length < 8)) {
       showError(
         signup
-          ? 'Use at least 15 characters and at most 1024 UTF-8 bytes.'
+          ? 'Use at least 8 characters and at most 1024 UTF-8 bytes.'
           : 'Password is too long.',
       );
       return;
@@ -214,7 +214,7 @@ export function SignIn(): JSX.Element {
               />
               {signup ? (
                 <p id="password-policy" className="text-sm text-muted-foreground">
-                  At least 15 characters. Spaces and Unicode are welcome.
+                  At least 8 characters. Spaces and Unicode are welcome.
                 </p>
               ) : null}
             </div>

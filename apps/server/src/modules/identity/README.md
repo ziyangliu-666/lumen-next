@@ -161,9 +161,10 @@ propagate instead of being misreported as invalid credentials.
 `passwordHash.ts` uses a random 16-byte salt, a 64-byte digest, fixed scrypt work
 factors (`N=32768, r=8, p=3`) and timing-safe digest comparison. Its 1024-byte
 input ceiling limits resource use; it is not a signup password-strength policy.
-AccountService validates new passwords (15 Unicode code points minimum, 1024
+AccountService validates new passwords (8 Unicode code points minimum, 1024
 UTF-8 bytes maximum) without imposing that minimum on existing logins. This is a
-provisional policy awaiting team review. The HTTP plugin requires a bounded local
+user-requested policy (2026-09-18), replacing the provisional 15-character rule;
+production security approval remains pending. The HTTP plugin requires a bounded local
 LoginGate; deployment-wide/account-level abuse controls and load testing are
 still needed before public exposure.
 

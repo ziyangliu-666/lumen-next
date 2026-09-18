@@ -4,7 +4,32 @@ Updated: 2026-09-18 after real verification-mail acceptance and parallel PR revi
 continue implementing them next session, not merely produce more design documents.
 This file is a handoff/checklist, not a background job or an automatic login hook.
 
-## Latest checkpoint: 2026-09-18, retention regression safely contained
+## Latest checkpoint: 2026-09-18, user-requested eight-character passwords
+
+- LU YI asked whether the 15-character rule was required and requested a shorter
+  rule if it was locally chosen. PLAN.md recorded it as a provisional local
+  implementation decision, not an agreed shared contract. Changed the new-password
+  minimum to **8 Unicode code points**, retaining the 1024 UTF-8 byte maximum,
+  whitespace/Unicode preservation, hashing and existing-password login behavior.
+  Password-only production security review remains pending; no NIST compliance
+  claim is made for the lowered minimum.
+- Signup, account password change and recovery frontend checks/messages now match
+  the shared backend validator. Boundary tests first failed against the old rule;
+  tests now cover 7/8, 8-15, longer passwords, Unicode, and byte ceilings. Real
+  SQL/HTTP signup/login and reset tests use synthetic eight-character passwords.
+- Full verify: **405 passed, zero skipped**, 90.81% lines; build passed.
+- The user's manual site is at http://127.0.0.1:4001/#/signin, with a separate native
+  PostgreSQL cluster on 55433 under ignored tmp/identity-manual-pg. Core HTTP and
+  Db, node-pg-migrate with local combined candidate migrations, identity and session
+  are composed by an ignored workstation helper, not production main.ts. OAuth/
+  mail are disabled and deletion remains safely refused. Existing private PGlite
+  data is untouched. The manual cluster was stopped cleanly and restarted on the
+  same directory to load this change; no account reset or password inspection.
+- Health and served eight-character UI text were checked after restart. The user
+  performs their own registration/login; do not read their password, cookie or
+  private local database configuration. Browser manual acceptance is still pending.
+
+## Earlier checkpoint: 2026-09-18, retention regression safely contained
 
 - Fixed the three deletion regressions inside identity only. AccountDeletion now
   requires validated, immediate restrictive account references for projects,

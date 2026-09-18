@@ -193,10 +193,10 @@ export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void
                 submit(event, async () => {
                   if (newPassword !== confirmation) throw new Error('Passwords do not match.');
                   if (
-                    [...newPassword].length < 15 ||
+                    [...newPassword].length < 8 ||
                     new TextEncoder().encode(newPassword).length > 1024
                   )
-                    throw new Error('Use at least 15 characters and at most 1024 UTF-8 bytes.');
+                    throw new Error('Use at least 8 characters and at most 1024 UTF-8 bytes.');
                   await request('/api/me/password', 'POST', { currentPassword, newPassword });
                   setMessage('Password changed. Use sign out everywhere to revoke other sessions.');
                 })

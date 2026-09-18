@@ -12,12 +12,17 @@ the card and the poller.
 **Candidate pattern:** State. This is the starting hypothesis from the proposal,
 not the conclusion. You compare the candidates, pick one, and write down why.
 
-## You design this slice
+## Implementation status
 
-This folder is empty on purpose: a README and an empty `index.ts`. Nobody has
-decided your classes for you. Write the design first (use case flow, analysis
-class diagram, the pattern and why) in your own design doc, then build it here
-with a unit test for every class that carries the pattern.
+The first pattern story implements `ProjectCardContext` and six State classes.
+Together they project a confirmed `TaskStatus` into one descriptor containing
+the card label, semantic tone, available actions, and refresh policy. The context
+accepts authoritative snapshots without owning the session lifecycle.
+
+See [the before/after record](CARD_STATE.md) for the brute-force approach,
+refactor, tests, and remaining integration work. These classes are internal;
+`index.ts` still exports no public API. Routes and Home integration await an
+agreed read model and session public operations.
 
 ## Boundary
 

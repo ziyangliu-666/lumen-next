@@ -14,7 +14,10 @@ session, one task, one step, rendered end to end.
 
 | File | Role |
 |---|---|
-| `trace.ts` | The record: sessions, tasks, steps. In memory until `core/db` lands; the kernel does not change when it does. |
+| `trace.ts` | The `Trace` interface: the record of sessions, tasks and steps. |
+| `pgTrace.ts` | The record in Postgres, used when the process has a `Db`. |
+| `memoryTrace.ts` | The record in memory, for a process without `DATABASE_URL` and for kernel unit tests. |
+| `traceContract.ts` | One test suite, run against both implementations so they cannot drift. |
 | `kernel.ts` | The engine. Opens the root task, runs the worker, and is the `WorkerReport` the worker writes through. Owns the "who may read this session" answer. |
 | `echoWorker.ts` | The Sprint 1 worker: one fixed step, no model. Steering replaces it behind `core/domain/worker.ts`. |
 | `routes.ts` | `POST /api/projects/:id/sessions`, `GET /api/sessions/:id`, `POST /api/sessions/:id/stop`; commands `session.say`, `session.stop`. |
@@ -23,7 +26,7 @@ session, one task, one step, rendered end to end.
 ## Public index
 
 ```ts
-export function createSessionSlice(deps: { broker: Broker; worker?: Worker }): SessionSlice;
+export function createSessionSlice(deps: { broker: Broker; worker?: Worker; db?: Db | null }): SessionSlice;
 // SessionSlice = { kernel, access, registerRoutes, registerCommands }
 export { TaskNode, type Node, type Kernel };
 ```

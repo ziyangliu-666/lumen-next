@@ -76,6 +76,17 @@ export class Kernel implements WorkerReport {
   }
 
   /**
+   * The answer to session.open. The bridge has already checked the principal
+   * and subscribed the socket; this publishes the snapshot to the session.
+   * Every socket watching it receives it and replaces its state with the same
+   * record, which costs a frame and keeps this layer ignorant of sockets.
+   */
+  async open(sessionId: string, principal: Principal): Promise<void> {
+    const snapshot = await this.snapshot(sessionId, principal);
+    this.broker.publish(sessionId, { type: 'session.snapshot', snapshot });
+  }
+
+  /**
    * Run once at startup, before the server listens. A task that is still
    * queued, running or waiting belongs to a process that is gone, so it cannot
    * be any of those. Nobody pressed stop, but the task was ended from outside:

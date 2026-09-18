@@ -9,6 +9,8 @@ import { openDatabase, type Db } from './core/db/db.js';
 import { headerStub } from './core/http/authGuard.js';
 import { buildServer, defaultWebRoot } from './core/http/server.js';
 import { Broker } from './core/protocol/broker.js';
+import { createBillingSlice } from './modules/billing/index.js';
+import { createIdentitySlice, LoginGate, type IdentitySlice } from './modules/identity/index.js';
 import { createSessionSlice } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
@@ -35,11 +37,37 @@ async function database(): Promise<Db | null> {
   return openDatabase(url);
 }
 
+function positiveInteger(name: string): number {
+  const raw = process.env[name];
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return value;
+}
+
+function identitySlice(db: Db): IdentitySlice {
+  const origin = process.env['LUMEN_ORIGIN'];
+  if (!origin) throw new Error('LUMEN_ORIGIN is required with DATABASE_URL');
+  const insecure = process.env['IDENTITY_INSECURE_COOKIES'];
+  if (insecure !== undefined && insecure !== 'true' && insecure !== 'false') {
+    throw new Error('IDENTITY_INSECURE_COOKIES must be true or false');
+  }
+  return createIdentitySlice({
+    database: db,
+    origin,
+    sessionLifetimeMs: positiveInteger('IDENTITY_SESSION_LIFETIME_MS'),
+    loginGate: new LoginGate(),
+    ...(insecure === undefined ? {} : { secureCookies: insecure !== 'true' }),
+  });
+}
+
 async function bootstrap(): Promise<void> {
   const db = await database();
-  // Sprint 1 trusts `Authorization: stub <id>:<role>`. Identity swaps the real
-  // resolver in here, and nothing else in the server changes.
-  const resolver = headerStub;
+  // Header authentication remains available only in database-free development.
+  // Every database-backed process uses identity's cookie resolver.
+  const identity = db ? identitySlice(db) : null;
+  const resolver = identity?.principalResolver ?? headerStub;
   const broker = new Broker();
   // Sprint 1 runs the echo worker; steering passes its own here when it lands.
   const session = createSessionSlice({ broker, db });
@@ -58,9 +86,11 @@ async function bootstrap(): Promise<void> {
 
   app.get('/api/health', () => ({ status: 'ok', uptimeSeconds: Math.round(process.uptime()) }));
 
-  // Each slice registers itself here once it has routes to serve or commands to
-  // claim. Session is wired; identity, projects, steering and billing follow
-  // the same two lines.
+  // Each slice registers itself here once it has routes to serve or commands to claim.
+  if (identity) {
+    await app.register(identity.registerRoutes);
+    await app.register(createBillingSlice({ accounts: identity }).registerRoutes);
+  }
   await app.register(session.registerRoutes);
   session.registerCommands(broker);
 

@@ -25,6 +25,11 @@ describe.skipIf(!TEST_DATABASE_URL)('core: database', () => {
         'steps',
         'findings',
         'ledger_entries',
+        'credentials',
+        'auth_sessions',
+        'identity_oauth_attempts',
+        'identity_mail_tokens',
+        'identity_email_verifications',
       ]),
     );
   });
@@ -37,7 +42,7 @@ describe.skipIf(!TEST_DATABASE_URL)('core: database', () => {
     const applied = await again.query('select name from pgmigrations');
     await again.close();
 
-    expect(applied).toHaveLength(1);
+    expect(applied).toHaveLength(4);
   });
 
   it('hands money back as a number, not the driver default string', async () => {
@@ -67,6 +72,23 @@ describe.skipIf(!TEST_DATABASE_URL)('core: database', () => {
 
     await expect(attempt).rejects.toThrow('changed my mind');
     const rows = await db.query(`select 1 from accounts where email = $1`, ['lost@example.com']);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('rolls back when transaction work catches a query failure', async () => {
+    const attempt = db.withTransaction(async (tx) => {
+      await tx.query(`insert into accounts (email, display_name) values ($1, $2)`, [
+        'rollback-only@example.com',
+        'Rollback only',
+      ]);
+      await tx.query('select * from table_that_does_not_exist').catch(() => undefined);
+      return 'must not commit';
+    });
+
+    await expect(attempt).rejects.toBeDefined();
+    const rows = await db.query(`select 1 from accounts where email = $1`, [
+      'rollback-only@example.com',
+    ]);
     expect(rows).toHaveLength(0);
   });
 

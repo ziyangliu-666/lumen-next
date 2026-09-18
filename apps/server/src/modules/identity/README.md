@@ -1,5 +1,16 @@
 # identity — LU YI
 
+## Current shared integration
+
+With explicit cross-owner approval, database-backed `main.ts` now supplies core's
+shared `Db`, mounts identity routes, uses `SessionPrincipalResolver`, and passes
+the same `IdentitySlice` to billing's read-only administrator routes. Core's
+runner owns migrations 002/003/004. Database-free development retains the stub;
+configured databases never fall back to it. Role/suspension admin mutations,
+deployment approval, OAuth/mail production configuration, and open-WebSocket
+revocation remain pending. Older sections describing migrations and `main.ts` as
+unmounted are historical implementation notes superseded by this checkpoint.
+
 **Continuation:** read [NEXT_SESSION.md](../../../../../docs/luyi/NEXT_SESSION.md)
 for unfinished work, the uncommitted checkpoint and next-session instructions.
 

@@ -12,7 +12,7 @@ import pg from 'pg';
 export type Row = Record<string, unknown>;
 
 export interface Queryable {
-  query<T extends Row = Row>(sql: string, params?: readonly unknown[]): Promise<T[]>;
+  query<T extends object = Row>(sql: string, params?: readonly unknown[]): Promise<T[]>;
 }
 
 export interface Db extends Queryable {
@@ -41,11 +41,19 @@ interface Runs {
   query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }>;
 }
 
-function wrap(client: Runs): Queryable {
+function wrap(client: Runs, failed?: (error: unknown) => void): Queryable {
   return {
-    async query<T extends Row = Row>(sql: string, params: readonly unknown[] = []): Promise<T[]> {
-      const result = await client.query(sql, [...params]);
-      return result.rows as T[];
+    async query<T extends object = Row>(
+      sql: string,
+      params: readonly unknown[] = [],
+    ): Promise<T[]> {
+      try {
+        const result = await client.query(sql, [...params]);
+        return result.rows as T[];
+      } catch (error) {
+        failed?.(error);
+        throw error;
+      }
     },
   };
 }
@@ -94,7 +102,18 @@ export async function openDatabase(url: string, options: OpenOptions = {}): Prom
       const client = await pool.connect();
       try {
         await client.query('begin');
-        const result = await work(wrap(client));
+        let queryFailure: unknown;
+        const result = await work(
+          wrap(client, (error) => {
+            queryFailure ??= error;
+          }),
+        );
+        // PostgreSQL can answer COMMIT with ROLLBACK after a caught SQL error.
+        // Never report success once any query has failed inside this transaction.
+        if (queryFailure !== undefined) {
+          if (queryFailure instanceof Error) throw queryFailure;
+          throw new Error('transaction query failed', { cause: queryFailure });
+        }
         await client.query('commit');
         return result;
       } catch (error) {

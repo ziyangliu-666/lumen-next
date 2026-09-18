@@ -234,7 +234,12 @@ sign-in page calls the real endpoint paths, but the application cannot authentic
 durably until core provides the pool/runner and mounts the factory's plugin.
 
 See [PERSISTENCE.md](../../../../../docs/luyi/PERSISTENCE.md) for the database
-handoff and optional PostgreSQL WASM tests (not multi-connection acceptance).
+handoff, optional PostgreSQL WASM tests and the new opt-in `postgresLive.test.ts`
+real-pg concurrency suite. Its 18 tests passed on native PostgreSQL 17.10 with
+external pg 8.23.0 on 2026-09-18; combined verify passed 339 tests with zero skips.
+A separate local clean PostgreSQL stop/start persistence probe also passed.
+A disposable database and external pg module remain required to rerun this suite.
+Transport-failure/crash-recovery and production composition acceptance remain pending.
 [RUNTIME_API.md](../../../../../docs/luyi/RUNTIME_API.md) maps the historical
 submission to the current implementation without claiming team contract approval.
 

@@ -4,6 +4,89 @@ Updated: 2026-09-18 after real verification-mail acceptance and parallel PR revi
 continue implementing them next session, not merely produce more design documents.
 This file is a handoff/checklist, not a background job or an automatic login hook.
 
+## PR preparation checkpoint: 2026-09-18
+
+- Refreshed origin and mine. Team main is now `e3937d4`, six commits beyond
+  the previously integrated base. `git merge-tree --write-tree HEAD origin/main`
+  succeeded without textual conflicts; no merge or rebase was performed.
+- IMPORTANT: the 339-test result below is for the identity branch before these
+  upstream changes. Core moved `core/db/schema.sql` to the migration directory;
+  identity's local harness and five engine suites still reference the removed
+  path. Session/wire behavior also changed. Reconcile within identity and rerun
+  the combined checks after integrating main; do not claim latest-main compatibility.
+- GitHub reports the personal repository has no parent (it is not a fork).
+  Team-main PR creation therefore requires an explicitly approved source branch
+  in the team repository, or another approved fork/publication arrangement.
+  Current authorization is publication to `mine/identity/auth-flow` only.
+- Commit the four reviewed test/documentation files and publish the pending local
+  commits to that personal branch. Prepare an English Draft PR body with scope,
+  validation provenance, upstream compatibility warning and remaining blockers.
+  No team branch write, PR creation, merge or deployment is authorized by this note.
+
+## Earlier checkpoint: 2026-09-18, expanded concurrency and restart acceptance
+
+- Expanded `postgresLive.test.ts` from seven to **18 passing real-pg tests**:
+  concurrent OAuth identity/account resolution without automatic linking, one-use
+  OAuth state/reset, reset vs issuance in both lock orders, reset vs suspension,
+  deletion vs issuance/suspension, and real deferred-constraint COMMIT failure.
+  No application behavior or policy changed; these tests passed existing code.
+- Combined verify: **339 passed, zero skips**, 88.53% lines; build passed. This
+  includes PGlite, Arctic and native PostgreSQL 17.10 / pg 8.23.0 acceptance.
+- Separate local smoke check passed a real PostgreSQL stop/start (different server
+  PID, same data directory): account and active session persisted, revoked session
+  stayed revoked, and new suspension invalidated the remaining session. This is
+  not an application restart or crash-recovery test and is outside the Vitest count.
+- Rerun after build: `node tmp/identity-pg-tools/dist/run-identity-live-pg.mjs restart`.
+  The ignored helper was corrected for inherited Windows pg_ctl stdio handles
+  after timed-out attempts; identified test clusters were stopped safely. The
+  final run confirmed schema cleanup and clean shutdown. See PERSISTENCE.md.
+- Remaining independent database acceptance: transport loss/ambiguous COMMIT,
+  rollback transport failure, crash recovery and additional race permutations.
+  Core's runner/production mounting, Settings, live reset mail and OAuth dependency
+  approval are still blocked on their existing owner/input requirements.
+- All changes remain local/uncommitted. No production dependencies, cross-slice
+  implementation, push or deployment were added.
+
+## Earlier checkpoint: 2026-09-18, first real PostgreSQL acceptance
+
+- User requested provisioning of the missing independent database/driver.
+  Installed native PostgreSQL 17.10 binaries via embedded-postgres and pg 8.23.0
+  only in ignored `tmp/identity-pg-tools`; application manifests/lockfile unchanged.
+- Ran the seven live-pg tests successfully against a fresh loopback-only cluster,
+  with a non-superuser database owner and randomly generated SCRAM credentials.
+  Observed actual multi-connection lock waits; this is no longer WASM-only evidence.
+- Combined `npm run verify` with PGlite, Arctic and real pg: **328 passed, zero
+  skipped**, 88.15% line coverage. Schema cleanup confirmed; cluster stopped cleanly
+  and no listener remains on 55432. No service/autostart was installed.
+- Local rerun helper: `node tmp/identity-pg-tools/dist/run-identity-live-pg.mjs`;
+  add `verify` to run the quality gate. See PERSISTENCE.md for isolation and setup.
+- Still pending: server restart persistence, OAuth/reset/deletion races and
+  transport/COMMIT failure acceptance, core's real migration runner/production
+  mounting, Settings integration, provider approval and real password-reset mail.
+  The seven tests do not complete all P3 requirements. Changes remain uncommitted;
+  nothing was pushed or deployed.
+
+## Earlier checkpoint: 2026-09-18, PostgreSQL test preparation
+
+- Added `postgresLive.test.ts`: seven opt-in real-pg tests for driver/schema
+  isolation, concurrent signup/password changes, rollback-only handling and
+  deterministic lock races around suspension/password-proof session issuance.
+- This is test preparation, **not live PostgreSQL acceptance**. No Docker/psql/
+  postgres command or listener on 5432 was detected during this continuation.
+  Supply an external pg module and a disposable test database as described in
+  PERSISTENCE.md. No production dependency or other owner's code was changed.
+- No listener on port 4000 was detected either. Do not assume the previous local
+  OAuth/mail process or its private credentials survived. Restart using the
+  documented local setup only when needed; never expose credentials in chat.
+- Validation: default verify 282 passed / 46 skipped; PGlite + Arctic verify
+  321 passed / 7 live-pg tests skipped, 88.15% lines; workspace build passed.
+  Partial live-pg configuration was deliberately tested and failed before import
+  or connection, rather than silently skipping. No live mail/provider check ran.
+- Changes remain local and uncommitted; no push/PR/deployment was performed.
+  Next action is to run the seven tests against a disposable PostgreSQL instance,
+  not to mark the P3 acceptance checkbox complete. Other owner/policy blockers
+  below remain unchanged.
+
 ## First actions
 
 1. Read CLAUDE.md and its required references, then this file, CONTEXT.md,
@@ -134,10 +217,17 @@ local outbox contains secrets and must stay untracked/unpublished.
 - [ ] LIU ZIYANG: mount identity in production main.ts, remove stub fallback,
   supply shared pg pool through postgresDatabase(pool), assign migration numbers
   and run reviewed migrations 002/003/004 through core's runner.
-- [ ] Test a disposable real PostgreSQL service: driver compatibility, restart,
-  commit/rollback failures, concurrent email signup/provider signup, password
-  updates/reset/deletion vs suspension/session issuance. PGlite is not proof of
-  multi-connection correctness or deployment readiness.
+- [x] Prepare an isolated opt-in pg suite for driver/schema checks, concurrent
+  signup/password changes, rollback-only behavior and observed multi-connection
+  lock races. Implemented and passed against native PostgreSQL 17.10 / pg 8.23.0
+  on 2026-09-18 (seven tests; see latest checkpoint).
+- [x] Extend native PostgreSQL acceptance to OAuth/state/reset/deletion races and
+  deferred-constraint COMMIT failure (18 tests), plus a separate clean server
+  stop/start persistence smoke check. Passed on 2026-09-18; see latest checkpoint.
+- [ ] Finish disposable PostgreSQL failure acceptance: transport loss, ambiguous
+  COMMIT, rollback transport failure, crash recovery and additional lock-order
+  permutations. Repeat through core's reviewed pool/runner and application startup
+  before deployment. Current tests are not production integration.
 - [ ] LIU ZIYANG: shared frontend /api/me login state, cache invalidation on
   signout/account switch and a real #/admin route guard. Member navigation still
   reaches the static admin placeholder, although protected APIs reject members.
@@ -177,10 +267,10 @@ ADMIN_HANDOFF.md, PERSISTENCE.md. Do not edit their owned code silently.
 
 ## Validation and local resume commands
 
-Latest completed validation: full verify with both external local tools enabled,
-**321 passing tests**, none skipped, 88.15% line coverage; workspace build passed.
-Default full verify without tools: **282 passing, 39 explicitly skipped**, 71.61%
-lines. Formatting, lint and strict typecheck passed in both runs. See
+Latest completed validation: full verify with PGlite, Arctic and real PostgreSQL
+**339 passing tests**, none skipped, 88.53% line coverage; workspace build passed.
+Default verify without optional tools: **282 passing / 57 explicitly skipped**,
+71.61% lines. Formatting, lint and strict typecheck passed in both runs. See
 PR_READINESS.md for parallel audit findings and fixes: callback admission before
 SQL, rollback-only transactions, isolated mail telemetry and atomic password-proof
 version checks at session issuance. Each defect was reproduced before its fix.

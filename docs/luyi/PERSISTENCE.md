@@ -153,6 +153,104 @@ expiry/revocation and the HTTP signup-to-signout flow across fresh app instances
 It does not prove PostgreSQL 17 driver integration, filesystem/process restart
 persistence, network failures, multiple-connection locks or production readiness.
 
+### Opt-in real PostgreSQL concurrency suite
+
+`postgresLive.test.ts` now supplies 18 tests through `postgresDatabase(pool)`
+and an externally installed `pg` driver. It covers independent backend connections,
+concurrent normalized-email signup, simultaneous password changes with the same
+proof, rollback after a caught SQL error, both issuance/suspension lock orders,
+and stale password proof rejection after waiting for a credential update.
+It also covers same-provider first-login serialization, provider/provider and
+password/provider email conflicts without linking, concurrent one-use OAuth
+state consumption, concurrent one-use reset, both reset/issuance lock orders,
+reset vs suspension, deletion vs issuance/suspension, and a real deferred-foreign-
+key failure at COMMIT with no partial write and subsequent pool reuse.
+The lock-order cases pause the first writer after its real row/advisory lock and
+require `pg_blocking_pids` to show the second connection waiting before release.
+Mail is a synthetic in-memory fixture; no external provider or real mailbox is
+used by these tests.
+
+Live acceptance passed on 2026-09-18: **18 tests passed, zero skipped** on
+PostgreSQL 17.10 (native Windows x64) through pg 8.23.0. Combined verify with the
+PGlite, Arctic and real-pg suites passed **339 tests, zero skips**, 88.53% line
+coverage; build passed. These results do not complete the remaining rollout
+requirements. No production dependency was installed.
+
+The local-only tooling is installed under ignored `tmp/identity-pg-tools`:
+`embedded-postgres@17.10.0-beta.17` supplies native binaries, and `pg@8.23.0` is
+loaded from `node_modules/pg/lib/index.js`. Packages were installed with lifecycle
+scripts disabled; the Windows binaries ran without symlink hydration. Neither the
+application package manifests nor its lockfile changed.
+
+The ignored local helper can be rerun on this workstation:
+
+```powershell
+node tmp/identity-pg-tools/dist/run-identity-live-pg.mjs
+# Full quality gate with real pg; enable PGlite/Arctic separately if desired:
+node tmp/identity-pg-tools/dist/run-identity-live-pg.mjs verify
+# Build first; also stop/start the actual PostgreSQL process and verify persistence:
+npm run build
+node tmp/identity-pg-tools/dist/run-identity-live-pg.mjs restart
+```
+
+This helper is a workstation artifact, not a tracked provisioning tool. On a fresh
+checkout, provide a disposable PostgreSQL service and use the environment-based
+commands below instead. Each helper invocation creates a new isolated cluster
+under `tmp/identity-live-pg-*`, refuses an occupied port 55432, listens only on
+127.0.0.1 and uses SCRAM authentication. A non-superuser `identity_test` role owns
+only the test database. Random passwords stay in the helper/child environment;
+the temporary initdb password file is removed immediately after initialization.
+The helper verifies schema cleanup and shuts down its own cluster via pg_ctl in
+finally. No Windows service, autostart entry or OS user was installed. Cluster
+files remain ignored; the server is stopped after testing. Credentials are not
+saved for manual reuse: rerun the helper for a fresh test environment.
+
+The separate local restart smoke check passed on 2026-09-18. It records a changed
+postmaster PID across a clean pg_ctl stop/start on the same directory, then uses
+new pools/stores to check the saved account/credential, an active login token and
+a previously revoked token. A fresh suspension after restart invalidates the
+remaining token. This is real server-process persistence evidence, but not an
+application-process/browser restart, crash recovery or production-runner test.
+It is not included in the Vitest count. Initial helper runs exceeded the outer
+command timeout because background PostgreSQL inherited pg_ctl's captured pipes
+on Windows; the helper now starts pg_ctl with ignored stdio. Only the identified
+test clusters were stopped, and the corrected run completed with schema cleanup.
+
+Safety and scope:
+
+- Both `IDENTITY_PG_MODULE` and `IDENTITY_PG_TEST_URL` must be set. If neither is
+  set the suite skips; partial configuration fails instead of silently skipping.
+- It never reads `DATABASE_URL` and refuses `NODE_ENV=production`. Use only a
+  disposable database and a dedicated test role with CREATE-schema permission.
+  The URL itself cannot establish that the database is disposable.
+- Each run creates a random `identity_test_<uuid>` schema, sets every connection's
+  search_path to that schema without a public fallback, and applies the base SQL
+  plus candidates 002/003/004 there. No existing schema is reused or truncated.
+- Teardown drops only the generated schema. A killed process can leave that
+  schema behind; inspect it before manual cleanup. Connection, SQL and lock waits
+  are bounded. The pool uses up to four connections plus the setup connection.
+- Test-owned DDL is not the shared migration runner. Transport loss, ambiguous
+  COMMIT outcomes, rollback transport failure, crash recovery, additional race
+  permutations and production composition still require further acceptance.
+
+Example in PowerShell, from the repository root (set the two values locally;
+never paste credentials into chat or commit them):
+
+```powershell
+# Use an approved pg installation outside the application dependency tree.
+$env:IDENTITY_PG_MODULE = Read-Host 'Absolute path to pg/lib/index.js'
+$env:IDENTITY_PG_TEST_URL = Read-Host 'Disposable PostgreSQL test URL' -MaskInput
+try {
+  npx vitest run apps/server/src/modules/identity/postgresLive.test.ts
+} finally {
+  Remove-Item Env:IDENTITY_PG_MODULE
+  Remove-Item Env:IDENTITY_PG_TEST_URL
+}
+```
+
+`-MaskInput` requires PowerShell 7.1 or newer. Do not use a shared/production URL.
+A successful run should report 18 passing tests and zero skips in this file.
+
 Before main.ts integration is accepted, repeat against a disposable PostgreSQL 17
 service through core's real pool/runner. Include concurrent normalized-email
 signup (one succeeds), simultaneous password changes using the same proof (one

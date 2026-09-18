@@ -11,7 +11,8 @@ export default defineConfig({
         'apps/server/src/modules/**',
       ],
       exclude: ['**/*.test.ts', '**/index.ts'],
-      thresholds: { lines: 60 },
+      // The gate rises each sprint (docs/CODING_STANDARDS.md): 60, 65, 70, 70.
+      thresholds: { lines: 65 },
       reporter: ['text-summary'],
     },
   },

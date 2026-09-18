@@ -29,19 +29,20 @@ Do not ask them to repeat this backlog. This section supersedes older checkpoint
 
 ### Current code/publication and acceptance
 
-- The administrator increment is committed through `61842bb` and pushed only to
-  `mine/identity/auth-flow`, updating personal Draft PR #1. GitHub quality,
-  build-web, dependency audit, and CodeQL passed; the Draft-only review request
-  was skipped. Modified ownership includes billing/admin/core/main under the
-  user's explicit approval. No team branch, merge, or deployment occurred.
+- After explicit user authorization, the branch was pushed to the team repository
+  and Draft PR #15 was opened against team `main`:
+  https://github.com/ziyangliu-666/lumen-next/pull/15. It is mergeable and awaits
+  CI plus required CODEOWNERS review. Personal Draft PR #1 remains available as
+  earlier evidence. Do not mark ready, merge, or deploy automatically.
 
 - Branch: `identity/auth-flow`. Latest increment commits: `07eb2fd` production
   identity composition, `94acae9` read-only billing admin routes, `bfefed8`
   protected real admin page, and `61842bb` acceptance documentation. Earlier
   implementation commit `eafeb40` sets the minimum eight-character password;
   prior `04be76b` fixes deletion by failing closed.
-  Team main `e3937d4` was integrated via `628f897`. These commits were pushed only
-  to `mine` (youayouly/lumen-next), not to a team branch.
+  Team main `e3937d4` was integrated via `628f897`. The branch now exists on both
+  `origin/identity/auth-flow` and `mine/identity/auth-flow`; no merge or deployment
+  has occurred.
 - Personal Draft PR: https://github.com/youayouly/lumen-next/pull/1. At `61842bb`,
   GitHub quality, build-web, dependency audit and CodeQL jobs all succeeded.
   Copilot request was skipped for Draft; no repo-level COPILOT_REVIEW_TOKEN was

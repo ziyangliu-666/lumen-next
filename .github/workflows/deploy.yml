@@ -1,10 +1,17 @@
 name: Deploy
 
-# Continuous delivery: build a container, deploy to staging, run DAST against it,
-# then a manual approval gate to production.
+# Continuous delivery: build the container, bring it up as staging with a real
+# database, run DAST against it, then wait at a manual gate before production.
+#
+# Staging runs on the workflow runner: the image that was just built and a
+# Postgres beside it. That is a real deployment of the real artefact, and it
+# needs no hosting account. When the team has one, the `staging` job deploys
+# there instead and `dast` takes its URL; nothing else changes.
 on:
   push:
     branches: [main]
+  # So that a change to the image or to this file can be tried before it merges.
+  workflow_dispatch:
 
 jobs:
   container:
@@ -15,32 +22,63 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        run: docker build -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
+        run: docker build -t lumen:staging .
+      - name: Save image for the next job
+        run: docker save lumen:staging | gzip > lumen-image.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumen-image
+          path: lumen-image.tar.gz
+          retention-days: 1
       # - name: Push (enable once GHCR is set up)
       #   run: |
       #     echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      #     docker tag lumen:staging ghcr.io/${{ github.repository }}:${{ github.sha }}
       #     docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
 
-  staging:
+  staging-and-dast:
+    name: Staging, smoke test, DAST
     needs: container
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - run: echo "Deploy ${{ github.sha }} to staging here (Fly / Vercel / Render)."
-
-  dast:
-    needs: staging
-    runs-on: ubuntu-latest
-    steps:
       - uses: actions/checkout@v4
-      - name: OWASP ZAP baseline scan
-        uses: zaproxy/action-baseline@v0.12.0
+      - uses: actions/download-artifact@v4
         with:
-          target: 'https://staging.lumen.example'
-        continue-on-error: true
+          name: lumen-image
+      - name: Load image
+        run: gunzip -c lumen-image.tar.gz | docker load
+      - name: Start staging (the image and Postgres)
+        run: docker compose -f docker-compose.staging.yml up -d --no-build --wait
+      - name: Smoke test, end to end through the container
+        run: |
+          set -euo pipefail
+          curl -fsS http://localhost:4000/api/health
+          curl -fsS http://localhost:4000/ | grep -qi '<div id="root"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:4000/api/projects/demo/sessions \
+            -H 'content-type: application/json' -d '{"text":"x"}')" = 401
+          curl -fsS -X POST http://localhost:4000/api/projects/demo/sessions \
+            -H 'authorization: stub smoke:user' -H 'content-type: application/json' \
+            -d '{"text":"smoke"}' | grep -q '"tasks"'
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: 'http://localhost:4000'
+          allow_issue_writing: false
+          artifact_name: zap-baseline-report
+          # Warnings are reported, not fatal, until the team has triaged the
+          # first report. A FAIL-level rule still fails the job.
+          cmd_options: '-I'
+      - name: Logs, when something went wrong
+        if: failure()
+        run: docker compose -f docker-compose.staging.yml logs --no-color
+      - name: Stop staging
+        if: always()
+        run: docker compose -f docker-compose.staging.yml down -v
 
   production:
-    needs: dast
+    needs: staging-and-dast
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: production # protection rule = manual approval gate
     steps:

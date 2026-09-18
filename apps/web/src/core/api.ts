@@ -62,7 +62,15 @@ export interface SessionState {
 export function apply(state: SessionState, event: ServerEvent): SessionState {
   const { snapshot } = state;
   switch (event.type) {
+    case 'session.snapshot':
+      // The whole record, read back. Replace, do not merge: after a dropped
+      // connection this is what makes the page right again.
+      return event.snapshot.session.id === snapshot.session.id
+        ? { ...state, snapshot: event.snapshot }
+        : state;
     case 'task.opened':
+      // The snapshot may already hold it, if it was read after the event was sent.
+      if (snapshot.tasks.some((task) => task.id === event.task.id)) return state;
       return { ...state, snapshot: { ...snapshot, tasks: [...snapshot.tasks, event.task] } };
     case 'task.status':
       return {
@@ -80,8 +88,20 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
           tasks: patchTask(snapshot.tasks, event.taskId, { ownCost: event.ownCost }),
         },
       };
+    case 'task.total': {
+      const totals = { ...snapshot.totals, [event.taskId]: event.total };
+      // The root's total is the session's spend; the server says so, the page does not add.
+      const isRoot = snapshot.tasks.some((t) => t.id === event.taskId && t.parentId === null);
+      const spend = isRoot ? event.total : snapshot.spend;
+      return { ...state, snapshot: { ...snapshot, totals, spend } };
+    }
     case 'step.appended': {
-      const step: Step = { taskId: event.taskId, index: event.index, text: event.text };
+      const step: Step = {
+        taskId: event.taskId,
+        index: event.index,
+        kind: event.kind,
+        text: event.text,
+      };
       // The snapshot may already hold this step if it was read after the event
       // was sent; the (task, index) pair says so.
       const seen = snapshot.steps.some((s) => s.taskId === step.taskId && s.index === step.index);
@@ -94,6 +114,13 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
   }
 }
 
+/** The tasks in call-tree order: each parent, then its children, depth first. */
+export function inTreeOrder(tasks: readonly Task[]): readonly Task[] {
+  const under = (parentId: string | null): Task[] =>
+    tasks.filter((task) => task.parentId === parentId).flatMap((task) => [task, ...under(task.id)]);
+  return under(null);
+}
+
 function patchTask(tasks: readonly Task[], taskId: string, patch: Partial<Task>): readonly Task[] {
   return tasks.map((task) => (task.id === taskId ? { ...task, ...patch } : task));
 }
@@ -103,10 +130,19 @@ export interface Stream {
   close(): void;
 }
 
+/** How long to wait before connecting again: 0.5 s, doubling, never over 10 s. */
+export function backoffMs(attempt: number): number {
+  return Math.min(10_000, 500 * 2 ** attempt);
+}
+
 /**
- * Open the event stream for one session. `onEvent` gets every frame; `onState`
- * the socket's own life. No reconnect yet: Sprint 2 adds the backoff and the
- * re-read of the snapshot, both inside this function.
+ * Open the event stream for one session and keep it open. `onEvent` gets every
+ * frame; `onState` the socket's own life.
+ *
+ * On every connection, the first and each one after a drop, it says
+ * `session.open`, and the server answers with the snapshot. The events missed
+ * while the socket was down are never replayed; the snapshot is how the page
+ * catches up. `close()` is final: it also cancels a reconnect that is waiting.
  */
 export function openStream(
   sessionId: string,
@@ -114,22 +150,45 @@ export function openStream(
   onState: (state: SessionState['stream']) => void,
 ): Stream {
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  const socket = new WebSocket(
-    `${scheme}://${window.location.host}/ws?session=${encodeURIComponent(sessionId)}`,
-  );
-  socket.addEventListener('open', () => onState('open'));
-  socket.addEventListener('close', () => onState('closed'));
-  socket.addEventListener('message', (frame: MessageEvent<string>) => {
-    try {
-      onEvent(JSON.parse(frame.data) as ServerEvent);
-    } catch {
-      // A frame that is not JSON is a server bug, not something the page can act on.
-    }
-  });
+  const url = `${scheme}://${window.location.host}/ws`;
+  let socket: WebSocket | null = null;
+  let timer: number | undefined;
+  let attempt = 0;
+  let closed = false;
+
+  const connect = (): void => {
+    onState('connecting');
+    const current = new WebSocket(url);
+    socket = current;
+    current.addEventListener('open', () => {
+      attempt = 0;
+      current.send(JSON.stringify({ type: 'session.open', sessionId } satisfies ClientCommand));
+      onState('open');
+    });
+    current.addEventListener('close', () => {
+      if (closed) return;
+      onState('closed');
+      timer = window.setTimeout(connect, backoffMs(attempt));
+      attempt += 1;
+    });
+    current.addEventListener('message', (frame: MessageEvent<string>) => {
+      try {
+        onEvent(JSON.parse(frame.data) as ServerEvent);
+      } catch {
+        // A frame that is not JSON is a server bug, not something the page can act on.
+      }
+    });
+  };
+  connect();
+
   return {
     send: (command) => {
-      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(command));
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(command));
     },
-    close: () => socket.close(),
+    close: () => {
+      closed = true;
+      window.clearTimeout(timer);
+      socket?.close();
+    },
   };
 }

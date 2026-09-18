@@ -14,18 +14,22 @@ session, one task, one step, rendered end to end.
 
 | File | Role |
 |---|---|
-| `trace.ts` | The record: sessions, tasks, steps. In memory until `core/db` lands; the kernel does not change when it does. |
+| `trace.ts` | The `Trace` interface: the record of sessions, tasks and steps. |
+| `pgTrace.ts` | The record in Postgres, used when the process has a `Db`. |
+| `memoryTrace.ts` | The record in memory, for a process without `DATABASE_URL` and for kernel unit tests. |
+| `traceContract.ts` | One test suite, run against both implementations so they cannot drift. |
 | `kernel.ts` | The engine. Opens the root task, runs the worker, and is the `WorkerReport` the worker writes through. Owns the "who may read this session" answer. |
-| `echoWorker.ts` | The Sprint 1 worker: one fixed step, no model. Steering replaces it behind `core/domain/worker.ts`. |
+| `delegation.ts` | The two bounds on a fan-out: how deep the tree may go, and how many children run at once. |
+| `demoWorker.ts` | A worker with no model: a lead that fans out to three readers, each of which spends and replies. Steering replaces it behind `core/domain/worker.ts`. |
 | `routes.ts` | `POST /api/projects/:id/sessions`, `GET /api/sessions/:id`, `POST /api/sessions/:id/stop`; commands `session.say`, `session.stop`. |
-| `taskComposite.ts` | The Composite the design problem asks for. Not yet wired to the trace; that is Sprint 2, with delegation. |
+| `taskComposite.ts` | The Composite the design problem asks for, and `buildTree`, which turns task rows into it. The kernel uses it for the session's spend, each task's rolled-up total, and stop. |
 
 ## Public index
 
 ```ts
-export function createSessionSlice(deps: { broker: Broker; worker?: Worker }): SessionSlice;
+export function createSessionSlice(deps: { broker: Broker; worker?: Worker; db?: Db | null }): SessionSlice;
 // SessionSlice = { kernel, access, registerRoutes, registerCommands }
-export { TaskNode, type Node, type Kernel };
+export { buildTree, TaskNode, type Node, type Kernel };
 ```
 
 `main.ts` builds the server with `access` and registers the routes and commands.

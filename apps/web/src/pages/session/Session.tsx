@@ -2,7 +2,8 @@
 // The two halves below are the agreed boundary between them: each owner works
 // inside their own panel and neither restyles the other.
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
-import type { ServerEvent, Task } from '@lumen/contracts';
+import type { ServerEvent, StepKind, Task } from '@lumen/contracts';
+import { cn } from 'cn';
 import { Badge } from '@/ui/badge';
 import { Button } from '@/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
@@ -12,6 +13,7 @@ import { Textarea } from '@/ui/textarea';
 import { PageHeader } from '@/core/shell';
 import {
   apply,
+  inTreeOrder,
   openStream,
   signInStub,
   startSession,
@@ -31,6 +33,18 @@ const TONE: Record<Task['status'], string> = {
   failed: 'bg-gap-soft text-gap',
 };
 
+// How far a task sits from the left, by depth. Written out, because Tailwind
+// only ships the classes it can read in the source.
+const INDENT = ['ml-0', 'ml-6', 'ml-12', 'ml-16'] as const;
+
+const KIND_TONE: Record<StepKind, string> = {
+  you: 'text-primary',
+  thinking: 'text-faint',
+  tool: 'text-decide',
+  delegate: 'text-chart-2',
+  reply: 'text-keep',
+};
+
 function money(dollars: number): string {
   return `$${dollars.toFixed(4)}`;
 }
@@ -45,6 +59,7 @@ export function Session(): JSX.Element {
   const [account, setAccount] = useState<string>(() => stubAccount() ?? '');
   const [state, setState] = useState<SessionState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   // The socket is an external system, not render state: a ref, so opening it
   // does not itself schedule a render.
   const stream = useRef<Stream | null>(null);
@@ -109,32 +124,59 @@ export function Session(): JSX.Element {
           <CardContent className="space-y-4">
             {snapshot ? (
               <>
-                <ul className="space-y-3">
-                  {snapshot.tasks.map((task) => (
-                    <li key={task.id} className="rounded-md bg-sunken p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-ink">
-                          <span className="font-mono text-muted-foreground">{task.agent}</span>{' '}
-                          {task.title}
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {money(task.ownCost.dollars)}
+                <p className="text-sm text-muted-foreground">
+                  {snapshot.tasks.length} task{snapshot.tasks.length === 1 ? '' : 's'} · session
+                  spend <span className="font-mono text-ink">{money(snapshot.spend.dollars)}</span>
+                </p>
+                <ul className="space-y-2">
+                  {inTreeOrder(snapshot.tasks).map((task) => {
+                    const open = (selected ?? snapshot.tasks[0]?.id) === task.id;
+                    const total = snapshot.totals[task.id]?.dollars ?? 0;
+                    return (
+                      <li
+                        key={task.id}
+                        className={cn(
+                          'rounded-md bg-sunken',
+                          INDENT[Math.min(task.depth, INDENT.length - 1)],
+                        )}
+                      >
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          onClick={() => setSelected(task.id)}
+                          className="flex w-full items-center justify-between gap-2 rounded-md p-3 text-left hover:bg-accent"
+                        >
+                          <span className="text-sm text-ink">
+                            <span className="font-mono text-muted-foreground">{task.agent}</span>{' '}
+                            {task.title}
                           </span>
-                          <Badge className={TONE[task.status]}>{task.status}</Badge>
-                        </span>
-                      </div>
-                      <ol className="mt-2 space-y-1">
-                        {snapshot.steps
-                          .filter((step) => step.taskId === task.id)
-                          .map((step) => (
-                            <li key={step.index} className="text-sm text-muted-foreground">
-                              <span className="font-mono text-faint">{step.index}</span> {step.text}
-                            </li>
-                          ))}
-                      </ol>
-                    </li>
-                  ))}
+                          <span className="flex shrink-0 items-center gap-2">
+                            <span
+                              className="font-mono text-xs text-muted-foreground"
+                              title="own cost / with everything delegated under it"
+                            >
+                              {money(task.ownCost.dollars)} / {money(total)}
+                            </span>
+                            <Badge className={TONE[task.status]}>{task.status}</Badge>
+                          </span>
+                        </button>
+                        {open ? (
+                          <ol className="space-y-1 px-3 pb-3">
+                            {snapshot.steps
+                              .filter((step) => step.taskId === task.id)
+                              .map((step) => (
+                                <li key={step.index} className="text-sm text-muted-foreground">
+                                  <span className={cn('font-mono text-xs', KIND_TONE[step.kind])}>
+                                    {step.kind}
+                                  </span>{' '}
+                                  {step.text}
+                                </li>
+                              ))}
+                          </ol>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <form onSubmit={onSay} className="flex gap-2">
                   <Input name="say" placeholder="Say something to the lead…" />

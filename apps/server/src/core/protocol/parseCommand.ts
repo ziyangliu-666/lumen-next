@@ -44,10 +44,12 @@ export function parseCommand(raw: string): ClientCommand | null {
       if (!sessionId || !body) return null;
       return { type: 'session.say', sessionId, text: body };
     }
+    case 'session.open':
+    case 'session.close':
     case 'session.stop': {
       const sessionId = text(payload['sessionId']);
       if (!sessionId) return null;
-      return { type: 'session.stop', sessionId };
+      return { type: payload['type'], sessionId };
     }
     case 'task.steer': {
       const taskId = text(payload['taskId']);

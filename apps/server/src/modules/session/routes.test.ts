@@ -114,7 +114,8 @@ describe('session: routes', () => {
       headers: AUTH,
     });
     expect(mine.statusCode).toBe(200);
-    expect(mine.json<SessionSnapshot>().steps).toHaveLength(1);
+    expect(mine.json<SessionSnapshot>().tasks).toHaveLength(4);
+    expect(mine.json<SessionSnapshot>().spend.dollars).toBeCloseTo(0.03, 6);
 
     const theirs = await server.inject({
       method: 'GET',
@@ -170,12 +171,57 @@ describe('session: the walking skeleton, end to end', () => {
     socket.send(JSON.stringify({ type: 'session.say', sessionId: session.id, text: 'more' }));
 
     const root = started.json<SessionSnapshot>().tasks[0];
-    expect(await incoming).toEqual({
+    expect(await incoming).toMatchObject({
       type: 'step.appended',
       taskId: root?.id,
-      index: 1,
-      text: 'you: more',
+      kind: 'you',
+      text: 'more',
     });
+    socket.terminate();
+  });
+
+  it('opens a session over the socket, is sent the snapshot, and catches up the same way after a drop', async () => {
+    const { app: server, slice } = await build();
+    const origin = await listen(server);
+    const cookie = { cookie: 'lumen_stub=stub acc-1:user' };
+    const started = await server.inject({
+      method: 'POST',
+      url: '/api/projects/p1/sessions',
+      headers: cookie,
+      payload: { text: 'q' },
+    });
+    const { session } = started.json<SessionSnapshot>();
+    await slice.kernel.idle();
+
+    for (const attempt of ['first connection', 'after a drop']) {
+      const socket = await connect(`ws://${origin}/ws`, cookie);
+      const incoming = nextMessage(socket);
+      socket.send(JSON.stringify({ type: 'session.open', sessionId: session.id }));
+
+      const frame = (await incoming) as { type: string; snapshot: SessionSnapshot };
+      expect(frame.type, attempt).toBe('session.snapshot');
+      expect(frame.snapshot.tasks, attempt).toHaveLength(4);
+      expect(frame.snapshot.spend.dollars, attempt).toBeCloseTo(0.03, 6);
+      socket.terminate();
+    }
+  });
+
+  it('tells a stranger who opens the session "no such session", and sends no snapshot', async () => {
+    const { app: server } = await build();
+    const origin = await listen(server);
+    const started = await server.inject({
+      method: 'POST',
+      url: '/api/projects/p1/sessions',
+      headers: AUTH,
+      payload: { text: 'q' },
+    });
+    const { session } = started.json<SessionSnapshot>();
+
+    const socket = await connect(`ws://${origin}/ws`, { authorization: 'stub acc-2:user' });
+    const incoming = nextMessage(socket);
+    socket.send(JSON.stringify({ type: 'session.open', sessionId: session.id }));
+
+    expect(await incoming).toEqual({ type: 'error', message: 'no such session' });
     socket.terminate();
   });
 });

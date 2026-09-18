@@ -1,4 +1,4 @@
-import type { Money } from '@lumen/contracts';
+import type { Money, Task } from '@lumen/contracts';
 import { add, zero } from '@lumen/contracts';
 
 // Composite. A leaf task and a task with children answer cost(), cancel() and
@@ -16,7 +16,7 @@ export class TaskNode implements Node {
 
   constructor(
     readonly id: string,
-    private ownCost: Money,
+    private readonly ownCost: Money,
   ) {}
 
   addChild(node: TaskNode): void {
@@ -39,6 +39,39 @@ export class TaskNode implements Node {
   size(): number {
     return this.children.reduce((n, c) => n + c.size(), 1);
   }
+
+  /** This node or the descendant with that id. Stop and cost start from any task. */
+  find(id: string): TaskNode | null {
+    if (this.id === id) return this;
+    for (const c of this.children) {
+      const found = c.find(id);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  /** This node and every descendant, parents before children. */
+  flatten(): TaskNode[] {
+    return [this, ...this.children.flatMap((c) => c.flatten())];
+  }
 }
 
 export const noCost: Money = zero;
+
+/**
+ * Build the tree of one session from its task rows. The rows say parent_id;
+ * this is the one place that turns them into nodes, so no caller walks
+ * parent_id by hand — which is the brute force the Composite replaced.
+ * Returns the root, or null when there is none.
+ */
+export function buildTree(tasks: readonly Task[]): TaskNode | null {
+  const nodes = new Map(tasks.map((task) => [task.id, new TaskNode(task.id, task.ownCost)]));
+  let root: TaskNode | null = null;
+  for (const task of tasks) {
+    const node = nodes.get(task.id)!;
+    const parent = task.parentId === null ? null : nodes.get(task.parentId);
+    if (parent) parent.addChild(node);
+    else if (task.parentId === null) root = node;
+  }
+  return root;
+}

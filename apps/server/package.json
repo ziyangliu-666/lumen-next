@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/main.js",
   "scripts": {
-    "build": "tsc --build",
+    "build": "tsc --build && node scripts/copy-migrations.cjs",
     "dev": "node --experimental-strip-types src/main.ts",
     "start": "node dist/main.js"
   },
@@ -14,9 +14,12 @@
     "@fastify/static": "10.1.3",
     "@fastify/websocket": "11.3.0",
     "@lumen/contracts": "*",
-    "fastify": "5.12.3"
+    "fastify": "5.12.3",
+    "node-pg-migrate": "9.0.0",
+    "pg": "8.23.0"
   },
   "devDependencies": {
+    "@types/pg": "8.23.1",
     "@types/ws": "8.18.1"
   }
 }

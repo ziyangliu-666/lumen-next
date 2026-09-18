@@ -1,9 +1,15 @@
 import type { Principal } from '../../core/http/authGuard.js';
 
+/** Internal proof metadata, never a response DTO or a shared-core principal. */
+export interface VerifiedPrincipal extends Principal {
+  /** Password version verified by the strategy; rechecked during durable issuance. */
+  readonly expectedPasswordHash?: string;
+}
+
 /** A verifier owns input validation and proves identity, not session issuance. */
 export interface AuthStrategy {
   readonly kind: string;
-  verify(payload: unknown): Promise<Principal | null>;
+  verify(payload: unknown): Promise<VerifiedPrincipal | null>;
 }
 
 export type AuthFailureCode = 'unsupported_kind' | 'invalid_credentials';
@@ -47,5 +53,5 @@ export abstract class AbstractAuthFlow<Result> {
     return this.onAuthenticated(principal);
   }
 
-  protected abstract onAuthenticated(principal: Principal): Promise<Result>;
+  protected abstract onAuthenticated(principal: VerifiedPrincipal): Promise<Result>;
 }

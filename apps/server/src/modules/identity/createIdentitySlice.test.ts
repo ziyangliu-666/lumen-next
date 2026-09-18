@@ -72,7 +72,7 @@ describe('identity: SQL-backed slice composition', () => {
   });
 
   it('wires signup through SQL stores and puts only the session token in the cookie', async () => {
-    const db = database([[account], [], []]);
+    const db = database([[account], [], [account], []]);
     const app = await setup(db);
     const response = await app.inject({
       method: 'POST',
@@ -84,13 +84,18 @@ describe('identity: SQL-backed slice composition', () => {
     expect(response.json()).toEqual(principal);
     expect(response.cookies[0]).toMatchObject({ name: AUTH_COOKIE, httpOnly: true, secure: true });
     expect(db.calls[1]?.[1]?.[1]).toMatch(/^scrypt\$v1\$/);
-    expect(db.calls[2]?.[1]?.[1]).toMatch(/^[a-f0-9]{64}$/);
+    expect(db.calls[3]?.[1]?.[1]).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(db.calls)).not.toContain(password);
   });
 
   it('wires password strategy through the durable session completion hook', async () => {
     const passwordHash = await hashPassword(password);
-    const db = database([[{ ...principal, passwordHash, suspended: false }], []]);
+    const db = database([
+      [{ ...principal, passwordHash, suspended: false }],
+      [account],
+      [{ passwordHash }],
+      [],
+    ]);
     const response = await (
       await setup(db)
     ).inject({
@@ -101,7 +106,9 @@ describe('identity: SQL-backed slice composition', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(principal);
-    expect(db.calls[1]?.[0]).toContain('insert into auth_sessions');
+    expect(db.calls[2]?.[0]).toContain('for update');
+    expect(db.calls[3]?.[0]).toContain('insert into auth_sessions');
+    expect(response.body).not.toContain(passwordHash);
   });
 
   it('reads current session identity and the account without issuing a new session', async () => {

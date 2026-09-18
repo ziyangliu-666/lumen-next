@@ -27,7 +27,7 @@ describe('identity: password strategy', () => {
     expect(strategy.kind).toBe('password');
     await expect(
       strategy.verify({ email: ' A@Example.edu ', password: '  secret  ' }),
-    ).resolves.toEqual(account.principal);
+    ).resolves.toEqual({ ...account.principal, expectedPasswordHash: account.passwordHash });
     expect(findByEmail).toHaveBeenCalledWith('a@example.edu');
     expect(verify).toHaveBeenCalledWith('  secret  ', 'stored-hash');
   });
@@ -82,7 +82,7 @@ describe('identity: password strategy', () => {
     const { strategy } = setup(staff);
     await expect(
       strategy.verify({ email: 'a@example.edu', password: 'secret', role: 'user' }),
-    ).resolves.toEqual(staff.principal);
+    ).resolves.toEqual({ ...staff.principal, expectedPasswordHash: staff.passwordHash });
   });
 
   it('does not turn storage failure into credential rejection', async () => {
@@ -102,7 +102,7 @@ describe('identity: password strategy', () => {
     });
     await expect(
       strategy.verify({ email: 'a@example.edu', password: 'a real test password' }),
-    ).resolves.toEqual(account.principal);
+    ).resolves.toEqual({ ...account.principal, expectedPasswordHash: passwordHash });
     await expect(
       strategy.verify({ email: 'a@example.edu', password: 'wrong' }),
     ).resolves.toBeNull();

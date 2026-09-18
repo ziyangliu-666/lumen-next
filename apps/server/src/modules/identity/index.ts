@@ -6,6 +6,7 @@ export {
   AuthFailure,
   type AuthFailureCode,
   type AuthStrategy,
+  type VerifiedPrincipal,
 } from './authFlow.js';
 export {
   PasswordStrategy,
@@ -22,6 +23,29 @@ export {
 export { AUTH_COOKIE, SessionStrategy, SessionPrincipalResolver } from './sessionStrategy.js';
 export { SessionAuthFlow } from './sessionAuthFlow.js';
 export { AccountService } from './accountService.js';
+export { resendMailSender, type MailSender, type IdentityMail } from './mail.js';
+export {
+  OAuthStrategy,
+  OAuthAccounts,
+  OAuthAttempts,
+  OAuthEmailConflict,
+  type OAuthKind,
+  type OAuthProvider,
+  type OAuthProfile,
+} from './oauth.js';
+export {
+  githubProvider,
+  googleProvider,
+  type GitHubOAuthClient,
+  type GoogleOAuthClient,
+  type OAuthTokens,
+} from './oauthProviders.js';
+export {
+  AdminAccountFailure,
+  type AdminAccountFailureCode,
+  type AccountSummary,
+  type AdminAccounts,
+} from './adminAccounts.js';
 export {
   AccountFailure,
   type AccountFailureCode,
@@ -30,6 +54,12 @@ export {
 } from './accounts.js';
 export { LoginGate, LoginLimited } from './loginGate.js';
 export { type IdentityDatabase, type IdentitySql } from './identityDatabase.js';
+export {
+  postgresDatabase,
+  type IdentityPgPool,
+  type IdentityPgConnection,
+} from './postgresDatabase.js';
+export type { IdentityAuthentication } from './identityAuthentication.js';
 export { PostgresAccountStore, PostgresAuthSessionStore } from './postgresStores.js';
 export {
   createIdentitySlice,

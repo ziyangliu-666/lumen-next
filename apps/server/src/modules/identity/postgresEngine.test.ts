@@ -5,9 +5,12 @@ import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../../core/http/server.js';
 import { Broker } from '../../core/protocol/broker.js';
 import { AuthSessions } from './authSessions.js';
-import { createIdentitySlice } from './createIdentitySlice.js';
+import { createIdentitySlice, type IdentityAuthentication } from './index.js';
+import { createSessionSlice } from '../session/index.js';
+import type { SessionSnapshot } from '@lumen/contracts';
 import type { IdentityDatabase, IdentitySql } from './identityDatabase.js';
 import { LoginGate } from './loginGate.js';
+import { localRoleProbe } from './localRoleProbe.js';
 import { PostgresAccountStore, PostgresAuthSessionStore } from './postgresStores.js';
 import { AUTH_COOKIE } from './sessionStrategy.js';
 
@@ -97,8 +100,459 @@ describe.skipIf(!modulePath)('identity: optional PostgreSQL WASM engine acceptan
     });
     servers.push(app);
     await app.register(identity.registerRoutes);
+    await app.register(localRoleProbe);
     return app;
   }
+
+  async function registerUser(
+    app: FastifyInstance,
+    email: string,
+  ): Promise<{
+    accountId: string;
+    cookies: Record<string, string>;
+  }> {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      headers: { origin },
+      payload: { email, displayName: 'Role test', password },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json<{ role: string }>().role).toBe('user');
+    return {
+      accountId: response.json<{ accountId: string }>().accountId,
+      cookies: {
+        [AUTH_COOKIE]: response.cookies.find((cookie) => cookie.name === AUTH_COOKIE)!.value,
+      },
+    };
+  }
+
+  it('enforces anonymous/member/staff access and rejects client privilege forgery', async () => {
+    const app = await server();
+    const member = await registerUser(app, 'member@example.test');
+    const staff = await registerUser(app, 'staff@example.test');
+    await db.query("update accounts set role = 'staff' where id = $1", [staff.accountId]);
+    expect((await app.inject({ url: '/api/local/staff-check' })).statusCode).toBe(401);
+    expect(
+      (
+        await app.inject({
+          url: '/api/local/staff-check',
+          headers: { authorization: 'stub forged:staff' },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          url: '/api/local/staff-check',
+          cookies: member.cookies,
+          headers: { authorization: `stub ${staff.accountId}:staff` },
+        })
+      ).statusCode,
+    ).toBe(403);
+    for (const [email, role] of [
+      ['member@example.test', 'user'],
+      ['staff@example.test', 'staff'],
+    ] as const) {
+      const login = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password',
+        headers: { origin },
+        payload: { email, password },
+      });
+      expect(login.statusCode).toBe(200);
+      expect(login.json<{ role: string }>().role).toBe(role);
+      const cookies = {
+        [AUTH_COOKIE]: login.cookies.find((cookie) => cookie.name === AUTH_COOKIE)!.value,
+      };
+      expect((await app.inject({ url: '/api/local/staff-check', cookies })).statusCode).toBe(
+        role === 'staff' ? 200 : 403,
+      );
+    }
+    const forgedSignup = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      headers: { origin },
+      payload: { email: 'forged@example.test', displayName: 'Forged', password, role: 'staff' },
+    });
+    expect(forgedSignup.statusCode).toBe(400);
+    expect(await accounts.findByEmail('forged@example.test')).toBeNull();
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: '/api/me',
+          headers: { origin },
+          cookies: member.cookies,
+          payload: { role: 'staff', accountId: staff.accountId },
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect((await accounts.getAccount(member.accountId))?.role).toBe('user');
+  }, 30_000);
+
+  it('uses current database roles on existing cookies and blocks suspended logins', async () => {
+    const app = await server();
+    const user = await registerUser(app, 'changing@example.test');
+    const probe = (): Promise<number> =>
+      app
+        .inject({
+          url: '/api/local/staff-check',
+          cookies: user.cookies,
+        })
+        .then((response) => response.statusCode);
+    expect(await probe()).toBe(403);
+    await db.query("update accounts set role = 'staff' where id = $1", [user.accountId]);
+    expect(await probe()).toBe(200);
+    await db.query("update accounts set role = 'user' where id = $1", [user.accountId]);
+    expect(await probe()).toBe(403);
+    const admin = createIdentitySlice({
+      database: db,
+      origin,
+      sessionLifetimeMs: 60_000,
+      loginGate: new LoginGate(),
+    });
+    await admin.suspend(user.accountId, true);
+    expect(await probe()).toBe(401);
+    expect((await app.inject({ url: '/api/me', cookies: user.cookies })).statusCode).toBe(401);
+    const blocked = await app.inject({
+      method: 'POST',
+      url: '/api/auth/password',
+      headers: { origin },
+      payload: { email: 'changing@example.test', password },
+    });
+    expect(blocked.statusCode).toBe(401);
+    expect(blocked.cookies).toHaveLength(0);
+    await expect(
+      new AuthSessions(sessions, { lifetimeMs: 60_000 }).issue({
+        accountId: user.accountId,
+        role: 'user',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    await admin.suspend(user.accountId, false);
+    expect((await app.inject({ url: '/api/me', cookies: user.cookies })).statusCode).toBe(401);
+    const fresh = await app.inject({
+      method: 'POST',
+      url: '/api/auth/password',
+      headers: { origin },
+      payload: { email: 'changing@example.test', password },
+    });
+    expect(fresh.statusCode).toBe(200);
+    const freshCookies = {
+      [AUTH_COOKIE]: fresh.cookies.find((cookie) => cookie.name === AUTH_COOKIE)!.value,
+    };
+    expect((await app.inject({ url: '/api/me', cookies: freshCookies })).statusCode).toBe(200);
+    expect((await app.inject({ url: '/api/me', cookies: user.cookies })).statusCode).toBe(401);
+  }, 30_000);
+
+  it('deletes an unused password account only after reauthentication and invalidates its sessions', async () => {
+    const app = await server();
+    const user = await registerUser(app, 'delete@example.test');
+    const unrelated = await registerUser(app, 'keep@example.test');
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: '/api/me',
+          cookies: user.cookies,
+          headers: { origin },
+          payload: { currentPassword: 'wrong' },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: '/api/me',
+          cookies: user.cookies,
+          headers: { origin },
+          payload: { currentPassword: password, accountId: unrelated.accountId },
+        })
+      ).statusCode,
+    ).toBe(400);
+    const removed = await app.inject({
+      method: 'DELETE',
+      url: '/api/me',
+      cookies: user.cookies,
+      headers: { origin },
+      payload: { currentPassword: password },
+    });
+    expect(removed.statusCode).toBe(204);
+    expect(removed.cookies.find((cookie) => cookie.name === AUTH_COOKIE)?.value).toBe('');
+    expect(await accounts.getAccount(user.accountId)).toBeNull();
+    expect(
+      await db.query('select id from credentials where account_id = $1', [user.accountId]),
+    ).toEqual([]);
+    expect((await app.inject({ url: '/api/me', cookies: user.cookies })).statusCode).toBe(401);
+    expect((await app.inject({ url: '/api/me', cookies: unrelated.cookies })).statusCode).toBe(200);
+  }, 30_000);
+
+  it.each(['projects', 'ledger_entries'] as const)(
+    'refuses deletion with retained %s and rolls back all credential/session changes',
+    async (resource) => {
+      const app = await server();
+      const user = await registerUser(app, 'retained@example.test');
+      if (resource === 'projects')
+        await db.query("insert into projects (account_id, title) values ($1, 'Retained project')", [
+          user.accountId,
+        ]);
+      else
+        await db.query(
+          "insert into ledger_entries (account_id, amount, reason) values ($1, 1, 'Retained ledger')",
+          [user.accountId],
+        );
+      expect(
+        (
+          await app.inject({
+            method: 'DELETE',
+            url: '/api/me',
+            cookies: user.cookies,
+            headers: { origin },
+            payload: { currentPassword: password },
+          })
+        ).statusCode,
+      ).toBe(409);
+      expect((await app.inject({ url: '/api/me', cookies: user.cookies })).statusCode).toBe(200);
+      expect((await accounts.getPasswordAccount(user.accountId))?.passwordHash).toBeTruthy();
+      expect(
+        await db.query(`select id from ${resource} where account_id = $1`, [user.accountId]),
+      ).toHaveLength(1);
+    },
+    30_000,
+  );
+
+  it('wires the public authentication API into the actual session slice without stub credentials', async () => {
+    const authentication: IdentityAuthentication = createIdentitySlice({
+      database: db,
+      origin,
+      sessionLifetimeMs: 60_000,
+      loginGate: new LoginGate({ attempts: 50 }),
+    });
+    const broker = new Broker();
+    const session = createSessionSlice({ broker });
+    const app = await buildServer({
+      broker,
+      resolver: authentication.principalResolver,
+      access: session.access,
+      logLevel: 'silent',
+    });
+    servers.push(app);
+    await app.register(authentication.registerRoutes);
+    await app.register(session.registerRoutes);
+    session.registerCommands(broker);
+    const owner = await registerUser(app, 'session-owner@example.test');
+    const other = await registerUser(app, 'session-other@example.test');
+    const me = await app.inject({ url: '/api/me', cookies: owner.cookies });
+    expect(me.statusCode).toBe(200);
+    expect(me.json<{ id: string }>().id).toBe(owner.accountId);
+    expect(await authentication.principalResolver.resolve({ cookies: owner.cookies })).toEqual({
+      accountId: owner.accountId,
+      role: 'user',
+    });
+    const opened = await app.inject({
+      method: 'POST',
+      url: '/api/projects/fixture-project/sessions',
+      cookies: owner.cookies,
+      headers: { origin },
+      payload: { text: 'Real identity integration', accountId: other.accountId, role: 'staff' },
+    });
+    expect(opened.statusCode).toBe(201);
+    const snapshot = opened.json<SessionSnapshot>();
+    expect(snapshot.session.accountId).toBe(owner.accountId);
+    await session.kernel.idle();
+    const sessionPath = `/api/sessions/${snapshot.session.id}`;
+    expect((await app.inject({ url: sessionPath, cookies: owner.cookies })).statusCode).toBe(200);
+    expect((await app.inject({ url: sessionPath, cookies: other.cookies })).statusCode).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `${sessionPath}/stop`,
+          cookies: other.cookies,
+          headers: { origin },
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          url: sessionPath,
+          headers: { authorization: `stub ${owner.accountId}:staff` },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      await session.access.canWatch(
+        { accountId: owner.accountId, role: 'user' },
+        snapshot.session.id,
+      ),
+    ).toBe(true);
+    expect(
+      await session.access.canWatch(
+        { accountId: other.accountId, role: 'user' },
+        snapshot.session.id,
+      ),
+    ).toBe(false);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/signout',
+          cookies: owner.cookies,
+          headers: { origin },
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect((await app.inject({ url: sessionPath, cookies: owner.cookies })).statusCode).toBe(401);
+    // The real session skeleton still trusts projectId; this is NOT a claim of
+    // project ownership validation or a implemented projects slice.
+  }, 30_000);
+
+  it('exposes safe admin summaries and live role changes through the public factory', async () => {
+    const admin = createIdentitySlice({
+      database: db,
+      origin,
+      sessionLifetimeMs: 60_000,
+      loginGate: new LoginGate(),
+    });
+    expect(await admin.listAccounts()).toEqual([]);
+    const app = await server();
+    const member = await registerUser(app, 'admin-contract@example.test');
+    const other = await registerUser(app, 'other-contract@example.test');
+    const summary = await admin.getAccount(member.accountId);
+    expect(summary).toMatchObject({ id: member.accountId, role: 'user', suspended: false });
+    expect(Object.keys(summary!).sort()).toEqual([
+      'createdAt',
+      'displayName',
+      'email',
+      'id',
+      'role',
+      'suspended',
+    ]);
+    expect(Number.isSafeInteger(summary?.createdAt)).toBe(true);
+    await admin.setRole(member.accountId, 'staff');
+    await admin.setRole(member.accountId, 'staff');
+    expect(
+      (await app.inject({ url: '/api/local/staff-check', cookies: member.cookies })).statusCode,
+    ).toBe(200);
+    expect((await admin.getAccount(other.accountId))?.role).toBe('user');
+    await admin.setRole(member.accountId, 'user');
+    expect(
+      (await app.inject({ url: '/api/local/staff-check', cookies: member.cookies })).statusCode,
+    ).toBe(403);
+    await admin.suspend(member.accountId, true);
+    await admin.setRole(member.accountId, 'staff');
+    expect(await admin.getAccount(member.accountId)).toMatchObject({
+      suspended: true,
+      role: 'staff',
+    });
+    expect(await accounts.getAccount(member.accountId)).toBeNull();
+    const listed = await admin.listAccounts();
+    expect(listed).toHaveLength(2);
+    expect(listed.find((row) => row.id === member.accountId)?.suspended).toBe(true);
+    expect(JSON.stringify(listed)).not.toMatch(/password|token|scrypt/i);
+    // A role change never unsuspends an account or restores revoked sessions.
+    await admin.suspend(member.accountId, false);
+    expect((await app.inject({ url: '/api/me', cookies: member.cookies })).statusCode).toBe(401);
+    const missing = '00000000-0000-4000-8000-000000000000';
+    expect(await admin.getAccount(missing)).toBeNull();
+    await expect(admin.setRole(missing, 'staff')).rejects.toMatchObject({
+      code: 'account_not_found',
+    });
+    await expect(admin.suspend(missing, true)).rejects.toMatchObject({ code: 'account_not_found' });
+  }, 30_000);
+
+  it('revokes every suspended account session permanently without affecting another account', async () => {
+    const user = await signup('suspended@example.test');
+    const other = await signup('other@example.test');
+    const service = new AuthSessions(sessions, { lifetimeMs: 60_000 });
+    const principal = { accountId: user.id, role: 'user' as const };
+    const first = await service.issue(principal);
+    const second = await service.issue(principal);
+    const unrelated = await service.issue({ accountId: other.id, role: 'user' });
+    await accounts.suspend(user.id, true);
+    await accounts.suspend(user.id, true);
+    expect(await db.query('select id from auth_sessions where account_id = $1', [user.id])).toEqual(
+      [],
+    );
+    await accounts.suspend(user.id, false);
+    expect(await service.verify(first.token)).toBeNull();
+    expect(await service.verify(second.token)).toBeNull();
+    expect(await service.verify(unrelated.token)).not.toBeNull();
+  });
+
+  it('rolls back suspension and keeps sessions if revocation fails', async () => {
+    const user = await signup();
+    const service = new AuthSessions(sessions, { lifetimeMs: 60_000 });
+    const issued = await service.issue({ accountId: user.id, role: 'user' });
+    // Inject failure at DELETE while retaining the real engine transaction.
+    const failing: IdentityDatabase = {
+      ...db,
+      withTransaction: (work) =>
+        db.withTransaction((sql) =>
+          work({
+            query: <Row extends object>(
+              text: string,
+              values: readonly unknown[],
+            ): Promise<Row[]> => {
+              if (text.startsWith('delete from auth_sessions'))
+                throw new Error('Injected deletion failure');
+              return sql.query<Row>(text, values);
+            },
+          }),
+        ),
+    };
+    await expect(new PostgresAccountStore(failing).suspend(user.id, true)).rejects.toThrow(
+      'Injected deletion failure',
+    );
+    expect(await service.verify(issued.token)).not.toBeNull();
+    expect((await accounts.getPasswordAccount(user.id))?.suspended).toBe(false);
+  });
+
+  it('keeps two accounts isolated and revokes every staff session on signout-all', async () => {
+    const app = await server();
+    const member = await registerUser(app, 'isolated@example.test');
+    const staff = await registerUser(app, 'revoke@example.test');
+    await db.query("update accounts set role = 'staff' where id = $1", [staff.accountId]);
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/password',
+      headers: { origin },
+      payload: { email: 'revoke@example.test', password },
+    });
+    expect(login.statusCode).toBe(200);
+    const second = {
+      [AUTH_COOKIE]: login.cookies.find((cookie) => cookie.name === AUTH_COOKIE)!.value,
+    };
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: '/api/me',
+          cookies: member.cookies,
+          headers: { origin },
+          payload: { displayName: 'Member only' },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await accounts.getAccount(member.accountId))?.displayName).toBe('Member only');
+    expect((await accounts.getAccount(staff.accountId))?.displayName).toBe('Role test');
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/signout-all',
+          cookies: staff.cookies,
+          headers: { origin },
+        })
+      ).statusCode,
+    ).toBe(204);
+    for (const cookies of [staff.cookies, second]) {
+      expect((await app.inject({ url: '/api/local/staff-check', cookies })).statusCode).toBe(401);
+    }
+    expect((await app.inject({ url: '/api/me', cookies: member.cookies })).statusCode).toBe(200);
+  }, 30_000);
 
   it('runs the migration and rejects exact and case-normalized duplicate emails', async () => {
     const created = await signup(' User@Example.edu ');

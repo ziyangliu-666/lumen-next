@@ -1,5 +1,8 @@
 # identity — LU YI
 
+**Continuation:** read [NEXT_SESSION.md](../../../../../docs/luyi/NEXT_SESSION.md)
+for unfinished work, the uncommitted checkpoint and next-session instructions.
+
 **Use case:** UC1 — sign up, sign in, manage the account
 **Covers:** identity, email — sign-in, accounts, OAuth, email verification
 
@@ -13,6 +16,107 @@ a fifth must not change the session code.
 hypothesis from the proposal, not the conclusion. You compare the candidates,
 pick one, and write down why.
 
+## Local login with PGlite
+
+See [the local setup guide](../../../../../docs/luyi/LOCAL_AUTH.md). The standalone
+`localPglite.ts` entry point serves real signup/login with disk persistence on
+http://localhost:4000. It is not exported by this slice, not imported by main.ts,
+and refuses production mode. Deployment still requires core's PostgreSQL wiring.
+
+## Email verification and password recovery
+
+MailSender/IdentityMail and resendMailSender are exported for composition-root
+injection. With mailSender configured, identity registers verification status,
+request/confirm email, forgot-password and reset-password routes. One-use codes
+are hashed, purpose/account/email-bound and expire in 15 minutes. Reset revokes
+all target login sessions and requires a fresh login. Candidate migration 004
+must be applied before enabling mail. Local development defaults to a private
+disk outbox; real delivery explicitly opts into a configured mail provider.
+RecoveryPanel is accessible inside signin. See
+[mail setup and policy limits](../../../../../docs/luyi/MAIL_SETUP.md). Verification
+is not yet an access requirement; production delivery/abuse policies need review.
+
+## OAuth and account self-service increment
+
+GitHub and Google adapters/strategies and HTTP callbacks are implemented.
+`createIdentitySlice` accepts optional `oauthProviders`; the public index exports
+`githubProvider`, `googleProvider`, their client ports and OAuth strategy/types.
+Providers are unavailable until configured; GET /api/auth/providers advertises
+availability without secrets. Candidate migration 003_identity_oauth.sql must
+be applied before enabling either provider. See
+[OAuth setup and limitations](../../../../../docs/luyi/OAUTH_SETUP.md).
+
+OAuth uses one-use state/browser binding, Google S256 PKCE, verified provider
+email and no automatic email linking. Arctic is locally isolated because its
+latest release is deprecated; production library approval/replacement is pending.
+Real GitHub and Google local acceptance passed (see NEXT_SESSION.md). GitHub PKCE is not supplied by that
+client version. Tokens never appear in account responses.
+
+DELETE /api/me is implemented for password accounts with current-password proof.
+Project/ledger references block deletion (409); credentials/sessions/account are
+otherwise deleted atomically. No cross-slice cascade or OAuth-only deletion is
+implemented. AccountPanel lives inside the signin page folder and is accessible
+from its "Manage signed-in account" button, pending reviewed Settings integration.
+
+## Core authentication public interface
+
+The public index exports `IdentityAuthentication` (principalResolver and
+registerRoutes), implemented by `createIdentitySlice`. `postgresDatabase(pool)`
+adapts core's supplied pg pool with transaction/rollback/release handling; it does
+not own a pool or migration runner and still needs real PostgreSQL acceptance.
+Any transaction query error makes the adapter rollback-only, even if the callback
+catches it; savepoint-based error recovery is not part of this port. Core can depend on this
+narrow interface without receiving the admin methods. Projects/steering consume
+core's `requireUser(request).accountId` after resolver injection; they do not need
+separate identity endpoints. GET /api/me remains the shell's account endpoint.
+
+The optional PostgreSQL engine suite now composes identity's public index with
+the actual session public index: real signup cookies, /api/me, session creation,
+owner checks, forged client identity rejection and signout are exercised. This
+does not implement project ownership validation or change production main.ts.
+
+## Steering authentication handoff
+
+See [the steering handoff](../../../../../docs/luyi/STEERING_HANDOFF.md) for
+LI ZHUOYANG. `steeringHandoff.test.ts` exercises real password/cookie/HTTP/WS
+identity against explicitly test-only resource handlers. It does not implement
+steering. It also characterizes the open-socket revocation gap and unsupported
+steer.cancel command so they remain visible for core/steering review.
+
+## Admin account public interface
+
+`createIdentitySlice(...)` returns an `IdentitySlice` implementing `AdminAccounts`:
+`listAccounts()`, `getAccount(id)`, `setRole(id, role)` and `suspend(id, on)`.
+The public index exports `AdminAccounts`, `AccountSummary`, `AdminAccountFailure`
+and its code type. No global database singleton or admin HTTP route is added.
+
+Admin reads include suspended accounts and only return id, email, displayName,
+role, suspended and createdAt (epoch milliseconds). The list is ordered by
+created_at then id; a missing account read returns null. Self-service reads are
+unchanged and still exclude suspended accounts. Role changes take effect on
+subsequent authenticated requests, without unsuspending accounts.
+
+Billing must authorize staff and validate HTTP inputs before calling these
+trusted methods. Mutation errors are typed: account_not_found, invalid_role and
+invalid_suspension; infrastructure failures propagate. See
+[the billing handoff](../../../../../docs/luyi/ADMIN_HANDOFF.md) for integration,
+error mapping and outstanding release policies.
+
+## Suspension policy
+
+`createIdentitySlice(...).suspend(accountId, on)` is a trusted in-process admin
+operation. Billing must authorize its caller with `requireStaff`; no admin HTTP
+route is added here. A missing account rejects with AdminAccountFailure. Suspending updates
+the account and deletes all its login sessions in one transaction. Unsuspending
+does not restore sessions: the user must sign in again. Repeated suspension is
+safe. Failure to delete sessions rolls back the suspension too.
+
+Session insertion now requires `IdentityDatabase` (not just `IdentitySql`) and
+locks the active account before checking any password proof and inserting. Suspension and issuance share that
+lock order. Other slices must use this operation, never update `suspended`
+directly. Already-running requests/open sockets are not forcibly disconnected.
+Multi-connection locking acceptance still requires real PostgreSQL.
+
 ## Implementation status
 
 The first building block is `authFlow.ts`, tested by `authFlow.test.ts`.
@@ -20,6 +124,15 @@ The first building block is `authFlow.ts`, tested by `authFlow.test.ts`.
 selection, verification and the shared `onAuthenticated` completion hook.
 Unknown kinds and rejected credentials raise `AuthFailure`; unexpected failures
 propagate without issuing a session or trying a different provider.
+
+`VerifiedPrincipal` is identity-internal proof metadata, not a response DTO.
+PasswordStrategy carries `expectedPasswordHash` through the completion hook;
+AuthSessions passes it to NewAuthSession for the store to compare under the
+account/credential locks before inserting. This closes the reset-between-password-
+verification-and-issuance window without holding locks during scrypt. Adapters must
+honor the optional proof check atomically. AuthSessions explicitly projects only
+accountId/role into the issued principal; hashes never belong in HTTP responses,
+cookies, logs or auth_sessions rows. OAuth/signup do not use a password proof.
 
 The public index exports `AbstractAuthFlow`, `AuthStrategy`, `AuthFailure`,
 `AuthFailureCode`, `PasswordStrategy`, `PasswordAccount` and `PasswordAccountStore`.
@@ -110,7 +223,11 @@ The migration at `migrations/002_identity_auth.sql` is a review candidate: core
 must assign its final number and apply it transactionally with the shared runner.
 It is not automatically executed and has no destructive down migration.
 
-Account deletion, OAuth, mail and production wiring are not implemented yet.
+OAuth and restricted password-account deletion are now implemented as described
+above. Mail/verification/reset code and local outbox are also implemented. Real
+GitHub/Google local acceptance and Resend verification-mail acceptance passed.
+Real external password reset, OAuth-only reauthentication, deletion of accounts
+with retained resources and production wiring remain unfinished.
 Immediate socket revocation still needs design and review. The development auth
 stub in main.ts is unchanged. Only tests use in-memory adapters/engines. The
 sign-in page calls the real endpoint paths, but the application cannot authenticate

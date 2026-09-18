@@ -1,6 +1,9 @@
-import type { FastifyPluginAsync } from 'fastify';
-import type { PrincipalResolver } from '../../core/http/authGuard.js';
+import type { IdentityAuthentication } from './identityAuthentication.js';
 import { AccountService } from './accountService.js';
+import { AccountDeletion } from './accountDeletion.js';
+import { MailActions } from './mailActions.js';
+import type { MailSender } from './mail.js';
+import type { AdminAccounts } from './adminAccounts.js';
 import { AuthSessions } from './authSessions.js';
 import type { IdentityDatabase } from './identityDatabase.js';
 import type { LoginGate } from './loginGate.js';
@@ -9,6 +12,7 @@ import { PostgresAccountStore, PostgresAuthSessionStore } from './postgresStores
 import { identityRoutes } from './routes.js';
 import { SessionAuthFlow } from './sessionAuthFlow.js';
 import { SessionPrincipalResolver, SessionStrategy } from './sessionStrategy.js';
+import { OAuthAccounts, OAuthAttempts, OAuthStrategy, type OAuthProvider } from './oauth.js';
 
 export interface IdentitySliceOptions {
   readonly database: IdentityDatabase;
@@ -16,12 +20,12 @@ export interface IdentitySliceOptions {
   readonly sessionLifetimeMs: number;
   readonly loginGate: LoginGate;
   readonly secureCookies?: boolean;
+  readonly oauthProviders?: readonly OAuthProvider[];
+  readonly mailSender?: MailSender;
+  readonly mailDeliveryFailed?: () => void;
 }
 
-export interface IdentitySlice {
-  readonly principalResolver: PrincipalResolver;
-  readonly registerRoutes: FastifyPluginAsync;
-}
+export type IdentitySlice = IdentityAuthentication & AdminAccounts;
 
 /**
  * main.ts supplies core's database after migrations. No private pool, migration
@@ -33,16 +37,49 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
     lifetimeMs: options.sessionLifetimeMs,
   });
   const sessionStrategy = new SessionStrategy(sessions);
-  const flow = new SessionAuthFlow([new PasswordStrategy(accounts), sessionStrategy], sessions);
+  const providers = options.oauthProviders ?? [];
+  if (
+    new Set(providers.map((provider) => provider.kind)).size !== providers.length ||
+    providers.some((provider) => provider.kind !== 'github' && provider.kind !== 'google')
+  ) {
+    throw new Error('Invalid OAuth provider configuration');
+  }
+  const oauthAccounts = new OAuthAccounts(options.database);
+  const flow = new SessionAuthFlow(
+    [
+      new PasswordStrategy(accounts),
+      sessionStrategy,
+      ...providers.map((provider) => new OAuthStrategy(provider, oauthAccounts)),
+    ],
+    sessions,
+  );
   return {
     principalResolver: new SessionPrincipalResolver(sessionStrategy),
+    listAccounts: () => accounts.listAccounts(),
+    getAccount: (id) => accounts.getAdminAccount(id),
+    setRole: (id, role) => accounts.setRole(id, role),
+    suspend: (accountId, on) => accounts.suspend(accountId, on),
     registerRoutes: identityRoutes({
       flow,
       sessions,
       accounts,
       management: new AccountService(accounts),
+      deletion: new AccountDeletion(options.database),
+      ...(options.mailSender
+        ? {
+            mail: new MailActions(
+              options.database,
+              options.mailSender,
+              options.origin,
+              options.mailDeliveryFailed,
+            ),
+          }
+        : {}),
       origin: options.origin,
       loginGate: options.loginGate,
+      ...(providers.length
+        ? { oauth: { providers, attempts: new OAuthAttempts(options.database) } }
+        : {}),
       ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }),
     }),
   };

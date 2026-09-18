@@ -295,18 +295,183 @@ describe('identity: PostgreSQL account query contract', () => {
   });
 });
 
-describe('identity: PostgreSQL session query contract', () => {
-  it('inserts only the hashed token with explicit timestamps', async () => {
+describe('identity: admin account query contract', () => {
+  const summary = { ...account, suspended: true };
+
+  it('lists public summaries including suspended accounts in stable order', async () => {
+    const db = new RecordingDatabase();
+    db.results.push([{ ...summary, passwordHash: 'private', tokenHash: 'private' }], []);
+    const store = new PostgresAccountStore(db);
+    expect(await store.listAccounts()).toEqual([summary]);
+    expect(await store.listAccounts()).toEqual([]);
+    expect(db.calls[0]?.sql).toContain('order by created_at, id');
+    expect(db.calls[0]?.sql).not.toContain('not suspended');
+    expect(db.calls[0]?.values).toEqual([]);
+  });
+
+  it('reads suspended accounts for admin without changing self-service visibility', async () => {
+    const db = new RecordingDatabase();
+    db.results.push([{ ...summary, passwordHash: 'private' }], [], []);
+    const store = new PostgresAccountStore(db);
+    expect(await store.getAdminAccount(account.id)).toEqual(summary);
+    expect(await store.getAdminAccount('missing')).toBeNull();
+    expect(await store.getAccount(account.id)).toBeNull();
+    expect(db.calls[0]?.values).toEqual([account.id]);
+    expect(db.calls[0]?.sql).not.toContain('not suspended');
+    expect(db.calls[2]?.sql).toContain('not suspended');
+  });
+
+  it.each(['user', 'staff'] as const)(
+    'sets only the role to %s using bound parameters',
+    async (role) => {
+      const db = new RecordingDatabase();
+      db.results.push([{ id: account.id }]);
+      await new PostgresAccountStore(db).setRole(account.id, role);
+      expect(db.calls[0]?.sql).toBe('update accounts set role = $2 where id = $1 returning id');
+      expect(db.calls[0]?.values).toEqual([account.id, role]);
+    },
+  );
+
+  it('rejects missing accounts with a stable domain error', async () => {
     const db = new RecordingDatabase();
     db.results.push([]);
+    await expect(new PostgresAccountStore(db).setRole(account.id, 'staff')).rejects.toMatchObject({
+      code: 'account_not_found',
+    });
+  });
+
+  it('rejects invalid runtime roles before SQL', async () => {
+    const db = new RecordingDatabase();
+    await expect(
+      new PostgresAccountStore(db).setRole(account.id, 'owner' as 'staff'),
+    ).rejects.toMatchObject({ code: 'invalid_role' });
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('propagates unexpected storage failures without reporting success', async () => {
+    const db = new RecordingDatabase();
+    const failure = new Error('database unavailable');
+    db.results.push(failure, failure, failure);
+    const store = new PostgresAccountStore(db);
+    await expect(store.listAccounts()).rejects.toBe(failure);
+    await expect(store.getAdminAccount(account.id)).rejects.toBe(failure);
+    await expect(store.setRole(account.id, 'staff')).rejects.toBe(failure);
+  });
+});
+
+describe('identity: atomic suspension', () => {
+  it('rejects invalid runtime suspension values before starting a transaction', async () => {
+    const db = new RecordingDatabase();
+    await expect(
+      new PostgresAccountStore(db).suspend(account.id, 'false' as unknown as boolean),
+    ).rejects.toMatchObject({ code: 'invalid_suspension' });
+    expect(db.calls).toHaveLength(0);
+    expect(db.transactions).toHaveLength(0);
+  });
+  it('suspends and revokes all sessions on the same transaction connection', async () => {
+    const db = new RecordingDatabase();
+    db.results.push([account], []);
+    await new PostgresAccountStore(db).suspend(account.id, true);
+    expect(db.calls[0]?.values).toEqual([account.id, true]);
+    expect(db.calls[1]?.sql).toBe('delete from auth_sessions where account_id = $1');
+    expect(db.calls[1]?.values).toEqual([account.id]);
+    expect(db.calls.every((call) => call.transaction)).toBe(true);
+    expect(db.transactions).toEqual(['begin', 'commit']);
+  });
+
+  it('unsuspends without issuing or restoring any session', async () => {
+    const db = new RecordingDatabase();
+    db.results.push([account]);
+    await new PostgresAccountStore(db).suspend(account.id, false);
+    expect(db.calls).toHaveLength(1);
+    expect(db.calls[0]?.values).toEqual([account.id, false]);
+  });
+
+  it('rolls back when session deletion fails', async () => {
+    const db = new RecordingDatabase();
+    const failure = new Error('delete failed');
+    db.results.push([account], failure);
+    await expect(new PostgresAccountStore(db).suspend(account.id, true)).rejects.toBe(failure);
+    expect(db.transactions).toEqual(['begin', 'rollback']);
+  });
+
+  it('rejects a missing account without deleting sessions', async () => {
+    const db = new RecordingDatabase();
+    db.results.push([]);
+    await expect(new PostgresAccountStore(db).suspend(account.id, true)).rejects.toThrow(
+      'Account not found',
+    );
+    expect(db.calls).toHaveLength(1);
+    expect(db.transactions).toEqual(['begin', 'rollback']);
+  });
+});
+
+describe('identity: PostgreSQL session query contract', () => {
+  it('rejects session issuance after the account becomes suspended or disappears', async () => {
+    const db = new RecordingDatabase();
+    db.results.push([]);
+    await expect(
+      new PostgresAuthSessionStore(db).insert({
+        accountId: account.id,
+        tokenHash: 'a'.repeat(64),
+        createdAt: 1000,
+        expiresAt: 2000,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    expect(db.calls).toHaveLength(1);
+    expect(db.transactions).toEqual(['begin', 'rollback']);
+  });
+  it.each([{ rows: [] }, { rows: [{ passwordHash: 'new-version' }] }])(
+    'rejects stale or missing password proof before session insertion',
+    async ({ rows }) => {
+      const db = new RecordingDatabase();
+      db.results.push([account], rows);
+      await expect(
+        new PostgresAuthSessionStore(db).insert({
+          accountId: account.id,
+          tokenHash: 'a'.repeat(64),
+          createdAt: 1000,
+          expiresAt: 2000,
+          expectedPasswordHash: 'old-version',
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_credentials' });
+      expect(db.calls).toHaveLength(2);
+      expect(db.calls[0]?.sql).toContain('not suspended for update');
+      expect(db.calls[1]?.sql).toContain('for update');
+      expect(db.transactions).toEqual(['begin', 'rollback']);
+    },
+  );
+
+  it('checks the verified password version without storing proof metadata in a session', async () => {
+    const db = new RecordingDatabase();
+    db.results.push([account], [{ passwordHash: 'verified-version' }], []);
+    await new PostgresAuthSessionStore(db).insert({
+      accountId: account.id,
+      tokenHash: 'a'.repeat(64),
+      createdAt: 1000,
+      expiresAt: 2000,
+      expectedPasswordHash: 'verified-version',
+    });
+    expect(db.calls.every((call) => call.transaction)).toBe(true);
+    expect(db.calls[2]?.values).toEqual([account.id, 'a'.repeat(64), 1000, 2000]);
+    expect(JSON.stringify(db.calls[2])).not.toContain('verified-version');
+    expect(db.transactions).toEqual(['begin', 'commit']);
+  });
+
+  it('inserts only the hashed token with explicit timestamps', async () => {
+    const db = new RecordingDatabase();
+    db.results.push([account], []);
     await new PostgresAuthSessionStore(db).insert({
       accountId: account.id,
       tokenHash: 'a'.repeat(64),
       createdAt: 1000,
       expiresAt: 2000,
     });
-    expect(db.calls[0]?.values).toEqual([account.id, 'a'.repeat(64), 1000, 2000]);
-    expect(db.calls[0]?.sql).toContain('token_hash');
+    expect(db.calls[0]?.sql).toContain('not suspended for update');
+    expect(db.calls[1]?.values).toEqual([account.id, 'a'.repeat(64), 1000, 2000]);
+    expect(db.calls[1]?.sql).toContain('token_hash');
+    expect(db.calls.every((call) => call.transaction)).toBe(true);
+    expect(db.transactions).toEqual(['begin', 'commit']);
   });
 
   it('joins live accounts rather than storing role or suspension in a session', async () => {

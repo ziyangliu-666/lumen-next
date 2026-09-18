@@ -45,7 +45,7 @@ function nameOf(value: unknown): string {
   return value.trim();
 }
 
-function newPasswordOf(value: unknown): string {
+export function newPasswordOf(value: unknown): string {
   if (typeof value !== 'string' || !isBoundedPassword(value) || [...value].length < 15) {
     throw new AccountFailure(
       'invalid_body',

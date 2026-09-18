@@ -1,5 +1,5 @@
 import type { Principal } from '../../core/http/authGuard.js';
-import type { AuthStrategy } from './authFlow.js';
+import type { AuthStrategy, VerifiedPrincipal } from './authFlow.js';
 import { DUMMY_PASSWORD_HASH, isBoundedPassword, verifyPassword } from './passwordHash.js';
 
 export interface PasswordAccount {
@@ -24,7 +24,7 @@ export class PasswordStrategy implements AuthStrategy {
     private readonly verifyHash: PasswordVerifier = verifyPassword,
   ) {}
 
-  async verify(payload: unknown): Promise<Principal | null> {
+  async verify(payload: unknown): Promise<VerifiedPrincipal | null> {
     if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return null;
     if (!('email' in payload) || !('password' in payload)) return null;
     if (typeof payload.email !== 'string' || typeof payload.password !== 'string') return null;
@@ -41,6 +41,6 @@ export class PasswordStrategy implements AuthStrategy {
       account?.passwordHash ?? DUMMY_PASSWORD_HASH,
     );
     if (!account || !account.passwordHash || account.suspended || !matches) return null;
-    return account.principal;
+    return { ...account.principal, expectedPasswordHash: account.passwordHash };
   }
 }

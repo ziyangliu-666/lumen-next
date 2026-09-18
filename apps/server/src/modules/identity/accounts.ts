@@ -40,7 +40,11 @@ export interface AccountStore extends AccountReader {
   replacePassword(accountId: string, expectedHash: string, newHash: string): Promise<boolean>;
 }
 
-export type AccountFailureCode = 'invalid_body' | 'email_taken' | 'account_changed';
+export type AccountFailureCode =
+  | 'invalid_body'
+  | 'email_taken'
+  | 'account_changed'
+  | 'account_in_use';
 
 export class AccountFailure extends Error {
   constructor(

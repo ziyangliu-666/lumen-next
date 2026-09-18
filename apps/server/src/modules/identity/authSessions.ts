@@ -1,9 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Principal } from '../../core/http/authGuard.js';
+import type { VerifiedPrincipal } from './authFlow.js';
 
 export interface NewAuthSession {
   readonly accountId: string;
   readonly tokenHash: string;
+  /** Recheck under the account lock; this proof must not be stored in auth_sessions. */
+  readonly expectedPasswordHash?: string;
   readonly createdAt: number;
   readonly expiresAt: number;
 }
@@ -15,7 +18,7 @@ export interface StoredAuthSession {
   readonly expiresAt: number;
 }
 
-/** Durable adapters must enforce unique token hashes and join live accounts. */
+/** Durable adapters must enforce token uniqueness, join live accounts and atomically check proof versions. */
 export interface AuthSessionStore {
   insert(session: NewAuthSession): Promise<void>;
   /** Null for unknown, deleted/revoked sessions or deleted accounts. */
@@ -61,13 +64,18 @@ export class AuthSessions {
     this.now = options.now ?? Date.now;
   }
 
-  async issue(principal: Principal): Promise<IssuedAuthSession> {
+  async issue(verified: VerifiedPrincipal): Promise<IssuedAuthSession> {
+    // Explicit projection keeps strategy proof metadata out of JSON/cookies/logs.
+    const principal: Principal = { accountId: verified.accountId, role: verified.role };
     const createdAt = timestamp(this.now());
     const expiresAt = timestamp(createdAt + this.lifetimeMs);
     const token = randomBytes(32).toString('base64url');
     await this.store.insert({
       accountId: principal.accountId,
       tokenHash: createHash('sha256').update(token).digest('hex'),
+      ...(verified.expectedPasswordHash === undefined
+        ? {}
+        : { expectedPasswordHash: verified.expectedPasswordHash }),
       createdAt,
       expiresAt,
     });

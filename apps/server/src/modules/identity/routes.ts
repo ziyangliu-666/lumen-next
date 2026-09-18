@@ -8,6 +8,8 @@ import type { SessionAuthFlow } from './sessionAuthFlow.js';
 import { AUTH_COOKIE } from './sessionStrategy.js';
 import { AccountFailure, type AccountReader, type AccountView } from './accounts.js';
 import type { AccountService } from './accountService.js';
+import { registerOAuthRoutes, type OAuthRouteOptions } from './oauthRoutes.js';
+import type { MailActions } from './mailActions.js';
 
 export type { AccountReader, AccountView } from './accounts.js';
 
@@ -42,6 +44,9 @@ export interface IdentityRouteDeps {
   readonly origin: string;
   readonly secureCookies?: boolean;
   readonly loginGate: LoginGate;
+  readonly oauth?: OAuthRouteOptions;
+  readonly deletion?: { remove(accountId: string, input: unknown): Promise<void> };
+  readonly mail?: MailActions;
 }
 
 /** Register as a Fastify plugin so cache/origin hooks affect identity only. */
@@ -64,6 +69,7 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
     // Also covers failures from core's earlier principal-resolution hook.
     app.addHook('onSend', (_request, reply, payload, done) => {
       void reply.header('Cache-Control', 'no-store');
+      void reply.header('Referrer-Policy', 'no-referrer');
       done(null, payload);
     });
     app.addHook('onRequest', (request, reply, done) => {
@@ -78,6 +84,68 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
       }
       done();
     });
+
+    registerOAuthRoutes(app, deps.oauth, deps.flow, deps.loginGate, secure);
+    app.get('/api/auth/mail', () => ({ enabled: Boolean(deps.mail) }));
+    if (deps.mail) {
+      const mail = deps.mail;
+      const bodyFields = (input: unknown, fields: readonly string[]): Record<string, unknown> => {
+        if (
+          typeof input !== 'object' ||
+          input === null ||
+          Array.isArray(input) ||
+          Object.keys(input).some((field) => !fields.includes(field))
+        )
+          throw badRequest('Invalid request body');
+        return input as Record<string, unknown>;
+      };
+      app.get('/api/me/email-status', (request) => {
+        const principal = requireUser(request);
+        return accountAction(() => mail.status(principal.accountId));
+      });
+      app.post('/api/me/email/verification', async (request, reply) => {
+        const principal = requireUser(request);
+        await accountAction(() =>
+          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
+            mail.requestVerification(principal.accountId),
+          ),
+        );
+        return reply
+          .code(202)
+          .send({ message: 'If delivery is available, a verification code will be sent.' });
+      });
+      app.post('/api/me/email/verify', { bodyLimit: 8192 }, async (request, reply) => {
+        const principal = requireUser(request);
+        const body = bodyFields(request.body, ['code']);
+        await accountAction(() =>
+          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
+            mail.verifyEmail(principal.accountId, body['code']),
+          ),
+        );
+        return reply.code(204).send();
+      });
+      app.post('/api/auth/forgot-password', { bodyLimit: 8192 }, async (request, reply) => {
+        const body = bodyFields(request.body, ['email']);
+        await accountAction(() =>
+          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
+            mail.requestReset(body['email']),
+          ),
+        );
+        return reply
+          .code(202)
+          .send({ message: 'If the account is eligible, a password reset code will be sent.' });
+      });
+      app.post('/api/auth/reset-password', { bodyLimit: 8192 }, async (request, reply) => {
+        const body = bodyFields(request.body, ['code', 'newPassword']);
+        await accountAction(() =>
+          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
+            mail.resetPassword(body['code'], body['newPassword']),
+          ),
+        );
+        // Reset never logs the requester in; all target sessions were revoked.
+        return reply.code(204).send();
+      });
+    }
 
     app.post<{ Body: { email: string; password: string } }>(
       '/api/auth/password',
@@ -170,6 +238,20 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
       );
       return reply.code(204).send();
     });
+
+    if (deps.deletion) {
+      const deletion = deps.deletion;
+      app.delete('/api/me', { bodyLimit: 8192 }, async (request, reply) => {
+        const principal = requireUser(request);
+        await accountAction(() =>
+          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
+            deletion.remove(principal.accountId, request.body),
+          ),
+        );
+        void reply.clearCookie(AUTH_COOKIE, cookieOptions);
+        return reply.code(204).send();
+      });
+    }
 
     app.post('/api/auth/signout', async (request, reply) => {
       // Idempotent even for an absent/expired cookie; storage errors still fail.

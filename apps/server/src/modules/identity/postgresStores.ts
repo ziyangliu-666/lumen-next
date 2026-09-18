@@ -5,11 +5,24 @@ import {
   type ProfilePatch,
 } from './accounts.js';
 import type { AuthSessionStore, NewAuthSession, StoredAuthSession } from './authSessions.js';
+import { AuthFailure } from './authFlow.js';
+import { AdminAccountFailure, type AccountSummary } from './adminAccounts.js';
 import type { IdentityDatabase, IdentitySql } from './identityDatabase.js';
 import type { PasswordAccount, PasswordAccountStore } from './passwordStrategy.js';
 
 const publicColumns = `id, email, display_name as "displayName", role,
   floor(extract(epoch from created_at) * 1000)::double precision as "createdAt"`;
+function adminSummary(row: AccountSummary): AccountSummary {
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.displayName,
+    role: row.role,
+    suspended: row.suspended,
+    createdAt: row.createdAt,
+  };
+}
+
 const passwordColumns = `a.id as "accountId", a.role, a.suspended,
   c.password_hash as "passwordHash"`;
 const passwordJoin = `from accounts a left join credentials c
@@ -106,6 +119,46 @@ export class PostgresAccountStore implements AccountStore, PasswordAccountStore 
     );
   }
 
+  async listAccounts(): Promise<AccountSummary[]> {
+    const rows = await this.db.query<AccountSummary>(
+      `select ${publicColumns}, suspended from accounts order by created_at, id`,
+      [],
+    );
+    return rows.map(adminSummary);
+  }
+
+  async getAdminAccount(id: string): Promise<AccountSummary | null> {
+    const rows = await this.db.query<AccountSummary>(
+      `select ${publicColumns}, suspended from accounts where id = $1`,
+      [id],
+    );
+    return rows[0] ? adminSummary(rows[0]) : null;
+  }
+
+  async setRole(id: string, role: 'user' | 'staff'): Promise<void> {
+    if (role !== 'user' && role !== 'staff') throw new AdminAccountFailure('invalid_role');
+    // One atomic UPDATE acquires the account row lock and never changes suspension.
+    const rows = await this.db.query<{ id: string }>(
+      'update accounts set role = $2 where id = $1 returning id',
+      [id, role],
+    );
+    if (rows.length !== 1) throw new AdminAccountFailure('account_not_found');
+  }
+
+  /** Trusted in-process admin operation; the HTTP caller must requireStaff first. */
+  async suspend(accountId: string, on: boolean): Promise<void> {
+    if (typeof on !== 'boolean') throw new AdminAccountFailure('invalid_suspension');
+    return this.db.withTransaction(async (sql) => {
+      // UPDATE takes the same account lock as session issuance, even on retries.
+      const rows = await sql.query<{ id: string }>(
+        'update accounts set suspended = $2 where id = $1 returning id',
+        [accountId, on],
+      );
+      if (rows.length !== 1) throw new AdminAccountFailure('account_not_found');
+      if (on) await sql.query('delete from auth_sessions where account_id = $1', [accountId]);
+    });
+  }
+
   async getAccount(id: string): Promise<AccountView | null> {
     const rows = await this.db.query<AccountView>(
       `select ${publicColumns} from accounts where id = $1 and not suspended`,
@@ -182,15 +235,27 @@ interface SessionRow {
 }
 
 export class PostgresAuthSessionStore implements AuthSessionStore {
-  constructor(private readonly db: IdentitySql) {}
+  constructor(private readonly db: IdentityDatabase) {}
 
   async insert(session: NewAuthSession): Promise<void> {
-    await this.db.query(
-      `insert into auth_sessions (account_id, token_hash, created_at, expires_at)
-       values ($1, $2, to_timestamp($3::double precision / 1000),
-         to_timestamp($4::double precision / 1000))`,
-      [session.accountId, session.tokenHash, session.createdAt, session.expiresAt],
-    );
+    await this.db.withTransaction(async (sql) => {
+      // Serialize issuance against suspension and reset; password proofs can go stale.
+      if (!(await lockAccount(sql, session.accountId))) {
+        throw new AuthFailure('invalid_credentials');
+      }
+      if (
+        session.expectedPasswordHash !== undefined &&
+        !(await matchesProof(sql, session.accountId, session.expectedPasswordHash))
+      ) {
+        throw new AuthFailure('invalid_credentials');
+      }
+      await sql.query(
+        `insert into auth_sessions (account_id, token_hash, created_at, expires_at)
+         values ($1, $2, to_timestamp($3::double precision / 1000),
+           to_timestamp($4::double precision / 1000))`,
+        [session.accountId, session.tokenHash, session.createdAt, session.expiresAt],
+      );
+    });
   }
 
   async findByTokenHash(hash: string): Promise<StoredAuthSession | null> {

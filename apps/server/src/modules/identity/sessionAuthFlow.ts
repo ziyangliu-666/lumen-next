@@ -1,5 +1,4 @@
-import type { Principal } from '../../core/http/authGuard.js';
-import { AbstractAuthFlow, type AuthStrategy } from './authFlow.js';
+import { AbstractAuthFlow, type AuthStrategy, type VerifiedPrincipal } from './authFlow.js';
 import type { AuthSessions, IssuedAuthSession } from './authSessions.js';
 
 /** Explicit sign-in completion, not per-request cookie resolution. */
@@ -11,7 +10,7 @@ export class SessionAuthFlow extends AbstractAuthFlow<IssuedAuthSession> {
     super(strategies);
   }
 
-  protected onAuthenticated(principal: Principal): Promise<IssuedAuthSession> {
+  protected onAuthenticated(principal: VerifiedPrincipal): Promise<IssuedAuthSession> {
     return this.sessions.issue(principal);
   }
 }

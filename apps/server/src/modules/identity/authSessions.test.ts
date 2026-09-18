@@ -48,6 +48,16 @@ describe('identity: login sessions', () => {
     expect(JSON.stringify(store.insert.mock.calls)).not.toContain(first.token);
   });
 
+  it('passes proof only to the store and projects it out of the issued principal', async () => {
+    const { sessions, store } = setup();
+    const expectedPasswordHash = 'internal-verified-password-version';
+    const issued = await sessions.issue({ ...principal, expectedPasswordHash });
+    expect(store.insert).toHaveBeenCalledWith(expect.objectContaining({ expectedPasswordHash }));
+    expect(issued.principal).toEqual(principal);
+    expect(JSON.stringify(issued)).not.toContain(expectedPasswordHash);
+    expect(JSON.stringify(issued)).not.toContain('expectedPasswordHash');
+  });
+
   it('looks up the hash and returns the current stored principal without issuing', async () => {
     const { sessions, store } = setup();
     await expect(sessions.verify(token)).resolves.toEqual(principal);

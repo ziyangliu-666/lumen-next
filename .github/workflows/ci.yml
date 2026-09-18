@@ -12,6 +12,24 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    # The database tests skip without DATABASE_URL. Here they must not: this
+    # service is what makes the migrations and the SQL part of the gate.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: lumen
+          POSTGRES_PASSWORD: lumen
+          POSTGRES_DB: lumen
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lumen"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://lumen:lumen@localhost:5432/lumen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

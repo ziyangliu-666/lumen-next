@@ -17,6 +17,8 @@ export default tseslint.config(
       '**/coverage/**',
       '**/*.config.*',
       '.claude/**',
+      // Plain Node build scripts, outside every tsconfig.
+      'apps/server/scripts/**',
       // Vendored shadcn/ui sources. They are updated by `npx shadcn add`, not by
       // hand, so our house rules would only fight the generator.
       'apps/web/src/ui/**',

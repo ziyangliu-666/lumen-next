@@ -5,6 +5,7 @@
 // This file is the composition root, and the only place that knows all five
 // slices. It builds what core provides, lets each slice register its routes and
 // claim its commands, then listens.
+import { openDatabase, type Db } from './core/db/db.js';
 import { headerStub } from './core/http/authGuard.js';
 import { buildServer, defaultWebRoot } from './core/http/server.js';
 import { Broker } from './core/protocol/broker.js';
@@ -23,7 +24,19 @@ function port(): number {
   return parsed;
 }
 
+/**
+ * With DATABASE_URL the process connects and migrates before it serves. Without
+ * it the slices keep their records in memory, which is enough to develop a page
+ * against and nothing more: a restart forgets everything.
+ */
+async function database(): Promise<Db | null> {
+  const url = process.env['DATABASE_URL'];
+  if (url === undefined || url === '') return null;
+  return openDatabase(url);
+}
+
 async function bootstrap(): Promise<void> {
+  const db = await database();
   // Sprint 1 trusts `Authorization: stub <id>:<role>`. Identity swaps the real
   // resolver in here, and nothing else in the server changes.
   const resolver = headerStub;
@@ -51,6 +64,7 @@ async function bootstrap(): Promise<void> {
 
   await app.listen({ port: port(), host: '0.0.0.0' });
   if (webRoot) app.log.info(`serving the built web app from ${webRoot}`);
+  app.log.info(db ? 'database connected, migrations applied' : 'no DATABASE_URL: in-memory mode');
 
   // Drain in-flight work before exiting, so a rolling deploy does not cut a
   // browser off mid-event. Fastify's close() also runs the websocket plugin's
@@ -58,10 +72,13 @@ async function bootstrap(): Promise<void> {
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {
       app.log.info(`${signal} received, closing`);
-      app.close().then(
-        () => process.exit(0),
-        () => process.exit(1),
-      );
+      app
+        .close()
+        .then(() => db?.close())
+        .then(
+          () => process.exit(0),
+          () => process.exit(1),
+        );
     });
   }
 }

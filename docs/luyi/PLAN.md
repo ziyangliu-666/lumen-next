@@ -1,5 +1,9 @@
 # UC1 Identity delivery plan
 
+For the current ordered unfinished-task checklist and resume instructions, read
+[NEXT_SESSION.md](NEXT_SESSION.md). Historical increment notes below are retained
+as evidence and must not override that checkpoint or the current code.
+
 ## Goal and definition of done
 
 Deliver real signup/signin, durable login sessions, account self-service, OAuth
@@ -13,7 +17,18 @@ under modules/identity. Sign-in UI stays under
 pages/signin. Shared core/contracts, main.ts, shared UI and billing's settings
 folder are not silently edited.
 
-## Latest increment: PostgreSQL stores and composition
+## Current increment: OAuth and account self-service
+
+GitHub/Google strategies, adapters, callbacks and availability-driven UI are now
+implemented. AccountPanel and restricted password-account deletion are included.
+See OAUTH_SETUP.md for code/setup and explicit limitations. Real provider login
+needs credentials; the architecture's Arctic dependency is now deprecated and
+requires review/replacement before production. Mail verification/reset codes,
+RecoveryPanel, local outbox and an optional Resend adapter are now implemented;
+real Resend verification delivery passed; real external password reset and production
+abuse/delivery guarantees remain pending (MAIL_SETUP.md). Earlier checkpoints below are historical evidence, not current scope.
+
+## Earlier increment: PostgreSQL stores and composition
 
 This branch includes the persistence increment for personal-repository handoff:
 PostgresAccountStore, PostgresAuthSessionStore, createIdentitySlice and a candidate
@@ -38,11 +53,11 @@ PostgreSQL acceptance, main.ts wiring, review and deployment remain pending.
 | 6 | Sign-in/signup page | Implemented and browser-checked with mocked API; real backend integration pending |
 | 7 | Durable AccountRepo and numbered migrations | SQL stores and candidate migration implemented; core must review port, assign migration number and provide pool/runner |
 | 8 | Production composition-root wiring | Core owner review; inject real resolver, remove stub dependency, register plugin, configure trusted origin/cookies/lifetime |
-| 9 | Settings Account UI | Coordinate Account component ownership with HE RONG; no cross-page import or unreviewed edit to billing's folder |
-| 10 | GitHub/Google strategies and OAuth routes | arctic dependency/core approval; provider credentials, registered callbacks, state/PKCE lifecycle, verified identity and safe linking policy |
-| 11 | Account deletion | Agree dependent projects/sessions/ledger retention, recent reauthentication and stop/delete transaction semantics; never blindly cascade financial data |
-| 12 | Verification/reset email and token lifecycle | Choose approved transport, templates, expiry, single-use hashed tokens, generic forgot response, rate limits; scope approval notifications with billing |
-| 13 | Billing account public index | list/get/setRole/suspend contracts and errors agreed with HE RONG; current roles/suspension enforced on sessions |
+| 9 | Settings Account UI | AccountPanel implemented and reachable within signin; canonical Settings composition still needs HE RONG/shell review |
+| 10 | GitHub/Google strategies and OAuth routes | Implemented/tested with simulated exchange; live credentials/callbacks and deprecated Arctic dependency review remain pending |
+| 11 | Account deletion | Password-proven empty-account deletion implemented; retained-resource/OAuth-only deletion blocked pending retention/provider reauthentication decisions |
+| 12 | Verification/reset email and token lifecycle | Implemented/tested: hashed expiring single-use codes, generic forgot response, session revocation on reset, local outbox and injectable mail transport; live delivery/provider approval and production policy remain pending |
+| 13 | Billing account public index | list/get/setRole/suspend implemented through the factory, typed summaries/errors exported and PGlite-tested; billing agreement, HTTP/UI wiring and review pending (ADMIN_HANDOFF.md) |
 | 14 | Cross-slice integration | Steering/project ownership checks; HTTP/WS identity alignment; role routing is not server authorization; decide open-socket revocation |
 | 15 | Hardening and release evidence | Production proxy/rate policy, password policy approval, security/DAST, browser accessibility/responsive checks, docs aligned, small commits/PRs |
 

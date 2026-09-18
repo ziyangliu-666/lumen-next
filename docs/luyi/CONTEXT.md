@@ -1,10 +1,31 @@
 # LU YI working context
 
+## Resume checkpoint: 2026-09-18
+
+**Read [NEXT_SESSION.md](NEXT_SESSION.md) first when continuing implementation.**
+The user requested a saved unfinished-task list and implementation next session.
+That checklist supersedes older status statements below; check actual files too.
+
+- Working branch: identity/auth-flow. Local commits: 46fa9c2 (server/tests) and
+  e06a654 (signin account/recovery UI), followed by review/acceptance documentation.
+  Nothing from this review was pushed. Preserve later working-tree changes.
+- Full verify with PGlite/Arctic tools enabled: 321 tests pass, 88.15% lines; build
+  passes. Default full verify: 282 pass, 39 skip, 71.61% lines. See PR_READINESS.md
+  for reproduced/fixed regressions and exact evidence boundaries.
+- Real GitHub/Google success, repeat, logout, cancellation, staff redirect and
+  same-email collision acceptance passed on 2026-09-18. Real Resend verification
+  delivery and user submission also passed; the lead confirmed verified=true.
+  Approved maintained OAuth dependency, real external password reset, shared
+  Settings/core/WS integration, real PostgreSQL acceptance and review/merge remain
+  unfinished. The checklist records credentials/owner/policy blockers.
+- No automatic login hook or background work was installed. Resume from the
+  checklist when the user starts the next session and asks to continue.
+
 ## Purpose and refresh rule
 
 Persistent project context requested by LU YI. Read this before proposing identity work, together with `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/SLICES.md`, `CODEOWNERS`, the identity README, and the actual `packages/contracts/src/` files. Refresh remote refs before relying on the implementation status below. This note is not a replacement for the shared contract or owner review.
 
-## Repository checkpoint
+## Historical repository checkpoint
 
 - Team remote: `origin`, https://github.com/ziyangliu-666/lumen-next.git.
 - Personal remote: `mine`, https://github.com/youayouly/lumen-next.git.
@@ -15,7 +36,7 @@ Persistent project context requested by LU YI. Read this before proposing identi
 - Validation: the first verify attempt failed with unresolved dependency types; after `npm ci`, `npm run verify` passed (63 tests, 96.57% line coverage).
 - Personal remote design branch was `64c7561`; personal remote main was `2c2c691`. No push was performed during this sync.
 
-## Publication checkpoint
+## Historical publication checkpoint (before today's uncommitted work)
 
 The implementation has been committed and pushed to the personal repository:
 https://github.com/youayouly/lumen-next/tree/identity/auth-flow.
@@ -82,8 +103,8 @@ These are responsibilities, not claims of completion. Main has the session walki
 - `docs/luyi/README.md` identifies `design.md` as the submission source; `API.md` is an earlier superseded sketch, not an equally authoritative contract.
 - Submission routes (`/api/auth/login`, `/api/account`, etc.) differ from the shared architecture (`/api/auth/password`, `/api/me`, signout/signout-all, etc.). RUNTIME_API.md now records the implemented paths and the mapping; formal team/submission reconciliation is still required.
 - Submission wiring and claims that HTTP/core integration is unavailable are stale after this merge.
-- Identity now has the authentication template, password strategy/scrypt, login-session service/store port, SessionStrategy, cookie-only resolver, SessionAuthFlow, LoginGate, AccountService/AccountStore and routes for signup/password/signout/signout-all/me/profile/password-change. The #/signin page supports login/signup with real endpoint paths; browser checks used mock responses. The new local increment adds PostgresAccountStore, PostgresAuthSessionStore, IdentityDatabase/IdentitySql, createIdentitySlice and a candidate migration. Full verify with the optional PostgreSQL WASM suite passes with 240 tests and 98.14% line coverage; workspace build passes. Without the external test tool, 233 regular tests run and 7 engine tests skip. Core pool/runner and production wiring, account deletion, Settings Account UI and OAuth/email are not implemented. The development auth stub in main.ts is unchanged; this is not a runnable production sign-in feature yet.
-- Full remaining-work plan: `docs/luyi/PLAN.md`. New-password minimum is provisionally 15 Unicode code points (1024 UTF-8 byte ceiling), pending team approval. Email changes require current-password proof and adapter-side hash comparison; existing sessions survive password changes per the submission. Signup and account-store writes now have query-contract and actual PostgreSQL WASM SQL tests, including rollback and constraints. Live PostgreSQL 17 driver/multi-connection tests remain pending; see PERSISTENCE.md. These changes are included in this branch's personal-repository handoff, not a team merge.
+- Historical persistence checkpoint (superseded by NEXT_SESSION.md): identity had the authentication template, password strategy/scrypt, login-session service/store port, SessionStrategy, cookie-only resolver, SessionAuthFlow, LoginGate, AccountService/AccountStore and routes for signup/password/signout/signout-all/me/profile/password-change. The #/signin page supports login/signup with real endpoint paths; browser checks used mock responses. The new local increment adds PostgresAccountStore, PostgresAuthSessionStore, IdentityDatabase/IdentitySql, createIdentitySlice and a candidate migration. Full verify with the optional PostgreSQL WASM suite passes with 240 tests and 98.14% line coverage; workspace build passes. Without the external test tool, 233 regular tests run and 7 engine tests skip. Core pool/runner and production wiring, account deletion, Settings Account UI and OAuth/email are not implemented. The development auth stub in main.ts is unchanged; this is not a runnable production sign-in feature yet.
+- Current remaining-work checklist: `docs/luyi/NEXT_SESSION.md`; older delivery plan: `docs/luyi/PLAN.md`. New-password minimum is provisionally 15 Unicode code points (1024 UTF-8 byte ceiling), pending team approval. Email changes require current-password proof and adapter-side hash comparison; existing sessions survive password changes per the submission. Signup and account-store writes now have query-contract and actual PostgreSQL WASM SQL tests, including rollback and constraints. Live PostgreSQL 17 driver/multi-connection tests remain pending; see PERSISTENCE.md. These changes are included in this branch's personal-repository handoff, not a team merge.
 - Latest HTTP plan: `docs/luyi/HTTP_PLAN.md`. The plugin requires an exact configured Origin on mutations and secure cookies by default. Its local limiter keys on direct socket peers because core's unconditional trustProxy setting is not safe for trusting arbitrary forwarded addresses.
 - Session plan and rough estimate: `docs/luyi/SESSION_PLAN.md` (7.5 human engineering hours including 25% allowance, excluding database/HTTP/UI). Lifetime is explicitly supplied by the caller; no default duration or renewal policy has been agreed.
 - Site expects signup/signin to preserve the user's initial question/mode, supports GitHub/Google/password, and lists name, email, password and connected providers on Account.

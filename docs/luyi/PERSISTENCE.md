@@ -20,7 +20,11 @@ uses headerStub and does not mount identity. This increment is not deployment.
 ## Database port obligations
 
 Core must supply one shared pool and its reviewed migration runner. There is no
-identity-owned pool or runner. Map core's database API to:
+identity-owned pool or runner. Identity now exports `postgresDatabase(pool)` to
+adapt the structural pg pool contract directly; it handles BEGIN/COMMIT/ROLLBACK
+on one client, releases it in finally and discards it if rollback fails. It does
+not construct/end the pool or apply migrations. Adapter tests use a client double;
+real PostgreSQL driver/concurrency acceptance is still pending. Its output is:
 
 ```ts
 interface IdentitySql {
@@ -38,6 +42,16 @@ ROLLBACK on failure and always releases the client. Never route a transaction's
 queries through separate pool connections. READ COMMITTED is sufficient; stronger
 isolation may produce serialization errors that must not be hidden as success.
 Do not log SQL parameter values containing password hashes or session hashes.
+
+The factory also exposes `suspend(accountId, on)` for trusted admin callers.
+Suspension and deletion of all login sessions commit atomically; unsuspension
+never restores a cookie. Billing must enforce requireStaff before this call and
+must not update the suspended column directly. A missing account rejects with
+an error; deletion failure rolls back the entire operation. Session insertion
+also uses IdentityDatabase.withTransaction, locking the active account before
+inserting so a suspended account cannot receive a fresh session. Repeat this
+race against real multi-connection PostgreSQL before deployment. This does not
+terminate requests already authorized or disconnect already-open WebSockets.
 
 Identity locks the account before its password credential for sensitive changes.
 Other account writers must preserve this lock order and honor suspension. The

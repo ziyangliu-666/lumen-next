@@ -2,6 +2,10 @@
 
 Owner: LU YI.
 
+**Next session: read [NEXT_SESSION.md](NEXT_SESSION.md) and continue the first
+unblocked implementation task.** It contains the current uncommitted checkpoint,
+unfinished tasks, required owner/credential inputs and verification commands.
+
 For implementation planning, first read [PLAN.md](PLAN.md) for the complete
 UC1 backlog and [CONTEXT.md](CONTEXT.md) for the latest sync checkpoint, team
 responsibilities, reference links and known differences between the submission
@@ -14,6 +18,21 @@ has not been regenerated to match those implementation changes.
 **Read this: [UC1-Identity-Design-LU-YI.pdf](UC1-Identity-Design-LU-YI.pdf)** — 25
 pages, the current design. `design.docx` is the same document in Word form and is
 what gets submitted.
+
+## Cross-slice implementation handoffs
+
+These describe the current code and proposed owner-reviewed integration, not a
+claim that the other slices or production wiring are finished.
+
+| Recipient | Guide | Focus |
+|-----------|-------|-------|
+| LIU ZIYANG: core/session/shell | [CORE_HANDOFF.md](CORE_HANDOFF.md) | Resolver injection, /api/me login state, shared database, session ownership and live WS revocation |
+| PENG XUJIAN: projects | [PROJECTS_HANDOFF.md](PROJECTS_HANDOFF.md) | Trusted accountId, project ownership, Home cache behavior and project-to-session boundary |
+| LI ZHUOYANG: steering | [STEERING_HANDOFF.md](STEERING_HANDOFF.md) | HTTP/WS identity boundary, resource checks and test-fixture evidence |
+| HE RONG: billing | [ADMIN_HANDOFF.md](ADMIN_HANDOFF.md) | AdminAccounts methods, safe summaries and error handling |
+| Local development | [LOCAL_AUTH.md](LOCAL_AUTH.md) | PGlite setup, real local login and validation limits |
+| OAuth configuration | [OAUTH_SETUP.md](OAUTH_SETUP.md) | GitHub/Google implementation, provider setup and dependency review |
+| Mail configuration | [MAIL_SETUP.md](MAIL_SETUP.md) | Verification/reset codes, disk outbox and optional external delivery |
 
 ## What is here
 

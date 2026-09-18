@@ -1,7 +1,9 @@
 # Identity admin account interface for billing
 
-Implementation checkpoint: 2026-09-18. This is an in-process interface, not a new
-HTTP API. Billing owns admin routes/buttons; core owns composition-root wiring.
+Implementation checkpoint: 2026-09-18. Billing now wraps this in-process
+interface with authenticated read-only list/detail HTTP routes. Core mounts the
+same identity instance into billing from the composition root. Role/suspension
+mutations remain intentionally unavailable pending policy review.
 
 ## Obtain the interface
 
@@ -72,12 +74,21 @@ local probe is acceptance of billing's actual authorization boundary.
 
 ## Evidence and remaining integration
 
-- Query tests: empty lists, suspended visibility, stable ordering, safe projection,
-  parameter binding, invalid runtime role/boolean, missing accounts and failures.
-- PGlite SQL + HTTP tests exercise all four methods through the factory, live
-  member/staff role changes on existing cookies, suspension, revoked cookies and
-  isolated accounts. The account self-service view still hides suspended users.
-- Full verify with PGlite enabled: 260 tests pass, 89.56% line coverage.
-- No billing/admin page, shared router, production main.ts or dependency change.
-- Remaining: owner review, billing HTTP/button wiring, production PostgreSQL
-  pool/migrations and multi-connection concurrency acceptance.
+- Query tests cover empty lists, suspended visibility, stable ordering, safe
+  projection, parameter binding, invalid runtime role/boolean, missing accounts
+  and failures.
+- Billing route tests cover anonymous 401, member 403, staff list/detail, malformed
+  UUID 400, missing account 404, no-store responses, and absent mutation routes.
+- The responsive admin page uses real list/detail routes. Its shared staff guard
+  resolves `/api/me` before rendering and refreshes on focus, visibility, and
+  explicit authentication-change events.
+- The production composition root uses identity cookies whenever `DATABASE_URL`
+  is configured, mounts identity and billing, and core's runner owns migrations
+  002/003/004. Database-free development retains the documented header stub.
+- Full local verification passed 413 tests with zero skips and 90.79% line
+  coverage; workspace build and native PostgreSQL schema cleanup passed.
+- Manual native-PostgreSQL browser acceptance passed staff redirect, real list
+  and detail responses, anonymous API rejection, desktop rendering, and a 390 px
+  viewport without document overflow.
+- Remaining: owner/CI review, member-browser redirect acceptance, mutation policy,
+  audit/last-staff safeguards, pagination, and already-open WebSocket revocation.

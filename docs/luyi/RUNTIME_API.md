@@ -2,8 +2,10 @@
 
 This is the contract implemented by identityRoutes and createIdentitySlice on the
 working implementation branch. It supersedes historical API examples in API.md
-and design.docx for client development; it is not a claim of team approval or
-production availability. main.ts has not mounted this plugin yet.
+and design.docx for client development; it is not a claim of deployment approval.
+The composition root now mounts identity for database-backed processes and uses
+its cookie resolver instead of the stub. It requires explicit origin and session
+lifetime configuration.
 
 ## Transport and authentication
 
@@ -93,8 +95,9 @@ and owns the HTTP translation. See ADMIN_HANDOFF.md for the full contract.
 admin callers. Billing must enforce staff authorization before calling it.
 Suspension atomically deletes every login session; unsuspension requires fresh
 login and does not restore old cookies. Session issuance locks and rechecks the
-account's active state. Missing accounts reject with an error. No admin HTTP
-endpoint or open-WebSocket disconnection is implemented by this operation.
+account's active state. Missing accounts reject with an error. Read-only billing-owned admin HTTP
+endpoints are implemented; no admin mutation endpoint or open-WebSocket
+disconnection is implemented by this operation.
 
 ## Failures
 
@@ -138,8 +141,9 @@ OAuth strategies/routes, AccountPanel and restricted password-account deletion
 are implemented (OAUTH_SETUP.md). Real GitHub/Google local acceptance and Resend
 verification-mail acceptance passed. Maintained OAuth library approval, real external
 password reset, deployment abuse policy, canonical Settings mounting,
-OAuth-only/retained-resource deletion, billing HTTP/UI integration and production
-wiring remain pending. The in-process admin methods do not implement billing routes. See
-PERSISTENCE.md for the migration/factory handoff and PLAN.md for the full backlog.
+OAuth-only/retained-resource deletion, admin mutation policy, deployment review, and release remain pending. Billing's
+read-only HTTP/UI integration and production composition wiring are implemented;
+the trusted in-process methods still do not authorize callers themselves. See
+PERSISTENCE.md for database details and PLAN.md for the full backlog.
 Do not overwrite the submitted design document without reconciling these changes
 and the sprint estimate (its listed sprint allocations sum to 9.2, not 10.0).

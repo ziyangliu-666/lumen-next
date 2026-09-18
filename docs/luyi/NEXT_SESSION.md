@@ -1,6 +1,22 @@
 # LU YI: resume here next session
 
-Updated: 2026-09-18 after manual account acceptance, local staff promotion and
+Updated: 2026-09-18 after the first read-only administrator integration increment.
+The user explicitly authorized the required HE RONG and LIU ZIYANG cross-owner
+paths in this conversation. Database-backed production composition, numbered
+identity migrations, billing list/detail routes, shared staff guard, and the real
+responsive admin page are now implemented locally. Full verify passed **413 tests,
+zero skips**, 90.79% lines; workspace build passed. Manual native-PG browser
+acceptance passed staff redirect, real list/detail, anonymous API rejection,
+zero console errors on the accepted page, and 390 px document-width containment.
+The preserved manual account/database remain active at 127.0.0.1:4001/55433.
+
+Next work: add automated web guard/client coverage if a web test harness is
+approved, obtain a real member-browser direct-link check without altering the
+preserved staff account, review configuration/deployment and owner CI, then
+separately decide last-staff/self-demotion/audit policy before any mutation UI.
+Do not add role/suspension controls by default.
+
+Earlier update: 2026-09-18 after manual account acceptance, local staff promotion and
 an explicit user request to resume admin-page integration in a new conversation.
 Preserve unfinished tasks and continue implementation, not merely more design docs.
 This file is a handoff/checklist, not a background job or an automatic login hook.
@@ -12,6 +28,10 @@ the placeholder with a working UI, and save progress before starting a new chat.
 Do not ask them to repeat this backlog. This section supersedes older checkpoints.
 
 ### Current code/publication and acceptance
+
+- The administrator increment is currently uncommitted and not pushed. Preserve
+  it before relying on the older published commit references below. Modified
+  ownership includes billing/admin/core/main under the user's explicit approval.
 
 - Branch: `identity/auth-flow`. Latest implementation commit: `eafeb40` (minimum
   eight-character passwords); prior `04be76b` fixes deletion by failing closed.

@@ -1,5 +1,23 @@
 # Identity PostgreSQL integration guide
 
+## Production-runner integration checkpoint: 2026-09-18
+
+With explicit cross-owner approval, core's migration directory now contains and
+runs numbered identity migrations 002/003/004. Database-backed `main.ts` composes
+one core `Db`, identity's cookie resolver/routes, billing's read-only admin routes,
+and session; it requires `LUMEN_ORIGIN` and `IDENTITY_SESSION_LIFETIME_MS`.
+Database-free development alone retains `headerStub`.
+
+Core `Db` is structurally usable as `IdentityDatabase`. Its transaction wrapper
+now records the first query failure and refuses to report a successful commit if
+callback code catches that failure; native PostgreSQL acceptance covers this
+rollback-only behavior. Full local verification passed 413 tests with zero skips
+and 90.79% line coverage, including the core runner, PGlite, Arctic, and native
+PostgreSQL. Workspace build passed. The separate manual database was preserved.
+Production deployment, backup/rollback rehearsal, OAuth/mail configuration, and
+owner/CI review remain pending; the historical checkpoints below explain the
+prior candidate state.
+
 ## Current-base safety update: 2026-09-18
 
 The deletion regression below is now contained by an identity-owned metadata

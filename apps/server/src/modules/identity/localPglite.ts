@@ -11,6 +11,7 @@ import { LoginGate } from './loginGate.js';
 import { localRoleProbe } from './localRoleProbe.js';
 import { localOAuthProviders } from './localOAuth.js';
 import { localMailSender } from './localMail.js';
+import { readLocalBaseSchema } from './localSchema.js';
 
 interface EngineSql {
   query<Row extends object>(sql: string, values: unknown[]): Promise<{ rows: Row[] }>;
@@ -48,7 +49,7 @@ async function start(): Promise<void> {
       PGlite: new (directory: string) => Engine;
     };
     engine = new loaded.PGlite(resolve(scratch, 'identity-local-db'));
-    const base = await readFile(resolve(root, 'apps/server/src/core/db/schema.sql'), 'utf8');
+    const base = await readLocalBaseSchema();
     const identity = await readFile(
       resolve(root, 'apps/server/src/modules/identity/migrations/002_identity_auth.sql'),
       'utf8',

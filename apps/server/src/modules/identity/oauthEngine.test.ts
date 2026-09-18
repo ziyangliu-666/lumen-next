@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { readLocalBaseSchema } from './localSchema.js';
 import { pathToFileURL } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,7 +61,7 @@ describe.skipIf(!modulePath)('identity: OAuth and mail SQL/HTTP workflows', () =
     const library = (await import(pathToFileURL(modulePath!).href)) as { PGlite: new () => Engine };
     engine = new library.PGlite();
     db = { ...port(engine), withTransaction: (work) => engine.transaction((tx) => work(port(tx))) };
-    await engine.exec(await readFile(new URL('../../core/db/schema.sql', import.meta.url), 'utf8'));
+    await engine.exec(await readLocalBaseSchema());
     for (const migration of [
       '002_identity_auth.sql',
       '003_identity_oauth.sql',

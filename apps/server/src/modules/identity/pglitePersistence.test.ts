@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { expect, it } from 'vitest';
 import { AuthSessions } from './authSessions.js';
 import { AccountService } from './accountService.js';
+import { readLocalBaseSchema } from './localSchema.js';
 import type { IdentityDatabase, IdentitySql } from './identityDatabase.js';
 import { PasswordStrategy } from './passwordStrategy.js';
 import { PostgresAccountStore, PostgresAuthSessionStore } from './postgresStores.js';
@@ -49,9 +50,7 @@ it.skipIf(!modulePath)(
     try {
       const data = join(directory, 'data');
       engine = new loaded.PGlite(data);
-      await engine.exec(
-        await readFile(new URL('../../core/db/schema.sql', import.meta.url), 'utf8'),
-      );
+      await engine.exec(await readLocalBaseSchema());
       await engine.transaction(async (tx) => {
         await tx.exec(
           await readFile(new URL('./migrations/002_identity_auth.sql', import.meta.url), 'utf8'),

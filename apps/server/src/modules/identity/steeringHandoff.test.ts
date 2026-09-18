@@ -12,6 +12,7 @@ import { parseCommand } from '../../core/protocol/parseCommand.js';
 import { createIdentitySlice, type IdentitySlice } from './createIdentitySlice.js';
 import type { IdentityDatabase, IdentitySql } from './identityDatabase.js';
 import { LoginGate } from './loginGate.js';
+import { readLocalBaseSchema } from './localSchema.js';
 import { hashPassword } from './passwordHash.js';
 import { PostgresAccountStore } from './postgresStores.js';
 import { AUTH_COOKIE } from './sessionStrategy.js';
@@ -59,7 +60,7 @@ describe.skipIf(!modulePath)('identity: steering handoff with test-only resource
       ...sqlPort(engine),
       withTransaction: (work) => engine.transaction((tx) => work(sqlPort(tx))),
     };
-    await engine.exec(await readFile(new URL('../../core/db/schema.sql', import.meta.url), 'utf8'));
+    await engine.exec(await readLocalBaseSchema());
     await engine.transaction(async (tx) => {
       await tx.exec(
         await readFile(new URL('./migrations/002_identity_auth.sql', import.meta.url), 'utf8'),

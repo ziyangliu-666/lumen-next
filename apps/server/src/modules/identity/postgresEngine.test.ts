@@ -11,6 +11,7 @@ import type { SessionSnapshot } from '@lumen/contracts';
 import type { IdentityDatabase, IdentitySql } from './identityDatabase.js';
 import { LoginGate } from './loginGate.js';
 import { localRoleProbe } from './localRoleProbe.js';
+import { readLocalBaseSchema } from './localSchema.js';
 import { PostgresAccountStore, PostgresAuthSessionStore } from './postgresStores.js';
 import { AUTH_COOKIE } from './sessionStrategy.js';
 
@@ -54,7 +55,7 @@ describe.skipIf(!modulePath)('identity: optional PostgreSQL WASM engine acceptan
     };
     accounts = new PostgresAccountStore(db);
     sessions = new PostgresAuthSessionStore(db);
-    await engine.exec(await readFile(new URL('../../core/db/schema.sql', import.meta.url), 'utf8'));
+    await engine.exec(await readLocalBaseSchema());
     // The real shared runner must own this transaction; this is test setup only.
     await engine.transaction(async (tx) => {
       await tx.exec(

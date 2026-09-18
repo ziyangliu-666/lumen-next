@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AccountDeletion } from './accountDeletion.js';
 import { AuthSessions } from './authSessions.js';
 import { MailActions } from './mailActions.js';
+import { readLocalBaseSchema } from './localSchema.js';
 import { OAuthAccounts, OAuthAttempts } from './oauth.js';
 import { hashPassword, verifyPassword } from './passwordHash.js';
 import type { IdentityDatabase, IdentitySql } from './identityDatabase.js';
@@ -77,8 +78,8 @@ describe.skipIf(!modulePath && !connectionString)('identity: real PostgreSQL acc
     await db.withTransaction(async (sql) => {
       const scope = await sql.query<{ schema: string }>('select current_schema() as schema', []);
       if (scope[0]?.schema !== schema) throw new Error('Test schema isolation was not applied');
+      await sql.query(await readLocalBaseSchema(), []);
       for (const path of [
-        '../../core/db/schema.sql',
         './migrations/002_identity_auth.sql',
         './migrations/003_identity_oauth.sql',
         './migrations/004_identity_mail.sql',
@@ -492,6 +493,43 @@ describe.skipIf(!modulePath && !connectionString)('identity: real PostgreSQL acc
       await db.query('select id from credentials where account_id = $1', [account.id]),
     ).toEqual([]);
   }, 20_000);
+
+  it.each(['ledger_entries', 'sessions'] as const)(
+    'refuses deletion with retained %s on the current core schema',
+    async (resource) => {
+      const password = 'a sufficiently long retained account password';
+      const account = await accounts.createPasswordAccount({
+        email: `${randomUUID()}@example.test`,
+        displayName: 'Retained account',
+        passwordHash: await hashPassword(password),
+      });
+      if (resource === 'ledger_entries') {
+        await db.query(
+          "insert into ledger_entries (account_id, amount, reason) values ($1, 1, 'Retained test ledger')",
+          [account.id],
+        );
+      } else {
+        await db.query('insert into sessions (id, project_id, account_id) values ($1, $2, $3)', [
+          randomUUID(),
+          'fixture-project',
+          account.id,
+        ]);
+      }
+      const service = new AuthSessions(sessions, { lifetimeMs: 60_000 });
+      const issued = await service.issue({ accountId: account.id, role: 'user' });
+      // Keep this contract red until the owners resolve missing retention
+      // constraints. Do not pretend that successful deletion is acceptable.
+      await expect(
+        new AccountDeletion(db).remove(account.id, { currentPassword: password }),
+      ).rejects.toMatchObject({ code: 'account_in_use' });
+      expect(await accounts.getPasswordAccount(account.id)).not.toBeNull();
+      expect(await service.verify(issued.token)).not.toBeNull();
+      expect(
+        await db.query(`select id from ${resource} where account_id = $1`, [account.id]),
+      ).toHaveLength(1);
+    },
+    20_000,
+  );
 
   it('rejects deletion queued behind suspension without losing account data', async () => {
     const password = 'a sufficiently long deletion password';

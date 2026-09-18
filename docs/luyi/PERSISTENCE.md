@@ -1,5 +1,21 @@
 # Identity PostgreSQL integration guide
 
+## Current-base warning: 2026-09-18
+
+After merging team main `e3937d4`, full verification reports **382 passed and
+3 failed**. Core moved its base DDL to `migrations/001_core_base.sql` and left
+ledger/session account IDs without foreign keys for stub compatibility.
+The identity fixtures now read only the migration's Up section, but retention
+checks fail: deletion wrongly succeeds with ledger/session references. Preserve
+these regressions until core/billing/session approve a retention-safe integration.
+Do not read the earlier successful test counts below as current-base acceptance.
+The native suite now has 20 cases (18 pass, 2 retention failures); the third
+failure is the existing WASM ledger HTTP case. See PR_READINESS.md.
+
+Local PGlite bootstrap fingerprints intentionally change with the new base.
+Existing private local databases were not modified; never delete/reset them
+without explicit backup/migration approval.
+
 ## What this increment provides
 
 - `PostgresAccountStore`: parameterized PostgreSQL queries for AccountStore and
@@ -249,7 +265,8 @@ try {
 ```
 
 `-MaskInput` requires PowerShell 7.1 or newer. Do not use a shared/production URL.
-A successful run should report 18 passing tests and zero skips in this file.
+The current suite contains 20 tests; all 20 must pass with zero skips before
+claiming this part of acceptance. Currently two retention regressions fail.
 
 Before main.ts integration is accepted, repeat against a disposable PostgreSQL 17
 service through core's real pool/runner. Include concurrent normalized-email

@@ -3,6 +3,13 @@
 **Continuation:** read [NEXT_SESSION.md](../../../../../docs/luyi/NEXT_SESSION.md)
 for unfinished work, the uncommitted checkpoint and next-session instructions.
 
+**Latest-main blocker (2026-09-18):** after merging team main `e3937d4`, full
+verification reports 382 passing and three failing retention tests. Core's new
+ledger/session account columns lack foreign keys, so account deletion can remove
+an account with retained data. Do not expose deletion or mark merge/deployment
+ready until the owners approve a retention-safe integration. Earlier successful
+acceptance counts below describe the previous base; see NEXT_SESSION.md.
+
 **Use case:** UC1 — sign up, sign in, manage the account
 **Covers:** identity, email — sign-in, accounts, OAuth, email verification
 
@@ -53,8 +60,10 @@ Real GitHub and Google local acceptance passed (see NEXT_SESSION.md). GitHub PKC
 client version. Tokens never appear in account responses.
 
 DELETE /api/me is implemented for password accounts with current-password proof.
-Project/ledger references block deletion (409); credentials/sessions/account are
-otherwise deleted atomically. No cross-slice cascade or OAuth-only deletion is
+Deletion relies on restrictive foreign keys to block retained resources (409).
+The current core schema supplies that protection for projects, but not ledger
+entries or session ownership; this is a reproduced integration blocker.
+Without a blocking reference, credentials/login-sessions/account are deleted atomically. No cross-slice cascade or OAuth-only deletion is
 implemented. AccountPanel lives inside the signin page folder and is accessible
 from its "Manage signed-in account" button, pending reviewed Settings integration.
 

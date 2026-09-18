@@ -1,5 +1,25 @@
 # Identity PR readiness: 2026-09-18
 
+## Current merged-base status: BLOCKED
+
+Team main `e3937d4` was merged locally in `628f897` after the review below.
+Full verification now reports **382 passed / 3 failed / zero skipped**, and
+build passes. Default verify reports 311 passed / 74 skipped, including the
+three failures among its skips; that green default does not prove readiness.
+
+Core's newer schema omits account foreign keys for ledger_entries and sessions.
+Identity's deletion therefore incorrectly succeeds with retained data. The
+existing WASM ledger HTTP test and two new native-pg regressions are intentionally
+left failing against the agreed retention contract. Do not expose deletion or
+mark this branch ready for merge/deployment. Core/billing/session must approve
+reference migrations or a retention policy integration before this can be fixed
+without crossing ownership boundaries. See NEXT_SESSION.md for evidence.
+
+Only personal-branch publication is authorized. No team PR or branch write is
+included. Prior test totals and status below refer to the earlier base.
+
+## Historical review checkpoint
+
 Status: local implementation and review preparation, **not production completion**.
 Two independent read-only Pi workers reviewed integration and OAuth; the lead
 verified findings, wrote fixes/tests and owns all repository changes. No other

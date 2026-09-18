@@ -4,7 +4,44 @@ Updated: 2026-09-18 after real verification-mail acceptance and parallel PR revi
 continue implementing them next session, not merely produce more design documents.
 This file is a handoff/checklist, not a background job or an automatic login hook.
 
-## PR preparation checkpoint: 2026-09-18
+## Latest checkpoint: 2026-09-18, latest-main regression (BLOCKED)
+
+- User authorized latest-main testing and personal-repository publication only.
+  Merged `origin/main` at `e3937d4` in `628f897`, without textual conflicts.
+  Installed the upstream lockfile with npm ci; no new dependency choice was made.
+- Adapted identity's local harness and five SQL suites to read only the Up section
+  of core's `001_core_base.sql` through `localSchema.ts`. The Down section must
+  never be executed by a fixture. Production still uses core's migration runner.
+- Full merged-base verify with real PostgreSQL, PGlite and Arctic:
+  **382 passed, 3 FAILED, zero skipped (385 total)**. Formatting, lint and
+  typecheck passed; workspace build passed. Default verify without optional
+  databases/tools: **311 passed / 74 skipped**, 70.1% lines. Default green is NOT
+  release evidence: it skips all three failing retention checks.
+- BLOCKER: current core deliberately declares `ledger_entries.account_id` and
+  `sessions.account_id` as text without account foreign keys. AccountDeletion
+  relies on restrictive references, so it currently deletes accounts with retained
+  ledger/session records. The existing WASM ledger HTTP test returns 204 instead
+  of 409; two added native-pg regressions reproduce ledger and session deletion.
+  Expected assertions were preserved; no skipping or success-expectation change.
+- Core/billing/session owner decision needed: reviewed restrictive FK migrations
+  and reconciliation of stub-era IDs, or an explicit retention/worker-stop policy
+  port with a safe default. Do not add cross-slice SQL checks or change shared
+  schema silently. Until resolved, do not expose account deletion or mark ready
+  for merge/deployment. No production endpoint was mounted by this merge.
+- Existing disk-backed PGlite data was not opened, reset or migrated. Its old
+  bootstrap fingerprint will intentionally reject the new schema. Back up and
+  obtain explicit migration/reset approval rather than deleting that database.
+- Publication target remains `youayouly/lumen-next:identity/auth-flow`; no team
+  branch/PR/main write or deployment is authorized. Preserve this known failing
+  result prominently in any Draft PR. Previous 339/339 and 18/18 results below
+  describe the old base and must not be presented as current-base acceptance.
+- Personal GitHub Actions is enabled. CI triggers on main pushes or PRs, not
+  identity branch pushes. Copilot workflow requests review only for non-draft PRs
+  and requires COPILOT_REVIEW_TOKEN; no repository-level secret was listed.
+  Copilot subscription/ruleset status was not established (ruleset API returned
+  403 for the private repo). Do not claim Copilot or CI ran on this branch.
+
+## Earlier PR preparation checkpoint: 2026-09-18
 
 - Refreshed origin and mine. Team main is now `e3937d4`, six commits beyond
   the previously integrated base. `git merge-tree --write-tree HEAD origin/main`

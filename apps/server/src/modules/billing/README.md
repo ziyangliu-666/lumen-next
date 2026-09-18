@@ -14,12 +14,18 @@ invoices live here too.
 from the proposal, not the conclusion. You compare the candidates, pick one, and
 write down why.
 
-## You design this slice
+## Implemented read-only administration boundary
 
-This folder is empty on purpose: a README and an empty `index.ts`. Nobody has
-decided your classes for you. Write the design first (use case flow, analysis
-class diagram, the pattern and why) in your own design doc, then build it here
-with a unit test for every class that carries the pattern.
+`createBillingSlice({ accounts })` accepts identity's public `AdminAccounts`
+interface and registers staff-only account list/detail routes. Both routes call
+`requireStaff`, return only identity's safe `AccountSummary`, disable caching,
+and validate account UUIDs before calling identity. This first increment exposes
+no role, suspension, kill-switch, invitation, billing, or secret mutation.
+
+The spend-cap, payments, secrets, and mutation policies still require the slice
+owner's design. Write those flows and the Chain of Responsibility comparison
+before implementing them; the read-only account boundary does not decide those
+policies.
 
 ## Boundary
 

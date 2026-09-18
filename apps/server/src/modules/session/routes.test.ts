@@ -2,11 +2,12 @@ import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { SessionSnapshot } from '@lumen/contracts';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { headerStub } from '../../core/http/authGuard.js';
 import { buildServer } from '../../core/http/server.js';
 import { Broker } from '../../core/protocol/broker.js';
-import { createSessionSlice, type SessionSlice } from './index.js';
+import { notFound } from '../../core/http/httpError.js';
+import { createSessionSlice, type ProjectGate, type SessionSlice } from './index.js';
 
 // The walking skeleton, as a test: sign in with the stub, open a session under
 // a project, and watch its one task and one step arrive on a socket — the same
@@ -22,9 +23,11 @@ afterEach(async () => {
   await running?.close();
 });
 
-async function build(): Promise<{ app: FastifyInstance; slice: SessionSlice }> {
+async function build(
+  requireProject?: ProjectGate,
+): Promise<{ app: FastifyInstance; slice: SessionSlice }> {
   const broker = new Broker();
-  const slice = createSessionSlice({ broker });
+  const slice = createSessionSlice({ broker, ...(requireProject ? { requireProject } : {}) });
   const built = await buildServer({
     broker,
     resolver: headerStub,
@@ -141,6 +144,67 @@ describe('session: routes', () => {
       headers: AUTH,
     });
     expect(stopped.statusCode).toBe(204);
+  });
+});
+
+describe('session: what the projects slice is handed', () => {
+  const owner = { accountId: 'acc-1', role: 'user' as const };
+  const other = { accountId: 'acc-2', role: 'user' as const };
+  const staff = { accountId: 'acc-9', role: 'staff' as const };
+
+  it('refuses a session under a project the gate refuses, and leaves nothing behind', async () => {
+    const gate: ProjectGate = (_principal, projectId) =>
+      projectId === 'mine' ? Promise.resolve() : Promise.reject(notFound('no such project'));
+    const { app: server, slice } = await build(gate);
+    const post = (project: string): Promise<LightMyRequestResponse> =>
+      server.inject({
+        method: 'POST',
+        url: `/api/projects/${project}/sessions`,
+        headers: AUTH,
+        payload: { text: 'q' },
+      });
+
+    expect((await post('theirs')).statusCode).toBe(404);
+    expect(await slice.projects.list('theirs', owner)).toEqual([]);
+    expect((await post('mine')).statusCode).toBe(201);
+  });
+
+  it('refuses a mode the contract does not know, and takes seed', async () => {
+    const { app: server } = await build();
+    const post = (mode: unknown): Promise<LightMyRequestResponse> =>
+      server.inject({
+        method: 'POST',
+        url: '/api/projects/p1/sessions',
+        headers: AUTH,
+        payload: { text: 'q', mode },
+      });
+
+    expect((await post('sideways')).statusCode).toBe(400);
+    expect((await post('seed')).json<SessionSnapshot>().session.mode).toBe('seed');
+  });
+
+  it('starts, lists, finds and stops sessions for the projects slice', async () => {
+    const { slice } = await build();
+    const { id } = await slice.projects.start('p1', owner, 'question', 'seed');
+    await slice.kernel.idle();
+
+    const [summary] = await slice.projects.list('p1', owner);
+    expect(summary).toMatchObject({ id, mode: 'seed', status: 'ended' });
+    expect(summary?.spend.dollars).toBeCloseTo(0.03, 6);
+
+    expect(await slice.projects.context(id)).toEqual({ projectId: 'p1', accountId: 'acc-1' });
+    expect(await slice.projects.context('nope')).toBeNull();
+    const root = (await slice.kernel.snapshot(id, owner)).tasks[0]!;
+    expect(await slice.projects.taskSession(root.id)).toBe(id);
+    expect(await slice.projects.taskSession('nope')).toBeNull();
+
+    // Another account's session under the same project id is not listed for the owner.
+    await slice.projects.start('p1', other, 'theirs', 'explore');
+    expect(await slice.projects.list('p1', owner)).toHaveLength(1);
+    expect(await slice.projects.list('p1', staff)).toHaveLength(2);
+
+    await expect(slice.projects.stop(id, other)).rejects.toMatchObject({ status: 404 });
+    await expect(slice.projects.stop(id, owner)).resolves.toBeUndefined();
   });
 });
 

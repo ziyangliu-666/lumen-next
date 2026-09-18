@@ -30,7 +30,11 @@ function harness(
     events.push(event);
     publish(sessionId, event);
   };
-  return { kernel: new Kernel(new MemoryTrace(), broker, worker, delegation), broker, events };
+  return {
+    kernel: new Kernel(new MemoryTrace(), broker, worker, delegation ? { delegation } : {}),
+    broker,
+    events,
+  };
 }
 
 describe('session: kernel', () => {
@@ -263,5 +267,61 @@ describe('session: kernel, delegation and cost', () => {
 
     await expect(kernel.addSpend(tasks[0]!.id, { dollars: -1 }, 'refund?')).rejects.toThrow();
     await expect(kernel.addSpend(tasks[0]!.id, { dollars: Number.NaN }, 'x')).rejects.toThrow();
+  });
+
+  it('saves a finding before it announces it, with the id the saver gave', async () => {
+    const order: string[] = [];
+    const broker = new Broker();
+    const publish = broker.publish.bind(broker);
+    broker.publish = (sessionId: string, event: ServerEvent): void => {
+      if (event.type === 'finding.recorded') order.push(`announced ${event.findingId}`);
+      publish(sessionId, event);
+    };
+    const kernel = new Kernel(new MemoryTrace(), broker, oneStep, {
+      saveFinding: (sessionId, taskId, text) => {
+        order.push('saved');
+        return Promise.resolve({ id: 'f-1', sessionId, taskId, text, createdAt: 1 });
+      },
+    });
+    const { tasks } = await kernel.start('p1', owner.accountId, 'q');
+
+    const finding = await kernel.recordFinding(tasks[0]!.id, 'fusion works');
+
+    expect(finding.id).toBe('f-1');
+    expect(order).toEqual(['saved', 'announced f-1']);
+  });
+
+  it('announces nothing when the finding could not be saved, and refuses one with no text', async () => {
+    const broker = new Broker();
+    const announced: ServerEvent[] = [];
+    const publish = broker.publish.bind(broker);
+    broker.publish = (sessionId: string, event: ServerEvent): void => {
+      if (event.type === 'finding.recorded') announced.push(event);
+      publish(sessionId, event);
+    };
+    const kernel = new Kernel(new MemoryTrace(), broker, oneStep, {
+      saveFinding: () => Promise.reject(new Error('database is down')),
+    });
+    const { tasks } = await kernel.start('p1', owner.accountId, 'q');
+
+    await expect(kernel.recordFinding(tasks[0]!.id, 'lost')).rejects.toThrow('database is down');
+    await expect(kernel.recordFinding(tasks[0]!.id, '   ')).rejects.toThrow(/needs text/);
+    await expect(kernel.recordFinding('nope', 'x')).rejects.toThrow(/no task/);
+    expect(announced).toEqual([]);
+  });
+
+  it('keeps findings in memory when no projects slice is wired, so the demo still runs', async () => {
+    const { kernel, events } = harness(demoWorker);
+    await kernel.start('p1', owner.accountId, 'fusion');
+    await kernel.idle();
+
+    expect(events.filter((event) => event.type === 'finding.recorded')).toHaveLength(3);
+  });
+
+  it('opens a session in the mode it is given, and explores by default', async () => {
+    const { kernel } = harness();
+
+    expect((await kernel.start('p1', owner.accountId, 'q')).session.mode).toBe('explore');
+    expect((await kernel.start('p1', owner.accountId, 'q', 'seed')).session.mode).toBe('seed');
   });
 });

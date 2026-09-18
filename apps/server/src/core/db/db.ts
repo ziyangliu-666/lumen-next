@@ -84,6 +84,14 @@ export async function openDatabase(url: string, options: OpenOptions = {}): Prom
       migrationsTable: 'pgmigrations',
       schema,
       createSchema: true,
+      // Five slices add migrations on five branches, and they merge in whatever
+      // order review allows. With the order check on, a file numbered below one
+      // that is already applied stops the process at startup, so every merge
+      // would force the others to renumber. Off, it is applied like any other
+      // new file. The number names a file; it is not a promise about history.
+      // This is safe because a slice migrates its own tables: two files from
+      // two slices do not depend on which ran first.
+      checkOrder: false,
       log: () => {},
     });
   }

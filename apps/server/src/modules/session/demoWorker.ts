@@ -13,7 +13,8 @@ export const demoWorker: Worker = {
     if (task.agent !== 'lead') {
       await report.appendStep(task.id, 'tool', `search: "${task.title}" (demo, no network)`);
       await report.addSpend(task.id, SEARCH_COST, 'search');
-      await report.appendStep(task.id, 'reply', `Nothing found for "${task.title}": no model yet.`);
+      await report.recordFinding(task.id, `Demo finding for "${task.title}". No model wrote this.`);
+      await report.appendStep(task.id, 'reply', `Recorded one finding for "${task.title}".`);
       return;
     }
 

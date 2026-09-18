@@ -1,10 +1,17 @@
-import type { Money, Task } from './tasks.js';
+import type { Money, Task, TaskStatus } from './tasks.js';
 
 // A session is one run under a project: the root task and everything it
 // delegated. The browser opens a session, not a task, and the snapshot is what
 // it reads back when the socket (re)connects.
+// How a session goes about its question. 'explore' starts from the question
+// alone; 'seed' starts from material the user supplied. The project chooses it
+// and its first session runs in the same mode.
+export const SESSION_MODES = ['explore', 'seed'] as const;
+export type SessionMode = (typeof SESSION_MODES)[number];
+
 export interface Session {
   readonly id: string;
+  readonly mode: SessionMode;
   readonly projectId: string;
   readonly accountId: string;
   readonly startedAt: number;
@@ -42,4 +49,27 @@ export interface SessionSnapshot {
    * descendant rolled up. For display; the browser never adds.
    */
   readonly spend: Money;
+}
+
+/**
+ * One session as a project card needs it: no tasks, no steps. `status` and
+ * `endedAt` mirror the root task; `spend` is every task of the session, summed
+ * where the record lives.
+ */
+export interface SessionSummary {
+  readonly id: string;
+  readonly mode: SessionMode;
+  readonly status: TaskStatus;
+  readonly spend: Money;
+  readonly startedAt: number;
+  readonly endedAt: number | null;
+}
+
+/** A result an agent chose to keep. The projects slice owns the record. */
+export interface Finding {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly taskId: string;
+  readonly text: string;
+  readonly createdAt: number;
 }

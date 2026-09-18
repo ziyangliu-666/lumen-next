@@ -1,4 +1,4 @@
-import type { Money, StepKind, Task } from '@lumen/contracts';
+import type { Finding, Money, StepKind, Task } from '@lumen/contracts';
 
 // The seam between the kernel (session slice) and the agent (steering slice).
 // The kernel runs a task by handing it to a Worker; the Worker reports back
@@ -6,7 +6,7 @@ import type { Money, StepKind, Task } from '@lumen/contracts';
 // proposal: the worker never writes the database, so a worker that dies loses
 // nothing — the report already landed in the trace.
 //
-// Steering adds streamText, recordFinding and ask here when it needs them; the
+// Steering adds streamText and ask here when it needs them; the
 // kernel picks them up by implementing them, and no worker call site changes.
 
 /** One piece of work handed down: which agent does it, and its one-line title. */
@@ -25,6 +25,12 @@ export interface WorkerReport {
    * Rejects when the tree would become deeper than the kernel allows.
    */
   delegate(taskId: string, work: readonly Delegated[]): Promise<Task[]>;
+  /**
+   * Keep a result. Resolves with the finding once it is saved, and only then is
+   * it announced to the page. Required, not optional: a report that lacked it
+   * would let a worker lose a finding without anybody hearing an error.
+   */
+  recordFinding(taskId: string, text: string): Promise<Finding>;
   /** Add to the task's own cost. The roll-up to its ancestors is the kernel's. */
   addSpend(taskId: string, amount: Money, reason: string): Promise<void>;
 }

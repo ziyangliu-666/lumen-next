@@ -1,4 +1,11 @@
-import type { ClientCommand, ServerEvent, SessionSnapshot, Step, Task } from '@lumen/contracts';
+import type {
+  ClientCommand,
+  ServerEvent,
+  SessionMode,
+  SessionSnapshot,
+  Step,
+  Task,
+} from '@lumen/contracts';
 
 // The one door between the pages and the server: the REST calls, the socket,
 // and the single reducer that applies a ServerEvent to the page's state. Both
@@ -24,31 +31,62 @@ export function signInStub(accountId: string): void {
   document.cookie = `${STUB_COOKIE}=stub ${id}:user; path=/; SameSite=Lax`;
 }
 
-/** The error body core sends: `{ error: string }`. */
-async function failureOf(response: Response): Promise<Error> {
+/** A response that was not 2xx. Carries the status, so a page can tell 401 from 500. */
+export class RequestFailure extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'RequestFailure';
+  }
+}
+
+/** The error body core sends is `{ error: string }`. Anything else falls back to the status. */
+async function failureOf(response: Response): Promise<RequestFailure> {
   try {
     const body = (await response.json()) as { error?: unknown };
-    if (typeof body.error === 'string') return new Error(body.error);
+    if (typeof body.error === 'string') return new RequestFailure(response.status, body.error);
   } catch {
     // Not JSON; fall through to the status.
   }
-  return new Error(`request failed with ${response.status}`);
+  return new RequestFailure(response.status, `request failed with ${response.status}`);
 }
 
-export async function startSession(projectId: string, text: string): Promise<SessionSnapshot> {
-  const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/sessions`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text }),
+/**
+ * The one way a page talks to `/api`: same origin, JSON in, JSON out, and a
+ * RequestFailure for anything that is not 2xx. A page does not call fetch
+ * itself, so that there is one place to add what every request needs.
+ */
+export async function request<T>(url: string, init?: RequestInit & { json?: unknown }): Promise<T> {
+  const { json, ...rest } = init ?? {};
+  const response = await fetch(url, {
+    ...rest,
+    ...(json === undefined
+      ? {}
+      : {
+          method: rest.method ?? 'POST',
+          headers: { ...rest.headers, 'content-type': 'application/json' },
+          body: JSON.stringify(json),
+        }),
   });
   if (!response.ok) throw await failureOf(response);
-  return (await response.json()) as SessionSnapshot;
+  // 204 and friends have no body to parse.
+  return (response.status === 204 ? undefined : await response.json()) as T;
 }
 
-export async function fetchSession(sessionId: string): Promise<SessionSnapshot> {
-  const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`);
-  if (!response.ok) throw await failureOf(response);
-  return (await response.json()) as SessionSnapshot;
+export function startSession(
+  projectId: string,
+  text: string,
+  mode?: SessionMode,
+): Promise<SessionSnapshot> {
+  return request(`/api/projects/${encodeURIComponent(projectId)}/sessions`, {
+    json: mode ? { text, mode } : { text },
+  });
+}
+
+export function fetchSession(sessionId: string): Promise<SessionSnapshot> {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}`);
 }
 
 // The page's state: the snapshot, kept current by the events.

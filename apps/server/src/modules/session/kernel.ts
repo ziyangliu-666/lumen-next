@@ -1,4 +1,13 @@
-import type { Money, SessionSnapshot, StepKind, Task, TaskStatus } from '@lumen/contracts';
+import { randomUUID } from 'node:crypto';
+import type {
+  Finding,
+  Money,
+  SessionMode,
+  SessionSnapshot,
+  StepKind,
+  Task,
+  TaskStatus,
+} from '@lumen/contracts';
 import { zero } from '@lumen/contracts';
 import type { Delegated, Worker, WorkerReport } from '../../core/domain/worker.js';
 import type { Principal, SessionAccess } from '../../core/http/authGuard.js';
@@ -18,6 +27,28 @@ import { isEnding, type Trace } from './trace.js';
 // and stop go through the Composite (taskComposite.ts), so nothing here walks
 // parent_id. The BudgetGuard check points from ARCHITECTURE.md §9 arrive with
 // billing and slot in at start(), say() and delegate().
+/** Saves a finding and returns it as saved. The projects slice supplies the real one. */
+export type FindingSaver = (sessionId: string, taskId: string, text: string) => Promise<Finding>;
+
+export interface KernelOptions {
+  readonly delegation?: Delegation;
+  /**
+   * Where findings are kept. Findings belong to the projects slice, so main.ts
+   * passes `projects.recordFinding`. Left out, they are kept in this process's
+   * memory: enough for a test or a process with no projects slice, and no more.
+   */
+  readonly saveFinding?: FindingSaver;
+}
+
+function findingsInMemory(): FindingSaver {
+  const kept: Finding[] = [];
+  return (sessionId, taskId, text) => {
+    const finding = { id: randomUUID(), sessionId, taskId, text, createdAt: Date.now() };
+    kept.push(finding);
+    return Promise.resolve(finding);
+  };
+}
+
 export class Kernel implements WorkerReport {
   private readonly inFlight = new Set<Promise<void>>();
 
@@ -25,12 +56,23 @@ export class Kernel implements WorkerReport {
     private readonly trace: Trace,
     private readonly broker: Broker,
     private readonly worker: Worker,
-    private readonly delegation: Delegation = new Delegation(),
-  ) {}
+    options: KernelOptions = {},
+  ) {
+    this.delegation = options.delegation ?? new Delegation();
+    this.saveFinding = options.saveFinding ?? findingsInMemory();
+  }
+
+  private readonly delegation: Delegation;
+  private readonly saveFinding: FindingSaver;
 
   /** Open a session under a project and start its root task. Does not wait for the worker. */
-  async start(projectId: string, accountId: string, text: string): Promise<SessionSnapshot> {
-    const session = await this.trace.openSession(projectId, accountId);
+  async start(
+    projectId: string,
+    accountId: string,
+    text: string,
+    mode: SessionMode = 'explore',
+  ): Promise<SessionSnapshot> {
+    const session = await this.trace.openSession(projectId, accountId, mode);
     const root = await this.trace.openTask(session.id, null, 'lead', text);
     this.broker.publish(session.id, { type: 'task.opened', task: root });
     // Read the snapshot before the worker starts, so the caller always gets
@@ -132,6 +174,21 @@ export class Kernel implements WorkerReport {
     await this.delegation.runBounded(children, (child) => this.run(child, child.title, true));
     const rested = await Promise.all(children.map((child) => this.trace.task(child.id)));
     return rested.filter((task): task is NonNullable<typeof task> => task !== null);
+  }
+
+  async recordFinding(taskId: string, text: string): Promise<Finding> {
+    const task = await this.taskOrThrow(taskId);
+    if (text.trim().length === 0) throw new Error('kernel: a finding needs text');
+    // Save first, announce second. A page must never show a finding that a
+    // reload would not bring back.
+    const finding = await this.saveFinding(task.sessionId, taskId, text);
+    this.broker.publish(task.sessionId, {
+      type: 'finding.recorded',
+      taskId,
+      findingId: finding.id,
+      text: finding.text,
+    });
+    return finding;
   }
 
   async addSpend(taskId: string, amount: Money, _reason: string): Promise<void> {

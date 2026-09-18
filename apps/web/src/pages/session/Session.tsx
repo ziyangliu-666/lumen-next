@@ -13,6 +13,7 @@ import { Textarea } from '@/ui/textarea';
 import { PageHeader } from '@/core/shell';
 import {
   apply,
+  fetchSession,
   inTreeOrder,
   openStream,
   signInStub,
@@ -63,6 +64,29 @@ export function Session(): JSX.Element {
   // The socket is an external system, not render state: a ref, so opening it
   // does not itself schedule a render.
   const stream = useRef<Stream | null>(null);
+
+  // Another page hands a session over as `?session=<id>&task=<id>` in front of
+  // the hash: Landing after it creates a project, Home from a card or a finding.
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const id = query.get('session');
+    if (!id) return;
+    let active = true;
+    fetchSession(id).then(
+      (snapshot) => {
+        if (!active) return;
+        setState({ snapshot, stream: 'connecting' });
+        const taskId = query.get('task');
+        if (taskId && snapshot.tasks.some((task) => task.id === taskId)) setSelected(taskId);
+      },
+      (failure: unknown) => {
+        if (active) setError(failure instanceof Error ? failure.message : 'Could not open it.');
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // One socket per open session; closed when the session changes or the page goes.
   useEffect(() => {

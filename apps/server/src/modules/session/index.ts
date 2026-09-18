@@ -5,14 +5,17 @@ import type { Worker } from '../../core/domain/worker.js';
 import type { SessionAccess } from '../../core/http/authGuard.js';
 import type { Broker } from '../../core/protocol/broker.js';
 import { demoWorker } from './demoWorker.js';
-import { Kernel } from './kernel.js';
+import { sessionDirectory, type SessionDirectory } from './directory.js';
+import { Kernel, type FindingSaver } from './kernel.js';
 import { MemoryTrace } from './memoryTrace.js';
 import { PgTrace } from './pgTrace.js';
-import { sessionCommands, sessionRoutes } from './routes.js';
+import { sessionCommands, sessionRoutes, type ProjectGate } from './routes.js';
 
 export type { Node } from './taskComposite.js';
 export { buildTree, TaskNode } from './taskComposite.js';
-export type { Kernel } from './kernel.js';
+export type { FindingSaver, Kernel } from './kernel.js';
+export type { SessionDirectory } from './directory.js';
+export type { ProjectGate } from './routes.js';
 
 export interface SessionSlice {
   readonly kernel: Kernel;
@@ -20,6 +23,8 @@ export interface SessionSlice {
   readonly access: SessionAccess;
   readonly registerRoutes: (app: FastifyInstance) => void;
   readonly registerCommands: (broker: Broker) => void;
+  /** Hand to createProjectsSlice({ sessions }): what projects needs from sessions. */
+  readonly projects: SessionDirectory;
 }
 
 /**
@@ -31,13 +36,20 @@ export function createSessionSlice(deps: {
   broker: Broker;
   worker?: Worker;
   db?: Db | null;
+  /** From the projects slice: may this principal open a session under this project? */
+  requireProject?: ProjectGate;
+  /** From the projects slice: where findings are kept. */
+  recordFinding?: FindingSaver;
 }): SessionSlice {
   const trace = deps.db ? new PgTrace(deps.db) : new MemoryTrace();
-  const kernel = new Kernel(trace, deps.broker, deps.worker ?? demoWorker);
+  const kernel = new Kernel(trace, deps.broker, deps.worker ?? demoWorker, {
+    ...(deps.recordFinding ? { saveFinding: deps.recordFinding } : {}),
+  });
   return {
     kernel,
     access: kernel.access,
-    registerRoutes: sessionRoutes(kernel),
+    registerRoutes: sessionRoutes(kernel, deps.requireProject),
     registerCommands: sessionCommands(kernel),
+    projects: sessionDirectory(kernel, trace),
   };
 }

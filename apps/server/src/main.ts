@@ -42,7 +42,9 @@ async function bootstrap(): Promise<void> {
   const resolver = headerStub;
   const broker = new Broker();
   // Sprint 1 runs the echo worker; steering passes its own here when it lands.
-  const session = createSessionSlice({ broker });
+  const session = createSessionSlice({ broker, db });
+  // Before anything can connect: tasks left open by the last process are over.
+  const orphans = await session.kernel.restore();
 
   const webRoot = defaultWebRoot();
   const app = await buildServer({
@@ -64,6 +66,7 @@ async function bootstrap(): Promise<void> {
 
   await app.listen({ port: port(), host: '0.0.0.0' });
   if (webRoot) app.log.info(`serving the built web app from ${webRoot}`);
+  if (orphans > 0) app.log.info(`stopped ${orphans} task(s) left open by the last process`);
   app.log.info(db ? 'database connected, migrations applied' : 'no DATABASE_URL: in-memory mode');
 
   // Drain in-flight work before exiting, so a rolling deploy does not cut a

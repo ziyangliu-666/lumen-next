@@ -309,6 +309,65 @@ classDiagram
 - **broker**: fans events out to sockets that opened the session; routes
   commands to the one registered handler.
 
+### Two answers core owes identity
+
+LU YI raised both on 10 Sep and has been stopped by them since. The projects
+document raises the first one independently.
+
+**1. The error body gains a machine-readable code.**
+
+Decided: `{ error: { code, message, field? } }`.
+
+| Field | Is |
+|---|---|
+| `code` | A stable lowercase token a page branches on: `invalid_credentials`, `email_taken`, `invalid_body`. |
+| `message` | For a person. It may be reworded at any time. |
+| `field` | The offending input, when there is exactly one. |
+
+Core answers `{ error: string }` today, where the string is the message. That is
+not enough: identity's sign-in page is written against a closed set of codes,
+and the projects document specified the same nested shape on its own. Two of
+five slices need the code, and the alternative is branching on an English
+sentence, which breaks the first time somebody rewords one.
+
+The cost is one file, one error handler and four test assertions. It is cheap
+while core is the only thing on `main`, and it is a five-way conflict later.
+
+**2. The principal resolver exists. It cannot see the cookie.**
+
+There is no new registration point to add. `PrincipalResolver` is the port,
+`ServerDeps.resolver` injects it, and `main.ts` swaps it — §7 already has
+identity exporting `principalResolver`.
+
+What stops identity is the argument. `core/http/server.ts` calls:
+
+```ts
+request.principal = await deps.resolver.resolve(request.headers.authorization);
+```
+
+One header, nothing else. A cookie session cannot be read from there.
+
+Decided: widen the argument to everything a credential can arrive in.
+
+```ts
+export interface PrincipalResolver {
+  resolve(from: {
+    readonly authorization: string | undefined;
+    readonly cookies: Readonly<Record<string, string | undefined>>;
+  }): Promise<Principal | null>;
+}
+```
+
+`@fastify/cookie` is already registered, so `request.cookies` is there to pass.
+`headerStub` reads `from.authorization` and ignores the rest.
+
+**3. While we are here: `anySignedInMayWatch`.**
+
+Core ships a `SessionAccess.canWatch` that lets any signed-in principal watch
+any session. It cannot be closed in sprint 1: `headerStub` already lets anyone
+claim any account, and `projectOf(sessionId)` does not exist. Replacing it is
+the job of whichever of identity and projects lands second. It is not core's.
+
 ### Interfaces shared by two slices (`core/domain`)
 
 ```mermaid

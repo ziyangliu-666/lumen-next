@@ -63,13 +63,13 @@ export function traceContract(make: () => Trace): void {
     const root = await trace.openTask(session.id, null, 'lead', 'q');
 
     const steps = await Promise.all([
-      trace.appendStep(root.id, 'a'),
-      trace.appendStep(root.id, 'b'),
-      trace.appendStep(root.id, 'c'),
+      trace.appendStep(root.id, 'thinking', 'a'),
+      trace.appendStep(root.id, 'tool', 'b'),
+      trace.appendStep(root.id, 'reply', 'c'),
     ]);
 
     expect(steps.map((step) => step.index).sort()).toEqual([0, 1, 2]);
-    await expect(trace.appendStep('nope', 'x')).rejects.toThrow(/no task/);
+    await expect(trace.appendStep('nope', 'reply', 'x')).rejects.toThrow(/no task/);
   });
 
   it('reads a snapshot with the tasks in the order they were opened and their steps', async () => {
@@ -79,16 +79,16 @@ export function traceContract(make: () => Trace): void {
     const root = await trace.openTask(session.id, null, 'lead', 'q');
     const child = await trace.openTask(session.id, root.id, 'reader', 'part');
     await trace.openTask(other.id, null, 'lead', 'not mine');
-    await trace.appendStep(root.id, 'thinking');
-    await trace.appendStep(child.id, 'reading');
+    await trace.appendStep(root.id, 'thinking', 'planning');
+    await trace.appendStep(child.id, 'tool', 'reading');
 
     const snapshot = await trace.snapshot(session.id);
 
     expect(snapshot?.session.id).toBe(session.id);
     expect(snapshot?.tasks.map((task) => task.id)).toEqual([root.id, child.id]);
     expect(snapshot?.steps).toEqual([
-      { taskId: root.id, index: 0, text: 'thinking' },
-      { taskId: child.id, index: 0, text: 'reading' },
+      { taskId: root.id, index: 0, kind: 'thinking', text: 'planning' },
+      { taskId: child.id, index: 0, kind: 'tool', text: 'reading' },
     ]);
   });
 
@@ -104,5 +104,20 @@ export function traceContract(make: () => Trace): void {
 
     expect(open).toContain(running.id);
     expect(open).not.toContain(ended.id);
+  });
+
+  it("adds a spend to the task's own cost, exactly, also when two arrive together", async () => {
+    const trace = make();
+    const session = await trace.openSession('p1', 'acc-1');
+    const root = await trace.openTask(session.id, null, 'lead', 'q');
+
+    await Promise.all([
+      trace.addCost(root.id, { dollars: 0.01 }),
+      trace.addCost(root.id, { dollars: 0.02 }),
+    ]);
+    const after = await trace.addCost(root.id, { dollars: 0.0005 });
+
+    expect(after.ownCost.dollars).toBeCloseTo(0.0305, 6);
+    await expect(trace.addCost('nope', { dollars: 1 })).rejects.toThrow(/no task/);
   });
 }

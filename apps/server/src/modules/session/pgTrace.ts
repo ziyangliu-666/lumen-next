@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { Session, SessionSnapshot, Step, TaskStatus } from '@lumen/contracts';
+import type { Money, Session, Step, StepKind, TaskStatus } from '@lumen/contracts';
 import type { Db, Queryable } from '../../core/db/db.js';
 import type { TaskRecord } from '../../core/domain/task.js';
-import { isEnding, type Trace } from './trace.js';
+import { isEnding, type Trace, type TraceSnapshot } from './trace.js';
 
 // The record in Postgres. Every task and every step is written as it happens,
 // so a process that dies loses nothing, and the snapshot is a read of the same
@@ -37,6 +37,7 @@ interface TaskRow {
 interface StepRow {
   task_id: string;
   index: number;
+  kind: StepKind;
   text: string;
   [column: string]: unknown;
 }
@@ -58,6 +59,10 @@ function toSession(row: SessionRow): Session {
     accountId: row.account_id,
     startedAt: row.started_at.getTime(),
   };
+}
+
+function toStep(row: StepRow): Step {
+  return { taskId: row.task_id, index: row.index, kind: row.kind, text: row.text };
 }
 
 function toTask(row: TaskRow): TaskRecord {
@@ -150,7 +155,7 @@ export class PgTrace implements Trace {
     return (await this.task(taskId))!;
   }
 
-  async appendStep(taskId: string, text: string): Promise<Step> {
+  async appendStep(taskId: string, kind: StepKind, text: string): Promise<Step> {
     if (!UUID.test(taskId)) throw new Error(`trace: no task ${taskId}`);
     // Two reports for one task can arrive together. The index is max + 1, so
     // the two must not read the same max: the row lock on the task makes the
@@ -159,24 +164,36 @@ export class PgTrace implements Trace {
       const locked = await tx.query(`select id from tasks where id = $1 for update`, [taskId]);
       if (locked.length === 0) throw new Error(`trace: no task ${taskId}`);
       const [row] = await tx.query<StepRow>(
-        `insert into steps (task_id, index, text)
-         select $1, coalesce(max(index) + 1, 0), $2 from steps where task_id = $1
-         returning task_id, index, text`,
-        [taskId, text],
+        `insert into steps (task_id, index, kind, text)
+         select $1, coalesce(max(index) + 1, 0), $2, $3 from steps where task_id = $1
+         returning task_id, index, kind, text`,
+        [taskId, kind, text],
       );
-      return { taskId: row!.task_id, index: row!.index, text: row!.text };
+      return toStep(row!);
     });
   }
 
-  async snapshot(sessionId: string): Promise<SessionSnapshot | null> {
+  async addCost(taskId: string, amount: Money): Promise<TaskRecord> {
+    // The addition happens in SQL, on the numeric column. Reading the cost,
+    // adding in JS and writing it back would drift, and would lose one of two
+    // spends that arrive together.
+    const updated = await this.db.query(
+      `update tasks set own_cost = own_cost + $2 where id = $1 returning id`,
+      [UUID.test(taskId) ? taskId : null, amount.dollars],
+    );
+    if (updated.length === 0) throw new Error(`trace: no task ${taskId}`);
+    return (await this.task(taskId))!;
+  }
+
+  async snapshot(sessionId: string): Promise<TraceSnapshot | null> {
     const session = await this.session(sessionId);
     if (!session) return null;
     const tasks = await this.db.query<TaskRow>(
       `select ${TASK_COLUMNS} from tasks t where t.session_id = $1 order by t.seq`,
       [sessionId],
     );
-    const steps = await this.db.query<StepRow & { seq: string }>(
-      `select s.task_id, s.index, s.text from steps s
+    const steps = await this.db.query<StepRow>(
+      `select s.task_id, s.index, s.kind, s.text from steps s
          join tasks t on t.id = s.task_id
         where t.session_id = $1 order by t.seq, s.index`,
       [sessionId],
@@ -184,7 +201,7 @@ export class PgTrace implements Trace {
     return {
       session,
       tasks: tasks.map(toTask),
-      steps: steps.map((row) => ({ taskId: row.task_id, index: row.index, text: row.text })),
+      steps: steps.map(toStep),
     };
   }
 

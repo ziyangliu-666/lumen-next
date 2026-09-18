@@ -1,4 +1,4 @@
-import type { Session, SessionSnapshot, Step, TaskStatus } from '@lumen/contracts';
+import type { Money, Session, SessionSnapshot, Step, StepKind, TaskStatus } from '@lumen/contracts';
 import type { TaskRecord } from '../../core/domain/task.js';
 
 // The durable record of a session: its tasks and their steps, in the order
@@ -8,6 +8,9 @@ import type { TaskRecord } from '../../core/domain/task.js';
 // Two implementations sit behind it. PgTrace is the real one. MemoryTrace is
 // for a process started without DATABASE_URL and for unit tests of the kernel;
 // one suite (traceContract.ts) runs against both, so they cannot drift.
+/** The rows of one session. The kernel adds the rolled-up spend to make a SessionSnapshot. */
+export type TraceSnapshot = Omit<SessionSnapshot, 'spend' | 'totals'>;
+
 export interface Trace {
   openSession(projectId: string, accountId: string): Promise<Session>;
   session(id: string): Promise<Session | null>;
@@ -23,8 +26,10 @@ export interface Trace {
   rootOf(sessionId: string): Promise<TaskRecord | null>;
   /** Ending statuses (ended, stopped, failed) also stamp endedAt. */
   setStatus(taskId: string, status: TaskStatus): Promise<TaskRecord>;
-  appendStep(taskId: string, text: string): Promise<Step>;
-  snapshot(sessionId: string): Promise<SessionSnapshot | null>;
+  appendStep(taskId: string, kind: StepKind, text: string): Promise<Step>;
+  /** Add to the task's own cost and return the task with its new total. */
+  addCost(taskId: string, amount: Money): Promise<TaskRecord>;
+  snapshot(sessionId: string): Promise<TraceSnapshot | null>;
   /**
    * Every task still queued, running or waiting, in any session. After a
    * restart these are the tasks whose process is gone.

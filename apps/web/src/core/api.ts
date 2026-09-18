@@ -80,8 +80,20 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
           tasks: patchTask(snapshot.tasks, event.taskId, { ownCost: event.ownCost }),
         },
       };
+    case 'task.total': {
+      const totals = { ...snapshot.totals, [event.taskId]: event.total };
+      // The root's total is the session's spend; the server says so, the page does not add.
+      const isRoot = snapshot.tasks.some((t) => t.id === event.taskId && t.parentId === null);
+      const spend = isRoot ? event.total : snapshot.spend;
+      return { ...state, snapshot: { ...snapshot, totals, spend } };
+    }
     case 'step.appended': {
-      const step: Step = { taskId: event.taskId, index: event.index, text: event.text };
+      const step: Step = {
+        taskId: event.taskId,
+        index: event.index,
+        kind: event.kind,
+        text: event.text,
+      };
       // The snapshot may already hold this step if it was read after the event
       // was sent; the (task, index) pair says so.
       const seen = snapshot.steps.some((s) => s.taskId === step.taskId && s.index === step.index);
@@ -92,6 +104,13 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
     default:
       return state;
   }
+}
+
+/** The tasks in call-tree order: each parent, then its children, depth first. */
+export function inTreeOrder(tasks: readonly Task[]): readonly Task[] {
+  const under = (parentId: string | null): Task[] =>
+    tasks.filter((task) => task.parentId === parentId).flatMap((task) => [task, ...under(task.id)]);
+  return under(null);
 }
 
 function patchTask(tasks: readonly Task[], taskId: string, patch: Partial<Task>): readonly Task[] {

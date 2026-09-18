@@ -1,17 +1,23 @@
-import type { SessionSnapshot, Task, TaskStatus } from '@lumen/contracts';
-import type { Worker, WorkerReport } from '../../core/domain/worker.js';
+import type { Money, SessionSnapshot, StepKind, Task, TaskStatus } from '@lumen/contracts';
+import { zero } from '@lumen/contracts';
+import type { Delegated, Worker, WorkerReport } from '../../core/domain/worker.js';
 import type { Principal, SessionAccess } from '../../core/http/authGuard.js';
 import { notFound } from '../../core/http/httpError.js';
 import type { Broker } from '../../core/protocol/broker.js';
-import type { Trace } from './trace.js';
+import { Delegation } from './delegation.js';
+import { buildTree } from './taskComposite.js';
+import { isEnding, type Trace } from './trace.js';
 
 // The engine of a session. It opens the root task, hands it to the worker, and
 // is the WorkerReport the worker writes through: every report lands in the
 // trace and on the socket in one call, so the durable record and the live
 // stream cannot disagree.
 //
-// One root task and one worker run per turn. The Delegation fan-out and the BudgetGuard check points from ARCHITECTURE.md §9
-// slot in here without changing the worker or the routes.
+// A worker may delegate: the kernel opens the child tasks, runs them within
+// the Delegation bounds, and hands them back when they have come to rest. Cost
+// and stop go through the Composite (taskComposite.ts), so nothing here walks
+// parent_id. The BudgetGuard check points from ARCHITECTURE.md §9 arrive with
+// billing and slot in at start(), say() and delegate().
 export class Kernel implements WorkerReport {
   private readonly inFlight = new Set<Promise<void>>();
 
@@ -19,6 +25,7 @@ export class Kernel implements WorkerReport {
     private readonly trace: Trace,
     private readonly broker: Broker,
     private readonly worker: Worker,
+    private readonly delegation: Delegation = new Delegation(),
   ) {}
 
   /** Open a session under a project and start its root task. Does not wait for the worker. */
@@ -29,21 +36,38 @@ export class Kernel implements WorkerReport {
     // Read the snapshot before the worker starts, so the caller always gets
     // the root as it was opened and the page draws the rest from the events.
     const snapshot = await this.snapshotOf(session.id);
-    this.track(this.run(root));
+    this.track(this.run(root, text));
     return snapshot;
   }
 
   /** A new turn on the root: the user's words become a step, then the worker runs again. */
   async say(sessionId: string, principal: Principal, text: string): Promise<void> {
     const root = await this.rootFor(sessionId, principal);
-    await this.appendStep(root.id, `you: ${text}`);
-    this.track(this.run(root));
+    await this.appendStep(root.id, 'you', text);
+    this.track(this.run(root, text));
   }
 
   async stop(sessionId: string, principal: Principal): Promise<void> {
-    const root = await this.rootFor(sessionId, principal);
-    if (root.endedAt !== null) return;
-    await this.setStatus(root.id, 'stopped');
+    await this.rootFor(sessionId, principal);
+    const snapshot = await this.trace.snapshot(sessionId);
+    const tree = snapshot && buildTree(snapshot.tasks);
+    if (!snapshot || !tree) return;
+    // One call on the root cancels the whole tree. The kernel does not know,
+    // and does not ask, how deep it goes.
+    tree.cancel();
+    const cancelled = new Set(
+      tree
+        .flatten()
+        .filter((node) => node.isCancelled())
+        .map((node) => node.id),
+    );
+    for (const task of snapshot.tasks) {
+      // A task that already ended keeps its verdict: stop ends what is going
+      // on, it does not rewrite what happened.
+      if (cancelled.has(task.id) && !isEnding(task.status)) {
+        await this.setStatus(task.id, 'stopped');
+      }
+    }
   }
 
   async snapshot(sessionId: string, principal: Principal): Promise<SessionSnapshot> {
@@ -75,11 +99,49 @@ export class Kernel implements WorkerReport {
   };
 
   // WorkerReport: the one door out of the worker.
-  async appendStep(taskId: string, text: string): Promise<void> {
-    const task = await this.trace.task(taskId);
-    if (!task) throw new Error(`kernel: no task ${taskId}`);
-    const step = await this.trace.appendStep(taskId, text);
+  async appendStep(taskId: string, kind: StepKind, text: string): Promise<void> {
+    const task = await this.taskOrThrow(taskId);
+    const step = await this.trace.appendStep(taskId, kind, text);
     this.broker.publish(task.sessionId, { type: 'step.appended', ...step });
+  }
+
+  async delegate(taskId: string, work: readonly Delegated[]): Promise<Task[]> {
+    const parent = await this.taskOrThrow(taskId);
+    this.delegation.check(parent, work);
+
+    // Open every child before any of them runs, so the page draws the whole
+    // fan-out at once and a stop that arrives now reaches all of them.
+    const children: Task[] = [];
+    for (const item of work) {
+      const child = await this.trace.openTask(parent.sessionId, parent.id, item.agent, item.title);
+      this.broker.publish(parent.sessionId, { type: 'task.opened', task: child });
+      children.push(child);
+    }
+
+    await this.delegation.runBounded(children, (child) => this.run(child, child.title, true));
+    const rested = await Promise.all(children.map((child) => this.trace.task(child.id)));
+    return rested.filter((task): task is NonNullable<typeof task> => task !== null);
+  }
+
+  async addSpend(taskId: string, amount: Money, _reason: string): Promise<void> {
+    if (!Number.isFinite(amount.dollars) || amount.dollars < 0) {
+      throw new Error(`kernel: a spend must be a non-negative amount, got ${amount.dollars}`);
+    }
+    // The ledger entry (who pays, and why) is billing's record() and is wired
+    // in when that slice lands. The task's own cost is the trace's, and is here.
+    const task = await this.trace.addCost(taskId, amount);
+    this.broker.publish(task.sessionId, { type: 'task.cost', taskId, ownCost: task.ownCost });
+
+    // The spend changes the total of this task and of every ancestor, and of
+    // nothing else. The Composite gives each total; the page only displays it.
+    const snapshot = await this.trace.snapshot(task.sessionId);
+    const tree = snapshot && buildTree(snapshot.tasks);
+    if (!snapshot || !tree) return;
+    const byId = new Map(snapshot.tasks.map((row) => [row.id, row]));
+    for (let at = byId.get(taskId); at; at = at.parentId ? byId.get(at.parentId) : undefined) {
+      const total = tree.find(at.id)?.cost() ?? zero;
+      this.broker.publish(task.sessionId, { type: 'task.total', taskId: at.id, total });
+    }
   }
 
   /** Resolves once every worker run started so far has settled. For tests and shutdown. */
@@ -87,10 +149,17 @@ export class Kernel implements WorkerReport {
     while (this.inFlight.size > 0) await Promise.allSettled([...this.inFlight]);
   }
 
-  private async run(task: Task): Promise<void> {
+  /**
+   * One turn of one task. `onlyIfQueued` is for a delegated child, which may
+   * have waited for a free lane: if a stop reached it in the meantime it must
+   * stay stopped, not be set running again. A root's later turn is the
+   * opposite case, an ended task that runs again on purpose.
+   */
+  private async run(task: Task, input: string, onlyIfQueued = false): Promise<void> {
     try {
+      if (onlyIfQueued && (await this.trace.task(task.id))?.status !== 'queued') return;
       await this.setStatus(task.id, 'running');
-      await this.worker.run(task, this);
+      await this.worker.run({ ...task, status: 'running' }, input, this);
       // The user may have stopped it while the worker ran; that verdict stands.
       const now = await this.trace.task(task.id);
       if (now?.status === 'running') await this.setStatus(task.id, 'ended');
@@ -124,9 +193,23 @@ export class Kernel implements WorkerReport {
     return root;
   }
 
+  private async taskOrThrow(taskId: string): Promise<Task> {
+    const task = await this.trace.task(taskId);
+    if (!task) throw new Error(`kernel: no task ${taskId}`);
+    return task;
+  }
+
   private async snapshotOf(sessionId: string): Promise<SessionSnapshot> {
     const snapshot = await this.trace.snapshot(sessionId);
     if (!snapshot) throw notFound('no such session');
-    return snapshot;
+    // The session's spend is the root's cost with every descendant rolled up:
+    // one call on the Composite, for a tree that is already loaded.
+    const tree = buildTree(snapshot.tasks);
+    const totals: Record<string, Money> = {};
+    for (const node of tree?.flatten() ?? []) {
+      const total = node.cost();
+      if (total.dollars > 0) totals[node.id] = total;
+    }
+    return { ...snapshot, totals, spend: tree?.cost() ?? zero };
   }
 }

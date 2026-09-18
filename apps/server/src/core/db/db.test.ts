@@ -33,11 +33,15 @@ describe.skipIf(!TEST_DATABASE_URL)('core: database', () => {
     const [{ current_schema: schema } = { current_schema: '' }] = await db.query<{
       current_schema: string;
     }>('select current_schema()');
+    const before = await db.query<{ name: string }>('select name from pgmigrations');
     const again = await openDatabase(TEST_DATABASE_URL!, { schema });
-    const applied = await again.query('select name from pgmigrations');
+    const after = await again.query<{ name: string }>('select name from pgmigrations');
     await again.close();
 
-    expect(applied).toHaveLength(1);
+    // Not a fixed count: every slice adds files here, and a number in this
+    // test would make each of those pull requests conflict with the others.
+    expect(after).toEqual(before);
+    expect(after.map((row) => row.name)).toContain('001_core_base');
   });
 
   it('hands money back as a number, not the driver default string', async () => {

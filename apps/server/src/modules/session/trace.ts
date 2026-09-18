@@ -1,4 +1,13 @@
-import type { Money, Session, SessionSnapshot, Step, StepKind, TaskStatus } from '@lumen/contracts';
+import type {
+  Money,
+  Session,
+  SessionMode,
+  SessionSnapshot,
+  SessionSummary,
+  Step,
+  StepKind,
+  TaskStatus,
+} from '@lumen/contracts';
 import type { TaskRecord } from '../../core/domain/task.js';
 
 // The durable record of a session: its tasks and their steps, in the order
@@ -12,7 +21,7 @@ import type { TaskRecord } from '../../core/domain/task.js';
 export type TraceSnapshot = Omit<SessionSnapshot, 'spend' | 'totals'>;
 
 export interface Trace {
-  openSession(projectId: string, accountId: string): Promise<Session>;
+  openSession(projectId: string, accountId: string, mode: SessionMode): Promise<Session>;
   session(id: string): Promise<Session | null>;
   /** Throws when parentId names no task: a child of nothing is a bug upstream. */
   openTask(
@@ -35,6 +44,12 @@ export interface Trace {
    * restart these are the tasks whose process is gone.
    */
   openTasks(): Promise<TaskRecord[]>;
+  /**
+   * The sessions of one project, newest first, without their tasks and steps.
+   * A project card is drawn from this on every poll, so it must stay one cheap
+   * read however long the sessions ran.
+   */
+  summaries(projectId: string): Promise<SessionSummary[]>;
 }
 
 const ENDING: readonly TaskStatus[] = ['ended', 'stopped', 'failed'];

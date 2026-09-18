@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import type { Money, Session, Step, StepKind, TaskStatus } from '@lumen/contracts';
-import { add } from '@lumen/contracts';
+import type {
+  Money,
+  Session,
+  SessionMode,
+  SessionSummary,
+  Step,
+  StepKind,
+  TaskStatus,
+} from '@lumen/contracts';
+import { add, zero } from '@lumen/contracts';
 import { makeTask, type TaskRecord } from '../../core/domain/task.js';
 import { isEnding, type Trace, type TraceSnapshot } from './trace.js';
 
@@ -12,8 +20,14 @@ export class MemoryTrace implements Trace {
   private readonly tasks = new Map<string, TaskRecord>();
   private readonly steps = new Map<string, Step[]>();
 
-  openSession(projectId: string, accountId: string): Promise<Session> {
-    const session: Session = { id: randomUUID(), projectId, accountId, startedAt: Date.now() };
+  openSession(projectId: string, accountId: string, mode: SessionMode): Promise<Session> {
+    const session: Session = {
+      id: randomUUID(),
+      mode,
+      projectId,
+      accountId,
+      startedAt: Date.now(),
+    };
     this.sessions.set(session.id, session);
     return Promise.resolve(session);
   }
@@ -86,5 +100,25 @@ export class MemoryTrace implements Trace {
 
   openTasks(): Promise<TaskRecord[]> {
     return Promise.resolve([...this.tasks.values()].filter((task) => !isEnding(task.status)));
+  }
+
+  summaries(projectId: string): Promise<SessionSummary[]> {
+    const all = [...this.tasks.values()];
+    const result = [...this.sessions.values()]
+      .filter((session) => session.projectId === projectId)
+      .map((session): SessionSummary => {
+        const mine = all.filter((task) => task.sessionId === session.id);
+        const root = mine.find((task) => task.parentId === null);
+        return {
+          id: session.id,
+          mode: session.mode,
+          status: root?.status ?? 'queued',
+          spend: mine.reduce((sum, task) => add(sum, task.ownCost), zero),
+          startedAt: session.startedAt,
+          endedAt: root?.endedAt ?? null,
+        };
+      });
+    // Newest first. Insertion order breaks a tie inside one millisecond.
+    return Promise.resolve(result.reverse().sort((a, b) => b.startedAt - a.startedAt));
   }
 }

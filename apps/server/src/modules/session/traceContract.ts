@@ -8,10 +8,10 @@ import type { Trace } from './trace.js';
 export function traceContract(make: () => Trace): void {
   it('opens a session and reads it back', async () => {
     const trace = make();
-    const session = await trace.openSession('p1', 'acc-1');
+    const session = await trace.openSession('p1', 'acc-1', 'explore');
 
     expect(await trace.session(session.id)).toEqual(session);
-    expect(session).toMatchObject({ projectId: 'p1', accountId: 'acc-1' });
+    expect(session).toMatchObject({ projectId: 'p1', accountId: 'acc-1', mode: 'explore' });
   });
 
   it('answers null for an id that names nothing, uuid or not', async () => {
@@ -26,7 +26,7 @@ export function traceContract(make: () => Trace): void {
 
   it('opens the root queued at depth 0, and a child one level under its parent', async () => {
     const trace = make();
-    const session = await trace.openSession('p1', 'acc-1');
+    const session = await trace.openSession('p1', 'acc-1', 'explore');
     const root = await trace.openTask(session.id, null, 'lead', 'question');
     const child = await trace.openTask(session.id, root.id, 'reader', 'part one');
 
@@ -39,7 +39,7 @@ export function traceContract(make: () => Trace): void {
 
   it('refuses a child whose parent does not exist', async () => {
     const trace = make();
-    const session = await trace.openSession('p1', 'acc-1');
+    const session = await trace.openSession('p1', 'acc-1', 'explore');
 
     await expect(
       trace.openTask(session.id, '00000000-0000-4000-8000-000000000000', 'reader', 'orphan'),
@@ -48,7 +48,7 @@ export function traceContract(make: () => Trace): void {
 
   it('stamps endedAt on an ending status and clears it when the task runs again', async () => {
     const trace = make();
-    const session = await trace.openSession('p1', 'acc-1');
+    const session = await trace.openSession('p1', 'acc-1', 'explore');
     const root = await trace.openTask(session.id, null, 'lead', 'q');
 
     expect((await trace.setStatus(root.id, 'running')).endedAt).toBeNull();
@@ -59,7 +59,7 @@ export function traceContract(make: () => Trace): void {
 
   it('numbers the steps of a task from 0, also when two arrive together', async () => {
     const trace = make();
-    const session = await trace.openSession('p1', 'acc-1');
+    const session = await trace.openSession('p1', 'acc-1', 'explore');
     const root = await trace.openTask(session.id, null, 'lead', 'q');
 
     const steps = await Promise.all([
@@ -74,8 +74,8 @@ export function traceContract(make: () => Trace): void {
 
   it('reads a snapshot with the tasks in the order they were opened and their steps', async () => {
     const trace = make();
-    const session = await trace.openSession('p1', 'acc-1');
-    const other = await trace.openSession('p2', 'acc-2');
+    const session = await trace.openSession('p1', 'acc-1', 'explore');
+    const other = await trace.openSession('p2', 'acc-2', 'explore');
     const root = await trace.openTask(session.id, null, 'lead', 'q');
     const child = await trace.openTask(session.id, root.id, 'reader', 'part');
     await trace.openTask(other.id, null, 'lead', 'not mine');
@@ -94,7 +94,7 @@ export function traceContract(make: () => Trace): void {
 
   it('lists the tasks that have not ended, across sessions', async () => {
     const trace = make();
-    const session = await trace.openSession('p1', 'acc-1');
+    const session = await trace.openSession('p1', 'acc-1', 'explore');
     const running = await trace.openTask(session.id, null, 'lead', 'running');
     const ended = await trace.openTask(session.id, running.id, 'reader', 'ended');
     await trace.setStatus(running.id, 'running');
@@ -108,7 +108,7 @@ export function traceContract(make: () => Trace): void {
 
   it("adds a spend to the task's own cost, exactly, also when two arrive together", async () => {
     const trace = make();
-    const session = await trace.openSession('p1', 'acc-1');
+    const session = await trace.openSession('p1', 'acc-1', 'explore');
     const root = await trace.openTask(session.id, null, 'lead', 'q');
 
     await Promise.all([
@@ -119,5 +119,34 @@ export function traceContract(make: () => Trace): void {
 
     expect(after.ownCost.dollars).toBeCloseTo(0.0305, 6);
     await expect(trace.addCost('nope', { dollars: 1 })).rejects.toThrow(/no task/);
+  });
+
+  it('summarises the sessions of one project, newest first, with status and spend', async () => {
+    const trace = make();
+    const project = `p-${Math.random()}`;
+    const first = await trace.openSession(project, 'acc-1', 'explore');
+    const second = await trace.openSession(project, 'acc-1', 'seed');
+    await trace.openSession('another project', 'acc-1', 'explore');
+    const root = await trace.openTask(first.id, null, 'lead', 'q');
+    const child = await trace.openTask(first.id, root.id, 'reader', 'part');
+    await trace.addCost(root.id, { dollars: 0.01 });
+    await trace.addCost(child.id, { dollars: 0.02 });
+    await trace.setStatus(root.id, 'ended');
+
+    const summaries = await trace.summaries(project);
+
+    expect(summaries.map((summary) => summary.id).sort()).toEqual([first.id, second.id].sort());
+    const done = summaries.find((summary) => summary.id === first.id);
+    expect(done).toMatchObject({ mode: 'explore', status: 'ended' });
+    expect(done?.spend.dollars).toBeCloseTo(0.03, 6);
+    expect(done?.endedAt).not.toBeNull();
+    // A session whose root has not been opened yet is queued and has spent nothing.
+    expect(summaries.find((summary) => summary.id === second.id)).toMatchObject({
+      mode: 'seed',
+      status: 'queued',
+      spend: { dollars: 0 },
+      endedAt: null,
+    });
+    expect(await trace.summaries('no such project')).toEqual([]);
   });
 }

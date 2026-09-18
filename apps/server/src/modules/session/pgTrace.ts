@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { Money, Session, Step, StepKind, TaskStatus } from '@lumen/contracts';
+import type {
+  Money,
+  Session,
+  SessionMode,
+  SessionSummary,
+  Step,
+  StepKind,
+  TaskStatus,
+} from '@lumen/contracts';
 import type { Db, Queryable } from '../../core/db/db.js';
 import type { TaskRecord } from '../../core/domain/task.js';
 import { isEnding, type Trace, type TraceSnapshot } from './trace.js';
@@ -13,6 +21,7 @@ import { isEnding, type Trace, type TraceSnapshot } from './trace.js';
 
 interface SessionRow {
   id: string;
+  mode: SessionMode;
   project_id: string;
   account_id: string;
   started_at: Date;
@@ -55,6 +64,7 @@ const TASK_COLUMNS = `
 function toSession(row: SessionRow): Session {
   return {
     id: row.id,
+    mode: row.mode,
     projectId: row.project_id,
     accountId: row.account_id,
     startedAt: row.started_at.getTime(),
@@ -90,11 +100,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export class PgTrace implements Trace {
   constructor(private readonly db: Db) {}
 
-  async openSession(projectId: string, accountId: string): Promise<Session> {
+  async openSession(projectId: string, accountId: string, mode: SessionMode): Promise<Session> {
     const [row] = await this.db.query<SessionRow>(
-      `insert into sessions (id, project_id, account_id) values ($1, $2, $3)
-       returning id, project_id, account_id, started_at`,
-      [randomUUID(), projectId, accountId],
+      `insert into sessions (id, project_id, account_id, mode) values ($1, $2, $3, $4)
+       returning id, mode, project_id, account_id, started_at`,
+      [randomUUID(), projectId, accountId, mode],
     );
     return toSession(row!);
   }
@@ -102,7 +112,7 @@ export class PgTrace implements Trace {
   async session(id: string): Promise<Session | null> {
     if (!UUID.test(id)) return null;
     const [row] = await this.db.query<SessionRow>(
-      `select id, project_id, account_id, started_at from sessions where id = $1`,
+      `select id, mode, project_id, account_id, started_at from sessions where id = $1`,
       [id],
     );
     return row ? toSession(row) : null;
@@ -211,6 +221,34 @@ export class PgTrace implements Trace {
         where t.status in ('queued', 'running', 'waiting') order by t.seq`,
     );
     return rows.map(toTask);
+  }
+
+  async summaries(projectId: string): Promise<SessionSummary[]> {
+    // One statement, no steps read, and the spend summed on the numeric column.
+    const rows = await this.db.query<{
+      id: string;
+      mode: SessionMode;
+      status: TaskStatus | null;
+      spend: number;
+      started_at: Date;
+      ended_at: Date | null;
+    }>(
+      `select s.id, s.mode, s.started_at, r.status, r.ended_at,
+              coalesce((select sum(t.own_cost) from tasks t where t.session_id = s.id), 0) as spend
+         from sessions s
+         left join tasks r on r.session_id = s.id and r.parent_id is null
+        where s.project_id = $1
+        order by s.started_at desc, s.id desc`,
+      [projectId],
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      mode: row.mode,
+      status: row.status ?? 'queued',
+      spend: { dollars: row.spend },
+      startedAt: row.started_at.getTime(),
+      endedAt: row.ended_at ? row.ended_at.getTime() : null,
+    }));
   }
 
   private async oneTask(

@@ -21,14 +21,19 @@ session, one task, one step, rendered end to end.
 | `kernel.ts` | The engine. Opens the root task, runs the worker, and is the `WorkerReport` the worker writes through. Owns the "who may read this session" answer. |
 | `delegation.ts` | The two bounds on a fan-out: how deep the tree may go, and how many children run at once. |
 | `demoWorker.ts` | A worker with no model: a lead that fans out to three readers, each of which spends and replies. Steering replaces it behind `core/domain/worker.ts`. |
+| `directory.ts` | `SessionDirectory`: what the projects slice is handed (start, list, stop, context, taskSession). Trusted in-process calls. |
 | `routes.ts` | `POST /api/projects/:id/sessions`, `GET /api/sessions/:id`, `POST /api/sessions/:id/stop`; commands `session.say`, `session.stop`. |
 | `taskComposite.ts` | The Composite the design problem asks for, and `buildTree`, which turns task rows into it. The kernel uses it for the session's spend, each task's rolled-up total, and stop. |
 
 ## Public index
 
 ```ts
-export function createSessionSlice(deps: { broker: Broker; worker?: Worker; db?: Db | null }): SessionSlice;
-// SessionSlice = { kernel, access, registerRoutes, registerCommands }
+export function createSessionSlice(deps: {
+  broker: Broker; worker?: Worker; db?: Db | null;
+  requireProject?: ProjectGate;   // from projects: may this principal use this project?
+  recordFinding?: FindingSaver;   // from projects: where findings are kept
+}): SessionSlice;
+// SessionSlice = { kernel, access, registerRoutes, registerCommands, projects: SessionDirectory }
 export { buildTree, TaskNode, type Node, type Kernel };
 ```
 

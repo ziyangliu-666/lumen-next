@@ -1,0 +1,100 @@
+diff --git a/apps/web/src/core/api.ts b/apps/web/src/core/api.ts
+--- a/apps/web/src/core/api.ts
++++ b/apps/web/src/core/api.ts
+@@ -192,3 +192,34 @@
+     },
+   };
+ }
++
++export class RequestFailure extends Error {
++  constructor(
++    readonly status: number,
++    message: string,
++  ) {
++    super(message);
++  }
++}
++export async function request<T>(url: string, init?: RequestInit): Promise<T> {
++  const response = await fetch(url, init);
++  if (!response.ok) {
++    let message =
++      response.status === 401
++        ? 'Sign in to see your projects.'
++        : `Request failed (${response.status}). Please try refreshing.`;
++    try {
++      const body: unknown = await response.json();
++      if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string')
++        message = body.error;
++    } catch {
++      /* Use the status when the response is not JSON. */
++    }
++    throw new RequestFailure(response.status, message);
++  }
++  return (await response.json()) as T;
++}
++
++export function createProjectRequest(question: string, mode: 'explore' | 'seed'): Promise<Response> {
++  return fetch('/api/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question, mode }) });
++}
+diff --git a/apps/web/src/pages/home/api.ts b/apps/web/src/pages/home/api.ts
+--- a/apps/web/src/pages/home/api.ts
++++ b/apps/web/src/pages/home/api.ts
+@@ -28,32 +28,8 @@
+   items: T[];
+   nextCursor: string | null;
+ }
+-export class RequestFailure extends Error {
+-  constructor(
+-    readonly status: number,
+-    message: string,
+-  ) {
+-    super(message);
+-  }
+-}
+-export async function request<T>(url: string, init?: RequestInit): Promise<T> {
+-  const response = await fetch(url, init);
+-  if (!response.ok) {
+-    let message =
+-      response.status === 401
+-        ? 'Sign in to see your projects.'
+-        : `Request failed (${response.status}). Please try refreshing.`;
+-    try {
+-      const body: unknown = await response.json();
+-      if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string')
+-        message = body.error;
+-    } catch {
+-      /* Use the status when the response is not JSON. */
+-    }
+-    throw new RequestFailure(response.status, message);
+-  }
+-  return (await response.json()) as T;
+-}
++export { request, RequestFailure } from '@/core/api';
++
+ export function sessionLink(id: string, taskId?: string): string {
+   const query = new URLSearchParams({ session: id });
+   if (taskId) query.set('task', taskId);
+diff --git a/apps/web/src/pages/landing/Landing.tsx b/apps/web/src/pages/landing/Landing.tsx
+--- a/apps/web/src/pages/landing/Landing.tsx
++++ b/apps/web/src/pages/landing/Landing.tsx
+@@ -1,6 +1,6 @@
+ // Owner: PENG XUJIAN. Page: Landing.
+ import { useState, type FormEvent, type JSX } from 'react';
+-import { signInStub, stubAccount } from '@/core/api';
++import { createProjectRequest, signInStub, stubAccount } from '@/core/api';
+ import { Button } from '@/ui/button';
+ import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
+ import { Input } from '@/ui/input';
+@@ -65,11 +65,7 @@
+     setError(null);
+     try {
+       // Local bridge until the shared client gains the projects methods (see wiring patch).
+-      const response = await fetch('/api/projects', {
+-        method: 'POST',
+-        headers: { 'content-type': 'application/json' },
+-        body: JSON.stringify({ question, mode: draft.mode }),
+-      });
++      const response = await createProjectRequest(question, draft.mode);
+       if (!response.ok) {
+         if (response.status === 401) {
+           setAccount('');

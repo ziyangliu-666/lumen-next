@@ -38,8 +38,15 @@ Tests exercise each concrete state, coherent descriptor changes across confirmed
 updates, direct terminal snapshots, repeated snapshots, and retention of the
 last confirmed state until another summary arrives.
 
-This story supplies the pattern with fixtures. HTTP routes, ownership checks,
-latest-session selection, Home rendering, event invalidation, and the polling
-scheduler remain integration work once the shared read model is agreed. Home
-must consume that read model, never import these server classes. The existing
-auth guard remains the source of the principal for future route work.
+The UC2 service now selects the latest confirmed session and passes it into the
+context. HTTP cards contain the resulting label, tone, actions and polling
+policy. Home consumes these values without importing server classes. Its
+refresh scheduler stops periodic reads for terminal cards, retains the last
+confirmed card on transient failures and refreshes after Stop acknowledgement.
+Ownership comes from the unchanged shared auth guard.
+
+The pattern tests preceded the pattern implementation in commits `cfe6e2a` and
+`e538228`. Service, HTTP, store and real-kernel integration tests extend those
+tests. Shared startup/session/client changes remain unapplied owner patches;
+see [the handoff](integration/README.md). No pattern class owns execution or
+changes session state in response to a click.

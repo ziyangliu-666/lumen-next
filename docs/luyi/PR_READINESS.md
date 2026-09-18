@@ -1,6 +1,26 @@
 # Identity PR readiness: 2026-09-18
 
-## Current merged-base status: BLOCKED
+## Current merged-base status: safe deletion fallback; Draft review only
+
+The three retained-account deletion regressions are fixed without changing
+another slice's schema. Full verify: **394 passed, zero skips**, 90.81% lines;
+default verify: **315 passed / 79 skipped**, 71.04% lines; build passes.
+
+AccountDeletion now checks PostgreSQL metadata for validated, immediate,
+restrictive references from projects/sessions/ledger_entries, rejects destructive
+competing foreign keys, and holds an account-table lock through the transaction.
+On the current unprotected core schema even an empty account is deliberately
+refused with 409. Credentials, login sessions and accounts remain unchanged.
+Tests of successful deletion use explicit disposable restrictive-constraint
+fixtures; they are not approved migrations. Four gate tests run in default CI.
+
+The safety defect is contained, but normal account deletion remains unavailable
+until core/billing/session approve retention constraints, existing stub-ID
+reconciliation and lock contention. Other production blockers below still apply.
+Personal Draft PR: https://github.com/youayouly/lumen-next/pull/1.
+Do not confuse local quality results with completed GitHub checks or owner review.
+
+## Historical merged-base regression: BLOCKED
 
 Team main `e3937d4` was merged locally in `628f897` after the review below.
 Full verification now reports **382 passed / 3 failed / zero skipped**, and

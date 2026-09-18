@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../../core/http/server.js';
 import { Broker } from '../../core/protocol/broker.js';
 import { AuthSessions } from './authSessions.js';
+import { withTestRetentionConstraints } from './accountDeletionFixture.js';
 import { createIdentitySlice, type IdentityAuthentication } from './index.js';
 import { createSessionSlice } from '../session/index.js';
 import type { SessionSnapshot } from '@lumen/contracts';
@@ -246,7 +247,7 @@ describe.skipIf(!modulePath)('identity: optional PostgreSQL WASM engine acceptan
     expect((await app.inject({ url: '/api/me', cookies: user.cookies })).statusCode).toBe(401);
   }, 30_000);
 
-  it('deletes an unused password account only after reauthentication and invalidates its sessions', async () => {
+  it('deletes an unused password account only with reauthentication and restrictive test constraints', async () => {
     const app = await server();
     const user = await registerUser(app, 'delete@example.test');
     const unrelated = await registerUser(app, 'keep@example.test');
@@ -272,13 +273,15 @@ describe.skipIf(!modulePath)('identity: optional PostgreSQL WASM engine acceptan
         })
       ).statusCode,
     ).toBe(400);
-    const removed = await app.inject({
-      method: 'DELETE',
-      url: '/api/me',
-      cookies: user.cookies,
-      headers: { origin },
-      payload: { currentPassword: password },
-    });
+    const removed = await withTestRetentionConstraints(db, () =>
+      app.inject({
+        method: 'DELETE',
+        url: '/api/me',
+        cookies: user.cookies,
+        headers: { origin },
+        payload: { currentPassword: password },
+      }),
+    );
     expect(removed.statusCode).toBe(204);
     expect(removed.cookies.find((cookie) => cookie.name === AUTH_COOKIE)?.value).toBe('');
     expect(await accounts.getAccount(user.accountId)).toBeNull();

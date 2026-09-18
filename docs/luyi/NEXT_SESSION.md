@@ -4,7 +4,35 @@ Updated: 2026-09-18 after real verification-mail acceptance and parallel PR revi
 continue implementing them next session, not merely produce more design documents.
 This file is a handoff/checklist, not a background job or an automatic login hook.
 
-## Latest checkpoint: 2026-09-18, latest-main regression (BLOCKED)
+## Latest checkpoint: 2026-09-18, retention regression safely contained
+
+- Fixed the three deletion regressions inside identity only. AccountDeletion now
+  requires validated, immediate restrictive account references for projects,
+  sessions and ledger_entries, with no competing destructive foreign key.
+  It reads PostgreSQL metadata, not another slice's business rows. A conservative
+  account-table lock precedes row locks and remains held through the transaction
+  to serialize deletion against relevant DDL and account writes.
+- The current core schema does not meet that capability check: all password-account
+  deletion (including empty accounts) returns 409 without removing credentials,
+  login sessions or accounts. This is intentional fail-closed behavior, NOT a
+  completed production retention integration. Owners must review migrations,
+  stub-ID reconciliation and lock contention before enabling normal deletion.
+- The original three assertions remain and pass. Five additional native-pg cases
+  reject missing/cascade/competing-cascade/unvalidated/deferred protection. Existing
+  empty-account success/issuance-race cases now explicitly use restrictive DDL
+  fixtures in disposable test schemas; no production migration was added. Native
+  retained-resource cases also exercise rollback with those test constraints.
+- Four new default-CI unit tests verify the gate rejects absent/false/non-boolean
+  capability results without writes and allows writes only after positive proof.
+- Merged-base full verify: **394 passed, zero skipped**, 90.81% lines. Default:
+  **315 passed / 79 skipped**, 71.04% lines. Build passes. Temporary database/schema
+  cleanup and shutdown confirmed. This supersedes the 382/3 failure result below.
+- Personal Draft PR #1 exists at https://github.com/youayouly/lumen-next/pull/1.
+  Publish this fix only to mine/identity/auth-flow and keep the PR draft. No team
+  branch/main write or deployment. Core/Settings/OAuth/mail/WS integration and
+  production-retention approvals remain unfinished.
+
+## Earlier checkpoint: 2026-09-18, latest-main regression (BLOCKED)
 
 - User authorized latest-main testing and personal-repository publication only.
   Merged `origin/main` at `e3937d4` in `628f897`, without textual conflicts.

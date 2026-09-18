@@ -3,12 +3,12 @@
 **Continuation:** read [NEXT_SESSION.md](../../../../../docs/luyi/NEXT_SESSION.md)
 for unfinished work, the uncommitted checkpoint and next-session instructions.
 
-**Latest-main blocker (2026-09-18):** after merging team main `e3937d4`, full
-verification reports 382 passing and three failing retention tests. Core's new
-ledger/session account columns lack foreign keys, so account deletion can remove
-an account with retained data. Do not expose deletion or mark merge/deployment
-ready until the owners approve a retention-safe integration. Earlier successful
-acceptance counts below describe the previous base; see NEXT_SESSION.md.
+**Latest-main safety update (2026-09-18):** the three deletion regressions are
+fixed by a fail-closed retention gate. Full verify passes 394 tests with zero skips.
+Current core lacks required ledger/session foreign keys, so even empty-account
+deletion returns 409 and preserves account/login data. Successful deletion is
+available only with validated, immediate restrictive retention constraints; test
+fixtures are not production approval. See NEXT_SESSION.md for remaining blockers.
 
 **Use case:** UC1 — sign up, sign in, manage the account
 **Covers:** identity, email — sign-in, accounts, OAuth, email verification
@@ -62,8 +62,12 @@ client version. Tokens never appear in account responses.
 DELETE /api/me is implemented for password accounts with current-password proof.
 Deletion relies on restrictive foreign keys to block retained resources (409).
 The current core schema supplies that protection for projects, but not ledger
-entries or session ownership; this is a reproduced integration blocker.
-Without a blocking reference, credentials/login-sessions/account are deleted atomically. No cross-slice cascade or OAuth-only deletion is
+entries or session ownership. A PostgreSQL metadata gate now refuses deletion
+unless all three have validated, immediate restrictive references and no competing
+destructive FK. The check and deletion hold a conservative account-table lock
+acquired before row locks. Missing protection yields 409 even for empty accounts;
+no credentials/login-sessions/account are deleted. Owner-reviewed retention
+migrations and contention review remain required to enable normal deletion. No cross-slice cascade or OAuth-only deletion is
 implemented. AccountPanel lives inside the signin page folder and is accessible
 from its "Manage signed-in account" button, pending reviewed Settings integration.
 

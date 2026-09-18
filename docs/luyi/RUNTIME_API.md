@@ -51,9 +51,13 @@ storage failure the account remains and the caller can try password sign-in.
   cookie. Missing providers have no routes. See OAUTH_SETUP.md for exact behavior,
   dependency risk, verified-email and no-auto-linking policy.
 - DELETE /api/me accepts only currentPassword and requires the active user's
-  password proof. Success is 204 and clears the cookie. Existing project/ledger
-  references produce 409 with a full rollback, not a cascade. OAuth-only accounts
-  cannot use this password reauthentication flow.
+  password proof. Success is 204 and clears the cookie, but only when validated,
+  immediate restrictive references protect projects, sessions and ledger_entries.
+  Missing or unsafe protection returns 409 before deleting any identity data.
+  Current core lacks those constraints: even empty accounts return 409 until the
+  owners complete retention integration. With protection configured, retained
+  resources also return 409 with full rollback, never a cascade. OAuth-only
+  accounts cannot use this password reauthentication flow.
 
 ## Mail verification and password recovery additions
 

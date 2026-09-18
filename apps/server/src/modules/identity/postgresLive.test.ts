@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AccountDeletion } from './accountDeletion.js';
+import { withTestRetentionConstraints } from './accountDeletionFixture.js';
 import { AuthSessions } from './authSessions.js';
 import { MailActions } from './mailActions.js';
 import { readLocalBaseSchema } from './localSchema.js';
@@ -478,10 +479,13 @@ describe.skipIf(!modulePath && !connectionString)('identity: real PostgreSQL acc
     });
     const service = new AuthSessions(sessions, { lifetimeMs: 60_000 });
     const old = await service.issue({ accountId: account.id, role: 'user' });
-    const results = await race(
-      'select id from accounts',
-      (database) => new AccountDeletion(database).remove(account.id, { currentPassword: password }),
-      () => service.issue({ accountId: account.id, role: 'user' }),
+    const results = await withTestRetentionConstraints(db, () =>
+      race(
+        'select id from accounts',
+        (database) =>
+          new AccountDeletion(database).remove(account.id, { currentPassword: password }),
+        () => service.issue({ accountId: account.id, role: 'user' }),
+      ),
     );
     expect(results).toMatchObject([
       { status: 'fulfilled' },
@@ -493,6 +497,58 @@ describe.skipIf(!modulePath && !connectionString)('identity: real PostgreSQL acc
       await db.query('select id from credentials where account_id = $1', [account.id]),
     ).toEqual([]);
   }, 20_000);
+
+  it.each(['missing', 'cascade', 'extra-cascade', 'unvalidated', 'deferred'] as const)(
+    'preserves an empty account when retention constraints are %s',
+    async (mode) => {
+      const password = 'a sufficiently long retention safety password';
+      const account = await accounts.createPasswordAccount({
+        email: `${randomUUID()}@example.test`,
+        displayName: 'Retention safety',
+        passwordHash: await hashPassword(password),
+      });
+      const service = new AuthSessions(sessions, { lifetimeMs: 60_000 });
+      const issued = await service.issue({ accountId: account.id, role: 'user' });
+      const rejectDeletion = async (): Promise<void> => {
+        await expect(
+          new AccountDeletion(db).remove(account.id, { currentPassword: password }),
+        ).rejects.toMatchObject({ code: 'account_in_use' });
+        expect(await accounts.getPasswordAccount(account.id)).not.toBeNull();
+        expect(await service.verify(issued.token)).not.toBeNull();
+      };
+      if (mode === 'missing') await rejectDeletion();
+      else
+        await withTestRetentionConstraints(db, async () => {
+          if (mode === 'extra-cascade') {
+            await db.query(
+              `alter table ledger_entries add constraint identity_test_unsafe
+              foreign key (account_id) references accounts(id) on delete cascade`,
+              [],
+            );
+            try {
+              await rejectDeletion();
+            } finally {
+              await db.query('alter table ledger_entries drop constraint identity_test_unsafe', []);
+            }
+            return;
+          }
+          const clause =
+            mode === 'cascade'
+              ? 'on delete cascade'
+              : mode === 'unvalidated'
+                ? 'not valid'
+                : 'deferrable initially deferred';
+          await db.query('alter table ledger_entries drop constraint identity_test_retention', []);
+          await db.query(
+            `alter table ledger_entries add constraint identity_test_retention
+          foreign key (account_id) references accounts(id) ${clause}`,
+            [],
+          );
+          await rejectDeletion();
+        });
+    },
+    20_000,
+  );
 
   it.each(['ledger_entries', 'sessions'] as const)(
     'refuses deletion with retained %s on the current core schema',
@@ -517,11 +573,14 @@ describe.skipIf(!modulePath && !connectionString)('identity: real PostgreSQL acc
       }
       const service = new AuthSessions(sessions, { lifetimeMs: 60_000 });
       const issued = await service.issue({ accountId: account.id, role: 'user' });
-      // Keep this contract red until the owners resolve missing retention
-      // constraints. Do not pretend that successful deletion is acceptable.
-      await expect(
-        new AccountDeletion(db).remove(account.id, { currentPassword: password }),
-      ).rejects.toMatchObject({ code: 'account_in_use' });
+      // First refuse the unprotected core schema; then prove restrictive test
+      // constraints reject actual retained resources and roll back credential deletion.
+      const rejectDeletion = (): Promise<void> =>
+        expect(
+          new AccountDeletion(db).remove(account.id, { currentPassword: password }),
+        ).rejects.toMatchObject({ code: 'account_in_use' });
+      await rejectDeletion();
+      await withTestRetentionConstraints(db, rejectDeletion);
       expect(await accounts.getPasswordAccount(account.id)).not.toBeNull();
       expect(await service.verify(issued.token)).not.toBeNull();
       expect(

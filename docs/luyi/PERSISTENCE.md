@@ -1,6 +1,28 @@
 # Identity PostgreSQL integration guide
 
-## Current-base warning: 2026-09-18
+## Current-base safety update: 2026-09-18
+
+The deletion regression below is now contained by an identity-owned metadata
+capability gate. Missing, unvalidated, deferred or destructive resource references
+refuse deletion with 409 before identity records are removed. The account table
+is locked in SHARE ROW EXCLUSIVE mode before row locks, serializing deletion
+against relevant DDL/account writes until transaction completion. No cross-slice
+business-table reads or production migration changes were introduced.
+
+Current core is unprotected: even an empty account cannot be deleted. This safe
+fallback is not approval of production retention policy. Owners must review the
+reference migration, existing text/stub-ID reconciliation and lock contention.
+Disposable test-only constraint fixtures demonstrate empty-account deletion and
+retained-resource rollback when restrictive references exist; they are never run
+by application startup or exported in the public index.
+
+Latest full verify: **394 passed, zero skipped**, 90.81% lines; default verify:
+**315 passed / 79 skipped**, 71.04% lines; build passes. The native suite now has
+**25 passing tests**, including five new unsafe-constraint cases. Four gate tests
+also run without external tools in default CI. Earlier failing counts below are
+historical reproduction evidence, not the current outcome.
+
+## Historical current-base warning: 2026-09-18
 
 After merging team main `e3937d4`, full verification reports **382 passed and
 3 failed**. Core moved its base DDL to `migrations/001_core_base.sql` and left
@@ -265,8 +287,9 @@ try {
 ```
 
 `-MaskInput` requires PowerShell 7.1 or newer. Do not use a shared/production URL.
-The current suite contains 20 tests; all 20 must pass with zero skips before
-claiming this part of acceptance. Currently two retention regressions fail.
+The current native suite contains 25 tests; all 25 pass with zero skips in the
+latest run. This proves the safe refusal on current core, not production deletion
+availability. The server restart probe below remains separate local evidence.
 
 Before main.ts integration is accepted, repeat against a disposable PostgreSQL 17
 service through core's real pool/runner. Include concurrent normalized-email

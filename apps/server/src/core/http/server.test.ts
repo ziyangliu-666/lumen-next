@@ -237,11 +237,67 @@ describe('core: the event stream', () => {
     await expect(connect(`ws://${origin}/ws?session=s1`)).rejects.toThrow(/401/);
   });
 
-  it('refuses an upgrade that names no session', async () => {
+  it('upgrades without naming a session, and watches nothing until it opens one', async () => {
     const harness = await build();
     const origin = await listen(harness);
+    const socket = await connect(`ws://${origin}/ws`, AUTH);
 
-    await expect(connect(`ws://${origin}/ws`, AUTH)).rejects.toThrow(/400/);
+    expect(harness.broker.subscriberCount('s1')).toBe(0);
+
+    socket.send(JSON.stringify({ type: 'session.open', sessionId: 's1' }));
+    await waitUntil(() => harness.broker.subscriberCount('s1') === 1);
+
+    const incoming = nextMessage(socket);
+    harness.broker.publish('s1', opened);
+    expect(JSON.parse(await incoming)).toMatchObject({ type: 'task.opened' });
+    socket.terminate();
+  });
+
+  it('answers session.open for a session this principal may not watch with an error, and subscribes to nothing', async () => {
+    const onlyS1: SessionAccess = { canWatch: (_p, id) => Promise.resolve(id === 's1') };
+    const harness = await build(undefined, onlyS1);
+    const origin = await listen(harness);
+    const socket = await connect(`ws://${origin}/ws`, AUTH);
+
+    const incoming = nextMessage(socket);
+    socket.send(JSON.stringify({ type: 'session.open', sessionId: 's2' }));
+
+    expect(JSON.parse(await incoming)).toEqual({ type: 'error', message: 'no such session' });
+    expect(harness.broker.subscriberCount('s2')).toBe(0);
+    socket.terminate();
+  });
+
+  it('watches two sessions on one socket, and session.close lets go of one', async () => {
+    const harness = await build();
+    const origin = await listen(harness);
+    const socket = await connect(`ws://${origin}/ws`, AUTH);
+
+    socket.send(JSON.stringify({ type: 'session.open', sessionId: 's1' }));
+    socket.send(JSON.stringify({ type: 'session.open', sessionId: 's2' }));
+    await waitUntil(
+      () =>
+        harness.broker.subscriberCount('s1') === 1 && harness.broker.subscriberCount('s2') === 1,
+    );
+
+    socket.send(JSON.stringify({ type: 'session.close', sessionId: 's1' }));
+    await waitUntil(() => harness.broker.subscriberCount('s1') === 0);
+    expect(harness.broker.subscriberCount('s2')).toBe(1);
+
+    socket.close();
+    await waitUntil(() => harness.broker.subscriberCount('s2') === 0);
+  });
+
+  it('opening the same session twice subscribes once', async () => {
+    const harness = await build();
+    const origin = await listen(harness);
+    const socket = await connect(`ws://${origin}/ws?session=s1`, AUTH);
+
+    socket.send(JSON.stringify({ type: 'session.open', sessionId: 's1' }));
+    socket.send(JSON.stringify({ type: 'session.say', sessionId: 's1', text: 'after' }));
+    await waitUntil(() => harness.received.length === 1);
+
+    expect(harness.broker.subscriberCount('s1')).toBe(1);
+    socket.terminate();
   });
 
   it('delivers an event published to the session the socket watches', async () => {

@@ -197,6 +197,9 @@ number carries the value, it does not compute with it.
 ## 5. The wire
 
 One WebSocket per tab at `/ws`, cookie checked before upgrade, JSON frames.
+A socket watches nothing until it says `session.open`; each open is checked
+against the principal. The slice answers by publishing `session.snapshot`.
+`?session=<id>` at the upgrade still works for one sprint.
 
 ```mermaid
 sequenceDiagram

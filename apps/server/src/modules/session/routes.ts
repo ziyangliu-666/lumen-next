@@ -4,7 +4,7 @@ import { badRequest } from '../../core/http/httpError.js';
 import type { Broker } from '../../core/protocol/broker.js';
 import type { Kernel } from './kernel.js';
 
-// What the session slice puts on the wire: three routes and two commands, all
+// What the session slice puts on the wire: three routes and four commands, all
 // thin. Ownership is decided in the kernel, once, so a route never checks it.
 
 interface StartBody {
@@ -45,6 +45,12 @@ export function sessionRoutes(kernel: Kernel): (app: FastifyInstance) => void {
 
 export function sessionCommands(kernel: Kernel): (broker: Broker) => void {
   return (broker) => {
+    broker.onCommand('session.open', (command, principal) =>
+      kernel.open(command.sessionId, principal),
+    );
+    // Closing is the bridge's work (it holds the subscription). The claim is
+    // here so that the command has an owner and a second claim throws.
+    broker.onCommand('session.close', () => undefined);
     broker.onCommand('session.say', (command, principal) =>
       kernel.say(command.sessionId, principal, command.text),
     );

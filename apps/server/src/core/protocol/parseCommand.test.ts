@@ -8,6 +8,14 @@ describe('core: parseCommand', () => {
       sessionId: 's1',
       text: 'hello',
     });
+    expect(parseCommand('{"type":"session.open","sessionId":"s1"}')).toEqual({
+      type: 'session.open',
+      sessionId: 's1',
+    });
+    expect(parseCommand('{"type":"session.close","sessionId":"s1"}')).toEqual({
+      type: 'session.close',
+      sessionId: 's1',
+    });
     expect(parseCommand('{"type":"session.stop","sessionId":"s1"}')).toEqual({
       type: 'session.stop',
       sessionId: 's1',

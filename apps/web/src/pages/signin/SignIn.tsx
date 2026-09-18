@@ -1,5 +1,5 @@
 // Owner: LU YI. Page: Sign in / sign up.
-import { useRef, useState, type FormEvent, type JSX } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
 import { PageHeader } from '@/core/shell';
 import { Button } from '@/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/ui/card';
@@ -7,15 +7,49 @@ import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Separator } from '@/ui/separator';
 import { submitAuthentication } from './authClient.js';
+import { AccountPanel } from './AccountPanel.js';
+import { RecoveryPanel } from './RecoveryPanel.js';
 
 export function SignIn(): JSX.Element {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [showAccount, setShowAccount] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    const code = new URLSearchParams(window.location.search).get('authError');
+    return code === 'oauth_email_conflict'
+      ? 'This email already belongs to an account. Sign in using its existing method. Automatic account linking is disabled.'
+      : code === 'oauth_failed'
+        ? 'Provider sign-in failed or expired. Please try again.'
+        : null;
+  });
+  const [providers, setProviders] = useState({ github: false, google: false });
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch('/api/auth/providers', {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const value: unknown = await response.json();
+        if (!controller.signal.aborted && typeof value === 'object' && value !== null) {
+          setProviders({
+            github: 'github' in value && value.github === true,
+            google: 'google' in value && value.google === true,
+          });
+        }
+      })
+      .catch(() => {
+        /* Unconfigured/offline providers remain unavailable. */
+      });
+    return () => controller.abort();
+  }, []);
   const submitting = useRef(false);
   const feedback = useRef<HTMLParagraphElement>(null);
   const signup = mode === 'signup';
@@ -74,6 +108,42 @@ export function SignIn(): JSX.Element {
     setConfirmation('');
     setError(null);
   }
+
+  if (showRecovery)
+    return (
+      <>
+        <PageHeader title="Recover and verify" description="Use a one-time code from your email." />
+        <RecoveryPanel />
+        <Button variant="ghost" onClick={() => setShowRecovery(false)}>
+          Back to sign in
+        </Button>
+      </>
+    );
+
+  if (showAccount)
+    return (
+      <>
+        <PageHeader title="Account" description="Manage the account signed in on this browser." />
+        <AccountPanel
+          onSignedOut={() => {
+            setShowAccount(false);
+            window.location.hash = '/signin';
+          }}
+        />
+        <Button
+          variant="outline"
+          onClick={() => {
+            setShowAccount(false);
+            setShowRecovery(true);
+          }}
+        >
+          Verify email / recover password
+        </Button>
+        <Button variant="ghost" onClick={() => setShowAccount(false)}>
+          Back to sign in
+        </Button>
+      </>
+    );
 
   return (
     <>
@@ -190,16 +260,52 @@ export function SignIn(): JSX.Element {
           >
             {signup ? 'Already have an account? Sign in' : 'New here? Create an account'}
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            disabled={pending}
+            onClick={() => setShowAccount(true)}
+          >
+            Manage signed-in account
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            disabled={pending}
+            onClick={() => {
+              setPassword('');
+              setConfirmation('');
+              setShowRecovery(true);
+            }}
+          >
+            Forgot password / email verification
+          </Button>
           <Separator />
           <div className="space-y-2" aria-describedby="oauth-status">
-            <Button type="button" variant="outline" className="w-full" disabled>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={pending || !providers.github}
+              onClick={() => window.location.assign('/api/auth/github')}
+            >
               Continue with GitHub
             </Button>
-            <Button type="button" variant="outline" className="w-full" disabled>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={pending || !providers.google}
+              onClick={() => window.location.assign('/api/auth/google')}
+            >
               Continue with Google
             </Button>
             <p id="oauth-status" className="text-sm text-muted-foreground">
-              GitHub and Google sign-in are not available yet.
+              {providers.github && providers.google
+                ? 'Continue securely through your provider.'
+                : 'Unavailable providers have not been configured on this server.'}
             </p>
           </div>
         </CardContent>

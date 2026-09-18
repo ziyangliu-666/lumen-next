@@ -12,16 +12,38 @@ that page. No new shell route or shared UI dependency was added.
 - User/staff go to `#/home` / `#/admin`. Existing query context is preserved;
   arbitrary redirect URLs are not accepted. Other pages still need to consume
   draft research context; this page does not start a project automatically.
-- GitHub/Google controls are visibly unavailable until OAuth routes ship.
+- GitHub/Google controls read /api/auth/providers and activate only configured
+  providers. Callback errors are restricted to known safe messages; see
+  docs/luyi/OAUTH_SETUP.md for dependency/configuration and acceptance limitations.
+- AccountPanel.tsx is reachable through "Manage signed-in account" on this page.
+  It supports profile/password changes, signout-one/all and password-proven
+  deletion of accounts without retained resources. The shell owner still needs
+  to integrate it into the canonical Settings composition without cross-page imports.
 - The 15-code-point signup minimum mirrors AccountService's provisional policy;
   existing password login does not impose this new minimum.
 
-The server plugin is not mounted by main.ts and no durable account adapter exists
-yet. Missing endpoints produce an explicit unavailable message, not a fake login.
+The server plugin is not mounted by main.ts. PostgreSQL stores and the separate
+local PGlite entry point are implemented. Missing endpoints produce an explicit
+unavailable message, not a fake login.
 The shell and other pages still use their development auth behavior; do not call
 this a production end-to-end authentication feature.
 
-## Verification
+RecoveryPanel.tsx is reachable through "Forgot password / email verification".
+It requests reset/verification codes and submits pasted codes; codes/passwords
+are never put in URLs or browser storage. Local mail is a disk outbox by default,
+not external delivery. See docs/luyi/MAIL_SETUP.md.
+
+## Current real-backend checks
+
+Against the local PGlite server, browser checks confirmed profile name changes,
+password changes with field clearing, and deletion of a disposable password
+account followed by /api/me returning 401. A real local outbox code also verified
+an email, and a reset code changed the password and invalidated the old session.
+Unconfigured OAuth buttons remain
+unavailable; real GitHub/Google acceptance requires provider credentials. The
+external-exchange tests are simulated, not live provider login.
+
+## Earlier mock verification
 
 The monorepo verify command typechecks/lints this page but its current Vitest
 include pattern does not run web tests. Browser checks were therefore performed

@@ -12,7 +12,7 @@ The preserved manual account/database remain active at 127.0.0.1:4001/55433.
 
 Next work: add automated web guard/client coverage if a web test harness is
 approved, obtain a real member-browser direct-link check without altering the
-preserved staff account, review configuration/deployment and owner CI, then
+preserved staff account, obtain owner review and review deployment configuration, then
 separately decide last-staff/self-demotion/audit policy before any mutation UI.
 Do not add role/suspension controls by default.
 
@@ -29,21 +29,26 @@ Do not ask them to repeat this backlog. This section supersedes older checkpoint
 
 ### Current code/publication and acceptance
 
-- The administrator increment is currently uncommitted and not pushed. Preserve
-  it before relying on the older published commit references below. Modified
-  ownership includes billing/admin/core/main under the user's explicit approval.
+- The administrator increment is committed through `61842bb` and pushed only to
+  `mine/identity/auth-flow`, updating personal Draft PR #1. GitHub quality,
+  build-web, dependency audit, and CodeQL passed; the Draft-only review request
+  was skipped. Modified ownership includes billing/admin/core/main under the
+  user's explicit approval. No team branch, merge, or deployment occurred.
 
-- Branch: `identity/auth-flow`. Latest implementation commit: `eafeb40` (minimum
-  eight-character passwords); prior `04be76b` fixes deletion by failing closed.
+- Branch: `identity/auth-flow`. Latest increment commits: `07eb2fd` production
+  identity composition, `94acae9` read-only billing admin routes, `bfefed8`
+  protected real admin page, and `61842bb` acceptance documentation. Earlier
+  implementation commit `eafeb40` sets the minimum eight-character password;
+  prior `04be76b` fixes deletion by failing closed.
   Team main `e3937d4` was integrated via `628f897`. These commits were pushed only
   to `mine` (youayouly/lumen-next), not to a team branch.
-- Personal Draft PR: https://github.com/youayouly/lumen-next/pull/1. At eafeb40,
+- Personal Draft PR: https://github.com/youayouly/lumen-next/pull/1. At `61842bb`,
   GitHub quality, build-web, dependency audit and CodeQL jobs all succeeded.
   Copilot request was skipped for Draft; no repo-level COPILOT_REVIEW_TOKEN was
   listed. Do not mark ready or merge automatically. Remote CI does not enable
   every optional local suite.
-- Latest full local verify: **405 passed, zero skips**, 90.81% lines. Default:
-  **326 passed / 79 skipped**, 71.04% lines. Build passed. Retention regressions
+- Latest full local verify: **413 passed, zero skips**, 90.79% lines. Default:
+  **333 passed / 80 skipped**, 70.58% lines. Build passed. Retention regressions
   are contained; current schema deliberately refuses ALL account deletions with
   409, including empty accounts, until owner-reviewed protection exists.
 - Real manual browser acceptance passed on the native-PG/core/identity harness:

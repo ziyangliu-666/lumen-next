@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { openTestDb, TEST_DATABASE_URL } from '../../core/db/testDb.js';
 import type { Db } from '../../core/db/db.js';
 import { Ledger } from './ledger.js';
+import { createBillingSlice } from './index.js';
 
 describe.skipIf(!TEST_DATABASE_URL)('billing: Postgres ledger', () => {
   let db: Db;
@@ -96,5 +97,35 @@ describe.skipIf(!TEST_DATABASE_URL)('billing: Postgres ledger', () => {
       }),
     ).rejects.toThrow('rollback');
     expect((await ledger.list('rollback', 20)).entries).toEqual([]);
+  });
+
+  it('compares exact decimals in SQL at the cap and excludes other months and accounts', async () => {
+    await db.query(`insert into ledger_entries (account_id, amount, reason, created_at) values
+      ('budget', 0.1, 'current', '2026-09-21T12:00:00Z'),
+      ('budget', 100, 'previous', '2026-08-31T23:59:59Z'),
+      ('budget-other', 100, 'foreign', '2026-09-21T12:00:00Z')`);
+    await ledger.setCap('budget', { dollars: 0.3 });
+    expect(await ledger.fits('budget', { dollars: 0.2 })).toBe(true);
+    expect(await ledger.fits('budget', { dollars: 0.200001 })).toBe(false);
+    expect(await ledger.fits('unknown', { dollars: 0.000001 })).toBe(false);
+    expect(await ledger.fits('unknown', { dollars: 0 })).toBe(true);
+  });
+
+  it('wires the public guard to the stored cap and ledger', async () => {
+    await ledger.setCap('wired', { dollars: 1 });
+    const billing = createBillingSlice({ db, canSpend: (id) => Promise.resolve(id === 'wired') });
+    const charge = {
+      accountId: 'wired',
+      taskId,
+      estimate: { dollars: 1 },
+      at: 'turn' as const,
+      reason: 'model',
+    };
+    expect(await billing.budgetGuard.check(charge)).toEqual({ kind: 'allow' });
+    await billing.record({ accountId: 'wired', taskId, amount: { dollars: 1 }, reason: 'model' });
+    expect(await billing.budgetGuard.check(charge)).toEqual({
+      kind: 'deny',
+      reason: 'over the cap',
+    });
   });
 });

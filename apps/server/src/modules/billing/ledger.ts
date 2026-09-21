@@ -4,6 +4,13 @@ import { badRequest } from '../../core/http/httpError.js';
 import type { Spend, WalletSummary } from './ports.js';
 import { cursorId, money, UUID } from './validation.js';
 
+const MONTH_TOTALS = `
+      select coalesce((select sum(amount) from ledger_entries
+        where account_id = $1
+          and created_at >= (date_trunc('month', $2::timestamptz at time zone 'UTC') at time zone 'UTC')
+          and created_at < ((date_trunc('month', $2::timestamptz at time zone 'UTC') + interval '1 month') at time zone 'UTC')), 0) as spent,
+        coalesce((select cap from billing_wallets where account_id = $1), 0) as cap`;
+
 export interface LedgerEntry {
   readonly id: string;
   readonly taskId: string | null;
@@ -39,16 +46,21 @@ export class Ledger {
   }
 
   async monthSpend(accountId: string): Promise<WalletSummary> {
-    const [row] = await this.db.query<{ spent: number; cap: number }>(
-      `
-      select coalesce((select sum(amount) from ledger_entries
-        where account_id = $1
-          and created_at >= (date_trunc('month', $2::timestamptz at time zone 'UTC') at time zone 'UTC')
-          and created_at < ((date_trunc('month', $2::timestamptz at time zone 'UTC') + interval '1 month') at time zone 'UTC')), 0) as spent,
-        coalesce((select cap from billing_wallets where account_id = $1), 0) as cap`,
-      [accountId, this.now()],
-    );
+    const [row] = await this.db.query<{ spent: number; cap: number }>(MONTH_TOTALS, [
+      accountId,
+      this.now(),
+    ]);
     return { spent: { dollars: row!.spent }, cap: { dollars: row!.cap } };
+  }
+
+  /** Both addition and comparison use Postgres numeric, never JS arithmetic. */
+  async fits(accountId: string, estimate: Money): Promise<boolean> {
+    money(estimate);
+    const [row] = await this.db.query<{ fits: boolean }>(
+      `select spent + $3::numeric <= cap as fits from (${MONTH_TOTALS}) as wallet`,
+      [accountId, this.now(), estimate.dollars],
+    );
+    return row!.fits;
   }
 
   async setCap(accountId: string, cap: Money): Promise<void> {

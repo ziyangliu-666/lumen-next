@@ -5,9 +5,12 @@ import { HttpError } from '../../core/http/httpError.js';
 import { Ledger } from './ledger.js';
 import type { BudgetGuard, Spend, WalletSummary } from './ports.js';
 import { walletRoutes } from './routes.js';
+import { AccountHandler, ApprovalHandler, BudgetChain, MonthlyCapHandler } from './budgetChain.js';
 
 export type { BudgetGuard, Charge, Decision, Spend, WalletSummary } from './ports.js';
 export type { LedgerEntry, LedgerPage } from './ledger.js';
+export { BudgetChain, AccountHandler, MonthlyCapHandler, ApprovalHandler } from './budgetChain.js';
+export type { BudgetHandler } from './budgetChain.js';
 
 export interface BillingSlice {
   readonly registerRoutes: (app: FastifyInstance) => void;
@@ -17,7 +20,11 @@ export interface BillingSlice {
   readonly budgetGuard: BudgetGuard;
 }
 
-export function createBillingSlice(deps: { db: Db | null }): BillingSlice {
+export function createBillingSlice(deps: {
+  db: Db | null;
+  /** Identity supplies eligibility through its public API when guard wiring lands. */
+  canSpend?: (accountId: string) => Promise<boolean>;
+}): BillingSlice {
   const ledger = deps.db ? new Ledger(deps.db) : null;
   const required = (): Ledger => {
     if (!ledger) throw new HttpError(503, 'wallet requires a database');
@@ -26,9 +33,11 @@ export function createBillingSlice(deps: { db: Db | null }): BillingSlice {
   return {
     monthSpend: (accountId) => required().monthSpend(accountId),
     record: (entry, tx) => required().record(entry, tx),
-    budgetGuard: {
-      check: () => Promise.resolve({ kind: 'deny', reason: 'billing guard is not configured' }),
-    },
+    budgetGuard: new BudgetChain([
+      new AccountHandler(deps.canSpend ?? (() => Promise.resolve(false))),
+      new MonthlyCapHandler((accountId, estimate) => required().fits(accountId, estimate)),
+      new ApprovalHandler(),
+    ]),
     registerRoutes: walletRoutes(ledger),
   };
 }

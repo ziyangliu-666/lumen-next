@@ -36,7 +36,7 @@ window.LUMEN_STATUS = {
   main: {
     commit: '069a6f2',
     pipelines: 'CI, Security and Deploy green',
-    tests: 115,
+    tests: 149,
     coverage: 98,
     gate: 65,
     dast: '0 fail, 8 warn',
@@ -193,7 +193,7 @@ Constraints: use another slice only through its public index. No new dependency 
       slice: 'UC5 money and administration',
       pattern: 'Chain of Responsibility',
       written: 80,
-      onMain: 40,
+      onMain: 70,
       state: 'done',
       stateLabel: 'Wallet and ledger on main',
       summary:

@@ -31,7 +31,7 @@ session/rich-steps at 5020d2b: four review lenses, one refuter per finding, one 
 
 ## 2. rich-steps-round-2
 
-session/rich-steps at a0a2caa: three review lenses on the fix commit, one refuter per finding, one live browser test.
+session/rich-steps at a0a2caa: three review lenses on the fix commit, one refuter per finding, one live browser test. Its findings are fixed in 5f1c1e9; the ones left open are listed in pull request 28.
 
 - [01-review-server](2-rich-steps-round-2/01-review-server.json)
 - [02-review-web](2-rich-steps-round-2/02-review-web.json)

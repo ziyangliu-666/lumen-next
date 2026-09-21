@@ -7,10 +7,14 @@
 
 A task and a subtree of tasks answer cost, cancellation and rendering the same way. Cost rolls up through the tree.
 
-## What is here (Sprint 1)
+## What is here
 
-The walking skeleton from the proposal, §8.1: sign in (stub), one project, one
-session, one task, one step, rendered end to end.
+The record of sessions, tasks and steps in Postgres, delegation with its two
+bounds, cost rolled up through the Composite, the three budget check points,
+restore after a restart, and the `session.open` command. A step carries what it
+did (`StepDetail`: tool, time, cost, rows, output, the children it opened), and
+the Session page draws it. No model is wired in: `demoWorker.ts` plays the shape
+of a run until the steering slice supplies the agent loop.
 
 | File | Role |
 |---|---|

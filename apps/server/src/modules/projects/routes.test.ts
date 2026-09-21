@@ -162,6 +162,6 @@ describe('projects HTTP boundary', () => {
       (await app.inject({ method: 'GET', url: '/api/projects', headers })).json<{
         items: unknown[];
       }>().items,
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   });
 });

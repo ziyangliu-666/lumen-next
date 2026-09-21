@@ -52,20 +52,50 @@ describe('ProjectService', () => {
     expect(await store.list(owner.accountId, { limit: 20, after: null })).toEqual([]);
     expect(sessions.start).not.toHaveBeenCalled();
   });
-  it('retains the project on uncertain start failure without retrying execution', async () => {
+  it('removes a failed creation only after session confirms there is no run', async () => {
     const { service, store, sessions } = setup();
     vi.mocked(sessions.start).mockRejectedValue(new Error('timeout'));
     await expect(
       service.create(owner, { question: 'Research', mode: 'explore' }),
     ).rejects.toMatchObject({ status: 503 });
     const rows = await store.list(owner.accountId, { limit: 20, after: null });
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(0);
     expect(sessions.start).toHaveBeenCalledTimes(1);
-    const card = await service.get(owner, rows[0]!.id);
-    expect(card).toMatchObject({
+  });
+  it('contains cleanup failure without replaying session creation', async () => {
+    const { service, store, sessions } = setup();
+    vi.mocked(sessions.start).mockRejectedValue(new Error('start failed'));
+    vi.spyOn(store, 'remove').mockRejectedValue(new Error('cleanup unavailable'));
+    await expect(
+      service.create(owner, { question: 'Research', mode: 'seed' }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(await store.list(owner.accountId, { limit: 20, after: null })).toHaveLength(1);
+    expect(sessions.start).toHaveBeenCalledTimes(1);
+  });
+  it('preserves a session created before a start failure and never retries it', async () => {
+    const { service, store, sessions } = setup();
+    vi.mocked(sessions.start).mockRejectedValue(new Error('snapshot failed'));
+    vi.mocked(sessions.list).mockResolvedValue([run()]);
+    await expect(
+      service.create(owner, { question: 'Research', mode: 'explore' }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(await store.list(owner.accountId, { limit: 20, after: null })).toHaveLength(1);
+    expect(sessions.start).toHaveBeenCalledTimes(1);
+  });
+  it('keeps uncertain creation recoverable without polling an empty card forever', async () => {
+    const { service, store, sessions } = setup();
+    vi.mocked(sessions.start).mockRejectedValue(new Error('connection lost'));
+    vi.mocked(sessions.list).mockRejectedValue(new Error('database unavailable'));
+    await expect(
+      service.create(owner, { question: 'Research', mode: 'explore' }),
+    ).rejects.toMatchObject({ status: 503 });
+    const rows = await store.list(owner.accountId, { limit: 20, after: null });
+    expect(rows).toHaveLength(1);
+    vi.mocked(sessions.list).mockResolvedValue([]);
+    expect(await service.get(owner, rows[0]!.id)).toMatchObject({
       latestSession: null,
-      refreshPolicy: 'poll',
-      actions: { stopLatestSession: false },
+      refreshPolicy: 'manual',
+      pollAfterMs: null,
     });
   });
   it('uses the latest session deterministically and does not sum money across sessions', async () => {

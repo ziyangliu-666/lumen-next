@@ -19,11 +19,10 @@ Stop, persisted findings, cursor pagination, Landing and Home. The six State
 classes provide the card label, tone, actions and refresh policy together. See
 [the before/after record](CARD_STATE.md) for the brute-force version and refactor.
 
-The shared application has **not** been wired to this slice. This task deliberately
-keeps changes inside projects, Home and Landing. The current main entry point
-therefore does not serve these routes. See [the integration handoff](integration/README.md)
-for unapplied owner patches and the remaining acceptance checks. Proposal files
-describe the target architecture; the API below describes the implemented slice.
+The normal application entry point registers projects using session's public
+`SessionDirectory`. Migration 005 runs through the shared migration directory.
+The core owner approved these two shared changes in PR #16. See
+[the integration note](integration/README.md) for remaining cross-slice work.
 
 ## Public index
 
@@ -38,7 +37,7 @@ The returned API is:
 - `listFindings(sessionId)`: chronological findings for a validated session.
 
 `ProjectSessions`, `ProjectMode`, `LatestSession`, `ProjectCard`, `Finding`, `Page`
-and `projectsMigrationsDir` are public exports. State classes remain internal.
+are public exports. State classes remain internal.
 Finding operations are trusted server operations: session must authorize browser
 access before calling them. Projects persists a finding; session publishes the
 event after the write succeeds. Projects does not publish a duplicate event.
@@ -69,40 +68,43 @@ project. Stop selects the latest session when handling the request and delegates
 its subtree stop to session. It never stops every session in the project or
 optimistically replaces the confirmed status.
 
-If session creation fails or times out after the project write, the project stays
-visible as awaiting confirmation. There is no automatic replay or compensating
-delete because a session may already exist. The browser retains the question and
-asks the user to check Projects before trying again.
+If session creation rejects, the service checks the public session directory.
+It removes the new project only when the settled start has no session. Existing
+sessions, failed lookups or failed cleanup retain the project for reconciliation;
+start is never replayed automatically. Cards without a confirmed session use
+manual refresh. The browser retains the question and asks the user to check
+Projects before trying again. This is compensation, not a cross-slice transaction.
 
 ## Storage and pages
 
 Memory and PostgreSQL stores implement the same port. SQL reads and writes only
-the owned projects/findings tables. Migration `002_projects_read_model.sql` must
-be registered by the composition root before using PostgreSQL. It accommodates
+the owned projects/findings tables. Migration `005_projects_read_model.sql` lives in `core/db/migrations` and is applied on normal startup. It accommodates
 arbitrary temporary account IDs without changing authGuard, and adds finding
 project associations and pagination indexes. See the handoff for legacy data.
 
 Landing preserves question/mode in tab storage and uses the existing development
 sign-in helper on localhost. Home supports loaded-project search/status filters,
-pagination, safe literal finding text and source-session links. Active cards and
-their findings refresh every five seconds; terminal cards refresh on demand or
-window focus. Fetches are aborted on unmount, hidden tabs pause polling, and failed
-refreshes retain the last data. A 401 clears private data. An optional shared-client
-invalidation event triggers refetch; Home does not create another WebSocket.
+pagination, safe literal finding text and source-session links. Queued/running cards refresh every five seconds; waiting cards every fifteen
+seconds; terminal and unconfirmed cards refresh manually or on window focus.
+Fetches abort on unmount, hidden tabs pause polling, and errors retain loaded
+data. A 401 clears private data. Transient failures back off 5/10/20/40/60 seconds,
+then pause until Retry; permanent client errors pause immediately. Focus does
+not bypass backoff. Home uses the shared HTTP client and creates no WebSocket.
 
 ## Validation
 
 Run `npm run verify` for formatting, lint, strict types and coverage. Set
 `DATABASE_URL` to a disposable PostgreSQL database to enable database tests.
-`npx vitest run --coverage --no-file-parallelism` also avoids the shared runner's
-fail-fast advisory-lock contention between existing core/session test files.
-Projects storage tests migrate a unique schema per case, so they do not take a
-global migration lock. Production migration locking is unchanged.
+Projects storage tests use the shared `openTestDb()` helper with an isolated
+schema per case. The shared migration runner serializes migrations safely.
+Run `npx vitest run --config apps/web/src/pages/home/vitest.config.ts` for the
+page-local retry tests (the root test configuration includes only server/contracts).
 
-Tests cover State coherence, ownership, malformed input, cursor scope/order,
-uncertain creation, latest-only Stop, finding associations, memory/SQL persistence
-and real session-kernel integration through the public index. Browser checks use
-a test-only composition adapter; they do not prove the unapplied shared patches.
+Tests cover State command delegation/refusal, polling intervals, authoritative
+summary replacement, ownership, malformed input, cursor scope/order, creation
+compensation, latest-only Stop, finding associations, memory/SQL persistence and
+integration with the real session public directory. No test-only lookup adapter
+is required.
 
 ## Boundary
 

@@ -24,6 +24,9 @@ export class PgProjectStore implements ProjectStore {
       [project.id, project.accountId, project.title, project.mode, new Date(project.createdAt)],
     );
   }
+  async remove(id: string): Promise<void> {
+    await this.db.query('delete from projects where id = $1', [id]);
+  }
   async get(id: string): Promise<Project | null> {
     const rows = await this.db.query<Project & Record<string, unknown>>(
       `select ${PROJECT} from projects where id = $1`,

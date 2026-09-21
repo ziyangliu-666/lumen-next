@@ -45,11 +45,20 @@ export class ProjectService {
       createdAt: Date.now(),
     };
     await this.store.insert(project);
-    // Never delete on a timeout or retry start: execution may already exist.
-    const session = await dependency(() =>
-      this.sessions.start(project.id, principal, question, mode),
-    );
-    return { project: summary(project), sessionId: session.id };
+    try {
+      const session = await this.sessions.start(project.id, principal, question, mode);
+      return { project: summary(project), sessionId: session.id };
+    } catch {
+      // Compensate only after the settled start is confirmed to have no session.
+      // A partial start or unavailable lookup must retain its project association.
+      try {
+        if ((await this.sessions.list(project.id, principal)).length === 0)
+          await this.store.remove(project.id);
+      } catch {
+        // Keep uncertain records for manual reconciliation; never replay start.
+      }
+      throw new HttpError(503, 'Session service unavailable. Refresh before trying again.');
+    }
   }
   async list(principal: Principal, query: unknown): Promise<Page<ProjectCard>> {
     const scope = JSON.stringify(['projects', principal.accountId]);
@@ -75,10 +84,11 @@ export class ProjectService {
     const card = await this.get(principal, id);
     const sessionId = card.latestSession?.id ?? null;
     if (!sessionId) return { projectId: card.project.id, sessionId, outcome: 'no_session' };
-    if (!card.actions.stopLatestSession)
-      return { projectId: card.project.id, sessionId, outcome: 'already_terminal' };
-    await dependency(() => this.sessions.stop(sessionId, principal));
-    return { projectId: card.project.id, sessionId, outcome: 'stop_requested' };
+    const context = new ProjectCardContext(card.latestSession!);
+    const outcome = await context.stop(() =>
+      dependency(() => this.sessions.stop(sessionId, principal)),
+    );
+    return { projectId: card.project.id, sessionId, outcome };
   }
   async findings(principal: Principal, id: string, query: unknown): Promise<Page<Finding>> {
     const project = await this.owned(principal, id);
@@ -130,7 +140,9 @@ export class ProjectService {
         (a, b) => b.startedAt - a.startedAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
       )[0] ?? null;
     const stats = await this.store.findingStats(project.id);
-    const descriptor = latest ? new ProjectCardContext(latest).describe() : null;
+    const context = latest ? new ProjectCardContext(latest) : null;
+    const descriptor = context?.describe();
+    const pollAfterMs = context?.pollDelay() ?? null;
     return {
       project: summary(project),
       latestSession: latest,
@@ -146,7 +158,8 @@ export class ProjectService {
         openSession: latest !== null,
         stopLatestSession: descriptor?.actions.includes('stop') ?? false,
       },
-      refreshPolicy: !descriptor || descriptor.refreshPolicy === 'continue' ? 'poll' : 'manual',
+      refreshPolicy: pollAfterMs === null ? 'manual' : 'poll',
+      pollAfterMs,
     };
   }
 }

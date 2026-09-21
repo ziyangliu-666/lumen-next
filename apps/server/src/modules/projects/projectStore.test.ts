@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { runner } from 'node-pg-migrate';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDatabase, type Db } from '../../core/db/db.js';
+import type { Db } from '../../core/db/db.js';
+import { openTestDb, TEST_DATABASE_URL } from '../../core/db/testDb.js';
 import { Broker } from '../../core/protocol/broker.js';
 import { createSessionSlice } from '../session/index.js';
 import { MemoryProjectStore } from './memoryProjectStore.js';
@@ -10,37 +9,17 @@ import { PgProjectStore } from './pgProjectStore.js';
 import type { ProjectStore } from './ports.js';
 import type { Finding, Project } from './models.js';
 
-const url = process.env['DATABASE_URL'];
+const url = TEST_DATABASE_URL;
 for (const database of [false, true]) {
   describe.skipIf(database && !url)(database ? 'PgProjectStore' : 'MemoryProjectStore', () => {
     let store: ProjectStore;
     let db: Db | undefined;
-    let schema: string;
+    let drop: (() => Promise<void>) | undefined;
     let sessionId: string;
     let taskId: string;
     beforeEach(async () => {
       if (database && url) {
-        schema = `test_projects_${randomUUID().replaceAll('-', '')}`;
-        await runner({
-          databaseUrl: url,
-          // Every case owns a fresh schema; no migration is shared with other tests.
-          noLock: true,
-          useGlob: true,
-          dir: [
-            fileURLToPath(new URL('../../core/db/migrations', import.meta.url)).replaceAll(
-              '\\',
-              '/',
-            ) + '/*.sql',
-            fileURLToPath(new URL('./migrations', import.meta.url)).replaceAll('\\', '/') +
-              '/*.sql',
-          ],
-          direction: 'up',
-          migrationsTable: 'pgmigrations',
-          schema,
-          createSchema: true,
-          log: () => {},
-        });
-        db = await openDatabase(url, { schema, migrate: false });
+        ({ db, drop } = await openTestDb());
         store = new PgProjectStore(db);
       } else store = new MemoryProjectStore();
       const sessions = createSessionSlice({
@@ -54,11 +33,9 @@ for (const database of [false, true]) {
       await sessions.kernel.idle();
     });
     afterEach(async () => {
-      if (db) {
-        await db.query(`drop schema "${schema}" cascade`);
-        await db.close();
-        db = undefined;
-      }
+      await drop?.();
+      db = undefined;
+      drop = undefined;
     });
     function project(accountId = 'alice', id = randomUUID()): Project {
       return { id, accountId, title: 'Research', mode: 'seed', createdAt: 1234567890000 };
@@ -72,6 +49,17 @@ for (const database of [false, true]) {
       expect(await store.get(record.id)).toEqual(record);
       expect(await store.get(randomUUID())).toBeNull();
       if (db) expect(await new PgProjectStore(db).get(record.id)).toEqual(record);
+    });
+    it('removes an empty project but preserves projects with durable findings', async () => {
+      const empty = project();
+      await store.insert(empty);
+      await store.remove(empty.id);
+      expect(await store.get(empty.id)).toBeNull();
+      const saved = project();
+      await store.insert(saved);
+      await store.saveFinding(saved.id, finding());
+      await expect(store.remove(saved.id)).rejects.toThrow();
+      expect(await store.get(saved.id)).toEqual(saved);
     });
     it('orders equal timestamps by ID and scopes every page by owner', async () => {
       const a = project('alice', '00000000-0000-4000-8000-000000000001');

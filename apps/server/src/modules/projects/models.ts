@@ -1,6 +1,7 @@
-import type { Money, TaskStatus } from '@lumen/contracts';
+import type { SessionMode, SessionSummary } from '@lumen/contracts';
+export type { Finding, SessionSummary as LatestSession } from '@lumen/contracts';
 
-export type ProjectMode = 'explore' | 'seed';
+export type ProjectMode = SessionMode;
 export interface Project {
   readonly id: string;
   readonly accountId: string;
@@ -9,30 +10,16 @@ export interface Project {
   readonly createdAt: number;
 }
 export type ProjectSummary = Omit<Project, 'accountId'>;
-export interface Finding {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly taskId: string;
-  readonly text: string;
-  readonly createdAt: number;
-}
-export interface LatestSession {
-  readonly id: string;
-  readonly mode: ProjectMode;
-  readonly status: TaskStatus;
-  readonly spend: Money;
-  readonly startedAt: number;
-  readonly endedAt: number | null;
-}
 export interface ProjectCard {
   readonly project: ProjectSummary;
-  readonly latestSession: LatestSession | null;
+  readonly latestSession: SessionSummary | null;
   readonly findingsCount: number;
   readonly lastActivityAt: number;
   readonly label: string;
   readonly tone: 'muted' | 'active' | 'decide' | 'keep' | 'gap';
   readonly actions: { readonly openSession: boolean; readonly stopLatestSession: boolean };
   readonly refreshPolicy: 'poll' | 'manual';
+  readonly pollAfterMs: number | null;
 }
 export interface Page<T> {
   readonly items: readonly T[];

@@ -12,6 +12,12 @@ export class MemoryProjectStore implements ProjectStore {
     this.projects.set(project.id, { ...project });
     return Promise.resolve();
   }
+  remove(id: string): Promise<void> {
+    if ([...this.records.values()].some((finding) => finding.projectId === id))
+      return Promise.reject(new Error('Project has findings.'));
+    this.projects.delete(id);
+    return Promise.resolve();
+  }
   get(id: string): Promise<Project | null> {
     const project = this.projects.get(id);
     return Promise.resolve(project ? { ...project } : null);

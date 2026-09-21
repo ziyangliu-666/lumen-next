@@ -1,4 +1,4 @@
-import type { SessionSnapshot, StepKind } from './sessions.js';
+import type { SessionSnapshot, StepDetail, StepKind } from './sessions.js';
 import type { Money, Task, TaskStatus } from './tasks.js';
 
 // Server -> browser. The broker streams these; the web client renders them.
@@ -13,7 +13,14 @@ export type ServerEvent =
   // The task's cost with every descendant rolled up. Sent for the task that
   // spent and for each of its ancestors, because the browser never adds.
   | { type: 'task.total'; taskId: string; total: Money }
-  | { type: 'step.appended'; taskId: string; index: number; kind: StepKind; text: string }
+  | {
+      type: 'step.appended';
+      taskId: string;
+      index: number;
+      kind: StepKind;
+      text: string;
+      detail?: StepDetail;
+    }
   | { type: 'finding.recorded'; taskId: string; findingId: string; text: string }
   // A command this socket sent could not be carried out. Says why in words a
   // user may read; never anything about the server's insides.

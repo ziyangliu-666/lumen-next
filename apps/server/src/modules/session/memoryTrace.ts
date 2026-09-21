@@ -5,6 +5,7 @@ import type {
   SessionMode,
   SessionSummary,
   Step,
+  StepDetail,
   StepKind,
   TaskStatus,
 } from '@lumen/contracts';
@@ -73,10 +74,10 @@ export class MemoryTrace implements Trace {
     return Promise.resolve(next);
   }
 
-  appendStep(taskId: string, kind: StepKind, text: string): Promise<Step> {
+  appendStep(taskId: string, kind: StepKind, text: string, detail?: StepDetail): Promise<Step> {
     if (!this.tasks.has(taskId)) return Promise.reject(new Error(`trace: no task ${taskId}`));
     const list = this.steps.get(taskId) ?? [];
-    const step: Step = { taskId, index: list.length, kind, text };
+    const step: Step = { taskId, index: list.length, kind, text, ...(detail ? { detail } : {}) };
     list.push(step);
     this.steps.set(taskId, list);
     return Promise.resolve(step);

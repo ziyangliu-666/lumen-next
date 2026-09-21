@@ -5,6 +5,7 @@ import type {
   SessionSnapshot,
   SessionSummary,
   Step,
+  StepDetail,
   StepKind,
   TaskStatus,
 } from '@lumen/contracts';
@@ -35,7 +36,8 @@ export interface Trace {
   rootOf(sessionId: string): Promise<TaskRecord | null>;
   /** Ending statuses (ended, stopped, failed) also stamp endedAt. */
   setStatus(taskId: string, status: TaskStatus): Promise<TaskRecord>;
-  appendStep(taskId: string, kind: StepKind, text: string): Promise<Step>;
+  /** `detail` is kept as given and read back as given; absent stays absent. */
+  appendStep(taskId: string, kind: StepKind, text: string, detail?: StepDetail): Promise<Step>;
   /** Add to the task's own cost and return the task with its new total. */
   addCost(taskId: string, amount: Money, reason?: string): Promise<TaskRecord>;
   snapshot(sessionId: string): Promise<TraceSnapshot | null>;

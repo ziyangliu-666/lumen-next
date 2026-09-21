@@ -8,7 +8,7 @@ import { Plus, SendHorizontal } from 'lucide-react';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
 import type { SessionFinding } from '@/core/api';
-import { childrenByStep, toolLabel, treeRows } from './tree';
+import { childrenByStep, took, toolLabel, treeRows } from './tree';
 
 // One tint per task status, from the theme, so a status means the same colour
 // here as on the project card.
@@ -128,11 +128,50 @@ function StepBlock({
         </li>
       );
     case 'tool': {
-      const { label, body } = toolLabel(step.text);
+      const parsed = toolLabel(step.text);
+      const detail = step.detail;
+      // What it took and what it cost, at the right of the label, as the spec has it.
+      const receipt = [
+        detail?.durationMs === undefined ? null : took(detail.durationMs),
+        detail?.cost ? money(detail.cost.dollars) : null,
+      ].filter((part): part is string => part !== null);
       return (
         <li className="px-4 py-3">
-          <Eyebrow>{label}</Eyebrow>
-          <p className="mt-2 rounded-sm bg-sunken px-3 py-2 font-mono text-sm text-body">{body}</p>
+          <div className="flex items-baseline justify-between gap-2">
+            <Eyebrow>{detail?.tool ?? parsed.label}</Eyebrow>
+            {receipt.length > 0 ? <Eyebrow>{receipt.join(' · ')}</Eyebrow> : null}
+          </div>
+          <p className="mt-1 font-mono text-sm text-muted-foreground">{parsed.body}</p>
+          {detail?.rows && detail.rows.length > 0 ? (
+            <ul className="mt-2 divide-y divide-border">
+              {detail.rows.map((row, index) => (
+                <li key={index} className="flex items-baseline gap-3 py-2">
+                  <span
+                    className={cn(
+                      'w-16 shrink-0 rounded-sm border px-1.5 py-0.5 text-center font-mono text-xs tracking-wider uppercase',
+                      row.empty ? 'border-decide text-decide' : 'border-rule-strong text-faint',
+                    )}
+                  >
+                    {row.source}
+                  </span>
+                  <span className="min-w-0 flex-1 font-mono text-sm text-body">{row.text}</span>
+                  <span
+                    className={cn(
+                      'shrink-0 text-sm',
+                      row.empty ? 'text-decide' : 'text-muted-foreground',
+                    )}
+                  >
+                    {row.result}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {detail?.output ? (
+            <pre className="mt-2 overflow-x-auto rounded-sm bg-sunken px-3 py-2 font-mono text-sm text-body">
+              {detail.output}
+            </pre>
+          ) : null}
         </li>
       );
     }

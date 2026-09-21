@@ -43,22 +43,44 @@ export function toolLabel(text: string): { readonly label: string; readonly body
 }
 
 /**
- * Which children each delegate step handed down. A step does not name them yet
- * (the contract's `childTaskIds` is the next change), but it says how many, and
- * both the steps and the children are in the order they happened: the first
- * delegate step takes the first N children, the next one the N after those.
- * A step that gives no number takes whatever is left.
+ * Which children each delegate step handed down. A step names them in
+ * `detail.childTaskIds`, and that is the answer. A step recorded before the
+ * contract had that field names nobody; it says how many, and both the steps
+ * and the children are in the order they happened, so it takes the next N
+ * children that no step has named. A step that gives no number takes what is
+ * left.
  */
-export function childrenByStep<T>(
-  delegateSteps: readonly { readonly index: number; readonly text: string }[],
+export function childrenByStep<T extends { readonly id: string }>(
+  delegateSteps: readonly {
+    readonly index: number;
+    readonly text: string;
+    readonly detail?: { readonly childTaskIds?: readonly string[] };
+  }[],
   children: readonly T[],
 ): Map<number, readonly T[]> {
+  const named = new Set(delegateSteps.flatMap((step) => step.detail?.childTaskIds ?? []));
+  const unnamed = children.filter((child) => !named.has(child.id));
   const result = new Map<number, readonly T[]>();
   let next = 0;
   for (const step of delegateSteps) {
-    const count = Number(/\b(\d+)\b/.exec(step.text)?.[1] ?? children.length - next);
-    result.set(step.index, children.slice(next, next + count));
+    const ids = step.detail?.childTaskIds;
+    if (ids) {
+      result.set(
+        step.index,
+        ids.flatMap((id) => children.filter((child) => child.id === id)),
+      );
+      continue;
+    }
+    const count = Number(/\b(\d+)\b/.exec(step.text)?.[1] ?? unnamed.length - next);
+    result.set(step.index, unnamed.slice(next, next + count));
     next += count;
   }
   return result;
+}
+
+/** A step's duration as the spec writes it: '6 s', '8.9 s', '2 min 41 s'. Sub-second shows as ms. */
+export function took(durationMs: number): string {
+  if (durationMs < 1000) return `${Math.max(0, Math.round(durationMs))} ms`;
+  if (durationMs < 10_000) return `${(durationMs / 1000).toFixed(1).replace(/\.0$/, '')} s`;
+  return elapsed(durationMs);
 }

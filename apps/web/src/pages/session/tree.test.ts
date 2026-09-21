@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@lumen/contracts';
-import { childrenByStep, elapsed, toolLabel, treeRows } from './tree';
+import { childrenByStep, elapsed, took, toolLabel, treeRows } from './tree';
 
 const task = (id: string, parentId: string | null): Task => ({
   id,
@@ -59,23 +59,72 @@ describe('session page: small formats', () => {
 });
 
 describe('session page: which children a delegate step handed down', () => {
-  it('gives each delegate step its own children, in order, and not the whole list', () => {
+  const kids = ['a', 'b', 'c', 'd'].map((id) => ({ id }));
+  const ids = (list: readonly { id: string }[] | undefined): string[] =>
+    (list ?? []).map((k) => k.id);
+
+  it('takes the children a step names, in the order it names them', () => {
+    const byStep = childrenByStep(
+      [
+        { index: 1, text: 'delegated 3 in parallel', detail: { childTaskIds: ['c', 'a', 'b'] } },
+        { index: 5, text: 'delegated 1 in parallel', detail: { childTaskIds: ['d'] } },
+      ],
+      kids,
+    );
+
+    expect(ids(byStep.get(1))).toEqual(['c', 'a', 'b']);
+    expect(ids(byStep.get(5))).toEqual(['d']);
+  });
+
+  it('for a step recorded before steps named their children, takes the next N by order', () => {
     const byStep = childrenByStep(
       [
         { index: 1, text: 'delegated 3 in parallel' },
         { index: 5, text: 'delegated 1 in parallel' },
       ],
-      ['a', 'b', 'c', 'd'],
+      kids,
     );
 
-    expect(byStep.get(1)).toEqual(['a', 'b', 'c']);
-    expect(byStep.get(5)).toEqual(['d']);
+    expect(ids(byStep.get(1))).toEqual(['a', 'b', 'c']);
+    expect(ids(byStep.get(5))).toEqual(['d']);
   });
 
-  it('gives a step that names no number whatever is left', () => {
-    expect(childrenByStep([{ index: 0, text: 'handed down' }], ['a', 'b']).get(0)).toEqual([
+  it('never gives an old step a child that a newer step names', () => {
+    const byStep = childrenByStep(
+      [
+        { index: 1, text: 'delegated 2 in parallel' },
+        { index: 5, text: 'delegated 2 in parallel', detail: { childTaskIds: ['b', 'd'] } },
+      ],
+      kids,
+    );
+
+    expect(ids(byStep.get(1))).toEqual(['a', 'c']);
+    expect(ids(byStep.get(5))).toEqual(['b', 'd']);
+  });
+
+  it('ignores a named child that is not in the tree, and gives a numberless step what is left', () => {
+    expect(
+      ids(
+        childrenByStep([{ index: 0, text: 'x', detail: { childTaskIds: ['zz', 'a'] } }], kids).get(
+          0,
+        ),
+      ),
+    ).toEqual(['a']);
+    expect(ids(childrenByStep([{ index: 0, text: 'handed down' }], kids).get(0))).toEqual([
       'a',
       'b',
+      'c',
+      'd',
     ]);
+  });
+});
+
+describe('session page: how long a step took', () => {
+  it('writes it the way the spec does', () => {
+    expect(took(0)).toBe('0 ms');
+    expect(took(412)).toBe('412 ms');
+    expect(took(6_000)).toBe('6 s');
+    expect(took(8_940)).toBe('8.9 s');
+    expect(took(161_000)).toBe('2 min 41 s');
   });
 });

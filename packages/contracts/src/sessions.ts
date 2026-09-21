@@ -23,15 +23,42 @@ export interface Session {
 export const STEP_KINDS = ['you', 'thinking', 'tool', 'delegate', 'reply'] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
-// One line of a task's trace. The richer step (timing, streamed body, cost) in
-// docs/ARCHITECTURE.md §4 lands with the steering slice and adds fields, never
-// repurposes these.
+// One row of a tool step's result: where it looked, what it asked, what came
+// back. "arxiv · permutation statistics · 41 papers". `empty` marks the row
+// that found nothing, which is often the row that matters.
+export interface StepRow {
+  readonly source: string;
+  readonly text: string;
+  readonly result: string;
+  readonly empty?: boolean;
+}
+
+// What a step carries beyond its one line of text. All of it is optional, and
+// a step with none of it is a complete step: `text` alone always says what
+// happened. The page draws what is here and leaves out what is not.
+export interface StepDetail {
+  /** The tool a tool step ran: 'search', 'run', 'save', 'record'. The block's label. */
+  readonly tool?: string;
+  /** How long it took. */
+  readonly durationMs?: number;
+  /** What this one step cost. The task's own cost is the sum the kernel keeps; this is the receipt. */
+  readonly cost?: Money;
+  /** A tool's result as rows, when it has that shape. */
+  readonly rows?: readonly StepRow[];
+  /** A tool's result as text: a terminal's output, a file's diff. Shown in a fixed-width block. */
+  readonly output?: string;
+  /** The tasks a delegate step opened, in the order it opened them. */
+  readonly childTaskIds?: readonly string[];
+}
+
+// One line of a task's trace, and what it carried.
 export interface Step {
   readonly taskId: string;
   /** Position inside the task, from 0. Matches `step.appended`. */
   readonly index: number;
   readonly kind: StepKind;
   readonly text: string;
+  readonly detail?: StepDetail;
 }
 
 /** What `GET /api/sessions/:id` returns, and what the page starts from. */

@@ -153,7 +153,7 @@ describe('session: kernel', () => {
 
 describe('session: kernel, delegation and cost', () => {
   it('fans a question out to child tasks, one level under the lead, and ends them all', async () => {
-    const { kernel } = harness(demoWorker);
+    const { kernel } = harness(demoWorker());
     const { session } = await kernel.start('p1', owner.accountId, 'fusion');
     await kernel.idle();
 
@@ -167,7 +167,7 @@ describe('session: kernel, delegation and cost', () => {
   });
 
   it('rolls what the children spent up to the session, and leaves the lead at zero', async () => {
-    const { kernel, events } = harness(demoWorker);
+    const { kernel, events } = harness(demoWorker());
     const { session } = await kernel.start('p1', owner.accountId, 'fusion');
     await kernel.idle();
 
@@ -184,7 +184,7 @@ describe('session: kernel, delegation and cost', () => {
   });
 
   it('hands the children back to the lead only when they have come to rest', async () => {
-    const { kernel } = harness(demoWorker);
+    const { kernel } = harness(demoWorker());
     const { session } = await kernel.start('p1', owner.accountId, 'fusion');
     await kernel.idle();
 
@@ -325,7 +325,7 @@ describe('session: kernel, delegation and cost', () => {
   });
 
   it('keeps findings in memory when no projects slice is wired, so the demo still runs', async () => {
-    const { kernel, events } = harness(demoWorker);
+    const { kernel, events } = harness(demoWorker());
     await kernel.start('p1', owner.accountId, 'fusion');
     await kernel.idle();
 
@@ -337,6 +337,93 @@ describe('session: kernel, delegation and cost', () => {
 
     expect((await kernel.start('p1', owner.accountId, 'q')).session.mode).toBe('explore');
     expect((await kernel.start('p1', owner.accountId, 'q', 'seed')).session.mode).toBe('seed');
+  });
+});
+
+describe('session: kernel, what a step carries', () => {
+  it('names in the delegate step exactly the tasks that step opened, turn by turn', async () => {
+    const { kernel } = harness(demoWorker());
+    const { session } = await kernel.start('p1', owner.accountId, 'fusion');
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'and in 2026?');
+    await kernel.idle();
+
+    const { tasks, steps } = await kernel.snapshot(session.id, owner);
+    const lead = tasks[0]!;
+    const delegated = steps.filter((step) => step.taskId === lead.id && step.kind === 'delegate');
+    const readers = tasks.filter((task) => task.parentId === lead.id).map((task) => task.id);
+
+    // Three on the first turn, one on the second, and between them every reader once.
+    expect(delegated.map((step) => step.detail?.childTaskIds?.length)).toEqual([3, 1]);
+    expect(delegated.flatMap((step) => step.detail?.childTaskIds ?? [])).toEqual(readers);
+  });
+
+  it('charges the cost a step carries to the task, once, and announces both', async () => {
+    const worker: Worker = {
+      run: (task, _input, report) =>
+        report.appendStep(task.id, 'tool', 'search: x', {
+          tool: 'search',
+          cost: { dollars: 0.1 + 0.2 },
+        }),
+    };
+    const { kernel, events } = harness(worker);
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const snapshot = await kernel.snapshot(session.id, owner);
+    // Rounded to the column's six decimals on the receipt and on the charge alike.
+    expect(snapshot.steps[0]?.detail?.cost).toEqual({ dollars: 0.3 });
+    expect(snapshot.tasks[0]?.ownCost).toEqual({ dollars: 0.3 });
+    expect(snapshot.spend).toEqual({ dollars: 0.3 });
+    expect(events.filter((event) => event.type === 'task.cost')).toHaveLength(1);
+  });
+
+  it('writes neither the step nor the charge when the cost is not an amount', async () => {
+    const { kernel } = harness();
+    const { session, tasks } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    await expect(
+      kernel.appendStep(tasks[0]!.id, 'tool', 'search: x', { cost: { dollars: -1 } }),
+    ).rejects.toThrow(/non-negative/);
+
+    const after = await kernel.snapshot(session.id, owner);
+    expect(after.steps.map((step) => step.kind)).toEqual(['reply']);
+    expect(after.spend).toEqual({ dollars: 0 });
+  });
+
+  it('does not charge a step whose cost is zero, and does not let a worker name child tasks', async () => {
+    const { kernel, events } = harness();
+    const { tasks } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    await kernel.appendStep(tasks[0]!.id, 'tool', 'run: free', {
+      tool: 'run',
+      cost: { dollars: 0 },
+    });
+    expect(events.filter((event) => event.type === 'task.cost')).toHaveLength(0);
+
+    await expect(
+      kernel.appendStep(tasks[0]!.id, 'delegate', 'made up', { childTaskIds: ['not-a-task'] }),
+    ).rejects.toThrow(/set by delegate/);
+  });
+
+  it('sends the detail on the event, so the page draws it without reading the snapshot again', async () => {
+    const { kernel, events } = harness(demoWorker());
+    await kernel.start('p1', owner.accountId, 'fusion');
+    await kernel.idle();
+
+    const search = events.find(
+      (event) => event.type === 'step.appended' && event.detail?.tool === 'search',
+    );
+    expect(search).toMatchObject({
+      kind: 'tool',
+      detail: { tool: 'search', cost: { dollars: 0.01 }, rows: expect.any(Array) as unknown },
+    });
+    const run = events.find(
+      (event) => event.type === 'step.appended' && event.detail?.tool === 'run',
+    );
+    expect(run?.type === 'step.appended' && run.detail?.output).toContain('$ demo tally');
   });
 });
 
@@ -358,7 +445,7 @@ describe('session: kernel, the three budget check points', () => {
       },
     };
   }
-  const withGuard = (guard: BudgetGuard, worker: Worker = demoWorker): Kernel =>
+  const withGuard = (guard: BudgetGuard, worker: Worker = demoWorker()): Kernel =>
     new Kernel(new MemoryTrace(), new Broker(), worker, { budget: guard });
 
   it('asks at a turn, at the fan-out and as each delegated task opens, for the owner of the session', async () => {

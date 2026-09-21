@@ -17,6 +17,7 @@ export type { SpendRecorder } from './spendRecorder.js';
 export type { Node } from './taskComposite.js';
 export { buildTree, TaskNode } from './taskComposite.js';
 export type { FindingSaver, Kernel } from './kernel.js';
+export { demoWorker, type DemoOptions } from './demoWorker.js';
 export type { SessionDirectory } from './directory.js';
 export type { ProjectGate } from './routes.js';
 
@@ -49,7 +50,7 @@ export function createSessionSlice(deps: {
   recordSpend?: SpendRecorder;
 }): SessionSlice {
   const trace = deps.db ? new PgTrace(deps.db, deps.recordSpend) : new MemoryTrace();
-  const kernel = new Kernel(trace, deps.broker, deps.worker ?? demoWorker, {
+  const kernel = new Kernel(trace, deps.broker, deps.worker ?? demoWorker(), {
     ...(deps.recordFinding ? { saveFinding: deps.recordFinding } : {}),
     ...(deps.budget ? { budget: deps.budget } : {}),
   });

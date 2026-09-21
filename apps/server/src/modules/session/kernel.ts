@@ -4,6 +4,7 @@ import type {
   Money,
   SessionMode,
   SessionSnapshot,
+  StepDetail,
   StepKind,
   Task,
   TaskStatus,
@@ -162,9 +163,33 @@ export class Kernel implements WorkerReport {
   };
 
   // WorkerReport: the one door out of the worker.
-  async appendStep(taskId: string, kind: StepKind, text: string): Promise<void> {
+  async appendStep(
+    taskId: string,
+    kind: StepKind,
+    text: string,
+    detail?: StepDetail,
+  ): Promise<void> {
+    // Which tasks a delegate step opened is the kernel's to say, from the tasks
+    // it opened. A worker that names them could name tasks that do not exist.
+    if (detail?.childTaskIds) throw new Error('kernel: childTaskIds is set by delegate()');
+    // The amount is checked before anything is written, so a bad cost leaves
+    // neither a step nor a charge.
+    const kept = detail?.cost ? { ...detail, cost: recordable(detail.cost) } : detail;
+    await this.writeStep(taskId, kind, text, kept);
+    // The step is the receipt; this is the charge. One call makes both.
+    if (kept?.cost && kept.cost.dollars > 0) {
+      await this.addSpend(taskId, kept.cost, kept.tool ?? kind);
+    }
+  }
+
+  private async writeStep(
+    taskId: string,
+    kind: StepKind,
+    text: string,
+    detail?: StepDetail,
+  ): Promise<void> {
     const task = await this.taskOrThrow(taskId);
-    const step = await this.trace.appendStep(taskId, kind, text);
+    const step = await this.trace.appendStep(taskId, kind, text, detail);
     this.broker.publish(task.sessionId, { type: 'step.appended', ...step });
   }
 
@@ -184,6 +209,12 @@ export class Kernel implements WorkerReport {
       this.broker.publish(parent.sessionId, { type: 'task.opened', task: child });
       children.push(child);
     }
+    // The delegate step is written here, after the children exist, so that it
+    // can name them. It used to be the worker's line, written before, and the
+    // page had to guess which children belonged to which step.
+    await this.writeStep(parent.id, 'delegate', `delegated ${children.length} in parallel`, {
+      childTaskIds: children.map((child) => child.id),
+    });
 
     await this.delegation.runBounded(children, (child) => this.run(child, child.title, true));
     const rested = await Promise.all(children.map((child) => this.trace.task(child.id)));

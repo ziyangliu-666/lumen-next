@@ -1,38 +1,98 @@
-import type { Worker } from '../../core/domain/worker.js';
+import type { StepRow } from '@lumen/contracts';
+import type { Worker, WorkerReport } from '../../core/domain/worker.js';
 
 // A worker with no model and no sandbox. It plays the shape of a real run so
 // that the whole path can be seen and tested before the steering slice supplies
-// the agent loop behind the same interface: a lead that thinks, fans the
-// question out to readers, and answers; readers that each use a tool, spend
-// something and reply. Every figure it reports is made up and says so.
+// the agent loop behind the same interface: a lead that thinks, searches, fans
+// the question out to readers and answers; readers that search, run something,
+// keep a finding and reply. Nothing here reaches a network or starts a process,
+// and every line it writes says so. The durations are measured, not invented:
+// they are how long the demo waited.
+
 const PARTS = ['what is already known', 'what changed recently', 'what is still open'] as const;
 const SEARCH_COST = { dollars: 0.01 };
 
-export const demoWorker: Worker = {
-  async run(task, input, report) {
-    if (task.agent !== 'lead') {
-      await report.appendStep(task.id, 'tool', `search: "${task.title}" (demo, no network)`);
-      await report.addSpend(task.id, SEARCH_COST, 'search');
-      await report.recordFinding(task.id, `Demo finding for "${task.title}". No model wrote this.`);
-      await report.appendStep(task.id, 'reply', `Recorded one finding for "${task.title}".`);
-      return;
-    }
+export interface DemoOptions {
+  /**
+   * How long each step pretends to work, in ms. Zero for tests. A person
+   * watching the page needs a moment between steps to see that it is live.
+   */
+  readonly paceMs?: number;
+}
 
-    // The first turn of a root is its question. A later turn is the user
-    // speaking again, and gets one reader rather than the whole fan-out.
-    const firstTurn = input === task.title;
-    const work = firstTurn
-      ? PARTS.map((part) => ({ agent: 'reader', title: `${part}: ${input}` }))
-      : [{ agent: 'reader', title: input }];
+export function demoWorker(options: DemoOptions = {}): Worker {
+  const paceMs = options.paceMs ?? 0;
 
-    await report.appendStep(task.id, 'thinking', `Splitting "${input}" into ${work.length}.`);
-    await report.appendStep(task.id, 'delegate', `delegated ${work.length} in parallel`);
-    const children = await report.delegate(task.id, work);
-    const ended = children.filter((child) => child.status === 'ended').length;
-    await report.appendStep(
-      task.id,
-      'reply',
-      `${ended} of ${children.length} readers finished. No model is wired in yet.`,
-    );
-  },
-};
+  /** Wait as a tool would, and say how long it took. */
+  async function work(): Promise<number> {
+    const startedAt = Date.now();
+    if (paceMs > 0) await new Promise((done) => setTimeout(done, paceMs));
+    return Date.now() - startedAt;
+  }
+
+  async function search(
+    report: WorkerReport,
+    taskId: string,
+    query: string,
+    rows: readonly StepRow[],
+  ): Promise<void> {
+    const durationMs = await work();
+    await report.appendStep(taskId, 'tool', `search: "${query}" (demo, no network)`, {
+      tool: 'search',
+      durationMs,
+      cost: SEARCH_COST,
+      rows,
+    });
+  }
+
+  return {
+    async run(task, input, report) {
+      if (task.agent !== 'lead') {
+        await search(report, task.id, task.title, [
+          { source: 'demo', text: task.title, result: '3 sources' },
+          { source: 'demo', text: `${task.title}, last 6 months`, result: 'nothing', empty: true },
+        ]);
+        const durationMs = await work();
+        await report.appendStep(task.id, 'tool', 'run: tally the sources (demo, no process)', {
+          tool: 'run',
+          durationMs,
+          output: [
+            '$ demo tally --sources 3',
+            '3 sources read   0 contradictions',
+            'no model is wired in: these lines are fixed',
+          ].join('\n'),
+        });
+        await report.recordFinding(
+          task.id,
+          `Demo finding for "${task.title}". No model wrote this.`,
+        );
+        await report.appendStep(task.id, 'reply', `Recorded one finding for "${task.title}".`);
+        return;
+      }
+
+      // The first turn of a root is its question. A later turn is the user
+      // speaking again, and gets one reader rather than the whole fan-out.
+      const firstTurn = input === task.title;
+      const parts = firstTurn
+        ? PARTS.map((part) => ({ agent: 'reader', title: `${part}: ${input}` }))
+        : [{ agent: 'reader', title: input }];
+
+      await work();
+      await report.appendStep(
+        task.id,
+        'thinking',
+        firstTurn
+          ? `Before anything else, find out what is already known about "${input}": a result that is rediscovered is worth nothing. Then split it ${parts.length} ways.`
+          : `"${input}" is one line of enquiry. One reader.`,
+      );
+      // delegate() writes the delegate step itself, naming the tasks it opened.
+      const children = await report.delegate(task.id, parts);
+      const ended = children.filter((child) => child.status === 'ended').length;
+      await report.appendStep(
+        task.id,
+        'reply',
+        `${ended} of ${children.length} readers finished. No model is wired in yet, so there is nothing to conclude.`,
+      );
+    },
+  };
+}

@@ -5,6 +5,7 @@ import type {
   SessionMode,
   SessionSummary,
   Step,
+  StepDetail,
   StepKind,
   TaskStatus,
 } from '@lumen/contracts';
@@ -49,6 +50,7 @@ interface StepRow {
   index: number;
   kind: StepKind;
   text: string;
+  detail: StepDetail | null;
   [column: string]: unknown;
 }
 
@@ -73,7 +75,14 @@ function toSession(row: SessionRow): Session {
 }
 
 function toStep(row: StepRow): Step {
-  return { taskId: row.task_id, index: row.index, kind: row.kind, text: row.text };
+  return {
+    taskId: row.task_id,
+    index: row.index,
+    kind: row.kind,
+    text: row.text,
+    // Null in the column is absent in the contract, not `detail: null`.
+    ...(row.detail ? { detail: row.detail } : {}),
+  };
 }
 
 function toTask(row: TaskRow): TaskRecord {
@@ -169,7 +178,12 @@ export class PgTrace implements Trace {
     return (await this.task(taskId))!;
   }
 
-  async appendStep(taskId: string, kind: StepKind, text: string): Promise<Step> {
+  async appendStep(
+    taskId: string,
+    kind: StepKind,
+    text: string,
+    detail?: StepDetail,
+  ): Promise<Step> {
     if (!UUID.test(taskId)) throw new Error(`trace: no task ${taskId}`);
     // Two reports for one task can arrive together. The index is max + 1, so
     // the two must not read the same max: the row lock on the task makes the
@@ -178,10 +192,12 @@ export class PgTrace implements Trace {
       const locked = await tx.query(`select id from tasks where id = $1 for update`, [taskId]);
       if (locked.length === 0) throw new Error(`trace: no task ${taskId}`);
       const [row] = await tx.query<StepRow>(
-        `insert into steps (task_id, index, kind, text)
-         select $1, coalesce(max(index) + 1, 0), $2, $3 from steps where task_id = $1
-         returning task_id, index, kind, text`,
-        [taskId, kind, text],
+        `insert into steps (task_id, index, kind, text, detail)
+         select $1, coalesce(max(index) + 1, 0), $2, $3, $4::jsonb from steps where task_id = $1
+         returning task_id, index, kind, text, detail`,
+        // Stringified here: the driver would send a JS array as a Postgres
+        // array, not as JSON, and rows is an array.
+        [taskId, kind, text, detail ? JSON.stringify(detail) : null],
       );
       return toStep(row!);
     });
@@ -214,7 +230,7 @@ export class PgTrace implements Trace {
       [sessionId],
     );
     const steps = await this.db.query<StepRow>(
-      `select s.task_id, s.index, s.kind, s.text from steps s
+      `select s.task_id, s.index, s.kind, s.text, s.detail from steps s
          join tasks t on t.id = s.task_id
         where t.session_id = $1 order by t.seq, s.index`,
       [sessionId],

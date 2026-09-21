@@ -56,6 +56,31 @@ describe('web core: applying events to the session state', () => {
     expect(twice.findings).toEqual([{ id: 'f1', taskId: 'r1', text: 'kept' }]);
   });
 
+  it('keeps what a step carried, not only its line of text', () => {
+    const detail = {
+      tool: 'search',
+      durationMs: 6000,
+      cost: { dollars: 0.01 },
+      rows: [{ source: 'oeis', text: 'pop-stack preimages', result: 'nothing', empty: true }],
+    };
+    const next = apply(state, {
+      type: 'step.appended',
+      taskId: 'lead',
+      index: 0,
+      kind: 'tool',
+      text: 'search: x',
+      detail,
+    });
+
+    expect(next.snapshot.steps[0]).toEqual({
+      taskId: 'lead',
+      index: 0,
+      kind: 'tool',
+      text: 'search: x',
+      detail,
+    });
+  });
+
   it('takes the session spend from the total of the root, and from nowhere else', () => {
     const child = apply(state, { type: 'task.total', taskId: 'r1', total: { dollars: 0.01 } });
     expect(child.snapshot.spend).toEqual({ dollars: 0 });

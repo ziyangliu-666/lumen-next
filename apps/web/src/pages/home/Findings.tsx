@@ -7,13 +7,13 @@ import { usePages } from './usePages';
 export function Findings({
   projectId,
   title,
-  polling,
+  pollAfterMs,
 }: {
   projectId: string;
   title: string;
-  polling: boolean;
+  pollAfterMs: number | null;
 }): JSX.Element {
-  const shouldPoll = useCallback(() => polling, [polling]);
+  const shouldPoll = useCallback(() => pollAfterMs, [pollAfterMs]);
   const state = usePages<Finding>(
     `/api/projects/${encodeURIComponent(projectId)}/findings`,
     shouldPoll,
@@ -23,13 +23,13 @@ export function Findings({
       <CardHeader className="flex-row items-center justify-between gap-4">
         <CardTitle className="text-base">Findings · {title}</CardTitle>
         <Button variant="outline" size="sm" onClick={state.refresh} disabled={state.loading}>
-          Refresh findings
+          {state.error ? 'Retry' : 'Refresh findings'}
         </Button>
       </CardHeader>
       <CardContent className="space-y-4" aria-busy={state.loading}>
         {state.error && (
           <p role="alert" className="text-gap">
-            {state.error}
+            {state.error} {state.paused && 'Automatic retries paused. Choose Retry to try again.'}
           </p>
         )}
         {state.loading && state.items.length === 0 && (

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
-import { request, RequestFailure, type Page } from './api';
+import { request, RequestFailure } from '@/core/api';
+import type { Page } from './api';
+import { retryDelay } from './retry';
 
 /** Refetch loaded pages together so polling cannot mix old cursors and new data. */
 export function usePages<T>(
   url: string,
-  shouldPoll: (items: readonly T[]) => boolean,
+  pollDelay: (items: readonly T[]) => number | null,
 ): {
   items: readonly T[];
   loading: boolean;
   error: string | null;
   unauthorized: boolean;
+  paused: boolean;
   hasMore: boolean;
   refresh: () => void;
   loadMore: () => void;
@@ -20,13 +23,16 @@ export function usePages<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     let timer: number | undefined;
     let busy = false;
     let again = false;
-    let poll = false;
+    let delay: number | null = null;
+    let failures = 0;
+    let retryAt = 0;
     const fetchPages = async (): Promise<void> => {
       if (busy) {
         again = true;
@@ -54,7 +60,9 @@ export function usePages<T>(
         setHasMore(cursor !== null);
         setError(null);
         setUnauthorized(false);
-        poll = shouldPoll(all);
+        failures = 0;
+        setPaused(false);
+        delay = pollDelay(all);
       } catch (failure: unknown) {
         if (controller.signal.aborted) return;
         const auth = failure instanceof RequestFailure && failure.status === 401;
@@ -64,43 +72,49 @@ export function usePages<T>(
           setHasMore(false);
         }
         setError(failure instanceof Error ? failure.message : 'Refresh failed.');
-        poll = !auth;
+        failures++;
+        delay = retryDelay(
+          failures,
+          failure instanceof RequestFailure ? failure.status : undefined,
+        );
+        setPaused(delay === null);
       } finally {
         busy = false;
         if (!controller.signal.aborted) {
           setLoading(false);
-          if (again || poll)
+          if ((again && failures === 0) || delay !== null) {
+            retryAt = Date.now() + (delay ?? 0);
             timer = window.setTimeout(
               () => {
                 void fetchPages();
               },
-              again ? 0 : 5000,
+              again && failures === 0 ? 0 : delay!,
             );
+          }
           again = false;
         }
       }
     };
     const refresh = (): void => {
-      void fetchPages();
+      // Focus must not bypass backoff or restart an exhausted retry budget.
+      if (failures === 0 || (delay !== null && Date.now() >= retryAt)) void fetchPages();
     };
     refresh();
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
-    // Optional shared-client notification; no second socket or event reducer.
-    window.addEventListener('lumen:projects-invalidated', refresh);
     return () => {
       controller.abort();
       window.clearTimeout(timer);
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
-      window.removeEventListener('lumen:projects-invalidated', refresh);
     };
-  }, [url, pages, revision, shouldPoll]);
+  }, [url, pages, revision, pollDelay]);
   return {
     items,
     loading,
     error,
     unauthorized,
+    paused,
     hasMore,
     refresh: () => setRevision((n) => n + 1),
     loadMore: () => setPages((n) => n + 1),

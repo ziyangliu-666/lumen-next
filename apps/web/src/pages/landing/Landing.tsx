@@ -1,6 +1,6 @@
 // Owner: PENG XUJIAN. Page: Landing.
 import { useState, type FormEvent, type JSX } from 'react';
-import { signInStub, stubAccount } from '@/core/api';
+import { request, RequestFailure, signInStub, stubAccount } from '@/core/api';
 import { Button } from '@/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { Input } from '@/ui/input';
@@ -64,26 +64,9 @@ export function Landing(): JSX.Element {
     setPending(true);
     setError(null);
     try {
-      // Local bridge until the shared client gains the projects methods (see wiring patch).
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ question, mode: draft.mode }),
+      const result = await request<unknown>('/api/projects', {
+        json: { question, mode: draft.mode },
       });
-      if (!response.ok) {
-        if (response.status === 401) {
-          setAccount('');
-          throw new Error('Please sign in again. Your question has been kept.');
-        }
-        if (response.status >= 500) setUncertain(true);
-        const body: unknown = await response.json();
-        throw new Error(
-          body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
-            ? body.error
-            : 'Could not start the project.',
-        );
-      }
-      const result: unknown = await response.json();
       if (
         !result ||
         typeof result !== 'object' ||
@@ -100,6 +83,10 @@ export function Landing(): JSX.Element {
       }
       window.location.assign(`?session=${encodeURIComponent(result.sessionId)}#/session`);
     } catch (failure: unknown) {
+      if (failure instanceof RequestFailure) {
+        if (failure.status === 401) setAccount('');
+        if (failure.status >= 500) setUncertain(true);
+      }
       if (failure instanceof TypeError || failure instanceof SyntaxError) setUncertain(true);
       setError(failure instanceof Error ? failure.message : 'Could not start the project.');
     } finally {

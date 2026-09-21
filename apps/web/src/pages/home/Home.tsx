@@ -7,7 +7,8 @@ import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
 import { PageHeader } from '@/core/shell';
-import { request, sessionLink, type ProjectCard } from './api';
+import { request } from '@/core/api';
+import { sessionLink, type ProjectCard } from './api';
 import { Findings } from './Findings';
 import { usePages } from './usePages';
 
@@ -18,15 +19,17 @@ const TONE: Record<ProjectCard['tone'], string> = {
   keep: 'bg-keep-soft text-keep',
   gap: 'bg-gap-soft text-gap',
 };
-const shouldPoll = (items: readonly ProjectCard[]): boolean =>
-  items.some((card) => card.refreshPolicy === 'poll');
+const pollDelay = (items: readonly ProjectCard[]): number | null => {
+  const delays = items.flatMap((card) => (card.pollAfterMs === null ? [] : [card.pollAfterMs]));
+  return delays.length ? Math.min(...delays) : null;
+};
 const LABELS: Record<string, string> = {
   all: 'All statuses',
   ended: 'Finished',
   pending: 'Awaiting session',
 };
 export function Home(): JSX.Element {
-  const state = usePages<ProjectCard>('/api/projects', shouldPoll);
+  const state = usePages<ProjectCard>('/api/projects', pollDelay);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [selected, setSelected] = useState<string | null>(null);
@@ -114,12 +117,15 @@ export function Home(): JSX.Element {
             </Select>
           </div>
           <Button variant="outline" onClick={state.refresh} disabled={state.loading}>
-            {state.loading ? 'Refreshing…' : 'Refresh'}
+            {state.loading ? 'Refreshing…' : state.error ? 'Retry' : 'Refresh'}
           </Button>
         </div>
         {state.error && (
           <div role="alert" className="space-y-2 rounded-md bg-gap-soft p-4 text-gap">
             <p>{state.error}</p>
+            {state.paused && (
+              <p className="text-sm">Automatic retries paused. Choose Retry to try again.</p>
+            )}
             {state.unauthorized ? (
               <Button asChild variant="outline">
                 <a href="#/">Continue to sign in</a>
@@ -255,7 +261,7 @@ export function Home(): JSX.Element {
             key={selectedCard.project.id}
             projectId={selectedCard.project.id}
             title={selectedCard.project.title}
-            polling={selectedCard.refreshPolicy === 'poll'}
+            pollAfterMs={selectedCard.pollAfterMs}
           />
         )}
       </div>

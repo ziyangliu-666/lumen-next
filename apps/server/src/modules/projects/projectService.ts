@@ -49,14 +49,8 @@ export class ProjectService {
       const session = await this.sessions.start(project.id, principal, question, mode);
       return { project: summary(project), sessionId: session.id };
     } catch {
-      // Compensate only after the settled start is confirmed to have no session.
-      // A partial start or unavailable lookup must retain its project association.
-      try {
-        if ((await this.sessions.list(project.id, principal)).length === 0)
-          await this.store.remove(project.id);
-      } catch {
-        // Keep uncertain records for manual reconciliation; never replay start.
-      }
+      // A rejected start must not leave a project card. Cleanup errors propagate.
+      await this.store.remove(project.id);
       throw new HttpError(503, 'Session service unavailable. Refresh before trying again.');
     }
   }

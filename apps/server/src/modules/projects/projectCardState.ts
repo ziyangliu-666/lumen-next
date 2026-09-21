@@ -1,3 +1,4 @@
+import type { TaskStatus } from '@lumen/contracts';
 export interface CardDescriptor {
   readonly label: string;
   readonly tone: 'muted' | 'active' | 'decide' | 'keep' | 'gap';
@@ -7,11 +8,15 @@ export interface CardDescriptor {
 
 export interface ProjectCardState {
   describe(): CardDescriptor;
+  canTransitionTo(status: TaskStatus): boolean;
   stop(command: () => Promise<void>): Promise<'stop_requested' | 'already_terminal'>;
   pollDelay(): number | null;
 }
 
 export class QueuedState implements ProjectCardState {
+  canTransitionTo(_status: TaskStatus): boolean {
+    return true;
+  }
   async stop(command: () => Promise<void>): Promise<'stop_requested'> {
     await command();
     return 'stop_requested';
@@ -30,6 +35,9 @@ export class QueuedState implements ProjectCardState {
 }
 
 export class RunningState implements ProjectCardState {
+  canTransitionTo(status: TaskStatus): boolean {
+    return status !== 'queued';
+  }
   async stop(command: () => Promise<void>): Promise<'stop_requested'> {
     await command();
     return 'stop_requested';
@@ -48,6 +56,9 @@ export class RunningState implements ProjectCardState {
 }
 
 export class WaitingState implements ProjectCardState {
+  canTransitionTo(status: TaskStatus): boolean {
+    return status !== 'queued';
+  }
   async stop(command: () => Promise<void>): Promise<'stop_requested'> {
     await command();
     return 'stop_requested';
@@ -66,6 +77,9 @@ export class WaitingState implements ProjectCardState {
 }
 
 export class FinishedState implements ProjectCardState {
+  canTransitionTo(status: TaskStatus): boolean {
+    return status !== 'queued';
+  }
   stop(_command: () => Promise<void>): Promise<'already_terminal'> {
     return Promise.resolve('already_terminal');
   }
@@ -83,6 +97,9 @@ export class FinishedState implements ProjectCardState {
 }
 
 export class StoppedState implements ProjectCardState {
+  canTransitionTo(status: TaskStatus): boolean {
+    return status !== 'queued';
+  }
   stop(_command: () => Promise<void>): Promise<'already_terminal'> {
     return Promise.resolve('already_terminal');
   }
@@ -100,6 +117,9 @@ export class StoppedState implements ProjectCardState {
 }
 
 export class FailedState implements ProjectCardState {
+  canTransitionTo(status: TaskStatus): boolean {
+    return status !== 'queued';
+  }
   stop(_command: () => Promise<void>): Promise<'already_terminal'> {
     return Promise.resolve('already_terminal');
   }

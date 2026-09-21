@@ -33,6 +33,8 @@ export class ProjectCardContext {
   }
 
   applySummary(summary: ConfirmedSessionSummary): void {
+    if (!this.state.canTransitionTo(summary.status))
+      throw new Error('Illegal card transition: an existing session cannot return to queued.');
     this.state = states[summary.status];
   }
 

@@ -3,6 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { ProjectCardContext } from './projectCardContext.js';
 
 describe('ProjectCardContext', () => {
+  it.each(['running', 'waiting', 'ended', 'stopped', 'failed'] as const)(
+    'refuses an illegal %s to queued transition without changing behavior',
+    (status) => {
+      const context = new ProjectCardContext({ status });
+      const before = context.describe();
+      expect(() => context.applySummary({ status: 'queued' })).toThrow('Illegal card transition');
+      expect(context.describe()).toEqual(before);
+    },
+  );
   it('changes Stop execution and cadence only after an authoritative update', async () => {
     const command = vi.fn().mockResolvedValue(undefined);
     const context = new ProjectCardContext({ status: 'waiting' });

@@ -68,12 +68,11 @@ project. Stop selects the latest session when handling the request and delegates
 its subtree stop to session. It never stops every session in the project or
 optimistically replaces the confirmed status.
 
-If session creation rejects, the service checks the public session directory.
-It removes the new project only when the settled start has no session. Existing
-sessions, failed lookups or failed cleanup retain the project for reconciliation;
-start is never replayed automatically. Cards without a confirmed session use
-manual refresh. The browser retains the question and asks the user to check
-Projects before trying again. This is compensation, not a cross-slice transaction.
+If session creation rejects, the service deletes the newly inserted project
+before returning 503. It does not query session or replay start. A cleanup error
+propagates to the shared error handler rather than claiming compensation succeeded.
+This is the requested delete-on-failure strategy, not an atomic cross-slice
+transaction; session owns any partially written session records.
 
 ## Storage and pages
 
@@ -87,8 +86,8 @@ sign-in helper on localhost. Home supports loaded-project search/status filters,
 pagination, safe literal finding text and source-session links. Queued/running cards refresh every five seconds; waiting cards every fifteen
 seconds; terminal and unconfirmed cards refresh manually or on window focus.
 Fetches abort on unmount, hidden tabs pause polling, and errors retain loaded
-data. A 401 clears private data. Transient failures back off 5/10/20/40/60 seconds,
-then pause until Retry; permanent client errors pause immediately. Focus does
+data. A 401 clears private data. Transient failures back off 5/10/20/40 seconds,
+then pause on the fifth consecutive failure until Retry; 401 pauses immediately; all other failures use the bounded schedule. Focus does
 not bypass backoff. Home uses the shared HTTP client and creates no WebSocket.
 
 ## Validation

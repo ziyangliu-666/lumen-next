@@ -71,6 +71,20 @@ async function bootstrap(): Promise<void> {
 
   app.get('/api/health', () => ({ status: 'ok', uptimeSeconds: Math.round(process.uptime()) }));
 
+  // Each slice registers itself here once it has routes to serve or commands to
+  // claim. Session is wired; identity, projects, steering and billing follow
+  // the same two lines.
+  //
+  // Projects, when it lands, goes in like this. The two slices need each
+  // other, so session is given closures and projects is built second:
+  //
+  //   let projects: ProjectsSlice;
+  //   const session = createSessionSlice({ broker, db,
+  //     requireProject: (principal, id) => projects.requireProject(principal, id),
+  //     recordFinding: (sessionId, taskId, text) => projects.recordFinding(sessionId, taskId, text),
+  //   });
+  //   projects = createProjectsSlice({ sessions: session.projects, db });
+  //   await app.register(projects.registerRoutes);
   await app.register(projects.registerRoutes);
   await app.register(session.registerRoutes);
   await app.register(billing.registerRoutes);

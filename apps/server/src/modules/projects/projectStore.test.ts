@@ -9,16 +9,16 @@ import { PgProjectStore } from './pgProjectStore.js';
 import type { ProjectStore } from './ports.js';
 import type { Finding, Project } from './models.js';
 
-const url = TEST_DATABASE_URL;
 for (const database of [false, true]) {
-  describe.skipIf(database && !url)(database ? 'PgProjectStore' : 'MemoryProjectStore', () => {
+  const suite = database ? describe.skipIf(!TEST_DATABASE_URL) : describe;
+  suite(database ? 'PgProjectStore' : 'MemoryProjectStore', () => {
     let store: ProjectStore;
     let db: Db | undefined;
     let drop: (() => Promise<void>) | undefined;
     let sessionId: string;
     let taskId: string;
     beforeEach(async () => {
-      if (database && url) {
+      if (database) {
         ({ db, drop } = await openTestDb());
         store = new PgProjectStore(db);
       } else store = new MemoryProjectStore();

@@ -35,18 +35,21 @@ protocol; it would need a separate dispatcher implementing the same rules.
 A table plus callbacks remains a valid simpler alternative if the behavior does
 not grow; the chosen classes keep each state's presentation and behavior together.
 
-`applySummary` replaces the projection from an authoritative session summary.
-Snapshots can skip lifecycle transitions or describe a new latest session, so
-rejecting such updates would incorrectly enforce session's lifecycle in projects.
-The refused operation tested here is Stop on a terminal state. Neither a Stop
-acknowledgement nor a refresh failure is evidence of a lifecycle transition.
-The context owns no execution state and starts no timers.
+`applySummary` asks the current state whether a transition is legal before
+replacing it. Queued accepts the first observation and skipped forward states.
+Once a card has left Queued, it refuses a transition back to Queued and preserves
+its current descriptor. Repeated snapshots are idempotent. New research turns
+may resume an existing root, including after completion, so other observed
+statuses remain legal. A different session is initialized with a new context.
+These are card projection rules; projects does not change session's execution
+lifecycle. Stop acknowledgement alone still does not update confirmed state.
 
 ## Validation
 
 Behavior tests were run failing before implementation. They exercise command
 execution in each active state, refusal in each terminal state, rejected commands,
-different intervals, and context delegation after a confirmed summary replacement.
+different intervals, context delegation after a confirmed summary replacement, and refusal of illegal
+transitions without mutating the previous state.
 Service tests verify these behaviors are used in production orchestration.
 The original descriptor tests remain as regression checks, and integration tests
 use session's real public directory. See [integration](integration/README.md).

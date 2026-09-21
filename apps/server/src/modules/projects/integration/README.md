@@ -25,12 +25,11 @@ contract-owner adoption. No nonexistent `createProjectRequest` helper is assumed
 
 ## Failure behavior
 
-Creation is an in-process start followed by compensation on rejection. Delete the
-new project only after session confirms no run exists; otherwise retain its
-association. Cleanup failure is contained, start is not replayed, and a card with
-no confirmed session does not poll. This does not promise an atomic transaction
-across two slices. A process crash between insert and start can still leave a
-manual-refresh card requiring reconciliation.
+Creation uses delete-on-failure compensation: when start rejects, delete the new
+project before returning 503. No session lookup is required and start is never
+replayed. Cleanup errors propagate. This does not promise atomic rollback of
+session-owned records; that would require a transactional session port outside
+this slice's boundary.
 
 Stop delegates to session and reports its confirmed status. Cancellation of
 worker execution belongs to session; projects does not implement its own kernel.
@@ -91,3 +90,29 @@ integration test uses the real session directory, with no test-owned lookup adap
   spend and findings were preserved.
 - Browser: Landing creates and opens the existing session; Home shows Finished,
   spend and 3 findings with source-task links; network errors retain loaded cards.
+
+## Strict acceptance follow-up
+
+The follow-up enforces the numbered review requirements literally at their
+observable boundaries:
+
+- Non-401 reads retry after failures 1–4 with delays 5/10/20/40 seconds. Failure
+  5 schedules nothing; the 60-second ceiling remains in the delay calculation.
+  Retry starts a fresh attempt budget. Authentication failures stop immediately.
+- A rejected session start deletes the new project without a conditional session
+  lookup. Cleanup failure is surfaced, not swallowed; no start is replayed.
+- State implementations decide whether the current card may transition. Returning
+  an already-started card to Queued is refused without changing its descriptor;
+  initial snapshots and later research turns remain supported.
+- PostgreSQL storage cases explicitly use `describe.skipIf(!TEST_DATABASE_URL)`
+  and `openTestDb()`. No private migration runner remains.
+- The old migration directory is removed. Shared main changes are limited to
+  imports and the reviewed public-port wiring; its original comments are retained.
+  The forward reference uses a typed `const` to satisfy the repository's
+  `prefer-const` lint rule without changing the reviewed composition.
+
+New behavior tests were run failing before the fixes. With the repository's
+`docker compose up -d db` database and `DATABASE_URL` set, the full suite passes
+221 tests with 99% line coverage. The page-local retry suite passes all 3 tests.
+PR #24 is the upstream continuation of closed fork PR #16; merge still requires
+owner approval and the previously documented shared Deploy smoke update.

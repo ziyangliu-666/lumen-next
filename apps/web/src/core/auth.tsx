@@ -2,43 +2,16 @@ import { useCallback, useEffect, useState, type JSX, type ReactNode } from 'reac
 import { Button } from '@/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/ui/card';
 import { Skeleton } from '@/ui/skeleton';
+import { stubAccount } from './api';
+import { authStateOf, type AuthState } from './authState';
 
-export interface CurrentAccount {
-  readonly id: string;
-  readonly email: string;
-  readonly displayName: string;
-  readonly role: 'user' | 'staff';
-  readonly createdAt: number;
-}
+export { authStateOf, type AuthState, type CurrentAccount } from './authState';
 
-type AuthState =
-  | { readonly status: 'loading' }
-  | { readonly status: 'signed-out' }
-  | { readonly status: 'ready'; readonly account: CurrentAccount }
-  | { readonly status: 'error' };
-
-function accountOf(value: unknown): CurrentAccount | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const account = value as Record<string, unknown>;
-  if (
-    typeof account.id !== 'string' ||
-    typeof account.email !== 'string' ||
-    typeof account.displayName !== 'string' ||
-    (account.role !== 'user' && account.role !== 'staff') ||
-    typeof account.createdAt !== 'number'
-  ) {
-    return null;
-  }
-  return {
-    id: account.id,
-    email: account.email,
-    displayName: account.displayName,
-    role: account.role,
-    createdAt: account.createdAt,
-  };
-}
-
-function useCurrentAccount(): { readonly state: AuthState; readonly refresh: () => void } {
+/** The current account, asked of the server once per mount and again on `refresh`. */
+export function useCurrentAccount(): {
+  readonly state: AuthState;
+  readonly refresh: () => void;
+} {
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState<AuthState>({ status: 'loading' });
   const refresh = useCallback(() => {
@@ -53,12 +26,9 @@ function useCurrentAccount(): { readonly state: AuthState; readonly refresh: () 
       cache: 'no-store',
       signal: controller.signal,
     })
-      .then(async (response) => {
-        if (response.status === 401) return { status: 'signed-out' } as const;
-        if (!response.ok) return { status: 'error' } as const;
-        const account = accountOf(await response.json().catch(() => null));
-        return account ? ({ status: 'ready', account } as const) : ({ status: 'error' } as const);
-      })
+      .then(async (response) =>
+        authStateOf(response.status, await response.json().catch(() => null), stubAccount()),
+      )
       .then((next) => {
         if (!controller.signal.aborted) setState(next);
       })
@@ -91,7 +61,9 @@ export function StaffGuard({ children }: { readonly children: ReactNode }): JSX.
 
   useEffect(() => {
     if (state.status === 'signed-out') window.location.hash = '/signin';
-    if (state.status === 'ready' && state.account.role !== 'staff') window.location.hash = '/home';
+    if (state.status === 'ready' && state.mode === 'identity' && state.account.role !== 'staff') {
+      window.location.hash = '/home';
+    }
   }, [state]);
 
   if (state.status === 'loading') {
@@ -122,6 +94,10 @@ export function StaffGuard({ children }: { readonly children: ReactNode }): JSX.
       </Card>
     );
   }
+
+  // A process with no database has no roles to check. It is development only
+  // (main.ts refuses it in production), so the page renders and says nothing.
+  if (state.status === 'ready' && state.mode === 'stub') return <>{children}</>;
 
   if (state.status !== 'ready' || state.account.role !== 'staff') {
     return <p role="status">Redirecting…</p>;

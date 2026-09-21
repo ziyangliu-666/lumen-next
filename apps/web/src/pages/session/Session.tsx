@@ -8,17 +8,14 @@ import { Badge } from '@/ui/badge';
 import { Button } from '@/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { Input } from '@/ui/input';
-import { Label } from '@/ui/label';
 import { Textarea } from '@/ui/textarea';
+import { useCurrentAccount } from '@/core/auth';
 import { PageHeader } from '@/core/shell';
 import {
   apply,
   fetchSession,
   inTreeOrder,
   openStream,
-  signInStub,
-  startSession,
-  stubAccount,
   type SessionState,
   type Stream,
 } from '@/core/api';
@@ -57,7 +54,8 @@ function field(form: FormData, name: string): string {
 }
 
 export function Session(): JSX.Element {
-  const [account, setAccount] = useState<string>(() => stubAccount() ?? '');
+  const { state: auth } = useCurrentAccount();
+  const account = auth.status === 'ready' ? auth.account.displayName : '';
   const [state, setState] = useState<SessionState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -103,24 +101,6 @@ export function Session(): JSX.Element {
       stream.current = null;
     };
   }, [state?.snapshot.session.id]);
-
-  async function onStart(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const who = field(form, 'account');
-    const projectId = field(form, 'project');
-    const text = field(form, 'text');
-    if (!who || !projectId || !text) return;
-    signInStub(who);
-    setAccount(who);
-    setError(null);
-    try {
-      const snapshot = await startSession(projectId, text);
-      setState({ snapshot, stream: 'connecting' });
-    } catch (failure: unknown) {
-      setError(failure instanceof Error ? failure.message : 'could not start');
-    }
-  }
 
   function onSay(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -210,27 +190,21 @@ export function Session(): JSX.Element {
                 </form>
               </>
             ) : (
-              <form onSubmit={(event) => void onStart(event)} className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="account">Account (Sprint 1 stub)</Label>
-                  <Input id="account" name="account" defaultValue={account} placeholder="demo" />
+              <div className="space-y-3 text-sm text-muted-foreground">
+                {error ? <p className="text-gap">{error}</p> : null}
+                <p>
+                  A session belongs to a project. Start one from a question, or open one from your
+                  projects, and its call tree draws here.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild>
+                    <a href="#/">Ask a question</a>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <a href="#/home">Your projects</a>
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="project">Project</Label>
-                  <Input id="project" name="project" defaultValue="demo" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="text">Question</Label>
-                  <Textarea
-                    id="text"
-                    name="text"
-                    rows={3}
-                    placeholder="What do you want to know?"
-                  />
-                </div>
-                {error ? <p className="text-sm text-gap">{error}</p> : null}
-                <Button type="submit">Start the session</Button>
-              </form>
+              </div>
             )}
           </CardContent>
         </Card>

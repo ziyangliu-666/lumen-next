@@ -1,6 +1,7 @@
 // Owner: PENG XUJIAN. Page: Landing.
 import { useState, type FormEvent, type JSX } from 'react';
-import { request, RequestFailure, signInStub, stubAccount } from '@/core/api';
+import { request, RequestFailure, signInStub } from '@/core/api';
+import { useCurrentAccount } from '@/core/auth';
 import { Button } from '@/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { Input } from '@/ui/input';
@@ -39,7 +40,9 @@ function saveDraft(draft: Draft): void {
 }
 export function Landing(): JSX.Element {
   const [draft, setDraft] = useState(readDraft);
-  const [account, setAccount] = useState(() => stubAccount() ?? '');
+  // Who is signed in is the shell's answer, not this page's: real sign-in and
+  // the development account both arrive through the same hook.
+  const { state: auth, refresh: refreshAccount } = useCurrentAccount();
   const [accountInput, setAccountInput] = useState('');
   const [pending, setPending] = useState(false);
   const [uncertain, setUncertain] = useState(false);
@@ -56,7 +59,7 @@ export function Landing(): JSX.Element {
       setError('Enter a question of 1 to 10,000 characters.');
       return;
     }
-    if (!account) {
+    if (auth.status !== 'ready') {
       setError('Sign in before starting. Your question is saved in this tab.');
       return;
     }
@@ -84,7 +87,7 @@ export function Landing(): JSX.Element {
       window.location.assign(`?session=${encodeURIComponent(result.sessionId)}#/session`);
     } catch (failure: unknown) {
       if (failure instanceof RequestFailure) {
-        if (failure.status === 401) setAccount('');
+        if (failure.status === 401) refreshAccount();
         if (failure.status >= 500) setUncertain(true);
       }
       if (failure instanceof TypeError || failure instanceof SyntaxError) setUncertain(true);
@@ -174,7 +177,7 @@ export function Landing(): JSX.Element {
           </form>
         </CardContent>
       </Card>
-      {!account ? (
+      {auth.status === 'signed-out' ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Continue with your account</CardTitle>
@@ -188,7 +191,7 @@ export function Landing(): JSX.Element {
                 Sign in
               </a>
             </Button>
-            {window.location.hostname === 'localhost' && (
+            {auth.mode === 'stub' && (
               <form
                 className="space-y-2"
                 onSubmit={(event) => {
@@ -196,7 +199,7 @@ export function Landing(): JSX.Element {
                   const id = accountInput.trim();
                   if (id) {
                     signInStub(id);
-                    setAccount(id);
+                    refreshAccount();
                     setError(null);
                   }
                 }}

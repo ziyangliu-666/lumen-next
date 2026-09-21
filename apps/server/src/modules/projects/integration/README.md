@@ -43,6 +43,22 @@ worker execution belongs to session; projects does not implement its own kernel.
 - Legacy findings have nullable project IDs and need an owner-approved backfill
   before they count on Home. Down migration fails on arbitrary non-UUID stub IDs
   rather than deleting data. Review legacy timestamp precision for pagination.
+- The shared Deploy workflow still creates a session under the placeholder project
+  ID `demo`. The newly wired ownership gate correctly rejects that request.
+  Before merging, its owner must replace the authenticated smoke step with a real
+  project creation, then fetch the returned session (keep the anonymous 401 check):
+
+  ```sh
+  created="$(curl -fsS -X POST http://localhost:4000/api/projects \
+    -H 'authorization: stub smoke:user' -H 'content-type: application/json' \
+    -d '{"question":"smoke","mode":"explore"}')"
+  session_id="$(printf '%s' "$created" | node -e 'let s=""; process.stdin.on("data", c => s += c); process.stdin.on("end", () => console.log(JSON.parse(s).sessionId));')"
+  curl -fsS "http://localhost:4000/api/sessions/$session_id" \
+    -H 'authorization: stub smoke:user'
+  ```
+
+  The workflow is outside the approved shared-file boundary; this branch does not
+  silently change it. This is a merge prerequisite, not a failing UC2 route.
 - CI and owner approval are required before merge. Fork PR #16 has no workflow
   runs because private-fork workflows are disabled; use an upstream branch as
   the reviewer requested. Local validation does not substitute for those checks.

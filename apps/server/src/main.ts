@@ -10,6 +10,7 @@ import { headerStub } from './core/http/authGuard.js';
 import { buildServer, defaultWebRoot } from './core/http/server.js';
 import { Broker } from './core/protocol/broker.js';
 import { createSessionSlice } from './modules/session/index.js';
+import { createBillingSlice } from './modules/billing/index.js';
 
 const DEFAULT_PORT = 4000;
 
@@ -41,6 +42,7 @@ async function bootstrap(): Promise<void> {
   // resolver in here, and nothing else in the server changes.
   const resolver = headerStub;
   const broker = new Broker();
+  const billing = createBillingSlice({ db });
   // Sprint 1 runs the echo worker; steering passes its own here when it lands.
   const session = createSessionSlice({ broker, db });
   // Before anything can connect: tasks left open by the last process are over.
@@ -73,6 +75,7 @@ async function bootstrap(): Promise<void> {
   //   projects = createProjectsSlice({ sessions: session.projects, db });
   //   await app.register(projects.registerRoutes);
   await app.register(session.registerRoutes);
+  await app.register(billing.registerRoutes);
   session.registerCommands(broker);
 
   await app.listen({ port: port(), host: '0.0.0.0' });

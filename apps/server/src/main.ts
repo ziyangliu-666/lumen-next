@@ -11,6 +11,7 @@ import { buildServer, defaultWebRoot } from './core/http/server.js';
 import { Broker } from './core/protocol/broker.js';
 import { createSessionSlice } from './modules/session/index.js';
 import { createBillingSlice } from './modules/billing/index.js';
+import { createProjectsSlice, type ProjectsSlice } from './modules/projects/index.js';
 
 const DEFAULT_PORT = 4000;
 
@@ -47,11 +48,14 @@ async function bootstrap(): Promise<void> {
   const session = createSessionSlice({
     broker,
     db,
+    requireProject: (principal, id) => projects.requireProject(principal, id),
+    recordFinding: (sessionId, taskId, text) => projects.recordFinding(sessionId, taskId, text),
     ...(db ? { recordSpend: billing.record } : {}),
     // Not yet: `budget: billing.budgetGuard`. The chain fails closed, and a new
     // account's cap is 0, so wiring it today would refuse every session. It goes
     // in when billing gives a new account a default cap (see the review on #21).
   });
+  const projects: ProjectsSlice = createProjectsSlice({ sessions: session.projects, db });
   // Before anything can connect: tasks left open by the last process are over.
   const orphans = await session.kernel.restore();
 
@@ -81,6 +85,7 @@ async function bootstrap(): Promise<void> {
   //   });
   //   projects = createProjectsSlice({ sessions: session.projects, db });
   //   await app.register(projects.registerRoutes);
+  await app.register(projects.registerRoutes);
   await app.register(session.registerRoutes);
   await app.register(billing.registerRoutes);
   session.registerCommands(broker);

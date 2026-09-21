@@ -21,12 +21,16 @@ window.LUMEN_STATUS = {
         note: '#10, #11',
       },
       { text: 'Sandbox behind its interface', done: false, note: 'Compute interface not started' },
-      { text: 'Wallet shows spend; ledger writes', done: false, note: 'billing is empty' },
+      {
+        text: 'Wallet shows spend; ledger writes',
+        done: false,
+        note: 'written in #19, #20, #21; none merged',
+      },
       { text: 'Container image builds; DAST runs against staging', done: true, note: '#14' },
     ],
   },
   main: {
-    commit: '1eab4c2',
+    commit: 'bd25121',
     pipelines: 'CI, Security and Deploy green',
     tests: 115,
     coverage: 98,
@@ -46,7 +50,7 @@ window.LUMEN_STATUS = {
       state: 'done',
       stateLabel: 'Sprint 2 part done',
       summary:
-        'core/db, the trace in Postgres, restore after a restart, delegation, cost roll-up, session.open and reconnect, container and DAST, and the ports projects plugs into. 11 pull requests merged.',
+        'core/db, the trace in Postgres, restore after a restart, delegation, cost roll-up, session.open and reconnect, container and DAST, the ports projects plugs into, and this board (#18). 12 pull requests merged.',
       todo: [
         { text: 'core/db: pool and migrations (#8)', done: true },
         { text: 'Trace in Postgres; restore after a restart (#13)', done: true },
@@ -180,46 +184,41 @@ Constraints: use another slice only through its public index. No new dependency 
       name: 'HE RONG',
       slice: 'UC5 money and administration',
       pattern: 'Chain of Responsibility',
-      written: 25,
+      written: 80,
       onMain: 25,
-      state: 'idle',
-      stateLabel: 'No code yet',
+      state: 'review',
+      stateLabel: 'Waiting on review, CI green',
       summary:
-        'The design document is complete. There is no branch and no pull request. The Sprint 2 outcome "Wallet shows spend; ledger writes" depends on this slice alone. The kernel already has the places for record() and the three budget checks.',
+        'Three pull requests, stacked one on the next, each with CI, SCA and SAST green: #19 the wallet shell against main, #20 the ledger, the Wallet tab and session writing spend inside the task transaction, #21 the BudgetChain with tests for order, short circuit and a fourth policy. None has a human review yet; the automated reviewer reached its quota on all three. Nothing on main yet, and no caller asks the guard before a worker spends.',
       todo: [
         {
           text: 'Today: a draft pull request with the slice shell and GET /api/wallet',
-          done: false,
+          done: true,
         },
-        { text: 'Ledger: record(), monthSpend() in SQL, Wallet tab', done: false },
-        { text: 'BudgetChain and the tests that prove the pattern', done: false },
+        { text: 'Ledger: record(), monthSpend() in SQL, Wallet tab', done: true },
+        { text: 'BudgetChain and the tests that prove the pattern', done: true },
         { text: 'Decide on the admin routes from #15', done: false },
       ],
-      prs: [],
-      prompt: `You are working in the lumen-next repo on the billing slice (apps/server/src/modules/billing, apps/web/src/pages/settings, apps/web/src/pages/admin), owned by HE RONG. The slice is empty on main. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/DOD.md, docs/ARCHITECTURE.md sections 6 and 7 (billing), apps/server/src/core/db/db.ts and core/db/testDb.ts, and modules/session/index.ts as the example of how a slice is built and wired. Everything you commit is English.
+      prs: [
+        { number: 19, label: 'feat(billing): authenticated wallet slice shell' },
+        { number: 20, label: 'feat(billing): persist ledger and connect Wallet to task spend' },
+        { number: 21, label: 'feat(billing): ordered budget checks with fail-closed policies' },
+      ],
+      prompt: `You are working in the lumen-next repo on the billing slice (apps/server/src/modules/billing, apps/web/src/pages/settings, apps/web/src/pages/admin), owned by HE RONG. Three pull requests are open and stacked: #19, the wallet shell, against main; #20, the ledger and the Wallet tab, against #19; #21, the budget chain, against #20. CI, SCA and SAST are green on all three, and none of them has been reviewed by a person: the automated reviewer reached its quota. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/DOD.md and apps/server/src/modules/billing/README.md before you change anything. Everything you commit is English.
 
-Goal: the Sprint 2 outcome "Wallet shows spend; ledger writes", in three small pull requests. Open the first one as a draft today.
+Goal: the three land on main in order, and the cap the page shows becomes a cap that holds.
 
-PR 1, today: the shell. modules/billing/index.ts exports createBillingSlice({ db }) returning { registerRoutes, record, monthSpend, budgetGuard }. One route, GET /api/wallet, behind requireUser, returning { spent: { dollars: 0 }, cap: { dollars: 0 } }. Register it in main.ts with the two lines the session slice uses. One test with app.inject().
+Do, in this order:
+1. While they wait for review, do not widen #19, #20 or #21. If main moves, merge main into each branch from the bottom of the stack up, and keep CI green.
+2. When #19 merges, point #20 at main; when #20 merges, point #21 at main. One review at a time, in that order.
+3. Ask the core owner whether Charge, Decision and BudgetGuard should move from modules/billing/ports.ts to core/domain/budget.ts. If they should, do it in a fourth, small pull request that imports from core and deletes the local copies.
+4. Ask the identity owner for an account eligibility check on the public index of modules/identity, and pass it to createBillingSlice as canSpend in main.ts. Until that exists the account handler denies every charge, which is why no caller may ask the guard yet.
+5. With the session owner's agreement, and only after step 4: ask budgetGuard.check before a worker spends, at the three points Charge.at names (turn, fan-out, task-open). A deny ends the step with its reason; escalate stays a denial until approvals land in Sprint 3. Test that an over-cap charge stops the step and one under the cap does not.
+6. Decide the admin routes: either billing takes GET /api/admin/accounts and the admin page out of #15, or identity keeps them. Write the decision in the billing README and tell the identity owner, so #15 can shrink either way.
 
-PR 2: the ledger.
-1. Migration apps/server/src/core/db/migrations/007_billing_wallets.sql: billing_wallets (account_id text primary key, cap numeric(12,6) not null default 0). ledger_entries already exists in 001. account_id is text, as in sessions.
-2. record({ accountId, taskId, amount, reason }) inserts one ledger row. monthSpend(accountId) returns { spent, cap } with the sum done in SQL over the current UTC month. Never add money in JS.
-3. GET /api/wallet returns the real figures. GET /api/wallet/ledger?limit&cursor lists the account's entries, newest first. PATCH /api/wallet/cap { cap: { dollars } } validates a finite, non-negative amount with at most six decimals.
-4. Tests with openTestDb() and describe.skipIf(!TEST_DATABASE_URL): two concurrent records both count; a month boundary; a foreign account sees nothing.
-5. Wallet tab in pages/settings: spent / cap and the ledger table, built from @/ui, money in font-mono with four decimals, request() from @/core/api. The browser never adds.
+Constraints: read another slice only through its public index. No new dependency. Money is added and compared in Postgres numeric, never in JavaScript. Until step 5 is on main, neither the Wallet tab nor the README may describe the cap as something that stops a worker.
 
-PR 3: the pattern, test first.
-1. If apps/server/src/core/domain/budget.ts exists on main, import BudgetGuard, Charge and Decision from it. If it does not, declare them in modules/billing/ports.ts exactly so:
-   type Charge = { accountId: string; taskId: string; estimate: Money; at: 'turn' | 'fan-out' | 'task-open'; reason: string }
-   type Decision = { kind: 'allow' } | { kind: 'escalate'; approvalId: string } | { kind: 'deny'; reason: string }
-   interface BudgetGuard { check(charge: Charge): Promise<Decision> }
-2. BudgetChain implements BudgetGuard over ordered BudgetHandlers: AccountHandler (deny or pass), MonthlyCapHandler (allow when spent + estimate <= cap, else pass), ApprovalHandler (Sprint 3: for now deny with reason 'over the cap'). No handler result means deny. A thrown error propagates; it never becomes allow.
-3. Tests that prove the reason for the pattern: handler order and short-circuit; under the cap allows; over the cap does not; adding a fourth handler changes no caller; a store failure is never allow.
-
-The admin routes and page that PR #15 contained are yours to take or rewrite; leave them for a fourth pull request.
-
-Constraints: read another slice only through its public index. No new dependency. Each PR: npm run verify green with DATABASE_URL set (docker compose up db), Conventional Commits, branch billing/<topic>.`,
+Done means: the three pull requests are on main, npm run verify is green with DATABASE_URL set (docker compose up db), and a test proves that a charge over the cap stops the step it was checked for.`,
     },
   ],
 };

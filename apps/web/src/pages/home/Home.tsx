@@ -8,6 +8,7 @@ import { Label } from '@/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
 import { PageHeader } from '@/core/shell';
 import { request } from '@/core/api';
+import { useCurrentAccount, type CurrentAccount } from '@/core/auth';
 import { sessionLink, type ProjectCard } from './api';
 import { Findings } from './Findings';
 import { usePages } from './usePages';
@@ -29,6 +30,50 @@ const LABELS: Record<string, string> = {
   pending: 'Awaiting session',
 };
 export function Home(): JSX.Element {
+  const { state: auth, refresh } = useCurrentAccount();
+  if (auth.status === 'loading')
+    return (
+      <p role="status" className="text-muted-foreground">
+        Checking your account…
+      </p>
+    );
+  if (auth.status === 'error')
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Unable to check your account</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p role="alert" className="text-muted-foreground">
+            The server could not confirm who is signed in.
+          </p>
+          <Button onClick={refresh}>Try again</Button>
+        </CardContent>
+      </Card>
+    );
+  if (auth.status === 'signed-out')
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Your projects</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-muted-foreground">
+            {auth.mode === 'stub'
+              ? 'Choose a development account on Landing to see your projects.'
+              : 'Sign in from Landing to see your projects.'}
+          </p>
+          <Button asChild>
+            <a href="#/">Continue to Landing</a>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  // A different account or mode must never reuse another account's loaded pages.
+  return <HomeProjects key={JSON.stringify([auth.mode, auth.account.id])} account={auth.account} />;
+}
+
+function HomeProjects({ account }: { account: CurrentAccount }): JSX.Element {
   const state = usePages<ProjectCard>('/api/projects', pollDelay);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
@@ -74,7 +119,7 @@ export function Home(): JSX.Element {
     <>
       <PageHeader
         title="Projects"
-        description="Pick up where your research left off."
+        description={`Pick up where your research left off. Signed in as ${account.displayName}.`}
         actions={
           <Button asChild>
             <a href="#/">New project</a>

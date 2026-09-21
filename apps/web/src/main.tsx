@@ -1,5 +1,6 @@
 import { StrictMode, type JSX } from 'react';
 import { createRoot } from 'react-dom/client';
+import { StaffGuard } from './core/auth.js';
 import { renderRoute, useHash, type Route } from './core/router.js';
 import { AppShell } from './core/shell.js';
 import { Landing } from './pages/landing/Landing.js';
@@ -16,7 +17,14 @@ const routes: readonly Route[] = [
   { path: '/home', render: () => <Home /> },
   { path: '/session', render: () => <Session /> },
   { path: '/settings', render: () => <Settings /> },
-  { path: '/admin', render: () => <Admin /> },
+  {
+    path: '/admin',
+    render: () => (
+      <StaffGuard>
+        <Admin />
+      </StaffGuard>
+    ),
+  },
 ];
 
 function App(): JSX.Element {

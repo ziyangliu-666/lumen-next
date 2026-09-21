@@ -24,5 +24,8 @@ services:
     environment:
       DATABASE_URL: postgres://lumen:lumen@db:5432/lumen
       LUMEN_PORT: '4000'
+      LUMEN_ORIGIN: http://localhost:4000
+      IDENTITY_SESSION_LIFETIME_MS: '86400000'
+      IDENTITY_INSECURE_COOKIES: 'true'
     ports:
       - '4000:4000'

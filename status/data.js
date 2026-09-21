@@ -17,7 +17,7 @@ window.LUMEN_STATUS = {
       {
         text: 'Slices run in parallel',
         done: false,
-        note: 'session and billing on main; identity, projects, steering are not',
+        note: 'session and billing on main; identity #23 waits on review; projects and steering are not',
       },
       {
         text: 'A question fans out to workers; the tree is readable and costed',
@@ -63,6 +63,7 @@ window.LUMEN_STATUS = {
         { text: 'Container image, staging, DAST (#14)', done: true },
         { text: 'Ports for the projects slice (#17)', done: true },
         { text: 'Review #15 and #16', done: true },
+        { text: 'Review #23: identity only, rebased, CI green', done: false },
         {
           text: 'BudgetGuard, Charge and Decision in core/domain, called at three check points',
           done: true,
@@ -119,38 +120,35 @@ Constraints: touch only modules/projects, pages/home, pages/landing, the one mig
       name: 'LU YI',
       slice: 'UC1 identity',
       pattern: 'Strategy with Template Method',
-      written: 60,
+      written: 75,
       onMain: 25,
       state: 'review',
-      stateLabel: 'Changes requested',
+      stateLabel: '#23 open, CI green, needs review',
       summary:
-        'Password sign-in is complete and sound: scrypt, hashed session tokens, an Origin check, parameterised SQL. OAuth, mail and reset are written but not wired. The pull request also edits billing, the admin page and core, would stop the staging container, and conflicts with main in four files, two of them in the billing slice that landed on 21 Sep. No commit since 18 Sep.',
+        'The slice was re-cut on identity/password-auth and opened as #23: identity only, rebased on main 069a6f2, wired into main.ts behind DATABASE_URL, with the staging origin and cookie settings and a deploy smoke test that signs in for real. Password sign-in keeps the reviewed scrypt, hashed session tokens, Origin check and parameterised SQL; a password change now revokes the other sessions. CI, CodeQL and the dependency audit are green and the review is requested from the core owner. Deploy has not run on the branch, so the container build and DAST are unproven. OAuth, mail and reset are written but not wired, and account deletion is left out (Sprint 3). #15 stays open as a superseded draft.',
       todo: [
-        { text: 'New branch with identity only', done: false },
-        { text: 'Staging env vars; smoke test signs in for real', done: false },
-        { text: 'Password change revokes other sessions', done: false },
-        { text: 'Store tests run in CI; drop pglite; pin arctic', done: false },
-        { text: 'Trim docs/luyi to docs/identity', done: false },
+        { text: 'New branch with identity only', done: true },
+        { text: 'Staging env vars; smoke test signs in for real', done: true },
+        { text: 'Password change revokes other sessions', done: true },
+        { text: 'Store tests run in CI; drop pglite; pin arctic', done: true },
+        { text: 'Trim docs/luyi to docs/identity', done: true },
       ],
-      prs: [{ number: 15, label: 'feat(identity): authentication and read-only admin access' }],
-      prompt: `You are working in the lumen-next repo on pull request #15 (branch identity/auth-flow), the identity slice, owned by LU YI. Read CLAUDE.md, docs/CODING_STANDARDS.md and the review on PR #15 (gh pr view 15 --comments) first. Everything you commit is English. The authentication core was reviewed and is sound: do not rewrite it.
+      prs: [
+        { number: 23, label: 'feat(identity): password authentication and staging integration' },
+        { number: 15, label: 'Superseded draft, left open until #23 merges' },
+      ],
+      prompt: `You are working in the lumen-next repo on pull request #23 (branch identity/password-auth), the identity slice, owned by LU YI. The re-cut branch is open and green: identity only, rebased on main 069a6f2, wired into main.ts, with CI, CodeQL and the dependency audit passing and the review requested from the core owner. Read CLAUDE.md, docs/CODING_STANDARDS.md and the review on #23 (gh pr view 23 --comments) before you change anything. Everything you commit is English. The authentication core was reviewed and is sound: do not rewrite it, and do not widen the scope again.
 
-Goal: a pull request that contains only identity and merges by Tuesday.
+Goal: get #23 reviewed, proven in a container, and merged this sprint.
 
 Do, in this order:
-1. Create a new branch identity/password-auth from origin/main. Bring over only: apps/server/src/modules/identity/**, apps/web/src/pages/signin/**, apps/web/src/core/auth.tsx, the StaffGuard change in apps/web/src/main.tsx, the three migrations 002_identity_auth, 003_identity_oauth, 004_identity_mail, the first hunk of core/db/db.ts (T extends object), and the identity wiring in apps/server/src/main.ts.
-2. Leave out: every file under modules/billing and pages/admin (HE RONG's), the second hunk of core/db/db.ts (the transaction change; the core owner takes it), and the change to db.test.ts (main already fixed it).
-3. docker-compose.staging.yml: set LUMEN_ORIGIN=http://localhost:4000, IDENTITY_SESSION_LIFETIME_MS and IDENTITY_INSECURE_COOKIES=true for the app service. List all three in .env.example with one line each.
-4. .github/workflows/deploy.yml smoke test: replace the "authorization: stub" calls with a real signup and login (keep the cookie with curl -c and -b), then the session POST. With the project gate wired, create the project through POST /api/projects first if that route exists on main; otherwise keep the session POST out of the smoke test.
-5. main.ts: log one line at startup naming the active resolver. Refuse to start when NODE_ENV=production and DATABASE_URL is unset.
-6. accountService.changePassword: revoke every other session of the account, keep the current one. Test it.
-7. Tests: move the Postgres tests to openTestDb() and describe.skipIf(!TEST_DATABASE_URL) from core/db/testDb.ts. Remove the IDENTITY_PGLITE_MODULE and IDENTITY_PG_MODULE switches and localPglite.ts. Add arctic to apps/server/package.json with an exact version; remove the dynamic import from tmp/identity-tools.
-8. Delete modules/identity/migrations/ (the second copy). core/db/migrations is the only one.
-9. Leave account deletion (DELETE /api/me) out of this pull request: it depends on a foreign key the base schema does not have.
-10. Docs: keep API.md, OAUTH_SETUP.md, MAIL_SETUP.md, LOCAL_AUTH.md and the seven SVG figures under docs/identity/. Delete every other file that was under docs/luyi/ (working notes, *_PLAN.md, *_HANDOFF.md, archive/, all .docx, .pdf, .png).
-11. PR body: say that OAuth, mail verification and password reset are written but not wired (Sprint 3), and that 002 adds accounts.suspended and a unique index on the normalised email. Tell the team that the stub stops working when DATABASE_URL is set.
+1. Answer the review on #23. Fix what is asked inside identity and push to the same branch. If a request reaches another owner's files, say so on the pull request instead of editing them.
+2. Before the merge, tell the other four owners two things: the stub principal stops working for every slice once DATABASE_URL is set, and migration 002 adds accounts.suspended and a unique index on the normalised email, so two accounts whose emails normalise alike fail the startup migration. Ask them to check their own tests and staging settings against both.
+3. The Deploy workflow has not run on this branch, so the container build, the compose health check and DAST are unproven. Run Deploy against identity/password-auth and fix what it reports. The native process run is not a substitute.
+4. Keep OAuth, mail verification and password reset unwired, and account deletion (DELETE /api/me) out of this pull request. They are Sprint 3, and the inline reset delivery still has the timing-enumeration issue raised on #15.
+5. Leave #15 open until #23 merges, then close it as superseded. The billing and admin routes inside it are the billing owner's decision, so do not move them here.
 
-Constraints: no file outside the list in step 1 and the files named in steps 3 to 5. Done means npm run verify is green with DATABASE_URL set, the identity store tests run (not skip) in CI, and docker compose -f docker-compose.staging.yml up --build reaches healthy.`,
+Constraints: no file outside apps/server/src/modules/identity, apps/web/src/pages/signin, apps/web/src/core/auth.tsx, the StaffGuard line in apps/web/src/main.tsx, the three identity migrations under core/db/migrations, the identity lines of apps/server/src/main.ts, and the staging and deploy settings the branch already carries. No new dependency beyond the pinned arctic 3.7.0. Done means #23 is approved, CI, Security and Deploy are green on it, and it is merged into main.`,
     },
     {
       id: 'zhuoyang',
@@ -222,7 +220,7 @@ Do, in this order, one small pull request each:
 2. Give a new account a cap, so that wiring the guard does not refuse every session. Agree the number with the core owner, put it in the wallet migration or the store with a comment saying which, and test that an account with no row of its own is allowed a charge under that cap and refused one over it.
 3. Ask the identity owner for an account eligibility check on the public index of modules/identity, and pass it to createBillingSlice as canSpend in main.ts. Until that exists the account handler denies every charge, which is why no caller may ask the guard yet.
 4. With the session and core owner's agreement, and only after steps 2 and 3: pass billing.budgetGuard to createSessionSlice as budget in main.ts, where #22 left the comment saying why it is not passed. A deny ends the step with its reason; escalate stays a denial until approvals land in Sprint 3. Test that an over-cap charge stops the step and one under the cap does not.
-5. Decide the admin routes: either billing takes GET /api/admin/accounts and the admin page out of #15, or identity keeps them. Write the decision in the billing README and tell the identity owner, so #15 can shrink either way.
+5. Decide the admin routes. Identity's replacement pull request #23 leaves out GET /api/admin/accounts and the admin page, so they have no home unless billing takes them; #15 still holds them and stays open as a superseded draft. Write the decision in the billing README and tell the identity owner.
 
 Constraints: read another slice only through its public index. No new dependency. Money is added and compared in Postgres numeric, never in JavaScript. Until step 4 is on main, neither the Wallet tab nor the README may describe the cap as something that stops a worker.
 

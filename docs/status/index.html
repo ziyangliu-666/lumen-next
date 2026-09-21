@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lumen · status</title>
+    <!--
+      The team's status board. This file is the view; every number, todo and
+      prompt is in data.js. To update the board, edit data.js and nothing here.
+      No build step and no dependency: open the file, or serve the folder.
+    -->
+    <style>
+      /* The palette is the app's own (apps/web/src/styles/theme.css), so the
+         board and the product read as one thing. Dark is a second set of
+         values chosen for the dark surface, not an inversion of the light one. */
+      :root {
+        color-scheme: light dark;
+        --ground: #f6f8fa;
+        --surface: #ffffff;
+        --sunken: #eef1f5;
+        --ink: #131820;
+        --body: #2b3440;
+        --muted: #59646f;
+        --faint: #8b95a1;
+        --rule: #dde3ea;
+        --rule-strong: #c3ccd6;
+        --accent: #1f5f8b;
+        --accent-soft: #bcd5e6;
+        --keep: #2f6a4f;
+        --keep-soft: #e3f0ea;
+        --decide: #8a6008;
+        --decide-soft: #f7efdc;
+        --gap: #9e3a2c;
+        --gap-soft: #f9e8e5;
+        --sans: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ground: #0f1318;
+          --surface: #161c23;
+          --sunken: #1c232b;
+          --ink: #e6eaef;
+          --body: #c6ced7;
+          --muted: #8c97a3;
+          --faint: #67717c;
+          --rule: #262f39;
+          --rule-strong: #38434f;
+          --accent: #62a9d9;
+          --accent-soft: #2b4a60;
+          --keep: #6fbf95;
+          --keep-soft: #162a21;
+          --decide: #d5a447;
+          --decide-soft: #33290f;
+          --gap: #d97a67;
+          --gap-soft: #38201b;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--body);
+        font: 15px/1.5 var(--sans);
+      }
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: -0.01em;
+        color: var(--ink);
+      }
+      h1 span {
+        font-family: var(--mono);
+        font-weight: 600;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      h3 {
+        margin: 0;
+        font-size: 16px;
+        color: var(--ink);
+      }
+      p {
+        margin: 0;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .mono {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px 24px;
+        margin-bottom: 24px;
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+      .top {
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        margin-bottom: 32px;
+      }
+      .people {
+        grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        padding: 18px 20px;
+      }
+
+      /* A meter: one hue, two tones. The solid part is delivered (on main); the
+         soft part behind it is written but not merged. The numbers beside it
+         say the same thing in text, so the colour is never the only carrier. */
+      .meter {
+        position: relative;
+        height: 10px;
+        border-radius: 5px;
+        background: var(--sunken);
+        overflow: hidden;
+      }
+      .meter i {
+        position: absolute;
+        inset: 0 auto 0 0;
+        border-radius: 0 5px 5px 0;
+      }
+      .meter .written {
+        background: var(--accent-soft);
+      }
+      .meter .main {
+        background: var(--accent);
+        box-shadow: 2px 0 0 var(--surface);
+      }
+      .meter.time .main {
+        background: var(--faint);
+      }
+      .figures {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 6px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .figures b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .key {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .key::before {
+        content: '';
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        background: var(--accent);
+      }
+      .key.soft::before {
+        background: var(--accent-soft);
+      }
+      .key.grey::before {
+        background: var(--faint);
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 16px;
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .stack > * + * {
+        margin-top: 14px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        max-width: 100%;
+      }
+      .chip.done {
+        background: var(--keep-soft);
+        color: var(--keep);
+      }
+      .chip.review {
+        background: var(--decide-soft);
+        color: var(--decide);
+      }
+      .chip.progress {
+        background: var(--sunken);
+        color: var(--muted);
+      }
+      .chip.idle {
+        background: var(--gap-soft);
+        color: var(--gap);
+      }
+
+      ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .checks li {
+        display: grid;
+        grid-template-columns: 18px 1fr;
+        gap: 8px;
+        padding: 4px 0;
+        font-size: 14px;
+      }
+      .checks .mark {
+        font-family: var(--mono);
+        color: var(--faint);
+      }
+      .checks li.is-done .mark {
+        color: var(--keep);
+      }
+      .checks li.is-done .text {
+        color: var(--muted);
+      }
+      .checks .note {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      /* The name keeps its line; a long status wraps under it, never beside it. */
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px 12px;
+      }
+      .row > div {
+        flex: 1 0 auto;
+        max-width: 100%;
+      }
+      .sub {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .summary {
+        font-size: 14px;
+      }
+      .count {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+      }
+      button {
+        font: 600 13px var(--sans);
+        color: var(--surface);
+        background: var(--accent);
+        border: 0;
+        border-radius: 6px;
+        padding: 7px 14px;
+        cursor: pointer;
+      }
+      button:hover {
+        filter: brightness(1.08);
+      }
+      button:focus-visible,
+      summary:focus-visible,
+      a:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      button.copied {
+        background: var(--keep);
+      }
+      details summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      pre {
+        margin: 10px 0 0;
+        padding: 12px;
+        max-height: 320px;
+        overflow: auto;
+        white-space: pre-wrap;
+        background: var(--sunken);
+        border-radius: 6px;
+        font: 12px/1.55 var(--mono);
+        color: var(--body);
+      }
+      footer {
+        margin-top: 32px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app"><p>Loading. If this stays, data.js did not load.</p></main>
+
+    <script src="data.js"></script>
+    <script>
+      const S = window.LUMEN_STATUS;
+      const DAY = 86400000;
+      const el = (tag, attrs = {}, ...children) => {
+        const node = document.createElement(tag);
+        for (const [key, value] of Object.entries(attrs)) {
+          if (key === 'class') node.className = value;
+          else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+          else node.setAttribute(key, value);
+        }
+        for (const child of children.flat()) {
+          if (child !== null && child !== undefined && child !== false) node.append(child);
+        }
+        return node;
+      };
+      const clamp = (n) => Math.max(0, Math.min(100, n));
+      const pctBetween = (from, to, at) => clamp(((at - from) / (to - from)) * 100);
+      const date = (iso) => new Date(`${iso}T00:00:00`);
+      const short = (iso) =>
+        date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+      /** Working days from today up to and including `iso`. */
+      function workingDaysLeft(iso) {
+        const end = date(iso);
+        const at = new Date();
+        at.setHours(0, 0, 0, 0);
+        let days = 0;
+        for (; at <= end; at.setTime(at.getTime() + DAY)) if (at.getDay() % 6 !== 0) days += 1;
+        return days;
+      }
+
+      function meter({ written, onMain, label, time = false }) {
+        const title = time ? label : `${label}: ${onMain}% on main, ${written}% written`;
+        return el(
+          'div',
+          { class: `meter${time ? ' time' : ''}`, role: 'img', 'aria-label': title, title },
+          time ? null : el('i', { class: 'written', style: `width:${clamp(written)}%` }),
+          el('i', { class: 'main', style: `width:${clamp(onMain)}%` }),
+        );
+      }
+
+      function checklist(items) {
+        return el(
+          'ul',
+          { class: 'checks' },
+          items.map((item) =>
+            el(
+              'li',
+              { class: item.done ? 'is-done' : '' },
+              el('span', { class: 'mark', 'aria-hidden': 'true' }, item.done ? '✓' : '○'),
+              el(
+                'span',
+                { class: 'text' },
+                el('span', { class: 'sr' }, item.done ? '' : ''),
+                item.text,
+                item.note ? el('span', { class: 'note' }, item.note) : null,
+              ),
+            ),
+          ),
+        );
+      }
+
+      async function copy(button, text) {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          // No clipboard permission (an http page, or file:// in some browsers).
+          const area = el('textarea', { style: 'position:fixed;opacity:0' });
+          area.value = text;
+          document.body.append(area);
+          area.select();
+          document.execCommand('copy');
+          area.remove();
+        }
+        const before = button.textContent;
+        button.textContent = 'Copied';
+        button.classList.add('copied');
+        setTimeout(() => {
+          button.textContent = before;
+          button.classList.remove('copied');
+        }, 1600);
+      }
+
+      const STATE_ICON = { done: '✓', review: '◐', progress: '→', idle: '!' };
+
+      function person(p) {
+        const done = p.todo.filter((item) => item.done).length;
+        const copyButton = p.prompt
+          ? el(
+              'button',
+              { type: 'button', onclick: (event) => copy(event.currentTarget, p.prompt) },
+              'Copy agent prompt',
+            )
+          : null;
+        return el(
+          'section',
+          { class: 'card stack', id: p.id },
+          el(
+            'div',
+            { class: 'row' },
+            el(
+              'div',
+              {},
+              el('h3', {}, p.name),
+              el('p', { class: 'sub' }, `${p.slice} · ${p.pattern}`),
+            ),
+            el(
+              'span',
+              { class: `chip ${p.state}` },
+              el('span', { 'aria-hidden': 'true' }, STATE_ICON[p.state] ?? ''),
+              p.stateLabel,
+            ),
+          ),
+          el(
+            'div',
+            {},
+            meter({ written: p.written, onMain: p.onMain, label: p.name }),
+            el(
+              'div',
+              { class: 'figures mono' },
+              el('span', {}, el('b', {}, `${p.onMain}%`), ' on main'),
+              el('span', {}, el('b', {}, `${p.written}%`), ' written'),
+            ),
+          ),
+          el('p', { class: 'summary' }, p.summary),
+          el(
+            'div',
+            {},
+            el('h2', {}, 'To do ', el('span', { class: 'count mono' }, `${done}/${p.todo.length}`)),
+            checklist(p.todo),
+          ),
+          el(
+            'div',
+            { class: 'actions' },
+            copyButton,
+            p.prs.map((pr) =>
+              el('a', { href: `${S.repo}/pull/${pr.number}`, title: pr.label }, `#${pr.number}`),
+            ),
+          ),
+          p.prompt
+            ? el('details', {}, el('summary', {}, 'Read the prompt'), el('pre', {}, p.prompt))
+            : null,
+        );
+      }
+
+      function render() {
+        const avg = (key) =>
+          Math.round(S.people.reduce((sum, p) => sum + p[key], 0) / S.people.length);
+        const now = Date.now();
+        const elapsed = Math.round(pctBetween(date(S.project.starts), date(S.project.ends), now));
+        const dodDone = S.sprint.dod.filter((item) => item.done).length;
+        const left = workingDaysLeft(S.sprint.ends);
+
+        const app = document.getElementById('app');
+        app.replaceChildren(
+          el(
+            'header',
+            { class: 'head' },
+            el('h1', {}, el('span', {}, 'lumen'), ' · status'),
+            el(
+              'p',
+              { class: 'muted' },
+              `Updated ${short(S.updated)} · `,
+              el('a', { href: S.repo }, 'repository'),
+            ),
+          ),
+          el(
+            'div',
+            { class: 'grid top' },
+            el(
+              'section',
+              { class: 'card stack' },
+              el('h2', {}, 'Team'),
+              el(
+                'div',
+                {},
+                meter({ written: avg('written'), onMain: avg('onMain'), label: 'Team average' }),
+                el(
+                  'div',
+                  { class: 'figures mono' },
+                  el('span', {}, el('b', {}, `${avg('onMain')}%`), ' on main'),
+                  el('span', {}, el('b', {}, `${avg('written')}%`), ' written'),
+                ),
+              ),
+              el(
+                'div',
+                {},
+                meter({
+                  onMain: elapsed,
+                  label: `${elapsed}% of the project's time has passed`,
+                  time: true,
+                }),
+                el(
+                  'div',
+                  { class: 'figures mono' },
+                  el('span', {}, el('b', {}, `${elapsed}%`), ' of the time gone'),
+                  el('span', {}, `${short(S.project.starts)} to ${short(S.project.ends)}`),
+                ),
+              ),
+              el(
+                'div',
+                { class: 'legend' },
+                el('span', { class: 'key' }, 'on main: merged, delivered'),
+                el('span', { class: 'key soft' }, 'written: in a branch or pull request'),
+                el('span', { class: 'key grey' }, 'time'),
+              ),
+            ),
+            el(
+              'section',
+              { class: 'card' },
+              el(
+                'h2',
+                {},
+                `${S.sprint.name} · done when `,
+                el('span', { class: 'count mono' }, `${dodDone}/${S.sprint.dod.length}`),
+              ),
+              checklist(S.sprint.dod),
+              el(
+                'p',
+                { class: 'sub', style: 'margin-top:10px' },
+                `Ends ${short(S.sprint.ends)}. `,
+                el('b', { class: 'mono' }, String(left)),
+                ` working day${left === 1 ? '' : 's'} left.`,
+              ),
+            ),
+            el(
+              'section',
+              { class: 'card stack' },
+              el('h2', {}, 'main'),
+              el(
+                'p',
+                {},
+                el(
+                  'a',
+                  { class: 'mono', href: `${S.repo}/commit/${S.main.commit}` },
+                  S.main.commit,
+                ),
+                ` · ${S.main.pipelines}`,
+              ),
+              el(
+                'p',
+                { class: 'mono' },
+                el('b', {}, String(S.main.tests)),
+                ' tests · ',
+                el('b', {}, `${S.main.coverage}%`),
+                ` lines (gate ${S.main.gate}%)`,
+              ),
+              el('p', { class: 'sub' }, `DAST: ${S.main.dast}`),
+            ),
+          ),
+          el('h2', {}, 'People'),
+          el('div', { class: 'grid people' }, S.people.map(person)),
+          el(
+            'footer',
+            {},
+            "Percentages are of one person's whole slice: pages, server module, tests, the design pattern with a test that proves it, and the wiring into main. ",
+            'Only what is on main counts as delivered. To update this page, edit docs/status/data.js.',
+          ),
+        );
+        if (location.hash) document.querySelector(location.hash)?.scrollIntoView();
+      }
+
+      if (S) render();
+    </script>
+  </body>
+</html>

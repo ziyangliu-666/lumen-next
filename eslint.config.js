@@ -19,6 +19,8 @@ export default tseslint.config(
       '.claude/**',
       // Plain Node build scripts, outside every tsconfig.
       'apps/server/scripts/**',
+      // The status board: one static page and its data, read by a browser as they are.
+      'docs/status/**',
       // Vendored shadcn/ui sources. They are updated by `npx shadcn add`, not by
       // hand, so our house rules would only fight the generator.
       'apps/web/src/ui/**',

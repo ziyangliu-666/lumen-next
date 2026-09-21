@@ -31,6 +31,7 @@ session, one task, one step, rendered end to end.
 export function createSessionSlice(deps: {
   broker: Broker; worker?: Worker; db?: Db | null;
   requireProject?: ProjectGate;   // from projects: may this principal use this project?
+  budget?: BudgetGuard;           // from billing: asked at turn, fan-out and task-open
   recordSpend?: SpendRecorder;   // from billing: ledger write in the trace transaction
   recordFinding?: FindingSaver;   // from projects: where findings are kept
 }): SessionSlice;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ServerEvent } from '@lumen/contracts';
+import type { BudgetGuard, Charge, Decision } from '../../core/domain/budget.js';
 import type { Worker } from '../../core/domain/worker.js';
 import type { Principal } from '../../core/http/authGuard.js';
 import { HttpError } from '../../core/http/httpError.js';
@@ -133,6 +134,9 @@ describe('session: kernel', () => {
     const before = new Kernel(trace, broker, hung);
     const { session } = await before.start('p1', owner.accountId, 'q');
     const finished = await before.start('p1', owner.accountId, 'done already');
+    // Both runs must be inside the worker before the record is changed under
+    // them, or the run's own "running" lands after the "ended" written here.
+    while (releases.length < 2) await new Promise((done) => setTimeout(done, 1));
     await trace.setStatus(finished.tasks[0]!.id, 'ended');
 
     // The process dies here. A new kernel comes up over the same record.
@@ -269,6 +273,16 @@ describe('session: kernel, delegation and cost', () => {
     await expect(kernel.addSpend(tasks[0]!.id, { dollars: Number.NaN }, 'x')).rejects.toThrow();
   });
 
+  it('records a float artefact as the six decimals it stands for, and does not fail the task', async () => {
+    const { kernel } = harness();
+    const { session, tasks } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    await kernel.addSpend(tasks[0]!.id, { dollars: 0.1 + 0.2 }, 'two tools');
+
+    expect((await kernel.snapshot(session.id, owner)).spend).toEqual({ dollars: 0.3 });
+  });
+
   it('saves a finding before it announces it, with the id the saver gave', async () => {
     const order: string[] = [];
     const broker = new Broker();
@@ -323,5 +337,105 @@ describe('session: kernel, delegation and cost', () => {
 
     expect((await kernel.start('p1', owner.accountId, 'q')).session.mode).toBe('explore');
     expect((await kernel.start('p1', owner.accountId, 'q', 'seed')).session.mode).toBe('seed');
+  });
+});
+
+describe('session: kernel, the three budget check points', () => {
+  /** A guard that records what it was asked and answers from a script. */
+  function scripted(answer: (charge: Charge) => Decision | Error): {
+    guard: BudgetGuard;
+    asked: Charge[];
+  } {
+    const asked: Charge[] = [];
+    return {
+      asked,
+      guard: {
+        check: (charge) => {
+          asked.push(charge);
+          const result = answer(charge);
+          return result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
+        },
+      },
+    };
+  }
+  const withGuard = (guard: BudgetGuard, worker: Worker = demoWorker): Kernel =>
+    new Kernel(new MemoryTrace(), new Broker(), worker, { budget: guard });
+
+  it('asks at a turn, at the fan-out and as each delegated task opens, for the owner of the session', async () => {
+    const { guard, asked } = scripted(() => ({ kind: 'allow' }));
+    const kernel = withGuard(guard);
+    await kernel.start('p1', owner.accountId, 'fusion');
+    await kernel.idle();
+
+    expect(asked.map((charge) => charge.at)).toEqual([
+      'turn',
+      'fan-out',
+      'task-open',
+      'task-open',
+      'task-open',
+    ]);
+    expect(new Set(asked.map((charge) => charge.accountId))).toEqual(new Set(['acc-1']));
+  });
+
+  it('does not run a turn the guard denies: the task stops and says why', async () => {
+    const { guard } = scripted(() => ({ kind: 'deny', reason: 'over the cap' }));
+    const kernel = withGuard(guard);
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const { tasks, steps } = await kernel.snapshot(session.id, owner);
+    expect(tasks.map((task) => task.status)).toEqual(['stopped']);
+    expect(steps.map((step) => step.text)).toEqual(['Not run: over the cap.']);
+  });
+
+  it('puts a task the guard escalates in waiting, and a stop still ends it', async () => {
+    const { guard } = scripted(() => ({ kind: 'escalate', approvalId: 'a-1' }));
+    const kernel = withGuard(guard);
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    expect((await kernel.snapshot(session.id, owner)).tasks[0]?.status).toBe('waiting');
+    await kernel.stop(session.id, owner);
+    expect((await kernel.snapshot(session.id, owner)).tasks[0]?.status).toBe('stopped');
+  });
+
+  it('refuses a fan-out the guard denies and opens no child; the parent hears it as an error', async () => {
+    const { guard } = scripted((charge) =>
+      charge.at === 'fan-out' ? { kind: 'deny', reason: 'over the cap' } : { kind: 'allow' },
+    );
+    const kernel = withGuard(guard);
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const { tasks } = await kernel.snapshot(session.id, owner);
+    // demoWorker does not catch the refusal, so its task fails. No reader exists.
+    expect(tasks.map((task) => [task.agent, task.status])).toEqual([['lead', 'failed']]);
+  });
+
+  it('stops one delegated task the guard denies and lets its siblings run', async () => {
+    let opened = 0;
+    const { guard } = scripted((charge) => {
+      if (charge.at !== 'task-open') return { kind: 'allow' };
+      opened += 1;
+      return opened === 2 ? { kind: 'deny', reason: 'over the cap' } : { kind: 'allow' };
+    });
+    const kernel = withGuard(guard);
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const statuses = (await kernel.snapshot(session.id, owner)).tasks.map((task) => task.status);
+    expect(statuses.filter((status) => status === 'stopped')).toHaveLength(1);
+    expect(statuses.filter((status) => status === 'ended')).toHaveLength(3);
+  });
+
+  it('treats a guard that throws as a refusal, never as permission', async () => {
+    const { guard } = scripted(() => new Error('billing database is down'));
+    const kernel = withGuard(guard);
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const { tasks, steps } = await kernel.snapshot(session.id, owner);
+    expect(tasks[0]?.status).toBe('stopped');
+    expect(steps[0]?.text).toBe('Not run: the budget could not be checked.');
   });
 });

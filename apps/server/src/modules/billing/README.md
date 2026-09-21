@@ -32,3 +32,17 @@ own every file in this folder (see `/CODEOWNERS`).
 See `/docs/DOD.md`. In short: a passing unit test on the behaviour, the pattern
 demonstrated (brute-force version documented, then the refactor), lint and
 typecheck green, and the CI pipeline green.
+
+## Sprint 2 delivery
+
+
+`createBillingSlice({ db })` returns `registerRoutes`, `record`, `monthSpend`
+and `budgetGuard`. Register the routes once in the composition root.
+The first PR is the authenticated `GET /api/wallet` shell: zero spend and cap.
+The ledger and budget pattern follow in separate PRs. Until then `record`
+rejects rather than pretending to save, and the unconfigured guard denies.
+Neither is wired to worker execution in this shell.
+
+Stripe, approval persistence and admin are later stories. The admin changes
+in identity PR #15 should stay out of identity; billing will review them in a
+separate PR after the wallet and ledger are integrated.

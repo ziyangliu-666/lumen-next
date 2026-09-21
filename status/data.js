@@ -91,12 +91,12 @@ window.LUMEN_STATUS = {
       name: 'PENG XUJIAN',
       slice: 'UC2 projects',
       pattern: 'State',
-      written: 85,
+      written: 88,
       onMain: 85,
-      state: 'done',
-      stateLabel: 'UC2 on main (#24)',
+      state: 'review',
+      stateLabel: '#30 open, CI green, in review',
       summary:
-        'Merged on 21 Sep as #24, reopened on a branch in this repository after the fork pull request #16 was closed, so that CI could run. Five routes, memory and Postgres stores, Landing and Home, and migration 005 in the shared core/db/migrations. The six State classes now carry behaviour rather than constants: each decides the label, the tone, the actions, the refresh policy and which transitions are legal, and a started card is refused a return to Queued. Creation deletes the project when the session fails to start, so no orphan card is left, and a failed read that is not a 401 backs off and stops after five failures. Projects is composed in app.ts through the public SessionDirectory of the session slice, and the end-to-end test (#25) drives a project from the question to its findings. Legacy findings still have a null project id and wait on an owner-approved backfill.',
+        'Merged on 21 Sep as #24, reopened on a branch in this repository after the fork pull request #16 was closed, so that CI could run. Five routes, memory and Postgres stores, Landing and Home, and migration 005 in the shared core/db/migrations. The six State classes now carry behaviour rather than constants: each decides the label, the tone, the actions, the refresh policy and which transitions are legal, and a started card is refused a return to Queued. Creation deletes the project when the session fails to start, so no orphan card is left, and a failed read that is not a 401 backs off and stops after five failures. Projects is composed in app.ts through the public SessionDirectory of the session slice, and the end-to-end test (#25) drives a project from the question to its findings. Legacy findings still have a null project id and wait on an owner-approved backfill. Since the merge, the first of the two follow-ups is open as #30 on branch projects/home-current-account (one commit, 21 Sep, three files): Home takes the account and the mode from useCurrentAccount instead of reading sign-in from a 401, a signed-out visitor is pointed at Landing, the list is keyed by mode and account id so a changed account cannot reuse old pages, and the 401 path stays for a cookie that expires while the page is open. Seven rendering tests cover loading, a failed account lookup, signed out and ready in both modes, and a later 401. Quality, web build, dependency audit and CodeQL are green on it; it waits on an owner review, and the automated reviewer did not run because its quota was exhausted.',
       todo: [
         { text: 'Rebase; migration to core/db/migrations/005_', done: true },
         { text: 'Delete the patches; add the main.ts lines', done: true },
@@ -105,13 +105,13 @@ window.LUMEN_STATUS = {
         { text: 'Home asks useCurrentAccount (#26), not a 401 inside usePages', done: false },
         { text: 'Backfill legacy findings with a project id, so they count on Home', done: false },
       ],
-      prs: [],
+      prs: [{ number: 30, label: 'Home asks the shared current account: open, CI green, in review' }],
       prompt: `You are working in the lumen-next repo on the projects slice (apps/server/src/modules/projects, apps/web/src/pages/landing, apps/web/src/pages/home), owned by PENG XUJIAN. Pull request #24 is merged: the routes, both stores, Landing and Home, migration 005 and the six State classes are on main. The fork pull request #16 is closed. The composition root is now apps/server/src/app.ts, not main.ts, and projects is registered there. Read CLAUDE.md, docs/CODING_STANDARDS.md, apps/server/src/modules/projects/README.md and apps/web/src/core/auth.tsx before you change anything. Everything you commit is English.
 
 Goal: close the two loose ends the merge left, one small pull request each.
 
 Do, in this order:
-1. Home asks who is signed in the way the other pages do. #26 made useCurrentAccount in apps/web/src/core/auth.tsx the one answer, and Landing and Session already ask it; Home still decides from a 401 inside usePages, which cannot tell a signed-out visitor from a server built without an identity slice. Take the account and the mode from the hook, keep the 401 path for a cookie that expires while the page is open, and point a signed-out visitor at Landing. Test whatever plain function you extract.
+1. Written and waiting on review: pull request #30, on branch projects/home-current-account, makes Home take the account and the mode from useCurrentAccount instead of deciding from a 401 inside usePages, keeps the 401 path for a cookie that expires while the page is open, and points a signed-out visitor at Landing. CI is green on it. Do not write it a second time; answer its review, and rebase it if main moves under it.
 2. Backfill the legacy findings. Migration 005 added findings.project_id as nullable, so a finding written before it has no project and never reaches Home. Agree the rule with the core owner, write it as a new migration under apps/server/src/core/db/migrations, and test that a finding whose session has a project is given that project, and that one with a stub session id is left alone rather than deleted.
 3. If either step changes a State class, add the before and after to CARD_STATE.md, so the Sprint 4 refactor record stays true.
 

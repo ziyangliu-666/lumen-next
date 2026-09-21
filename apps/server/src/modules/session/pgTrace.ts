@@ -5,13 +5,14 @@ import type {
   SessionMode,
   SessionSummary,
   Step,
+  StepDetail,
   StepKind,
   TaskStatus,
 } from '@lumen/contracts';
 import type { Db, Queryable } from '../../core/db/db.js';
 import type { TaskRecord } from '../../core/domain/task.js';
 import type { SpendRecorder } from './spendRecorder.js';
-import { isEnding, type Trace, type TraceSnapshot } from './trace.js';
+import { isEnding, type Charged, type Trace, type TraceSnapshot } from './trace.js';
 
 // The record in Postgres. Every task and every step is written as it happens,
 // so a process that dies loses nothing, and the snapshot is a read of the same
@@ -49,6 +50,7 @@ interface StepRow {
   index: number;
   kind: StepKind;
   text: string;
+  detail: StepDetail | null;
   [column: string]: unknown;
 }
 
@@ -73,7 +75,14 @@ function toSession(row: SessionRow): Session {
 }
 
 function toStep(row: StepRow): Step {
-  return { taskId: row.task_id, index: row.index, kind: row.kind, text: row.text };
+  return {
+    taskId: row.task_id,
+    index: row.index,
+    kind: row.kind,
+    text: row.text,
+    // Null in the column is absent in the contract, not `detail: null`.
+    ...(row.detail ? { detail: row.detail } : {}),
+  };
 }
 
 function toTask(row: TaskRow): TaskRecord {
@@ -169,41 +178,83 @@ export class PgTrace implements Trace {
     return (await this.task(taskId))!;
   }
 
-  async appendStep(taskId: string, kind: StepKind, text: string): Promise<Step> {
+  async appendStep(
+    taskId: string,
+    kind: StepKind,
+    text: string,
+    detail?: StepDetail,
+  ): Promise<Step> {
     if (!UUID.test(taskId)) throw new Error(`trace: no task ${taskId}`);
-    // Two reports for one task can arrive together. The index is max + 1, so
-    // the two must not read the same max: the row lock on the task makes the
-    // second wait for the first to commit.
+    return this.db.withTransaction((tx) => this.insertStep(tx, taskId, kind, text, detail));
+  }
+
+  async appendCostedStep(
+    taskId: string,
+    kind: StepKind,
+    text: string,
+    detail: StepDetail,
+    charge: Charged,
+  ): Promise<{ step: Step; task: TaskRecord }> {
+    if (!UUID.test(taskId)) throw new Error(`trace: no task ${taskId}`);
+    // One transaction: the step that shows a cost, the task's own cost, and
+    // billing's ledger entry commit together or not at all. Written as two, a
+    // failure between them left a receipt on the page with nothing charged.
     return this.db.withTransaction(async (tx) => {
-      const locked = await tx.query(`select id from tasks where id = $1 for update`, [taskId]);
-      if (locked.length === 0) throw new Error(`trace: no task ${taskId}`);
-      const [row] = await tx.query<StepRow>(
-        `insert into steps (task_id, index, kind, text)
-         select $1, coalesce(max(index) + 1, 0), $2, $3 from steps where task_id = $1
-         returning task_id, index, kind, text`,
-        [taskId, kind, text],
-      );
-      return toStep(row!);
+      const step = await this.insertStep(tx, taskId, kind, text, detail);
+      const task = await this.charge(tx, taskId, charge.amount, charge.reason);
+      return { step, task };
     });
   }
 
   async addCost(taskId: string, amount: Money, reason = 'task spend'): Promise<TaskRecord> {
-    return this.db.withTransaction(async (tx) => {
-      const updated = await tx.query(
-        `update tasks set own_cost = own_cost + $2 where id = $1 returning id`,
-        [UUID.test(taskId) ? taskId : null, amount.dollars],
+    return this.db.withTransaction((tx) => this.charge(tx, taskId, amount, reason));
+  }
+
+  private async insertStep(
+    tx: Queryable,
+    taskId: string,
+    kind: StepKind,
+    text: string,
+    detail?: StepDetail,
+  ): Promise<Step> {
+    // Two reports for one task can arrive together. The index is max + 1, so
+    // the two must not read the same max: the row lock on the task makes the
+    // second wait for the first to commit.
+    const locked = await tx.query(`select id from tasks where id = $1 for update`, [taskId]);
+    if (locked.length === 0) throw new Error(`trace: no task ${taskId}`);
+    const [row] = await tx.query<StepRow>(
+      `insert into steps (task_id, index, kind, text, detail)
+       select $1, coalesce(max(index) + 1, 0), $2, $3, $4::jsonb from steps where task_id = $1
+       returning task_id, index, kind, text, detail`,
+      // Sent as JSON text and cast, so that what is stored does not depend on
+      // how the driver chooses to serialise an object.
+      [taskId, kind, text, detail ? JSON.stringify(detail) : null],
+    );
+    return toStep(row!);
+  }
+
+  private async charge(
+    tx: Queryable,
+    taskId: string,
+    amount: Money,
+    reason: string,
+  ): Promise<TaskRecord> {
+    // The addition happens in SQL, on the numeric column: read, add in JS and
+    // write back would drift, and would lose one of two spends that arrive together.
+    const updated = await tx.query(
+      `update tasks set own_cost = own_cost + $2 where id = $1 returning id`,
+      [UUID.test(taskId) ? taskId : null, amount.dollars],
+    );
+    if (updated.length === 0) throw new Error(`trace: no task ${taskId}`);
+    const task = (await this.oneTask(tx, 'where t.id = $1', [taskId]))!;
+    if (this.recordSpend) {
+      const [session] = await tx.query<{ account_id: string }>(
+        'select account_id from sessions where id = $1',
+        [task.sessionId],
       );
-      if (updated.length === 0) throw new Error(`trace: no task ${taskId}`);
-      const task = (await this.oneTask(tx, 'where t.id = $1', [taskId]))!;
-      if (this.recordSpend) {
-        const [session] = await tx.query<{ account_id: string }>(
-          'select account_id from sessions where id = $1',
-          [task.sessionId],
-        );
-        await this.recordSpend({ accountId: session!.account_id, taskId, amount, reason }, tx);
-      }
-      return task;
-    });
+      await this.recordSpend({ accountId: session!.account_id, taskId, amount, reason }, tx);
+    }
+    return task;
   }
 
   async snapshot(sessionId: string): Promise<TraceSnapshot | null> {
@@ -214,7 +265,7 @@ export class PgTrace implements Trace {
       [sessionId],
     );
     const steps = await this.db.query<StepRow>(
-      `select s.task_id, s.index, s.kind, s.text from steps s
+      `select s.task_id, s.index, s.kind, s.text, s.detail from steps s
          join tasks t on t.id = s.task_id
         where t.session_id = $1 order by t.seq, s.index`,
       [sessionId],

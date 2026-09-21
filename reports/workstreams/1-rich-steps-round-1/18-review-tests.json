@@ -1,0 +1,64 @@
+{
+  "findings": [
+    {
+      "title": "Nothing in parts.tsx is under test: the whole drawing of a rich step can be removed and 546 tests still pass.",
+      "file": "apps/web/src/pages/session/parts.tsx",
+      "line": 130,
+      "severity": "should-fix",
+      "scenario": "A later edit drops the rows list, the tool label, the time and cost receipt, the output block, or the named children of a delegate step. The page goes back to bare steps. `npm run verify` stays green, because vitest.config.ts includes only `apps/web/src/**/*.test.ts` with no DOM, and no test imports parts.tsx or Session.tsx.",
+      "evidence": "Mutation (k): `detail.rows.length > 0 && false ?` at line 145 -> `Tests 546 passed (546)`. A second batch mutation in the same file also passed 546/546: `{detail?.tool ?? parsed.label}` -> `{parsed.label}` (line 141), `receipt.length > 99` (line 142), `detail?.output && false` (line 170), `delegated.map` -> `[].map` (line 186). Test files in apps/web: only api.test.ts, authState.test.ts, retry.test.ts, tree.test.ts. The half of the commit title that says 'and the page draws it' has no test."
+    },
+    {
+      "title": "No test fixes when the delegate step is written: it can move to after the children have run and every test passes.",
+      "file": "apps/server/src/modules/session/kernel.ts",
+      "line": 215,
+      "severity": "should-fix",
+      "scenario": "Someone moves the `writeStep(parent.id, 'delegate', ...)` call below `runBounded(...)`. The final snapshot is the same (thinking, delegate, reply), so all assertions hold. On the live page the DELEGATED block, which lists the children, appears only after every reader has finished; with the 400 ms demo pace the lead shows nothing while the readers work. The code comment at 212-214 claims the ordering ('after the children exist'), and the old behaviour wrote it before the children ran.",
+      "evidence": "Mutation m1: moved the three-line writeStep block to after `await this.delegation.runBounded(...)` -> `Tests 546 passed (546)`, `Test Files 48 passed (48)`. The new kernel test 'names in the delegate step exactly the tasks that step opened' reads only the final snapshot; no test looks at the event order (step.appended delegate before a child's task.status running / a child's step.appended)."
+    },
+    {
+      "title": "The demo pace and the measured durationMs have no test: paceMs can be ignored, durationMs can be dropped, and the LUMEN_DEMO_PACE_MS check can be removed.",
+      "file": "apps/server/src/modules/session/demoWorker.ts",
+      "line": 30,
+      "severity": "should-fix",
+      "scenario": "(1) `work()` stops waiting: the running app shows all steps at once, which is the exact thing `paceMs` exists to prevent. (2) The demo stops sending `durationMs`: the page shows no time on SEARCH and RUN. (3) main.ts `demoPaceMs()` accepts `LUMEN_DEMO_PACE_MS=-5` or `abc`. All three leave the suite green.",
+      "evidence": "Mutation m8: deleted `if (paceMs > 0) await new Promise(...setTimeout...)` -> 546 passed. Batch mutation: removed both `durationMs,` lines from the demo's detail objects and replaced the main.ts validation with `if (false)` and default 400 -> 0 -> 546 passed. Every test calls `demoWorker()` with no options; the kernel and e2e assertions use `toMatchObject` without durationMs. main.ts has no test. A fake-timer test (`vi.useFakeTimers`) can cover the pace without a real wait."
+    },
+    {
+      "title": "The test comment and the code comment about JSON.stringify claim a failure that does not happen: the test passes without the stringify.",
+      "file": "apps/server/src/modules/session/traceContract.ts",
+      "line": 160,
+      "severity": "nit",
+      "scenario": "The contract test says 'a driver that sent it as a Postgres array instead of as JSON would fail here', and pgTrace.ts:198-199 says the driver would send the array as a Postgres array. node-pg 8.23 turns only a top-level array parameter into a Postgres array; `detail` is an object, so pg serialises the whole of it as JSON. The stringify is harmless, but the test does not guard what it says it guards, and a reader will trust a reason that is false.",
+      "evidence": "Mutation m5: `[taskId, kind, text, detail ? JSON.stringify(detail) : null]` -> `[taskId, kind, text, detail ?? null]` -> `Tests 546 passed (546)`, including 'session: trace in Postgres > reads a step back with exactly the detail it was given' and the e2e snapshot assertions (Postgres suites did run: mutations e and f failed them)."
+    },
+    {
+      "title": "took() is tested only at five comfortable values; the boundary gives '1000 ms' and NaN gives 'NaN h NaN min'.",
+      "file": "apps/web/src/pages/session/tree.ts",
+      "line": 83,
+      "severity": "nit",
+      "scenario": "A step with durationMs 999.6 (a real agent loop may report fractional ms from performance.now()) draws '1000 ms' and not '1 s'. A NaN draws 'NaN h NaN min'. The demo uses Date.now() integers, so the demo never reaches this.",
+      "evidence": "Ran `[999.6, 9960, 9999, 10000, -5, NaN].map(took)` in the worktree: `[\"1000 ms\",\"10 s\",\"10 s\",\"10 s\",\"0 ms\",\"NaN h NaN min\"]`. tree.test.ts asserts only 0, 412, 6000, 8940, 161000."
+    }
+  ],
+  "checked_and_fine": [
+    "Baseline: 546 tests pass in 48 files in the throwaway worktree with DATABASE_URL set; the Postgres suites ran and did not skip (mutations e and f failed 'session: trace in Postgres').",
+    "(a) kernel.appendStep without addSpend: 11 tests FAILED, among them kernel.test 'charges the cost a step carries to the task, once, and announces both', 'rolls what the children spent up to the session', e2e 'charges what the session spent to the wallet', billing integration 'records every delegated cost'.",
+    "(b) kernel.appendStep without recordable(): FAILED 'charges the cost a step carries...' (0.30000000000000004 vs 0.3) and 'writes neither the step nor the charge when the cost is not an amount'.",
+    "(c) childTaskIds guard removed: FAILED 'does not charge a step whose cost is zero, and does not let a worker name child tasks'.",
+    "(d) delegate step with empty childTaskIds: FAILED kernel.test 'names in the delegate step exactly the tasks that step opened, turn by turn' and e2e 'starts a project from a question...'.",
+    "(e) pgTrace.appendStep passes null: FAILED 'session: trace in Postgres > reads a step back with exactly the detail it was given' and e2e 'starts a project from a question...'.",
+    "(f) pgTrace toStep omits detail: FAILED the same two tests as (e).",
+    "(g) memoryTrace drops detail: FAILED 'session: trace in memory > reads a step back...' and three kernel tests (delegate names, cost charge, detail on the event).",
+    "(h) web reducer copies only four fields: FAILED api.test 'keeps what a step carried, not only its line of text'.",
+    "(i) childrenByStep ignores detail.childTaskIds: FAILED three tree.test cases ('takes the children a step names...', 'never gives an old step a child that a newer step names', 'ignores a named child that is not in the tree...').",
+    "(j) took() returns elapsed() always: FAILED 'session page: how long a step took > writes it the way the spec does' ('0 s' vs '0 ms').",
+    "Extra: charging a zero cost (removed `> 0`): FAILED 'does not charge a step whose cost is zero...'.",
+    "Extra: addSpend reason changed from `kept.tool ?? kind`: FAILED e2e 'charges what the session spent to the wallet...' (Set{'x'} vs Set{'search'}).",
+    "Extra: step.appended published without detail: FAILED 'sends the detail on the event, so the page draws it without reading the snapshot again'.",
+    "Extra: childrenByStep fallback slices all children, not the unnamed ones: FAILED 'never gives an old step a child that a newer step names'.",
+    "Timing: the new tests wait on kernel.idle(), not on fixed sleeps; the setTimeout calls in e2e.test.ts:101 and routes.test.ts:60 are fail-after-2s guards, not races. Tests pass paceMs 0, so no real wait.",
+    "The last assertion of 'sends the detail on the event' (`run?.type === 'step.appended' && run.detail?.output`) evaluates to `false` when the event is absent, and `toContain` on `false` throws, so it cannot pass vacuously.",
+    "The worktree /tmp/wf-tests was removed; /Users/rufus/lumen-next is untouched (status still shows only `?? zy-kw.mjs`)."
+  ]
+}

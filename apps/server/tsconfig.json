@@ -3,7 +3,9 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "types": ["node"]
+    "types": ["node"],
+    // String.prototype.toWellFormed (Node 20+), used to make text storable in Postgres.
+    "lib": ["ES2023", "ES2024.String"]
   },
   "references": [{ "path": "../../packages/contracts" }],
   "include": ["src/**/*.ts"]

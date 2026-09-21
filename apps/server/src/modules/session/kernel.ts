@@ -4,6 +4,7 @@ import type {
   Money,
   SessionMode,
   SessionSnapshot,
+  StepDetail,
   StepKind,
   Task,
   TaskStatus,
@@ -16,6 +17,7 @@ import type { Principal, SessionAccess } from '../../core/http/authGuard.js';
 import { notFound } from '../../core/http/httpError.js';
 import type { Broker } from '../../core/protocol/broker.js';
 import { Delegation, DelegationRefused } from './delegation.js';
+import { checkedDetail, storable } from './stepDetail.js';
 import { buildTree } from './taskComposite.js';
 import { isEnding, type Trace } from './trace.js';
 
@@ -162,9 +164,49 @@ export class Kernel implements WorkerReport {
   };
 
   // WorkerReport: the one door out of the worker.
-  async appendStep(taskId: string, kind: StepKind, text: string): Promise<void> {
+  async appendStep(
+    taskId: string,
+    kind: StepKind,
+    text: string,
+    detail?: StepDetail,
+  ): Promise<void> {
+    // The delegate step is the kernel's to write, from the tasks it opened. A
+    // worker that wrote one too would draw a second, empty DELEGATED block, and
+    // one that named tasks could name tasks that do not exist.
+    if (kind === 'delegate' || detail?.childTaskIds) {
+      throw new Error('kernel: a delegate step is written by delegate(), not by appendStep()');
+    }
+    // Everything is checked before anything is written, so a bad amount or a
+    // wrong shape leaves neither a step nor a charge.
+    const checked = detail ? checkedDetail(detail) : undefined;
+    const cost = checked?.cost ? recordable(checked.cost) : undefined;
+    const kept = checked && cost ? { ...checked, cost } : checked;
+    if (!kept || !cost || cost.dollars === 0) {
+      await this.writeStep(taskId, kind, text, kept);
+      return;
+    }
+    // The step is the receipt and this is the charge: one write, then the
+    // events. Nothing is announced that the record does not hold.
+    const charge = { amount: cost, reason: kept.tool ?? kind };
+    const { step, task } = await this.trace.appendCostedStep(
+      taskId,
+      kind,
+      storable(text),
+      kept,
+      charge,
+    );
+    this.broker.publish(task.sessionId, { type: 'step.appended', ...step });
+    await this.announceCost(task);
+  }
+
+  private async writeStep(
+    taskId: string,
+    kind: StepKind,
+    text: string,
+    detail?: StepDetail,
+  ): Promise<void> {
     const task = await this.taskOrThrow(taskId);
-    const step = await this.trace.appendStep(taskId, kind, text);
+    const step = await this.trace.appendStep(taskId, kind, storable(text), detail);
     this.broker.publish(task.sessionId, { type: 'step.appended', ...step });
   }
 
@@ -179,10 +221,31 @@ export class Kernel implements WorkerReport {
     // Open every child before any of them runs, so the page draws the whole
     // fan-out at once and a stop that arrives now reaches all of them.
     const children: Task[] = [];
-    for (const item of work) {
-      const child = await this.trace.openTask(parent.sessionId, parent.id, item.agent, item.title);
-      this.broker.publish(parent.sessionId, { type: 'task.opened', task: child });
-      children.push(child);
+    try {
+      for (const item of work) {
+        const child = await this.trace.openTask(
+          parent.sessionId,
+          parent.id,
+          item.agent,
+          item.title,
+        );
+        this.broker.publish(parent.sessionId, { type: 'task.opened', task: child });
+        children.push(child);
+      }
+      // The delegate step is written here, after the children exist, so that it
+      // can name them, and before any of them runs, so that the page draws the
+      // block first and watches the statuses in it change.
+      await this.writeStep(parent.id, 'delegate', `delegated ${children.length} in parallel`, {
+        childTaskIds: children.map((child) => child.id),
+      });
+    } catch (error) {
+      // Some children exist and nothing will ever run them: the record failed
+      // part way through the fan-out, or on the step. Left queued they would
+      // sit in the tree for the life of the process; end them, then say.
+      for (const child of children) {
+        await this.setStatus(child.id, 'stopped').catch(() => undefined);
+      }
+      throw error;
     }
 
     await this.delegation.runBounded(children, (child) => this.run(child, child.title, true));
@@ -212,15 +275,23 @@ export class Kernel implements WorkerReport {
     const spent = recordable(amount);
     // Postgres commits billing's ledger and the task cost together before events.
     const task = await this.trace.addCost(taskId, spent, reason);
-    this.broker.publish(task.sessionId, { type: 'task.cost', taskId, ownCost: task.ownCost });
+    await this.announceCost(task);
+  }
 
+  /** Tell the page a task's own cost changed, and the new total of it and of each ancestor. */
+  private async announceCost(task: Task): Promise<void> {
+    this.broker.publish(task.sessionId, {
+      type: 'task.cost',
+      taskId: task.id,
+      ownCost: task.ownCost,
+    });
     // The spend changes the total of this task and of every ancestor, and of
     // nothing else. The Composite gives each total; the page only displays it.
     const snapshot = await this.trace.snapshot(task.sessionId);
     const tree = snapshot && buildTree(snapshot.tasks);
     if (!snapshot || !tree) return;
     const byId = new Map(snapshot.tasks.map((row) => [row.id, row]));
-    for (let at = byId.get(taskId); at; at = at.parentId ? byId.get(at.parentId) : undefined) {
+    for (let at = byId.get(task.id); at; at = at.parentId ? byId.get(at.parentId) : undefined) {
       const total = tree.find(at.id)?.cost() ?? zero;
       this.broker.publish(task.sessionId, { type: 'task.total', taskId: at.id, total });
     }

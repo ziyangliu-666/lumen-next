@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@lumen/contracts';
-import { childrenByStep, elapsed, toolLabel, treeRows } from './tree';
+import { atFoot, childrenByStep, elapsed, took, toolLabel, treeRows, turnToSend } from './tree';
 
 const task = (id: string, parentId: string | null): Task => ({
   id,
@@ -59,23 +59,99 @@ describe('session page: small formats', () => {
 });
 
 describe('session page: which children a delegate step handed down', () => {
-  it('gives each delegate step its own children, in order, and not the whole list', () => {
+  const kids = ['a', 'b', 'c', 'd'].map((id) => ({ id }));
+  const ids = (list: readonly { id: string }[] | undefined): string[] =>
+    (list ?? []).map((k) => k.id);
+
+  it('takes the children a step names, in the order it names them', () => {
+    const byStep = childrenByStep(
+      [
+        { index: 1, text: 'delegated 3 in parallel', detail: { childTaskIds: ['c', 'a', 'b'] } },
+        { index: 5, text: 'delegated 1 in parallel', detail: { childTaskIds: ['d'] } },
+      ],
+      kids,
+    );
+
+    expect(ids(byStep.get(1))).toEqual(['c', 'a', 'b']);
+    expect(ids(byStep.get(5))).toEqual(['d']);
+  });
+
+  it('for a step recorded before steps named their children, takes the next N by order', () => {
     const byStep = childrenByStep(
       [
         { index: 1, text: 'delegated 3 in parallel' },
         { index: 5, text: 'delegated 1 in parallel' },
       ],
-      ['a', 'b', 'c', 'd'],
+      kids,
     );
 
-    expect(byStep.get(1)).toEqual(['a', 'b', 'c']);
-    expect(byStep.get(5)).toEqual(['d']);
+    expect(ids(byStep.get(1))).toEqual(['a', 'b', 'c']);
+    expect(ids(byStep.get(5))).toEqual(['d']);
   });
 
-  it('gives a step that names no number whatever is left', () => {
-    expect(childrenByStep([{ index: 0, text: 'handed down' }], ['a', 'b']).get(0)).toEqual([
+  it('never gives an old step a child that a newer step names', () => {
+    const byStep = childrenByStep(
+      [
+        { index: 1, text: 'delegated 2 in parallel' },
+        { index: 5, text: 'delegated 2 in parallel', detail: { childTaskIds: ['b', 'd'] } },
+      ],
+      kids,
+    );
+
+    expect(ids(byStep.get(1))).toEqual(['a', 'c']);
+    expect(ids(byStep.get(5))).toEqual(['b', 'd']);
+  });
+
+  it('ignores a named child that is not in the tree, and gives a numberless step what is left', () => {
+    expect(
+      ids(
+        childrenByStep([{ index: 0, text: 'x', detail: { childTaskIds: ['zz', 'a'] } }], kids).get(
+          0,
+        ),
+      ),
+    ).toEqual(['a']);
+    expect(ids(childrenByStep([{ index: 0, text: 'handed down' }], kids).get(0))).toEqual([
       'a',
       'b',
+      'c',
+      'd',
     ]);
+  });
+});
+
+describe('session page: how long a step took', () => {
+  it('writes it the way the spec does', () => {
+    expect(took(0)).toBe('0 ms');
+    expect(took(412)).toBe('412 ms');
+    expect(took(6_000)).toBe('6 s');
+    expect(took(8_940)).toBe('8.9 s');
+    expect(took(161_000)).toBe('2 min 41 s');
+    // The edge of a unit, and what is not a duration at all.
+    expect(took(999.6)).toBe('1 s');
+    expect(took(9_960)).toBe('10 s');
+    expect(took(Number.NaN)).toBe('0 ms');
+    expect(elapsed(Number.NaN)).toBe('0 s');
+  });
+});
+
+describe('session page: what the composer sends', () => {
+  it('sends the trimmed text, and nothing for an empty line', () => {
+    expect(turnToSend('  push it to n = 11 ', false)).toBe('push it to n = 11');
+    expect(turnToSend('   ', false)).toBeNull();
+    expect(turnToSend(null, false)).toBeNull();
+  });
+
+  it('sends nothing while a run is going or the socket is down, whatever key was pressed', () => {
+    // Enter submits a form that has no submit button, and while a run is going
+    // the only button is Stop. A turn said then started a second run on the lead.
+    expect(turnToSend('a second turn', true)).toBeNull();
+  });
+});
+
+describe('session page: when a new step pulls the stream down', () => {
+  it('follows a reader at the foot, and leaves one who scrolled up', () => {
+    expect(atFoot({ scrollHeight: 1200, scrollTop: 600, clientHeight: 600 })).toBe(true);
+    expect(atFoot({ scrollHeight: 1200, scrollTop: 560, clientHeight: 600 })).toBe(true);
+    expect(atFoot({ scrollHeight: 1200, scrollTop: 300, clientHeight: 600 })).toBe(false);
   });
 });

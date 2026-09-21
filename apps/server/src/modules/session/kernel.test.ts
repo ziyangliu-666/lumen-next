@@ -153,7 +153,7 @@ describe('session: kernel', () => {
 
 describe('session: kernel, delegation and cost', () => {
   it('fans a question out to child tasks, one level under the lead, and ends them all', async () => {
-    const { kernel } = harness(demoWorker);
+    const { kernel } = harness(demoWorker());
     const { session } = await kernel.start('p1', owner.accountId, 'fusion');
     await kernel.idle();
 
@@ -167,7 +167,7 @@ describe('session: kernel, delegation and cost', () => {
   });
 
   it('rolls what the children spent up to the session, and leaves the lead at zero', async () => {
-    const { kernel, events } = harness(demoWorker);
+    const { kernel, events } = harness(demoWorker());
     const { session } = await kernel.start('p1', owner.accountId, 'fusion');
     await kernel.idle();
 
@@ -184,7 +184,7 @@ describe('session: kernel, delegation and cost', () => {
   });
 
   it('hands the children back to the lead only when they have come to rest', async () => {
-    const { kernel } = harness(demoWorker);
+    const { kernel } = harness(demoWorker());
     const { session } = await kernel.start('p1', owner.accountId, 'fusion');
     await kernel.idle();
 
@@ -325,7 +325,7 @@ describe('session: kernel, delegation and cost', () => {
   });
 
   it('keeps findings in memory when no projects slice is wired, so the demo still runs', async () => {
-    const { kernel, events } = harness(demoWorker);
+    const { kernel, events } = harness(demoWorker());
     await kernel.start('p1', owner.accountId, 'fusion');
     await kernel.idle();
 
@@ -337,6 +337,244 @@ describe('session: kernel, delegation and cost', () => {
 
     expect((await kernel.start('p1', owner.accountId, 'q')).session.mode).toBe('explore');
     expect((await kernel.start('p1', owner.accountId, 'q', 'seed')).session.mode).toBe('seed');
+  });
+});
+
+describe('session: kernel, what a step carries', () => {
+  it('names in the delegate step exactly the tasks that step opened, turn by turn', async () => {
+    const { kernel } = harness(demoWorker());
+    const { session } = await kernel.start('p1', owner.accountId, 'fusion');
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'and in 2026?');
+    await kernel.idle();
+
+    const { tasks, steps } = await kernel.snapshot(session.id, owner);
+    const lead = tasks[0]!;
+    const delegated = steps.filter((step) => step.taskId === lead.id && step.kind === 'delegate');
+    const readers = tasks.filter((task) => task.parentId === lead.id).map((task) => task.id);
+
+    // Three on the first turn, one on the second, and between them every reader once.
+    expect(delegated.map((step) => step.detail?.childTaskIds?.length)).toEqual([3, 1]);
+    expect(delegated.flatMap((step) => step.detail?.childTaskIds ?? [])).toEqual(readers);
+  });
+
+  it('charges the cost a step carries to the task, once, and announces both', async () => {
+    const worker: Worker = {
+      run: (task, _input, report) =>
+        report.appendStep(task.id, 'tool', 'search: x', {
+          tool: 'search',
+          cost: { dollars: 0.1 + 0.2 },
+        }),
+    };
+    const { kernel, events } = harness(worker);
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const snapshot = await kernel.snapshot(session.id, owner);
+    // Rounded to the column's six decimals on the receipt and on the charge alike.
+    expect(snapshot.steps[0]?.detail?.cost).toEqual({ dollars: 0.3 });
+    expect(snapshot.tasks[0]?.ownCost).toEqual({ dollars: 0.3 });
+    expect(snapshot.spend).toEqual({ dollars: 0.3 });
+    expect(events.filter((event) => event.type === 'task.cost')).toHaveLength(1);
+  });
+
+  it('writes neither the step nor the charge when the cost is not an amount', async () => {
+    const { kernel } = harness();
+    const { session, tasks } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    await expect(
+      kernel.appendStep(tasks[0]!.id, 'tool', 'search: x', { cost: { dollars: -1 } }),
+    ).rejects.toThrow(/non-negative/);
+
+    const after = await kernel.snapshot(session.id, owner);
+    expect(after.steps.map((step) => step.kind)).toEqual(['reply']);
+    expect(after.spend).toEqual({ dollars: 0 });
+  });
+
+  it('does not charge a step whose cost is zero, and does not let a worker name child tasks', async () => {
+    const { kernel, events } = harness();
+    const { tasks } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    await kernel.appendStep(tasks[0]!.id, 'tool', 'run: free', {
+      tool: 'run',
+      cost: { dollars: 0 },
+    });
+    expect(events.filter((event) => event.type === 'task.cost')).toHaveLength(0);
+
+    await expect(
+      kernel.appendStep(tasks[0]!.id, 'delegate', 'made up', { childTaskIds: ['not-a-task'] }),
+    ).rejects.toThrow(/written by delegate\(\)/);
+    // The kind is not what names them: a tool step may not either.
+    await expect(
+      kernel.appendStep(tasks[0]!.id, 'tool', 'run: x', { childTaskIds: ['not-a-task'] }),
+    ).rejects.toThrow(/written by delegate\(\)/);
+    await expect(kernel.appendStep(tasks[0]!.id, 'delegate', 'as main did')).rejects.toThrow(
+      /written by delegate\(\)/,
+    );
+  });
+
+  it('sends the detail on the event, so the page draws it without reading the snapshot again', async () => {
+    const { kernel, events } = harness(demoWorker());
+    await kernel.start('p1', owner.accountId, 'fusion');
+    await kernel.idle();
+
+    const search = events.find(
+      (event) => event.type === 'step.appended' && event.detail?.cost !== undefined,
+    );
+    expect(search).toMatchObject({
+      kind: 'tool',
+      detail: { tool: 'search', cost: { dollars: 0.01 }, rows: expect.any(Array) as unknown },
+    });
+    const run = events.find(
+      (event) => event.type === 'step.appended' && event.detail?.tool === 'run',
+    );
+    expect(run?.type === 'step.appended' && run.detail?.output).toContain('$ demo tally');
+  });
+});
+
+describe('session: kernel, a step and its charge are one write', () => {
+  /** A record whose charge fails, as a database that goes away would make it. */
+  class ChargeFails extends MemoryTrace {
+    override addCost(): Promise<never> {
+      return Promise.reject(new Error('ledger is down'));
+    }
+  }
+
+  it('leaves no receipt when the charge fails: no step, no event, no cost', async () => {
+    const broker = new Broker();
+    const events: ServerEvent[] = [];
+    const publish = broker.publish.bind(broker);
+    broker.publish = (sessionId: string, event: ServerEvent): void => {
+      events.push(event);
+      publish(sessionId, event);
+    };
+    const worker: Worker = {
+      run: (task, _input, report) =>
+        report.appendStep(task.id, 'tool', 'search: x', {
+          tool: 'search',
+          cost: { dollars: 0.01 },
+        }),
+    };
+    const kernel = new Kernel(new ChargeFails(), broker, worker);
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const snapshot = await kernel.snapshot(session.id, owner);
+    // The page must never show "$0.01" for something nobody was charged for.
+    expect(snapshot.steps).toEqual([]);
+    expect(snapshot.spend).toEqual({ dollars: 0 });
+    expect(snapshot.tasks[0]?.status).toBe('failed');
+    expect(events.map((event) => event.type)).not.toContain('step.appended');
+    expect(events.map((event) => event.type)).not.toContain('task.cost');
+  });
+
+  it('announces the step before its cost, and both only after the write', async () => {
+    const worker: Worker = {
+      run: (task, _input, report) =>
+        report.appendStep(task.id, 'tool', 'search: x', {
+          tool: 'search',
+          cost: { dollars: 0.01 },
+        }),
+    };
+    const { kernel, events } = harness(worker);
+    await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const types = events.map((event) => event.type);
+    expect(types.indexOf('step.appended')).toBeLessThan(types.indexOf('task.cost'));
+    expect(types.indexOf('task.cost')).toBeLessThan(types.indexOf('task.total'));
+  });
+
+  it('makes the text of a step storable before it is written', async () => {
+    const { kernel } = harness();
+    const { session, tasks } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+    const nul = String.fromCharCode(0);
+
+    await kernel.appendStep(tasks[0]!.id, 'tool', `run: a${nul}b`, { output: `x${nul}y` });
+
+    const step = (await kernel.snapshot(session.id, owner)).steps.at(-1);
+    expect(step?.text).toBe('run: ab');
+    expect(step?.detail?.output).toBe('xy');
+  });
+});
+
+describe('session: kernel, the delegate step', () => {
+  it('is on the record, naming the children, before the first child runs', async () => {
+    const seen: (readonly string[] | undefined)[] = [];
+    let kernel: Kernel | null = null;
+    let sessionId = '';
+    const worker: Worker = {
+      async run(task, _input, report) {
+        if (task.agent === 'lead') {
+          await report.delegate(task.id, [
+            { agent: 'reader', title: 'one' },
+            { agent: 'reader', title: 'two' },
+          ]);
+          return;
+        }
+        // What a page that joins now would be sent.
+        const now = await kernel!.snapshot(sessionId, owner);
+        seen.push(now.steps.find((step) => step.kind === 'delegate')?.detail?.childTaskIds);
+      },
+    };
+    kernel = harness(worker).kernel;
+    const started = await kernel.start('p1', owner.accountId, 'q');
+    sessionId = started.session.id;
+    await kernel.idle();
+
+    const children = (await kernel.snapshot(sessionId, owner)).tasks
+      .slice(1)
+      .map((task) => task.id);
+    expect(seen).toEqual([children, children]);
+  });
+
+  it('stops the children it opened when the delegate step cannot be written, and tells the parent', async () => {
+    class DelegateStepFails extends MemoryTrace {
+      override appendStep(
+        ...args: Parameters<MemoryTrace['appendStep']>
+      ): ReturnType<MemoryTrace['appendStep']> {
+        if (args[1] === 'delegate') return Promise.reject(new Error('disk is full'));
+        return super.appendStep(...args);
+      }
+    }
+    const kernel = new Kernel(new DelegateStepFails(), new Broker(), demoWorker());
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const { tasks } = await kernel.snapshot(session.id, owner);
+    // Nothing is left queued for the life of the process.
+    expect(tasks.map((task) => [task.agent, task.status])).toEqual([
+      ['lead', 'failed'],
+      ['reader', 'stopped'],
+      ['reader', 'stopped'],
+      ['reader', 'stopped'],
+    ]);
+  });
+
+  it('stops the children it did open when the record fails part way through the fan-out', async () => {
+    class SecondChildFails extends MemoryTrace {
+      private opened = 0;
+      override openTask(
+        ...args: Parameters<MemoryTrace['openTask']>
+      ): ReturnType<MemoryTrace['openTask']> {
+        // The root is the first task opened, so the second child is the third.
+        this.opened += 1;
+        if (this.opened === 3) return Promise.reject(new Error('connection lost'));
+        return super.openTask(...args);
+      }
+    }
+    const kernel = new Kernel(new SecondChildFails(), new Broker(), demoWorker());
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const { tasks } = await kernel.snapshot(session.id, owner);
+    expect(tasks.map((task) => [task.agent, task.status])).toEqual([
+      ['lead', 'failed'],
+      ['reader', 'stopped'],
+    ]);
   });
 });
 
@@ -358,7 +596,7 @@ describe('session: kernel, the three budget check points', () => {
       },
     };
   }
-  const withGuard = (guard: BudgetGuard, worker: Worker = demoWorker): Kernel =>
+  const withGuard = (guard: BudgetGuard, worker: Worker = demoWorker()): Kernel =>
     new Kernel(new MemoryTrace(), new Broker(), worker, { budget: guard });
 
   it('asks at a turn, at the fan-out and as each delegated task opens, for the owner of the session', async () => {

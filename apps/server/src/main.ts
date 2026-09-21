@@ -8,6 +8,7 @@
 import { composeApp, type IdentityConfig } from './app.js';
 import { openDatabase, type Db } from './core/db/db.js';
 import { defaultWebRoot } from './core/http/server.js';
+import { demoWorker, paceFromEnv } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
 
@@ -65,6 +66,10 @@ async function bootstrap(): Promise<void> {
     db,
     // Real sign-in whenever there is a database; the stub only without one.
     identity: db ? identityConfig() : null,
+    // Until steering supplies the agent loop, the demo worker runs, paced so
+    // that a person can see the page is live. Tests build the application
+    // without this and do not wait.
+    worker: demoWorker({ paceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']) }),
     ...(webRoot ? { webRoot } : {}),
   });
 

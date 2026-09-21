@@ -3,7 +3,6 @@ import type {
   ServerEvent,
   SessionMode,
   SessionSnapshot,
-  Step,
   Task,
 } from '@lumen/contracts';
 
@@ -151,12 +150,10 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
       return { ...state, snapshot: { ...snapshot, totals, spend } };
     }
     case 'step.appended': {
-      const step: Step = {
-        taskId: event.taskId,
-        index: event.index,
-        kind: event.kind,
-        text: event.text,
-      };
+      // Everything but the event's own `type`. Copying the fields one by one
+      // dropped `detail` the day the contract gained it, and the page drew bare
+      // steps while the record held full ones.
+      const { type: _type, ...step } = event;
       // The snapshot may already hold this step if it was read after the event
       // was sent; the (task, index) pair says so.
       const seen = snapshot.steps.some((s) => s.taskId === step.taskId && s.index === step.index);

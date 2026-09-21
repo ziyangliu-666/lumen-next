@@ -1,0 +1,71 @@
+{
+  "findings": [
+    {
+      "title": "While a run is going the composer has no submit button, so Enter sends regardless of `disabled`, and clears the text when the socket is down",
+      "file": "apps/web/src/pages/session/parts.tsx",
+      "line": 375,
+      "severity": "should-fix",
+      "scenario": "The root is running (or 'waiting'), so the fix commit swaps the type=submit Send button for a type=button Stop. The form now has one text field and no submit button, and HTML implicit submission then submits on Enter unconditionally. (a) Stream is 'closed' or auth is not ready, so `disabled` is true: the user types a follow-up and presses Enter; submit() calls onSay, Stream.send silently drops the command because the socket is not OPEN, and form.reset() wipes the text. On main the disabled submit button blocked Enter. (b) Stream is open: Enter sends session.say in the middle of a run, although the UI offers only Stop. Kernel.say() starts a second worker.run on the same root; the first run to finish sets the root 'ended' while the second still writes steps.",
+      "evidence": "parts.tsx 375-390: `running ? <Button type=\"button\" ... onClick={onStop}> : <Button type=\"submit\" disabled={disabled}>`. submit() at 353-361 never reads `disabled` or `running`, and the <input> at 368 is never disabled. api.ts 243-245: send is a no-op unless readyState === OPEN. kernel.ts 98-102: say() appends the step and tracks a new run with no check of the root's status. parts.test.tsx 187 only asserts which button renders."
+    },
+    {
+      "title": "Sending a turn scrolls the stream to the top and takes the focus out of the input, so the new turn arrives out of view",
+      "file": "apps/web/src/pages/session/Session.tsx",
+      "line": 238,
+      "severity": "should-fix",
+      "scenario": "The lead's stream is taller than the card (true after the first demo turn on a 768 px screen, and after any second turn). The user types a follow-up and presses Enter. onSay calls open(root.id), which in the next frame sets scrollTop = 0 and focuses the stream div. The 'you' step and everything after it are appended at the bottom. The auto-scroll effect sees a distance from the foot far above 160 px and leaves the reader at the top. The comment says 'show it arrive', and the code does the opposite. Focus has also left the input, so a keyboard user must click or tab back before typing the next turn, every turn.",
+      "evidence": "Session.tsx 180-187: open() always does `streamBox.current.scrollTop = 0; streamBox.current.focus()`. 235-239: onSay calls open(root.id) even when the root is already shown. 149-153: the follow rule only fires within 160 px of the foot."
+    },
+    {
+      "title": "The auto-scroll rule measures after the new step is laid out, so any step taller than 160 px stops the follow for a reader who was at the foot",
+      "file": "apps/web/src/pages/session/Session.tsx",
+      "line": 152,
+      "severity": "should-fix",
+      "scenario": "The reader sits exactly at the foot of the stream. A tool step arrives with 320 px of output (max-h-80) or with six or more rows (the kernel allows 50). useEffect runs after the commit, so scrollHeight already includes the new block: scrollHeight - scrollTop - clientHeight equals the height of the new step, roughly 250-400 px, which is not < 160. The box does not scroll, and every later step adds more distance, so the follow never resumes. The same happens when a reconnect snapshot brings several steps at once. The rich steps this branch adds are the ones that break it; the three-row demo step is about 160 px and sits on the edge.",
+      "evidence": "Session.tsx 148-153: `if (box.scrollHeight - box.scrollTop - box.clientHeight < 160) box.scrollTop = box.scrollHeight;` inside useEffect keyed on stepCount. The 'was at the foot' test needs the distance from before the append (record it on scroll, or subtract the growth). Secondary: stepCount counts the steps of every task, so a step of a task that is not shown also pulls down a reader who is 100 px above the foot. Nothing moved for them, so this is harmless but unneeded."
+    },
+    {
+      "title": "The fix commit replaced `<Input>` from @/ui with a hand-rolled `<input>`",
+      "file": "apps/web/src/pages/session/parts.tsx",
+      "line": 368,
+      "severity": "nit",
+      "scenario": "docs/UI.md rule 1 and CLAUDE.md: 'Never hand-roll a control that already exists there.' apps/web/src/ui/input.tsx exists, and main and 5020d2b used it in the Composer. a0a2caa swapped it for a raw <input> with its own height, font and focus classes to get the borderless field inside the bordered box. The same look is reachable with `<Input className=\"border-0 shadow-none focus-visible:ring-0 ...\">`. Otherwise the shell owner must agree, because this field no longer follows changes to Input (disabled style, aria-invalid, dark:bg-input).",
+      "evidence": "`git show 5020d2b:apps/web/src/pages/session/parts.tsx` line 311 has `<Input`. HEAD parts.tsx 368-374 has `<input name=\"say\" ... className=\"h-10 min-w-0 flex-1 bg-transparent font-mono text-sm ...\">`, and the Input import is gone."
+    },
+    {
+      "title": "The findings refetch reads one page of 20 for the whole project, and when the page is incomplete the merge puts older findings after newer ones",
+      "file": "apps/web/src/pages/session/Session.tsx",
+      "line": 94,
+      "severity": "nit",
+      "scenario": "GET /api/projects/:id/findings has a default limit of 20, newest first, across every session of the project (projects/validation.ts line 31, pgProjectStore.ts line 58). A session records 25 findings live, so state.findings holds 25 in order. The socket drops and reopens, and the new refetch returns the newest 20. `later` is then the 5 oldest, and the list becomes [6..25, 1..5]. That breaks the 'oldest first' promise of SessionState.findings. The cap itself is on main too: a reload shows at most 20, and an older session in a project whose other sessions hold the newest 20 findings shows 'Nothing recorded yet'. The refetch-on-reopen claim ('brings back the ones recorded while nobody was listening') is only true under that cap. For the race asked about: finding.recorded against the refetch neither drops nor duplicates, because both sides dedupe by id.",
+      "evidence": "Session.tsx 94-106: there is no `?limit=` and no cursor loop; the merge is `[...mine, ...later]`, where `later` is whatever the reply did not contain, and the code assumes that is always newer."
+    },
+    {
+      "title": "ARCHITECTURE.md: the core/domain class diagram next to the updated appendStep line is still wrong",
+      "file": "docs/ARCHITECTURE.md",
+      "line": 388,
+      "severity": "nit",
+      "scenario": "The branch edited the WorkerReport line to add `detail` but left `Promise~Step~`. WorkerReport.appendStep returns Promise<void>; only Trace.appendStep returns Step. The same diagram still shows `Worker.run(task, report, signal)` where the code has `run(task, input, report)` with no signal, and an `ask(taskId, question)` that does not exist. Section 4's `Session` block lists rootTaskId, status, spend and endedAt, but the contract's Session has accountId and none of those. Apart from the appendStep line these are older than this branch. The task brief says the missing signal is a known gap, so the diagram should not claim one.",
+      "evidence": "docs/ARCHITECTURE.md 386-396 and 182-191, against apps/server/src/core/domain/worker.ts 27 and 55 and packages/contracts/src/sessions.ts 12-17. The StepDetail, StepRow and Step blocks in section 4, the step.appended event line (243), the Trace class (612-613) and both sequence diagrams (566-570, 726-727) match the code. apps/server/src/modules/session/README.md matches too: the stepDetail.ts row, the demoWorker row, and the paceFromEnv export."
+    }
+  ],
+  "checked_and_fine": [
+    "The reducer keeps detail. In api.ts, step.appended spreads the whole event except `type`, and dedupes on (taskId, index). api.test.ts covers it.",
+    "The findings effect cannot loop. Its dependencies are the primitives sessionId, projectId and connected, and its setState changes none of them. It runs again only when the stream goes from not-open to open.",
+    "A finding.recorded that races the refetch neither drops nor duplicates a finding. The merge removes ids the reply holds, and apply() ignores an id the list already holds. A reply that returns after a disconnect is discarded by `active = false`, and the next open reads again.",
+    "requestAnimationFrame after unmount is safe. The callback returns when streamBox.current is null.",
+    "The socket effect is keyed on sessionId only, and close() cancels a reconnect that is waiting. The handlers use functional setState, so no closure goes stale. The `stream` ref is cleared in the cleanup.",
+    "The clock effect fires once at 0 ms and then every second, and its cleanup clears both timers. It restarts when `running` changes back to true on a second turn.",
+    "Stop while the root is 'waiting' is intended. kernel.ts line 358 says 'a stop still ends it', and Kernel.stop sets every task that has not ended to 'stopped'. Stop is disabled when the stream is not open or auth is not ready.",
+    "Every non-stock class exists. theme.css defines ink, body, sunken, ground, rule-strong, decide, keep and gap as --color-*. I compiled max-w-2/5, min-h-96, max-h-80, h-[calc(100vh-11rem)] and break-words with the installed Tailwind 4.3.3, and all of them produce CSS. Button has an 'icon-sm' size.",
+    "The fixed height fits the shell. The shell takes 3.5rem for its header and 4rem for main's padding, and the page header about 2.25rem, so 11rem fits a one-line header. min-h-96 makes the page scroll on short screens and nothing gets clipped. Below lg the rail stacks under the card.",
+    "The eslint-disable on the <pre> is justified. A scrollable region must be focusable for a keyboard, and it carries role=region and an aria-label. `npx eslint apps/web/src/pages/session` prints nothing.",
+    "There is no inline style, no hex value, no CSS file per page, no import of another page, and no new UI dependency. lucide-react was already in use.",
+    "Long text wraps. break-words with min-w-0 is on the title, you, thinking, the tool body, row text, row result, reply and finding text. The <pre> scrolls both ways.",
+    "The empty row is marked by font-semibold and an sr-only 'found nothing: ', not by colour alone.",
+    "vitest.config.ts includes apps/web/src/**/*.test.{ts,tsx} and the '@' alias. `npx vitest run apps/web` gives 5 files and 35 tests, all passing. parts.test.tsx renders with react-dom/server and needs no DOM.",
+    "In tree.ts, childrenByStep prefers detail.childTaskIds, falls back to counting for old steps, and ignores ids that are not children. took() rounds before it picks the unit.",
+    "The browser never adds money. The spend comes from task.total on the root, and receiptOf only formats detail.cost.",
+    "Everything committed in the web files and the docs I read is English."
+  ]
+}

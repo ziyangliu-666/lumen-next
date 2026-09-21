@@ -1,0 +1,57 @@
+{
+  "findings": [
+    {
+      "title": "No test fails when the output <pre> loses tabIndex, role and aria-label",
+      "file": "apps/web/src/pages/session/parts.test.tsx",
+      "severity": "should-fix",
+      "scenario": "Fix claim (5) says the output <pre> scrolls and is focusable. I deleted the line `tabIndex={0}` from the <pre> in apps/web/src/pages/session/parts.tsx (line 203) and ran the whole suite: 579 of 579 passed. A later edit can remove the attribute (the eslint-disable comment above it invites that), and a keyboard user can no longer scroll a long output. The gate stays green.",
+      "evidence": "Mutation (p): removed `tabIndex={0}`. Result: Test Files 51 passed, Tests 579 passed. `grep -n 'tabindex|tabIndex|role=|region' parts.test.tsx` finds nothing. renderToStaticMarkup does emit tabindex=\"0\", role=\"region\" and aria-label=\"run output\", so one `toContain` line in the existing output test closes it."
+    },
+    {
+      "title": "The childTaskIds half of the appendStep guard has no test",
+      "file": "apps/server/src/modules/session/kernel.test.ts",
+      "line": 407,
+      "severity": "nit",
+      "scenario": "I changed the guard in kernel.ts line 176 to `if (kind === 'delegate')`. All 579 tests passed. The test named 'does not let a worker name child tasks' always sends kind 'delegate' with the childTaskIds, so the first half of the `||` answers and the second half never decides. A worker that sends kind 'tool' with detail.childTaskIds is the case the second half exists for. The damage is small: checkedDetail() drops childTaskIds anyway, so the mutant stores nothing wrong; it only stops throwing.",
+      "evidence": "Mutation (d2): 579 passed. Mutation (d1), which keeps only the childTaskIds half, fails 'session: kernel, what a step carries > does not charge a step whose cost is zero, and does not let a worker name child tasks'. Add one assertion: appendStep(id, 'tool', 'x', { childTaskIds: ['t'] }) rejects."
+    },
+    {
+      "title": "The Stop button's click is not tested, and Session.tsx has no test",
+      "file": "apps/web/src/pages/session/parts.test.tsx",
+      "line": 187,
+      "severity": "nit",
+      "scenario": "I removed `onClick={onStop}` from the Stop button in parts.tsx. All 579 tests passed: the suite renders to a string and passes noop handlers, so it proves the button is drawn and not that it stops anything. The same is true of every Session.tsx claim in fix (5): focus moves to the stream, findings are refetched when the socket reopens, the clock ticks at once, the stream scrolls inside the card. Only apps/web/src/main.tsx imports Session.tsx. vitest.config.ts says so openly ('A test that needs clicks gets a DOM environment when the first one lands'), so this is a known limit. The fix commit title says 'the page is tested'; the parts are tested, the page is not.",
+      "evidence": "Mutation (r): removed onClick={onStop}; 579 passed. `grep -rln \"pages/session/Session\" apps/web/src` returns main.tsx only."
+    },
+    {
+      "title": "The pace-0 test asserts exact [0, 0] from two Date.now() reads",
+      "file": "apps/server/src/modules/session/demoWorker.test.ts",
+      "line": 55,
+      "severity": "nit",
+      "scenario": "work() reads Date.now() twice with no wait between at pace 0 and returns the difference. If the millisecond changes between the two reads, durationMs is 1 and `toEqual([0, 0])` fails. The window is about 100 ns in each 1 ms, two times per run, so about 1 failure in several thousand runs. It passed in each of my 25 full runs. `durations.every((ms) => ms <= 1)` or a check that the run finished in under the pace says the same thing without the race.",
+      "evidence": "demoWorker.ts lines 42-46: `const startedAt = Date.now(); if (paceMs > 0) await ...; return Date.now() - startedAt;`. Test line 53-55 expects exactly [0, 0]. The other timing test (paceMs 40, each duration >= 35, wall >= sum - 5) has enough slack; its second assertion is true by construction for any measured value and only catches an invented duration."
+    }
+  ],
+  "checked_and_fine": [
+    "Whole suite on a0a2caa with DATABASE_URL set: 51 test files, 579 tests, all passed, 11 s. The Postgres tests ran (they were not skipped).",
+    "(a) kernel.appendStep with writeStep then trace.addCost: FAILED 'session: kernel, a step and its charge are one write > leaves no receipt when the charge fails: no step, no event, no cost'.",
+    "(b) pgTrace.appendCostedStep with the insert in its own transaction: FAILED 'session: trace in Postgres > rolls the step back with the charge when the ledger refuses it'.",
+    "(c) memoryTrace.appendCostedStep with the step before the charge: FAILED 'session: kernel, a step and its charge are one write > leaves no receipt when the charge fails ...'.",
+    "(d) kernel.appendStep with the whole delegate/childTaskIds guard removed: FAILED 'session: kernel, what a step carries > does not charge a step whose cost is zero, and does not let a worker name child tasks'. See the nit for the half that is not covered.",
+    "(e) kernel.delegate without the catch body that stops the children: FAILED 'session: kernel, the delegate step > stops the children it opened when the delegate step cannot be written, and tells the parent'.",
+    "(f) storable without toWellFormed(): 3 FAILED: stepDetail.test 'does not leave half an emoji where it cut the output', stepDetail.test 'drops the characters Postgres refuses: NUL, and half of a surrogate pair', trace.test 'takes, through the kernel, the output a real process can print' (real Postgres). Extra: without the NUL strip, 4 tests failed, one of them the kernel test 'makes the text of a step storable before it is written'.",
+    "(g) no 'more rows' line: FAILED stepDetail.test 'keeps at most the first rows, and adds a row that says how many it left out'. Extra: without the output cut line, FAILED 'cuts an output that is too long and says how much it cut'.",
+    "(h) paceFromEnv through Number(): FAILED demoWorker.test 'refuses what Number() would quietly accept'. Extra: without the 10000 upper bound the same test failed.",
+    "(i) web reducer drops detail: FAILED api.test 'keeps what a step carried, not only its line of text'.",
+    "(j) childrenByStep ignores detail.childTaskIds: 4 FAILED (3 in tree.test 'which children a delegate step handed down', 1 in parts.test 'lists under a delegate step the children it names, with their status, and no others'). Extra: when named children are not removed from the unnamed pool, FAILED 'never gives an old step a child that a newer step names'.",
+    "(k) took() without rounding first: FAILED tree.test 'how long a step took > writes it the way the spec does'.",
+    "(l) parts.tsx renders nothing for rows: 2 FAILED: 'draws every row: source, query, result' and 'marks the row that found nothing in words and in weight, not by colour alone'.",
+    "(m) sr-only 'found nothing' words removed: FAILED 'marks the row that found nothing in words and in weight, not by colour alone'. Extra: with font-semibold removed the same test failed, so both halves of the claim are held.",
+    "(n) Composer always shows Send: FAILED 'session page: the rail > offers Stop while a run is going and Send when it is not, each with a name'.",
+    "(o) receiptOf shows a zero cost: FAILED 'writes \"tool call\" for a tool that reports neither time nor cost, and no price for a free one'.",
+    "Extra: the text line shown even when a step carries rows: FAILED 'shows rows or output in place of the line of text, and the line when there is nothing else'.",
+    "The kernel atomicity test is real: it uses a Trace whose charge fails, then reads the snapshot and the published events, and asserts no step, zero spend, status failed, no step.appended and no task.cost.",
+    "No test in the branch asserts nothing. vitest.config.ts does include *.test.tsx: mutations in parts.tsx failed parts.test.tsx, so those tests run in the gate.",
+    "Worktree /tmp/wf2-tests removed with git worktree remove --force; every mutation was reverted with git checkout before the next one. /Users/rufus/lumen-next was not touched."
+  ]
+}

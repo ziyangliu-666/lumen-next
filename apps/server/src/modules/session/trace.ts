@@ -5,6 +5,7 @@ import type {
   SessionSnapshot,
   SessionSummary,
   Step,
+  StepDetail,
   StepKind,
   TaskStatus,
 } from '@lumen/contracts';
@@ -19,6 +20,12 @@ import type { TaskRecord } from '../../core/domain/task.js';
 // one suite (traceContract.ts) runs against both, so they cannot drift.
 /** The rows of one session. The kernel adds the rolled-up spend to make a SessionSnapshot. */
 export type TraceSnapshot = Omit<SessionSnapshot, 'spend' | 'totals'>;
+
+/** A spend to record with a step: how much, and why, as the ledger will say it. */
+export interface Charged {
+  readonly amount: Money;
+  readonly reason: string;
+}
 
 export interface Trace {
   openSession(projectId: string, accountId: string, mode: SessionMode): Promise<Session>;
@@ -35,7 +42,19 @@ export interface Trace {
   rootOf(sessionId: string): Promise<TaskRecord | null>;
   /** Ending statuses (ended, stopped, failed) also stamp endedAt. */
   setStatus(taskId: string, status: TaskStatus): Promise<TaskRecord>;
-  appendStep(taskId: string, kind: StepKind, text: string): Promise<Step>;
+  /** `detail` is kept as given and read back as given; absent stays absent. */
+  appendStep(taskId: string, kind: StepKind, text: string, detail?: StepDetail): Promise<Step>;
+  /**
+   * A step that shows a cost, and the charge for it, as one write: both are
+   * kept or neither is. Returns the step and the task with its new own cost.
+   */
+  appendCostedStep(
+    taskId: string,
+    kind: StepKind,
+    text: string,
+    detail: StepDetail,
+    charge: Charged,
+  ): Promise<{ step: Step; task: TaskRecord }>;
   /** Add to the task's own cost and return the task with its new total. */
   addCost(taskId: string, amount: Money, reason?: string): Promise<TaskRecord>;
   snapshot(sessionId: string): Promise<TraceSnapshot | null>;

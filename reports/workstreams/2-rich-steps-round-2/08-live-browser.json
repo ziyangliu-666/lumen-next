@@ -1,0 +1,76 @@
+{
+  "findings": [
+    {
+      "title": "Sending a turn scrolls the stream to the top, so the new turn runs out of sight once the stream is longer than the card",
+      "file": "apps/web/src/pages/session/Session.tsx",
+      "line": 238,
+      "severity": "should-fix",
+      "scenario": "1400x900, one session, three finished turns (the stream is 1130 px in a 655 px box). Scroll the box to the bottom, type a fourth turn, click Send. onSay calls open(root.id), and open() sets streamBox.scrollTop = 0 in requestAnimationFrame. The 'you' step arrives after that, the auto-follow test (scrollHeight - scrollTop - clientHeight < 160) is false, and the box stays at the top for the whole turn. The person who just spoke sees the first question and none of the new YOU / THINKING / DELEGATED / REPLY blocks. The second turn only looks right because the stream did not overflow yet (scrollTop 0 was also the bottom).",
+      "evidence": "/tmp/wf2-live/t7.mjs output: 'before turn4' boxTop=475 atBottom=0; 200 ms after Send boxTop=0 atBottom=540 steps=14; at the end boxTop=0 atBottom=759 steps=17. Also 'turn3 done' boxTop=0 atBottom=475. Screenshot /tmp/wf2-live/t7-turn4.png shows the first question at the top and turn 4 not visible. Fix direction: on say, scroll to the bottom (or do not reset scrollTop when the task shown does not change)."
+    },
+    {
+      "title": "Enter in the composer while a turn runs starts a second, concurrent turn; the header then says DONE with no Stop while a reader is still RUNNING",
+      "file": "apps/web/src/pages/session/parts.tsx",
+      "line": 353,
+      "severity": "should-fix",
+      "scenario": "While running, the Send button is replaced by Stop, but the form still submits on Enter (one text input, implicit submission) and submit() does not look at `running`. Say 'one', 1.2 s later type 'two' and press Enter. The server runs both turns on the root at once. Steps interleave in the lead's stream (you, thinking, delegated, you, thinking, delegated, reply, reply). When the first turn ends the root goes 'ended': for about 1.3 s the header shows DONE, the clock is frozen, the composer shows Send and no Stop, while the call tree shows the last reader RUNNING and money still moves ($0.0400 to $0.0500 under DONE). The run cannot be stopped in that window. The server accepted a say during a run on main too, but this branch's Stop-instead-of-Send UI says the opposite and does not enforce it.",
+      "evidence": "/tmp/wf2-live/t7b.mjs: at 1550 ms {h:'$0.0400 · 7 s DONE', stop:false, tree:'DONE,DONE,DONE,DONE,DONE,RUNNING'}; at 1865 ms '$0.0500 · 7 s DONE' still with a RUNNING reader; at 2798 ms the second reply lands. /tmp/wf2-live/t7.mjs final blocks end '...you,you,thinking,delegated,thinking,delegated,reply,reply'. One-line fix in submit(): return when `running` (or keep the text and do nothing)."
+    },
+    {
+      "title": "The page itself scrolls at 1400x900 once the findings rail is taller than the card; the rail has no height bound",
+      "file": "apps/web/src/pages/session/Session.tsx",
+      "line": 247,
+      "severity": "should-fix",
+      "scenario": "Question of 95 characters ('How do tardigrades survive desiccation and what does it teach us about protein stabilisation?'). Each demo finding then wraps to 7 lines in the 17rem rail. After the second turn (4 findings) document.scrollingElement.scrollHeight is 1015 against innerHeight 900; after 3 turns 1140; after 5 turns 1390. The stream card is bounded (h-[calc(100vh-11rem)]) but the rail Card is `self-start` with no max height and no overflow, so the rail grows the page. When the reader scrolls the page to read finding 4, the stream card and its composer move up and off. With a 8-character question the page stays at 900 even with 5 findings, so the demo text hides this; a real finding is longer than the demo one.",
+      "evidence": "/tmp/wf2-live/t7.mjs: turn1 pageScrollH=900, turn2 1015, turn3 1140, turn5 1390 (innerH=900 throughout). Screenshot /tmp/wf2-live/t7-turn4.png: the third finding runs off the bottom of the viewport. The composer itself stayed at top=781 bottom=848 while pageScrollY=0. Fix direction: give the rail the same height as the stream card and let the findings section scroll (the spec draws the rail as the full-height side of one panel)."
+    },
+    {
+      "title": "A long unbroken token in the question (a Google Docs URL) makes the page 797 px wide at 390 px",
+      "file": "apps/web/src/pages/session/Session.tsx",
+      "line": 216,
+      "severity": "should-fix",
+      "scenario": "Viewport 390x844. Ask 'Summarise https://docs.google.com/document/d/1A2b3C4d5E6f7G8h9I0jK1l2M3n4O5p6Q7r8S9t0UvWxYz/edit'. The stream card renders 796 px wide, the document scrolls horizontally (scrollWidth 797), the receipts, the DONE words and the Send button are off screen to the right. Below the lg breakpoint the grid has one implicit `auto` column and the Card has no min-w-0, so the card takes its min-content width; `break-words` (overflow-wrap: break-word) does not reduce min-content. The h1 also lacks break-words. At 1400 px the column is minmax(0,1fr) and the same text wraps correctly, so claim (5) 'long text wraps' holds on desktop only. A URL with hyphens (nature.com/...-w/figures/...) wraps fine at 390.",
+      "evidence": "/tmp/wf2-live/t9e.mjs: width 390 -> [scrollWidth 797, innerWidth 390, stream box right edge 796]; width 800 -> 796 (fits); width 1400 -> 967. Screenshot /tmp/wf2-live/t9e-390.png shows the title, the THINKING text and the delegated rows cut at the right edge. Same with a 100-character token: scrollWidth 923 (/tmp/wf2-live/t9b.mjs). Fix direction: `grid-cols-[minmax(0,1fr)]` (or min-w-0 on the Card) and break-words / wrap-anywhere on the h1."
+    },
+    {
+      "title": "Keyboard focus on the selected call tree row is invisible",
+      "file": "apps/web/src/pages/session/parts.tsx",
+      "line": 278,
+      "severity": "nit",
+      "scenario": "Tab to the call tree. The row of the task that is shown (aria-current=true) already has bg-accent and text-primary. The branch added `focus-visible:bg-accent focus-visible:outline-none` to the row, so focus changes nothing on it: same background, no outline, no ring. On main the rows had no focus classes and the browser outline showed. A keyboard user who lands on the selected row (the first stop in the tree in the default state) cannot see where the focus is. Other rows, delegated rows and findings are fine because their resting background is transparent.",
+      "evidence": "/tmp/wf2-live/t10.mjs, Tab stop 9: BUTTON 'lead $0.0300 DONE' bg=rgb(23, 48, 63) outline=none shadow=none current=true; the same element unfocused has the same bg (bg-accent). `git show origin/main:apps/web/src/pages/session/parts.tsx | grep focus` returns nothing."
+    },
+    {
+      "title": "At 390x844 the composer ends 20 px below the fold",
+      "file": "apps/web/src/pages/session/Session.tsx",
+      "line": 218,
+      "severity": "nit",
+      "scenario": "390x844, a normal question that wraps to three lines in the header. The card height is 100vh-11rem, which assumes a one-line header. The header is about 5.5rem taller on a phone, so the composer's rect is top=797 bottom=864 against innerHeight 844: the lower edge of the input and Send button is cut until the page is scrolled. It is reachable (the page scrolls because the rail is stacked under the card), so this is cosmetic.",
+      "evidence": "/tmp/wf2-live/t9c.mjs: composer [797, 864], innerH 844, scrollW 390 = innerW 390 (no horizontal overflow for a normal question). Screenshot /tmp/wf2-live/t9n-lead.png."
+    },
+    {
+      "title": "Demo lead shows 'Nothing yet.' for 1.8 s, then its first two steps arrive in the same frame",
+      "file": "apps/server/src/modules/session/demoWorker.ts",
+      "line": 100,
+      "severity": "nit",
+      "scenario": "First turn. The lead runs `await work()` (900 ms) and then search(), which waits another 900 ms before it writes. The first step.appended (search) reaches the page at 1781 ms and the thinking step at 1788 ms, so the two do not appear one by one, and the first 1.8 s of a first visit show only the question and 'Nothing yet.'. The pace was added so a person can see the run is live; the leading work() defeats that for the first step. On a later turn the leading work() is the only pause before 'thinking', so it should stay there and be skipped only when firstTurn.",
+      "evidence": "/tmp/wf2-live/t1b.mjs websocket trace: session.snapshot at 43 ms; nothing until 'WS< 1781 step.appended', 'WS< 1788 step.appended'; DOM blocks go from ['you','?'] to ['you','search','thinking'] in one poll at 1789 ms. The search step's durationMs is 905."
+    }
+  ],
+  "checked_and_fine": [
+    "1 LIVE (/tmp/wf2-live/t1.mjs, t1b.mjs): header clock ticks 0 s,1 s,2 s,3 s,4 s from the first frame; status RUNNING -> DONE; Stop is present and Send absent while running, Send enabled and Stop absent after; delegated block appears at 1.8 s, cost $0.0300 at 2.7 s, reply at 3.7 s. Only deviation is the nit about search+thinking arriving together.",
+    "2 TOOL BLOCKS: lead search shows 'SEARCH / 905 MS' with no price; reader search shows '902 MS · $0.0100'; rows draw source chip, text, result; the empty row has the decide-colour chip, a semibold result and the sr-only words 'found nothing:' (present in innerText); RUN block shows the three output lines in a <pre role=region aria-label='run output' tabindex=0>. Screenshots t1-done.png, t10-reader.png.",
+    "3 DELEGATED: first block lists exactly the 3 first-turn readers; the second turn's block lists exactly 1 ('second line of enquiry'), and the first block still lists 3. Live status seen: RUNNING at 1.0 s -> DONE at 2.8 s; after Stop the child shows STOPPED. Call tree went QUEUED -> RUNNING -> DONE.",
+    "4 RELOAD MID-RUN at 2 s (/tmp/wf2-live/t4.mjs): after the run ends the lead has search, thinking, delegated, reply once each in order; each reader has search (time, $0.0100, rows), run (output), reply once each. Identical to GET /api/sessions/<id> fetched from the page: 13 steps, same order, detail keys rows/tool/durationMs, childTaskIds, cost, output all present.",
+    "5 FINDINGS after reload mid-run: rail count '3', three distinct findings, GET /api/projects/<id>/findings returns 3. No duplicates after later turns either (4, then 5).",
+    "5b SOCKET DROP (/tmp/wf2-live/t5.mjs, WebSocket patched to fail for 4 s across the moment the findings are recorded): header shows 'offline, retrying'; on reconnect the snapshot restores every step once (lead 4, reader 3), status DONE, clock corrected from a drifting '9 s' to '4 s', and the findings list is refetched to 3 with no duplicates.",
+    "6 STOP mid-run on a second turn: within 205 ms the header says STOPPED and the composer is back to Send (enabled). The stopped reader then still wrote search ($0.01), run, a finding and a reply, and the lead wrote '0 of 1 readers finished' - this is the accepted no-abort-signal behaviour, statuses stay STOPPED. A third turn afterwards works: header RUNNING -> DONE, new YOU/THINKING/DELEGATED(1, DONE)/REPLY, spend $0.0500 equals API spend, earlier STOPPED reader keeps its status.",
+    "7 SCROLL, the parts that work: the stream card is fixed (box clientHeight 655, scrollHeight up to 1698), the composer stays at top=781 bottom=848 in every measurement, the page does not scroll for a short question (scrollHeight 900 with 5 findings). A reader who scrolled up mid-run is not yanked: scrollTop stayed 300 while steps went 18 -> 21. Follow-at-bottom works when the box is at the bottom (turn 2: scrollTop 0 -> 126 -> 191, rest 0). The failures are findings 1 and 3.",
+    "8 SECOND ACCOUNT in a fresh browser context opening the first user's ?session= URL: page shows 'no such session' and the empty-state card; no text of the session in the DOM; GET /api/sessions/<id> is 404 {error:'no such session'}; a hand-made websocket session.open gets {type:'error',message:'no such session'} and no snapshot. A signed-out context shows nothing of the session either.",
+    "9 390 px: for a normal question there is no horizontal overflow (scrollWidth 390), text wraps, rows and the empty row are readable, delegated titles truncate, the rail stacks under the card, composer reachable. The app is dark regardless of prefers-color-scheme: light (theme.css only has a .dark class variant); that is the shell's, not this branch's.",
+    "10 KEYBOARD: Tab order is nav, the 3 delegated children, input, Send, 4 tree rows, 3 findings; in a reader view Tab reaches the PRE[run output] with a visible outline. Enter on a delegated child and Enter on a tree row both open the task, the h1 gains '/ reader', and document.activeElement is the DIV[aria-label='Steps of reader'].",
+    "11 CONSOLE / NETWORK: across all runs the only console error is the 404 for /favicon.ico. No page errors, no failed requests, no 4xx/5xx on API calls for the owner. (The intruder's GET /api/sessions/<id> is requested twice, both 404.)",
+    "12 SPEC (docs/spec/index.html #p4 at 1500 px, /tmp/wf2-live/t12-spec.png) - remaining visible differences that could be drawn today, most important first: (a) the spec draws stream and rail as ONE framed panel with a vertical rule, the rail as tall as the stream; the app draws two separate rounded cards and a rail that ends where its content ends (this is also the cause of finding 3). (b) Spec composer's send is a bare primary-coloured icon; the app uses a filled primary button. (c) Spec call tree rows show name and status only; the app adds the subtree cost in each row (deliberate, commented). (d) Spec receipt reads '6 S · $0.01'; the app reads '906 MS · $0.0100' (four decimals is deliberate per contracts). (e) Spec puts title / mode / '$ · time' in the app bar with the status word ('finished') in the chrome; the app has a page header under the nav with DONE beside the clock. (f) Spec findings carry a status chip (DROPPED/CONFIRMED/OPEN) - the projects slice's, not reported; the app shows the agent name in that place. (g) Spec source chips name the real source (ARXIV, OEIS); the app shows DEMO - content, not layout.",
+    "Clock includes idle time between turns (7 s -> 13 s when a third turn starts after a pause): same formula on origin/main, not introduced by this branch, not reported."
+  ]
+}

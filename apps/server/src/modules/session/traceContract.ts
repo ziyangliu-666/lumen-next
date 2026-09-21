@@ -149,4 +149,33 @@ export function traceContract(make: () => Trace): void {
     });
     expect(await trace.summaries('no such project')).toEqual([]);
   });
+
+  it('reads a step back with exactly the detail it was given, and with none when none was given', async () => {
+    const trace = make();
+    const session = await trace.openSession('p1', 'acc-1', 'explore');
+    const root = await trace.openTask(session.id, null, 'lead', 'q');
+    const detail = {
+      tool: 'search',
+      durationMs: 6000,
+      cost: { dollars: 0.01 },
+      // An array inside the detail: a driver that sent it as a Postgres array
+      // instead of as JSON would fail here.
+      rows: [
+        { source: 'arxiv', text: 'permutation statistics', result: '41 papers' },
+        { source: 'oeis', text: 'pop-stack preimages', result: 'nothing', empty: true },
+      ],
+      output: 'line one\nline "two" with quotes, a \\ backslash and a \u2713',
+      childTaskIds: ['00000000-0000-4000-8000-000000000001'],
+    };
+
+    const written = await trace.appendStep(root.id, 'tool', 'search: x', detail);
+    const plain = await trace.appendStep(root.id, 'reply', 'done');
+    const read = (await trace.snapshot(session.id))?.steps;
+
+    expect(written.detail).toEqual(detail);
+    expect(read?.[0]?.detail).toEqual(detail);
+    // Absent, not null and not {}: the contract says optional.
+    expect(plain).not.toHaveProperty('detail');
+    expect(read?.[1]).not.toHaveProperty('detail');
+  });
 }

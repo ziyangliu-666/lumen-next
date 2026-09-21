@@ -1,0 +1,33 @@
+{
+  "findings": [
+    {
+      "title": "checkedDetail keeps a falsy cost that is not Money (null, 0, '', false): stored and sent as given, with no charge",
+      "file": "/Users/rufus/lumen-next/apps/server/src/modules/session/stepDetail.ts",
+      "line": 91,
+      "severity": "nit",
+      "scenario": "A worker calls report.appendStep(id, 'tool', 't', { cost: null }) (or cost: 0, '', false; an untyped or JSON-built detail). checkedDetail copies it because it only tests `detail.cost !== undefined`. In Kernel.appendStep (kernel.ts:182) `checked?.cost ? recordable(...) : undefined` is falsy, so recordable never runs and the step is written through writeStep with detail {\"cost\":null}. The record and every snapshot and socket frame now carry a cost that is not the contract's Money. Truthy bad values ({dollars:-1}, NaN, 1e12, '5', 5, 'x', {}) are all refused, so only the falsy ones pass. The page survives it today because parts.tsx:116 tests `detail?.cost && ...`. Fix: in checkedDetail, throw unless cost is a non-null object, or call recordable there.",
+      "evidence": "Probe test on MemoryTrace through the kernel: all four calls resolved, and the snapshot held [{\"cost\":null},{\"cost\":0},{\"cost\":\"\"},{\"cost\":false}]. The docstring of checkedDetail promises 'only the fields the contract names, each of the right type'."
+    },
+    {
+      "title": "delegate() still leaves children queued when openTask fails part way through the fan-out",
+      "file": "/Users/rufus/lumen-next/apps/server/src/modules/session/kernel.ts",
+      "line": 224,
+      "severity": "nit",
+      "scenario": "The try block added by the fix covers only the delegate step write (lines 232-243). The loop that opens the children (224-228) is outside it. If the second openTask rejects (connection lost, pool error), the first child is already opened and announced, nothing stops it, and delegate() rethrows. The parent goes to 'failed' and the first child stays 'queued' until a user presses Stop or the process restarts. The loop is the same on origin/main, so the fix did not cause it, but it is the same defect the fix closed three lines lower. Moving the loop inside the try closes both.",
+      "evidence": "Probe test: MemoryTrace.openTask made to reject on its third call (second child). Worker caught 'Error: db down' from delegate (the rethrow works), and the snapshot statuses were ['failed', 'queued']."
+    }
+  ],
+  "checked_and_fine": [
+    "Session suite on the branch with Postgres: 7 files, 93 tests, all green (run in /tmp/wf2-server, worktree removed afterwards; /private/tmp/wf2-tests is another agent's and was left alone).",
+    "Claim 1, PgTrace.appendCostedStep: insertStep, the own_cost update and the SpendRecorder run on one tx inside db.withTransaction; a recorder that throws rolls back step and cost (existing test in trace.test.ts, plus my probe through the kernel: snapshot steps unchanged, spend 0).",
+    "MemoryTrace.appendCostedStep charges first and appends second with no await gap that another write can enter; an unknown task rejects in addCost, so no step and no cost. MemoryTrace has no recorder, so there is no third write that could fail after the step. The two cannot drift on this path.",
+    "Step index allocation: `select ... for update` on the task row, then max(index)+1 in a new statement. Probe: 12 concurrent appends (6 plain, 6 costed with a 5 ms recorder) interleaved with 12 openTask under the same parent and 12 setStatus on it gave indexes 0..11 exactly, own cost 0.06, no deadlock. Lock order is task row then ledger in both appendCostedStep and addCost, so no cycle.",
+    "Events after commit: withTransaction (core/db/db.ts:107) resolves only after 'commit'; Kernel.appendStep publishes step.appended and task.cost after that await. A ledger refusal publishes nothing.",
+    "checkedDetail bounds: output of exactly 20000 chars is kept uncut; an emoji split at the cut yields well-formed text (U+FFFD); a 500-char field with an emoji at the cut is well-formed and exactly 500 long; a tool of only NUL characters throws; a row field that is an object throws; cost {dollars:-1}, NaN, 1e12, '5', a number, a string and {} all throw through recordable before anything is written; extra keys on cost are dropped.",
+    "Claim 2: appendStep throws for kind 'delegate' and for any detail.childTaskIds (an empty array too). delegate()'s catch stops every opened child when the step write fails and rethrows to the worker; run() then marks the parent failed. No other non-test caller writes a 'delegate' step; demoWorker no longer does.",
+    "Claim 4: paceFromEnv takes digits only, 0 to 10000, default 900 for unset or empty, and throws at startup otherwise. main.ts imports it through modules/session/index.js.",
+    "Public index: adds only paceFromEnv and DemoOptions. stepDetail.ts, PgTrace, MemoryTrace and Charged stay private. Nothing imports a session file directly from outside the slice in this diff.",
+    "Contracts: StepRow, StepDetail, Step.detail and step.appended.detail are all additive and optional. Migration 008 adds one nullable jsonb column and has a Down.",
+    "Everything committed in the server files I read is English."
+  ]
+}

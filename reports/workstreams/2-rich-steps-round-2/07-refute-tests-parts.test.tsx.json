@@ -1,0 +1,5 @@
+{
+  "refuted": false,
+  "reason": "The finding stands. The <pre> in /Users/rufus/lumen-next/apps/web/src/pages/session/parts.tsx (lines 201-208) has tabIndex={0}, role=\"region\" and aria-label. The only test of that block is /Users/rufus/lumen-next/apps/web/src/pages/session/parts.test.tsx line 84-89. It asserts only the regex /<pre[^>]*max-h-80[^>]*overflow-auto/ and the escaping. No snapshot exists, and no test names tabindex, role or \"run output\". A removal of any of the three attributes keeps the suite green, so the reviewer's mutation result is consistent with the code. The severity is low: the product code is correct today, the gap is a missing assertion for one fix claim, and one toContain line closes it. It is a test-coverage gap for an accessibility attribute, not a behaviour defect.",
+  "corrected_severity": "nit"
+}

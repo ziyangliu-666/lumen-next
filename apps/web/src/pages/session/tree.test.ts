@@ -126,5 +126,10 @@ describe('session page: how long a step took', () => {
     expect(took(6_000)).toBe('6 s');
     expect(took(8_940)).toBe('8.9 s');
     expect(took(161_000)).toBe('2 min 41 s');
+    // The edge of a unit, and what is not a duration at all.
+    expect(took(999.6)).toBe('1 s');
+    expect(took(9_960)).toBe('10 s');
+    expect(took(Number.NaN)).toBe('0 ms');
+    expect(elapsed(Number.NaN)).toBe('0 s');
   });
 });

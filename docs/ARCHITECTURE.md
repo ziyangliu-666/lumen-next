@@ -153,21 +153,29 @@ export interface Task {
 }
 
 export type StepKind = 'you' | 'thinking' | 'tool' | 'delegate' | 'reply';
-export type StepState = 'running' | 'done' | 'failed' | 'stopped';
 
 export interface Step {
-  readonly id: string;
   readonly taskId: string;
   readonly index: number;          // the order is the reasoning
   readonly kind: StepKind;
-  readonly tool: string | null;    // 'search' | 'run' | 'save' | 'record' …
-  readonly title: string;          // "search", "run 8.9 s", "delegated 3 in parallel"
-  readonly state: StepState;
-  readonly startedAt: number;
-  readonly endedAt: number | null;
-  readonly cost: Money | null;
-  readonly preview: string | null; // first lines; full text via step.full
-  readonly childTaskIds: readonly string[];
+  readonly text: string;           // what the step says when it carries nothing else
+  readonly detail?: StepDetail;    // what it did; absent on a step that only says something
+}
+
+export interface StepDetail {
+  readonly tool?: string;          // 'search' | 'run' | 'save' | 'record' …
+  readonly durationMs?: number;
+  readonly cost?: Money;           // charged to the task in the same write as the step
+  readonly rows?: readonly StepRow[];         // a search: source, query, result
+  readonly output?: string;        // a run: what the terminal printed, bounded by the kernel
+  readonly childTaskIds?: readonly string[];  // a delegate step: written by delegate() only
+}
+
+export interface StepRow {
+  readonly source: string;
+  readonly text: string;
+  readonly result: string;
+  readonly empty?: boolean;        // the row that found nothing, which often matters most
 }
 
 export type SessionMode = 'explore' | 'seed';
@@ -229,11 +237,10 @@ export type ServerEvent =
   | { type: 'task.status'; taskId: string; status: TaskStatus }
   | { type: 'task.cost'; taskId: string; ownCost: Money }
   | { type: 'task.total'; taskId: string; total: Money }        // rolled up; the browser never adds
-  | { type: 'step.opened'; step: Step }
-  | { type: 'step.updated'; stepId: string; patch: Partial<Step> }
-  | { type: 'step.closed'; step: Step }
-  | { type: 'step.text'; stepId: string; delta: string }        // streaming thinking / reply
-  | { type: 'step.content'; stepId: string; text: string }      // answer to step.full
+  // One event per step, written whole. A step is appended when it is done, so
+  // there is no open/update/close. Streaming a reply as it is typed is the
+  // steering slice's to add, as a new event, when a model is wired in.
+  | { type: 'step.appended'; taskId: string; index: number; kind: StepKind; text: string; detail?: StepDetail }
   | { type: 'finding.recorded'; finding: Finding }              // projects
   | { type: 'approval.requested'; approval: Approval }          // billing
   | { type: 'approval.resolved'; approvalId: string; status: 'approved' | 'declined' }
@@ -382,9 +389,7 @@ classDiagram
   }
   class WorkerReport {
     <<interface>>
-    +appendStep(taskId, step) Promise~Step~
-    +updateStep(stepId, patch)
-    +streamText(stepId, delta)
+    +appendStep(taskId, kind, text, detail) Promise~Step~
     +recordFinding(taskId, text) Promise~Finding~
     +addSpend(taskId, amount, reason)
     +delegate(taskId, tasks) Promise~Task[]~
@@ -550,17 +555,20 @@ sequenceDiagram
   S->>M: check(at: turn)
   M-->>S: allow
   S->>T: worker.run(root, report)
-  T->>S: report.appendStep(thinking) / streamText
-  S-->>B: step.opened, step.text …
+  T->>S: report.appendStep(thinking)
+  S-->>B: step.appended
   T->>S: report.delegate(root, 3 tasks)
   S->>M: check(at: fan-out)
   M-->>S: allow
   S->>S: open 3 child tasks
   S-->>B: task.opened ×3
+  S->>S: write the delegate step, naming the 3 children
+  S-->>B: step.appended
   S->>T: worker.run(child, report) ×3
-  T->>S: report.addSpend(task, $0.01, "search")
+  T->>S: report.appendStep(tool, detail.cost $0.01)
+  S->>S: step, cost and ledger entry in one transaction
   S->>M: record(...)
-  S-->>B: task.cost
+  S-->>B: step.appended, task.cost
   T->>S: report.recordFinding(task, text)
   S->>P: recordFinding(...)
   S-->>B: finding.recorded
@@ -601,8 +609,8 @@ classDiagram
     +openTask(sessionId, parentId, agent, title) Task
     +setStatus(taskId, status)
     +addCost(taskId, money)
-    +appendStep(taskId, step) Step
-    +closeStep(stepId, patch)
+    +appendStep(taskId, kind, text, detail) Step
+    +appendCostedStep(taskId, kind, text, detail, charge)
     +snapshot(sessionId) Snapshot
   }
   class Delegation {
@@ -715,8 +723,8 @@ sequenceDiagram
   end
   K-->>W: child tasks
   Note over W,K: later, a child spends
-  W->>K: report.addSpend(childId, $0.01)
-  K->>T: addCost(childId)
+  W->>K: report.appendStep(childId, tool, detail.cost $0.01)
+  K->>T: appendCostedStep(childId), one transaction
   K->>M: record(...)
   T-->>B: task.cost(childId)
   Note over B: page: parent total = TaskNode.cost()

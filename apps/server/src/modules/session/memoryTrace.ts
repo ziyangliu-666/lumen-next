@@ -11,7 +11,7 @@ import type {
 } from '@lumen/contracts';
 import { add, zero } from '@lumen/contracts';
 import { makeTask, type TaskRecord } from '../../core/domain/task.js';
-import { isEnding, type Trace, type TraceSnapshot } from './trace.js';
+import { isEnding, type Charged, type Trace, type TraceSnapshot } from './trace.js';
 
 // The record kept in process memory. A restart forgets it, so it is for a
 // process started without DATABASE_URL and for unit tests of the kernel. The
@@ -81,6 +81,20 @@ export class MemoryTrace implements Trace {
     list.push(step);
     this.steps.set(taskId, list);
     return Promise.resolve(step);
+  }
+
+  async appendCostedStep(
+    taskId: string,
+    kind: StepKind,
+    text: string,
+    detail: StepDetail,
+    charge: Charged,
+  ): Promise<{ step: Step; task: TaskRecord }> {
+    // Charge first: addCost is the write that can refuse, and a refusal must
+    // leave no step behind. Nothing here waits, so nothing can come between.
+    const task = await this.addCost(taskId, charge.amount);
+    const step = await this.appendStep(taskId, kind, text, detail);
+    return { step, task };
   }
 
   addCost(taskId: string, amount: Money): Promise<TaskRecord> {

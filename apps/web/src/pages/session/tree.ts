@@ -26,7 +26,7 @@ export function treeRows(tasks: readonly Task[]): TreeRow[] {
 
 /** How long something took, in the two largest units: '3 s', '2 min 41 s', '2 h 14 min'. */
 export function elapsed(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
+  const seconds = Number.isFinite(ms) ? Math.max(0, Math.round(ms / 1000)) : 0;
   if (seconds < 60) return `${seconds} s`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes} min ${seconds % 60} s`;
@@ -78,9 +78,14 @@ export function childrenByStep<T extends { readonly id: string }>(
   return result;
 }
 
-/** A step's duration as the spec writes it: '6 s', '8.9 s', '2 min 41 s'. Sub-second shows as ms. */
+/**
+ * A step's duration as the spec writes it: '6 s', '8.9 s', '2 min 41 s'. Under a
+ * second shows as ms, which only a demo produces. Rounded first, so that 999.6
+ * is '1 s' and never '1000 ms'; anything that is not a duration is '0 ms'.
+ */
 export function took(durationMs: number): string {
-  if (durationMs < 1000) return `${Math.max(0, Math.round(durationMs))} ms`;
-  if (durationMs < 10_000) return `${(durationMs / 1000).toFixed(1).replace(/\.0$/, '')} s`;
-  return elapsed(durationMs);
+  const ms = Number.isFinite(durationMs) ? Math.max(0, Math.round(durationMs)) : 0;
+  if (ms < 1000) return `${ms} ms`;
+  if (ms < 10_000) return `${(ms / 1000).toFixed(1).replace(/\.0$/, '')} s`;
+  return elapsed(ms);
 }

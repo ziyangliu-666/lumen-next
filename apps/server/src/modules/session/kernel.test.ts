@@ -405,7 +405,10 @@ describe('session: kernel, what a step carries', () => {
 
     await expect(
       kernel.appendStep(tasks[0]!.id, 'delegate', 'made up', { childTaskIds: ['not-a-task'] }),
-    ).rejects.toThrow(/set by delegate/);
+    ).rejects.toThrow(/written by delegate\(\)/);
+    await expect(kernel.appendStep(tasks[0]!.id, 'delegate', 'as main did')).rejects.toThrow(
+      /written by delegate\(\)/,
+    );
   });
 
   it('sends the detail on the event, so the page draws it without reading the snapshot again', async () => {
@@ -414,7 +417,7 @@ describe('session: kernel, what a step carries', () => {
     await kernel.idle();
 
     const search = events.find(
-      (event) => event.type === 'step.appended' && event.detail?.tool === 'search',
+      (event) => event.type === 'step.appended' && event.detail?.cost !== undefined,
     );
     expect(search).toMatchObject({
       kind: 'tool',
@@ -424,6 +427,127 @@ describe('session: kernel, what a step carries', () => {
       (event) => event.type === 'step.appended' && event.detail?.tool === 'run',
     );
     expect(run?.type === 'step.appended' && run.detail?.output).toContain('$ demo tally');
+  });
+});
+
+describe('session: kernel, a step and its charge are one write', () => {
+  /** A record whose charge fails, as a database that goes away would make it. */
+  class ChargeFails extends MemoryTrace {
+    override addCost(): Promise<never> {
+      return Promise.reject(new Error('ledger is down'));
+    }
+  }
+
+  it('leaves no receipt when the charge fails: no step, no event, no cost', async () => {
+    const broker = new Broker();
+    const events: ServerEvent[] = [];
+    const publish = broker.publish.bind(broker);
+    broker.publish = (sessionId: string, event: ServerEvent): void => {
+      events.push(event);
+      publish(sessionId, event);
+    };
+    const worker: Worker = {
+      run: (task, _input, report) =>
+        report.appendStep(task.id, 'tool', 'search: x', {
+          tool: 'search',
+          cost: { dollars: 0.01 },
+        }),
+    };
+    const kernel = new Kernel(new ChargeFails(), broker, worker);
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const snapshot = await kernel.snapshot(session.id, owner);
+    // The page must never show "$0.01" for something nobody was charged for.
+    expect(snapshot.steps).toEqual([]);
+    expect(snapshot.spend).toEqual({ dollars: 0 });
+    expect(snapshot.tasks[0]?.status).toBe('failed');
+    expect(events.map((event) => event.type)).not.toContain('step.appended');
+    expect(events.map((event) => event.type)).not.toContain('task.cost');
+  });
+
+  it('announces the step before its cost, and both only after the write', async () => {
+    const worker: Worker = {
+      run: (task, _input, report) =>
+        report.appendStep(task.id, 'tool', 'search: x', {
+          tool: 'search',
+          cost: { dollars: 0.01 },
+        }),
+    };
+    const { kernel, events } = harness(worker);
+    await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const types = events.map((event) => event.type);
+    expect(types.indexOf('step.appended')).toBeLessThan(types.indexOf('task.cost'));
+    expect(types.indexOf('task.cost')).toBeLessThan(types.indexOf('task.total'));
+  });
+
+  it('makes the text of a step storable before it is written', async () => {
+    const { kernel } = harness();
+    const { session, tasks } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+    const nul = String.fromCharCode(0);
+
+    await kernel.appendStep(tasks[0]!.id, 'tool', `run: a${nul}b`, { output: `x${nul}y` });
+
+    const step = (await kernel.snapshot(session.id, owner)).steps.at(-1);
+    expect(step?.text).toBe('run: ab');
+    expect(step?.detail?.output).toBe('xy');
+  });
+});
+
+describe('session: kernel, the delegate step', () => {
+  it('is on the record, naming the children, before the first child runs', async () => {
+    const seen: (readonly string[] | undefined)[] = [];
+    let kernel: Kernel | null = null;
+    let sessionId = '';
+    const worker: Worker = {
+      async run(task, _input, report) {
+        if (task.agent === 'lead') {
+          await report.delegate(task.id, [
+            { agent: 'reader', title: 'one' },
+            { agent: 'reader', title: 'two' },
+          ]);
+          return;
+        }
+        // What a page that joins now would be sent.
+        const now = await kernel!.snapshot(sessionId, owner);
+        seen.push(now.steps.find((step) => step.kind === 'delegate')?.detail?.childTaskIds);
+      },
+    };
+    kernel = harness(worker).kernel;
+    const started = await kernel.start('p1', owner.accountId, 'q');
+    sessionId = started.session.id;
+    await kernel.idle();
+
+    const children = (await kernel.snapshot(sessionId, owner)).tasks
+      .slice(1)
+      .map((task) => task.id);
+    expect(seen).toEqual([children, children]);
+  });
+
+  it('stops the children it opened when the delegate step cannot be written, and tells the parent', async () => {
+    class DelegateStepFails extends MemoryTrace {
+      override appendStep(
+        ...args: Parameters<MemoryTrace['appendStep']>
+      ): ReturnType<MemoryTrace['appendStep']> {
+        if (args[1] === 'delegate') return Promise.reject(new Error('disk is full'));
+        return super.appendStep(...args);
+      }
+    }
+    const kernel = new Kernel(new DelegateStepFails(), new Broker(), demoWorker());
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const { tasks } = await kernel.snapshot(session.id, owner);
+    // Nothing is left queued for the life of the process.
+    expect(tasks.map((task) => [task.agent, task.status])).toEqual([
+      ['lead', 'failed'],
+      ['reader', 'stopped'],
+      ['reader', 'stopped'],
+      ['reader', 'stopped'],
+    ]);
   });
 });
 

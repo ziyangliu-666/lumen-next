@@ -20,6 +20,21 @@ export interface DemoOptions {
   readonly paceMs?: number;
 }
 
+/** How long a step pretends to work when nothing says otherwise: slow enough to watch. */
+export const DEFAULT_PACE_MS = 900;
+
+/**
+ * The pace from LUMEN_DEMO_PACE_MS. Digits only: Number() would also take
+ * '1e3', '0x10' and ' ', and a misspelt setting should say so at startup.
+ */
+export function paceFromEnv(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_PACE_MS;
+  if (!/^\d{1,5}$/.test(raw) || Number(raw) > 10_000) {
+    throw new Error(`LUMEN_DEMO_PACE_MS must be a whole number from 0 to 10000, got "${raw}"`);
+  }
+  return Number(raw);
+}
+
 export function demoWorker(options: DemoOptions = {}): Worker {
   const paceMs = options.paceMs ?? 0;
 
@@ -33,25 +48,30 @@ export function demoWorker(options: DemoOptions = {}): Worker {
   async function search(
     report: WorkerReport,
     taskId: string,
-    query: string,
     rows: readonly StepRow[],
+    cost?: { dollars: number },
   ): Promise<void> {
     const durationMs = await work();
-    await report.appendStep(taskId, 'tool', `search: "${query}" (demo, no network)`, {
+    await report.appendStep(taskId, 'tool', 'search: demo, no network', {
       tool: 'search',
       durationMs,
-      cost: SEARCH_COST,
       rows,
+      ...(cost ? { cost } : {}),
     });
   }
 
   return {
     async run(task, input, report) {
       if (task.agent !== 'lead') {
-        await search(report, task.id, task.title, [
-          { source: 'demo', text: task.title, result: '3 sources' },
-          { source: 'demo', text: `${task.title}, last 6 months`, result: 'nothing', empty: true },
-        ]);
+        await search(
+          report,
+          task.id,
+          [
+            { source: 'demo', text: 'everything on it', result: '3 sources' },
+            { source: 'demo', text: 'the last 6 months', result: 'nothing', empty: true },
+          ],
+          SEARCH_COST,
+        );
         const durationMs = await work();
         await report.appendStep(task.id, 'tool', 'run: tally the sources (demo, no process)', {
           tool: 'run',
@@ -78,6 +98,16 @@ export function demoWorker(options: DemoOptions = {}): Worker {
         : [{ agent: 'reader', title: input }];
 
       await work();
+      if (firstTurn) {
+        // The lead looks before it delegates, as the spec's does, so the stream
+        // a person lands on shows a tool block. It is free: only the readers
+        // spend, which keeps a first turn at three cents.
+        await search(report, task.id, [
+          { source: 'demo', text: 'is it already known', result: 'partly' },
+          { source: 'demo', text: 'is it named', result: 'no recurrence' },
+          { source: 'demo', text: 'has anybody written it up', result: 'nothing', empty: true },
+        ]);
+      }
       await report.appendStep(
         task.id,
         'thinking',

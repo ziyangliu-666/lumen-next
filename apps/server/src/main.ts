@@ -8,7 +8,7 @@
 import { composeApp, type IdentityConfig } from './app.js';
 import { openDatabase, type Db } from './core/db/db.js';
 import { defaultWebRoot } from './core/http/server.js';
-import { demoWorker } from './modules/session/index.js';
+import { demoWorker, paceFromEnv } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
 
@@ -59,21 +59,6 @@ function identityConfig(): IdentityConfig {
   };
 }
 
-/**
- * Until steering supplies the agent loop, the demo worker runs. A person
- * watching the page needs a moment between steps to see that it is live, so it
- * paces itself here; tests build the application without this and do not wait.
- */
-function demoPaceMs(): number {
-  const raw = process.env['LUMEN_DEMO_PACE_MS'];
-  if (raw === undefined || raw === '') return 400;
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 10_000) {
-    throw new Error(`LUMEN_DEMO_PACE_MS must be 0 to 10000, got "${raw}"`);
-  }
-  return parsed;
-}
-
 async function bootstrap(): Promise<void> {
   const db = await database();
   const webRoot = defaultWebRoot();
@@ -81,7 +66,10 @@ async function bootstrap(): Promise<void> {
     db,
     // Real sign-in whenever there is a database; the stub only without one.
     identity: db ? identityConfig() : null,
-    worker: demoWorker({ paceMs: demoPaceMs() }),
+    // Until steering supplies the agent loop, the demo worker runs, paced so
+    // that a person can see the page is live. Tests build the application
+    // without this and do not wait.
+    worker: demoWorker({ paceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']) }),
     ...(webRoot ? { webRoot } : {}),
   });
 

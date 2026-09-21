@@ -20,7 +20,8 @@ session, one task, one step, rendered end to end.
 | `traceContract.ts` | One test suite, run against both implementations so they cannot drift. |
 | `kernel.ts` | The engine. Opens the root task, runs the worker, and is the `WorkerReport` the worker writes through. Owns the "who may read this session" answer. |
 | `delegation.ts` | The two bounds on a fan-out: how deep the tree may go, and how many children run at once. |
-| `demoWorker.ts` | A worker with no model: a lead that fans out to three readers, each of which spends and replies. Steering replaces it behind `core/domain/worker.ts`. |
+| `stepDetail.ts` | What a step may carry. Checks the shape a worker hands in, makes the text storable in Postgres, and cuts output and rows to their bounds before the write. |
+| `demoWorker.ts` | A worker with no model: a lead that searches and fans out to three readers, each of which searches for $0.01, runs something, keeps a finding and replies. `LUMEN_DEMO_PACE_MS` sets how long each step waits. Steering replaces it behind `core/domain/worker.ts`. |
 | `directory.ts` | `SessionDirectory`: what the projects slice is handed (start, list, stop, context, taskSession). Trusted in-process calls. |
 | `routes.ts` | `POST /api/projects/:id/sessions`, `GET /api/sessions/:id`, `POST /api/sessions/:id/stop`; commands `session.say`, `session.stop`. |
 | `taskComposite.ts` | The Composite the design problem asks for, and `buildTree`, which turns task rows into it. The kernel uses it for the session's spend, each task's rolled-up total, and stop. |
@@ -37,6 +38,7 @@ export function createSessionSlice(deps: {
 }): SessionSlice;
 // SessionSlice = { kernel, access, registerRoutes, registerCommands, projects: SessionDirectory }
 export { buildTree, TaskNode, type Node, type Kernel };
+export { demoWorker, paceFromEnv, type DemoOptions };
 ```
 
 `main.ts` builds the server with `access` and registers the routes and commands.

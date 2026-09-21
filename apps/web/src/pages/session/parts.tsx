@@ -1,19 +1,20 @@
-// The pieces of the Session page. Owner: LIU ZIYANG, except Composer, which is
-// LI ZHUOYANG's: it sits where the annotated spec puts it (docs/spec, 04), it
-// can say a new turn to the lead, and steering and attachments are his to add.
+// The pieces of the Session page, after docs/spec, page 04. Owner: LIU ZIYANG,
+// except Composer, which is LI ZHUOYANG's: it sits where the spec puts it, it
+// says a new turn to the lead and stops a run, and steering a running task and
+// attachments are his to add.
 import type { FormEvent, JSX, ReactNode } from 'react';
 import type { Step, Task } from '@lumen/contracts';
 import { cn } from 'cn';
-import { Plus, SendHorizontal } from 'lucide-react';
+import { Plus, SendHorizontal, Square } from 'lucide-react';
 import { Button } from '@/ui/button';
-import { Input } from '@/ui/input';
 import type { SessionFinding } from '@/core/api';
 import { childrenByStep, took, toolLabel, treeRows } from './tree';
 
 // One tint per task status, from the theme, so a status means the same colour
-// here as on the project card.
+// here as on the project card. The word is always there too: colour is never
+// the only thing that says it.
 const STATUS_TONE: Record<Task['status'], string> = {
-  queued: 'text-faint',
+  queued: 'text-muted-foreground',
   running: 'text-primary',
   waiting: 'text-decide',
   ended: 'text-keep',
@@ -30,11 +31,15 @@ const STATUS_WORD: Record<Task['status'], string> = {
   failed: 'failed',
 };
 
+/** Four decimals, always: two once showed a $0.006 cap as "$0.01" (see contracts/tasks.ts). */
 export function money(dollars: number): string {
   return `$${dollars.toFixed(4)}`;
 }
 
-/** The small capitals that name a block: YOU, THINKING, SEARCH … */
+/**
+ * The small capitals that name a block: YOU, THINKING, SEARCH … Muted, not
+ * faint: at this size the faintest grey is under the contrast a label needs.
+ */
 function Eyebrow({
   children,
   className,
@@ -43,7 +48,9 @@ function Eyebrow({
   className?: string;
 }): JSX.Element {
   return (
-    <p className={cn('font-mono text-xs tracking-widest text-faint uppercase', className)}>
+    <p
+      className={cn('font-mono text-xs tracking-widest text-muted-foreground uppercase', className)}
+    >
       {children}
     </p>
   );
@@ -81,12 +88,10 @@ export function StepStream({
   return (
     <ol className="divide-y divide-border">
       {/* What the task was asked is its title: the question for the lead, the
-          delegated part for a reader. It opens the stream the way YOU does. */}
+          delegated part for a child. It opens the stream the way YOU does. */}
       <li className="border-l-2 border-primary bg-accent/40 px-4 py-3">
-        <Eyebrow className="text-primary">
-          {task.parentId === null ? 'you' : `to ${task.agent}`}
-        </Eyebrow>
-        <p className="mt-1 font-mono text-sm text-ink">{task.title}</p>
+        <Eyebrow className="text-primary">{task.parentId === null ? 'you' : 'task'}</Eyebrow>
+        <p className="mt-1 font-mono text-sm break-words text-ink">{task.title}</p>
       </li>
       {steps.map((step) => (
         <StepBlock
@@ -103,6 +108,17 @@ export function StepStream({
   );
 }
 
+/** What a tool step took and cost, for the right of its label. A free step shows no price. */
+export function receiptOf(step: Step): string {
+  const detail = step.detail;
+  const parts = [
+    detail?.durationMs === undefined ? null : took(detail.durationMs),
+    detail?.cost && detail.cost.dollars > 0 ? money(detail.cost.dollars) : null,
+  ].filter((part): part is string => part !== null);
+  // The spec's word for a tool that reports neither: save, record.
+  return parts.length > 0 ? parts.join(' · ') : 'tool call';
+}
+
 function StepBlock({
   step,
   delegated,
@@ -117,50 +133,62 @@ function StepBlock({
       return (
         <li className="border-l-2 border-primary bg-accent/40 px-4 py-3">
           <Eyebrow className="text-primary">you</Eyebrow>
-          <p className="mt-1 font-mono text-sm text-ink">{step.text}</p>
+          <p className="mt-1 font-mono text-sm break-words text-ink">{step.text}</p>
         </li>
       );
     case 'thinking':
       return (
-        <li className="border-l-2 border-rule-strong px-4 py-3">
+        <li className="border-l-2 border-rule-strong bg-ground px-4 py-3">
           <Eyebrow>thinking</Eyebrow>
-          <p className="mt-1 font-mono text-sm text-muted-foreground">{step.text}</p>
+          <p className="mt-1 font-mono text-sm break-words text-muted-foreground">{step.text}</p>
         </li>
       );
     case 'tool': {
-      const parsed = toolLabel(step.text);
       const detail = step.detail;
-      // What it took and what it cost, at the right of the label, as the spec has it.
-      const receipt = [
-        detail?.durationMs === undefined ? null : took(detail.durationMs),
-        detail?.cost ? money(detail.cost.dollars) : null,
-      ].filter((part): part is string => part !== null);
+      const parsed = toolLabel(step.text);
+      const name = detail?.tool ?? parsed.label;
+      // The line of text is what a step says when it carries nothing else. With
+      // rows or output to show, the spec shows those and no line above them.
+      const carries = Boolean(detail?.rows?.length) || Boolean(detail?.output);
+      const body = step.text.startsWith(`${name}:`)
+        ? step.text.slice(name.length + 1).trim()
+        : parsed.body;
       return (
         <li className="px-4 py-3">
           <div className="flex items-baseline justify-between gap-2">
-            <Eyebrow>{detail?.tool ?? parsed.label}</Eyebrow>
-            {receipt.length > 0 ? <Eyebrow>{receipt.join(' · ')}</Eyebrow> : null}
+            <Eyebrow>{name}</Eyebrow>
+            <Eyebrow>{receiptOf(step)}</Eyebrow>
           </div>
-          <p className="mt-1 font-mono text-sm text-muted-foreground">{parsed.body}</p>
+          {carries ? null : (
+            <p className="mt-1 font-mono text-sm break-words text-muted-foreground">{body}</p>
+          )}
           {detail?.rows && detail.rows.length > 0 ? (
             <ul className="mt-2 divide-y divide-border">
               {detail.rows.map((row, index) => (
                 <li key={index} className="flex items-baseline gap-3 py-2">
                   <span
                     className={cn(
-                      'w-16 shrink-0 rounded-sm border px-1.5 py-0.5 text-center font-mono text-xs tracking-wider uppercase',
-                      row.empty ? 'border-decide text-decide' : 'border-rule-strong text-faint',
+                      'w-16 shrink-0 truncate rounded-sm border px-1.5 py-0.5 text-center font-mono text-xs tracking-wider uppercase',
+                      row.empty
+                        ? 'border-decide text-decide'
+                        : 'border-rule-strong text-muted-foreground',
                     )}
+                    title={row.source}
                   >
                     {row.source}
                   </span>
-                  <span className="min-w-0 flex-1 font-mono text-sm text-body">{row.text}</span>
+                  <span className="min-w-0 flex-1 font-mono text-sm break-words text-body">
+                    {row.text}
+                  </span>
+                  {/* The row that found nothing is often the one that matters. It is
+                      marked by weight and by words for a screen reader, not by colour alone. */}
                   <span
                     className={cn(
-                      'shrink-0 text-sm',
-                      row.empty ? 'text-decide' : 'text-muted-foreground',
+                      'max-w-2/5 shrink-0 text-right text-sm break-words',
+                      row.empty ? 'font-semibold text-decide' : 'text-muted-foreground',
                     )}
                   >
+                    {row.empty ? <span className="sr-only">found nothing: </span> : null}
                     {row.result}
                   </span>
                 </li>
@@ -168,7 +196,15 @@ function StepBlock({
             </ul>
           ) : null}
           {detail?.output ? (
-            <pre className="mt-2 overflow-x-auto rounded-sm bg-sunken px-3 py-2 font-mono text-sm text-body">
+            // A terminal can print a great deal. The block scrolls; the page does not grow with it.
+            // A block that scrolls must take the focus, or a keyboard cannot scroll it.
+            <pre
+              // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+              tabIndex={0}
+              role="region"
+              aria-label={`${name} output`}
+              className="mt-2 max-h-80 overflow-auto rounded-sm bg-sunken px-3 py-2 font-mono text-sm text-body"
+            >
               {detail.output}
             </pre>
           ) : null}
@@ -180,7 +216,9 @@ function StepBlock({
         <li className="px-4 py-3">
           <div className="flex items-baseline justify-between gap-2">
             <Eyebrow>delegated</Eyebrow>
-            <Eyebrow>{step.text.replace(/^delegated\s+/i, '')}</Eyebrow>
+            <span className="rounded-sm bg-accent px-1.5 py-0.5 font-mono text-xs tracking-wider text-accent-foreground uppercase">
+              {step.text.replace(/^delegated\s+/i, '')}
+            </span>
           </div>
           <ul className="mt-2 divide-y divide-border rounded-sm bg-sunken">
             {delegated.map((child) => (
@@ -188,9 +226,11 @@ function StepBlock({
                 <button
                   type="button"
                   onClick={() => onSelect(child.id)}
-                  className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-accent"
+                  className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
                 >
-                  <span className="w-24 shrink-0 font-mono text-sm text-ink">{child.agent}</span>
+                  <span className="w-24 shrink-0 truncate font-mono text-sm text-ink">
+                    {child.agent}
+                  </span>
                   <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
                     {child.title}
                   </span>
@@ -203,15 +243,15 @@ function StepBlock({
       );
     case 'reply':
       return (
-        <li className="px-4 py-3">
-          <Eyebrow className="text-keep">reply</Eyebrow>
-          <p className="mt-1 text-sm text-ink">{step.text}</p>
+        <li className="border-l-2 border-ink px-4 py-3">
+          <Eyebrow className="text-ink">reply</Eyebrow>
+          <p className="mt-1 text-sm break-words text-ink">{step.text}</p>
         </li>
       );
   }
 }
 
-/** The way around: every task, where it hangs, and how it ended. */
+/** The way around: every task, where it hangs, what it has cost, and how it ended. */
 export function CallTree({
   tasks,
   totals,
@@ -225,26 +265,38 @@ export function CallTree({
 }): JSX.Element {
   return (
     <ul>
-      {treeRows(tasks).map(({ task, branch }) => (
-        <li key={task.id}>
-          <button
-            type="button"
-            aria-current={task.id === selected ? 'true' : undefined}
-            onClick={() => onSelect(task.id)}
-            title={`${task.title}\nown ${money(task.ownCost.dollars)} · with everything under it ${money(totals[task.id]?.dollars ?? 0)}`}
-            className={cn(
-              'flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1 text-left font-mono text-sm hover:bg-accent',
-              task.id === selected ? 'bg-accent text-primary' : 'text-body',
-            )}
-          >
-            <span className="min-w-0 truncate">
-              <span className="whitespace-pre text-faint">{branch}</span>
-              {task.agent}
-            </span>
-            <StatusWord status={task.status} />
-          </button>
-        </li>
-      ))}
+      {treeRows(tasks).map(({ task, branch }) => {
+        const total = totals[task.id]?.dollars ?? 0;
+        return (
+          <li key={task.id}>
+            <button
+              type="button"
+              aria-current={task.id === selected ? 'true' : undefined}
+              onClick={() => onSelect(task.id)}
+              title={task.title}
+              className={cn(
+                'flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1 text-left font-mono text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                task.id === selected ? 'bg-accent text-primary' : 'text-body',
+              )}
+            >
+              <span className="min-w-0 truncate">
+                <span className="whitespace-pre text-muted-foreground" aria-hidden="true">
+                  {branch}
+                </span>
+                {task.agent}
+              </span>
+              <span className="flex shrink-0 items-baseline gap-2">
+                {/* With everything delegated under it. In the row, not in a tooltip,
+                    which a keyboard or a touch screen never sees. */}
+                {total > 0 ? (
+                  <span className="text-xs text-muted-foreground">{money(total)}</span>
+                ) : null}
+                <StatusWord status={task.status} />
+              </span>
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -269,12 +321,12 @@ export function Findings({
           <button
             type="button"
             onClick={() => onSelect(finding.taskId)}
-            className="w-full rounded-sm px-2 py-2 text-left hover:bg-accent"
+            className="w-full rounded-sm px-2 py-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
           >
             <Eyebrow className="text-keep">
               {tasks.find((task) => task.id === finding.taskId)?.agent ?? 'recorded'}
             </Eyebrow>
-            <p className="mt-1 font-mono text-sm text-body">{finding.text}</p>
+            <p className="mt-1 font-mono text-sm break-words text-body">{finding.text}</p>
           </button>
         </li>
       ))}
@@ -283,16 +335,20 @@ export function Findings({
 }
 
 /**
- * LI ZHUOYANG's. One row at the foot of the stream, as in the spec: attach,
- * say, send. Today it says a new turn to the lead. Steering a task that is
- * still running, and the "+", arrive with the steering slice.
+ * LI ZHUOYANG's. One box at the foot of the stream, as in the spec: attach,
+ * say, and one button that sends, or stops the run while there is one. Steering
+ * a task that is still running, and the "+", arrive with the steering slice.
  */
 export function Composer({
   disabled,
+  running,
   onSay,
+  onStop,
 }: {
   disabled: boolean;
+  running: boolean;
   onSay: (text: string) => void;
+  onStop: () => void;
 }): JSX.Element {
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -304,20 +360,35 @@ export function Composer({
     form.reset();
   }
   return (
-    <form onSubmit={submit} className="flex items-center gap-2 border-t border-border p-3">
-      <Button type="button" variant="ghost" size="icon" disabled aria-label="Attach a file">
-        <Plus />
-      </Button>
-      <Input
-        name="say"
-        aria-label="Say something to the lead"
-        placeholder="Say something to the lead…"
-        className="font-mono"
-        autoComplete="off"
-      />
-      <Button type="submit" variant="ghost" size="icon" disabled={disabled} aria-label="Send">
-        <SendHorizontal />
-      </Button>
+    <form onSubmit={submit} className="border-t border-border p-3">
+      <div className="flex items-center gap-1 rounded-md border border-rule-strong bg-sunken px-1 focus-within:border-primary">
+        <Button type="button" variant="ghost" size="icon-sm" disabled aria-label="Attach a file">
+          <Plus />
+        </Button>
+        <input
+          name="say"
+          aria-label="Say something to the lead"
+          placeholder="Say something to the lead…"
+          autoComplete="off"
+          className="h-10 min-w-0 flex-1 bg-transparent font-mono text-sm text-ink placeholder:text-muted-foreground focus:outline-none"
+        />
+        {running ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            disabled={disabled}
+            onClick={onStop}
+            aria-label="Stop"
+          >
+            <Square />
+          </Button>
+        ) : (
+          <Button type="submit" size="icon-sm" disabled={disabled} aria-label="Send">
+            <SendHorizontal />
+          </Button>
+        )}
+      </div>
     </form>
   );
 }

@@ -17,7 +17,7 @@ export type { SpendRecorder } from './spendRecorder.js';
 export type { Node } from './taskComposite.js';
 export { buildTree, TaskNode } from './taskComposite.js';
 export type { FindingSaver, Kernel } from './kernel.js';
-export { demoWorker, type DemoOptions } from './demoWorker.js';
+export { demoWorker, paceFromEnv, type DemoOptions } from './demoWorker.js';
 export type { SessionDirectory } from './directory.js';
 export type { ProjectGate } from './routes.js';
 

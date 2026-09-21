@@ -175,8 +175,8 @@ describe.skipIf(!TEST_DATABASE_URL)('end to end: sign up, ask, watch, pay', () =
     expect(delegate?.detail?.childTaskIds).toEqual(
       snapshot.body.tasks.filter((task) => task.parentId === lead.id).map((task) => task.id),
     );
-    const search = snapshot.body.steps.find((step) => step.detail?.tool === 'search');
-    expect(search?.detail).toMatchObject({ cost: { dollars: 0.01 } });
+    const search = snapshot.body.steps.find((step) => step.detail?.cost !== undefined);
+    expect(search?.detail).toMatchObject({ tool: 'search', cost: { dollars: 0.01 } });
     expect(search?.detail?.rows?.some((row) => row.empty)).toBe(true);
     const run = snapshot.body.steps.find((step) => step.detail?.tool === 'run');
     expect(run?.detail?.output?.split('\n')).toHaveLength(3);

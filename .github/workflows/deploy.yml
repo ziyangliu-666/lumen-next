@@ -69,8 +69,19 @@ jobs:
             -H "Origin: $base" -H 'content-type: application/json' \
             -d '{"email":"smoke@example.test","password":"staging-test-password"}' | grep -q '"accountId"'
           curl -fsS -b "$cookies" "$base/api/me" | grep -q 'smoke@example.test'
-          # Projects is not registered on main yet. Do not bypass its ownership
-          # gate by posting a fabricated project ID to the session endpoint.
+          # The join between the slices, through the container: a project from
+          # a question, the session under it run to the end, its findings on
+          # the card, and what it spent in the wallet of the account that asked.
+          curl -fsS -b "$cookies" -X POST "$base/api/projects" \
+            -H "Origin: $base" -H 'content-type: application/json' \
+            -d '{"question":"smoke test","mode":"explore"}' | grep -q '"sessionId"'
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS -b "$cookies" "$base/api/projects" | grep -q '"label":"Finished"'; then break; fi
+            if [ "$attempt" = 10 ]; then echo 'the session did not finish in 10 s'; exit 1; fi
+            sleep 1
+          done
+          curl -fsS -b "$cookies" "$base/api/projects" | grep -q '"findingsCount":3'
+          curl -fsS -b "$cookies" "$base/api/wallet" | grep -q '"spent":{"dollars":0.03}'
           curl -fsS -b "$cookies" -X POST "$base/api/auth/signout" -H "Origin: $base"
           test "$(curl -s -b "$cookies" -o /dev/null -w '%{http_code}' "$base/api/me")" = 401
       - name: OWASP ZAP baseline scan

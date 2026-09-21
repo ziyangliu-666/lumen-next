@@ -35,7 +35,7 @@ window.LUMEN_STATUS = {
     ],
   },
   main: {
-    commit: 'b8f2611',
+    commit: '65baeaf',
     pipelines: 'CI, Security and Deploy green',
     tests: 583,
     coverage: 98,
@@ -55,7 +55,7 @@ window.LUMEN_STATUS = {
       state: 'done',
       stateLabel: 'Sprint 2 part done',
       summary:
-        'core/db, the trace in Postgres, restore after a restart, delegation, cost roll-up, session.open and reconnect, container and DAST, the ports projects plugs into, this board (#18), and the budget seam the kernel asks at three check points (#22). Since then: the composition root moved out of main.ts into app.ts, and the whole application now runs end to end in the gate over HTTP, a cookie and one socket (#25); one answer to who is signed in, after #23 and #24 each shut the front door on the other (#26); the Session page rebuilt the way the spec draws it, with the step stream as the main column and the call tree beside it (#27); and a step that carries what it did (#28), with StepDetail in the contract, a jsonb column in migration 008, a step and its charge written in one transaction, and the page drawing a tool step with its rows, output, time and cost and a delegate step naming its own children. 17 pull requests merged.',
+        'core/db, the trace in Postgres, restore after a restart, delegation, cost roll-up, session.open and reconnect, container and DAST, the ports projects plugs into, this board (#18), and the budget seam the kernel asks at three check points (#22). Since then: the composition root moved out of main.ts into app.ts, and the whole application now runs end to end in the gate over HTTP, a cookie and one socket (#25); one answer to who is signed in, after #23 and #24 each shut the front door on the other (#26); the Session page rebuilt the way the spec draws it, with the step stream as the main column and the call tree beside it (#27); and a step that carries what it did (#28), with StepDetail in the contract, a jsonb column in migration 008, a step and its charge written in one transaction, and the page drawing a tool step with its rows, output, time and cost and a delegate step naming its own children. The architecture doc and the session README now say what main does in place of the Sprint 1 text (#29): the contract as it stands, the events and commands on the wire today, and the page layout that #27 and #28 built. 18 pull requests merged.',
       todo: [
         { text: 'core/db: pool and migrations (#8)', done: true },
         { text: 'Trace in Postgres; restore after a restart (#13)', done: true },
@@ -167,7 +167,7 @@ Constraints: no file outside apps/server/src/modules/identity, apps/web/src/page
       state: 'progress',
       stateLabel: 'Code on a branch, no pull request',
       summary:
-        'The core HTTP layer from Sprint 1 is on main (#5). SandboxFs, SteerQueue and the files routes sit on steering/sandbox-foundations, last pushed 17 Sep, now 18 commits behind main. The Worker, the Compute interface and the composer are not started. WorkerReport changed in #10 and #17, and again in #28: appendStep now takes an optional StepDetail, a detail.cost is charged in the same call, and delegate() writes the delegate step itself, so a worker may not name child tasks. The composition root moved from main.ts to apps/server/src/app.ts in #25, where the comment beside the registrations says steering is the one slice still to come. The Session page was rebuilt in #27: the composer is one row at the foot of the step stream, and it is left as the region of this slice.',
+        'The core HTTP layer from Sprint 1 is on main (#5). SandboxFs, SteerQueue and the files routes sit on steering/sandbox-foundations, last pushed 17 Sep, now 19 commits behind main. The Worker, the Compute interface and the composer are not started. WorkerReport changed in #10 and #17, and again in #28: appendStep now takes an optional StepDetail, a detail.cost is charged in the same call, and delegate() writes the delegate step itself, so a worker may not name child tasks. The composition root moved from main.ts to apps/server/src/app.ts in #25, where the comment beside the registrations says steering is the one slice still to come. The Session page was rebuilt in #27: the composer is one row at the foot of the step stream, and it is left as the region of this slice.',
       todo: [
         { text: 'Today: rebase and open the pull request for what exists', done: false },
         { text: 'Register the steering routes in app.ts, not main.ts (#25)', done: false },
@@ -176,7 +176,7 @@ Constraints: no file outside apps/server/src/modules/identity, apps/web/src/page
         { text: 'task.steer with the ownership check; composer', done: false },
       ],
       prs: [],
-      prompt: `You are working in the lumen-next repo on the steering slice (apps/server/src/modules/steering, the composer row of apps/web/src/pages/session/Session.tsx), owned by LI ZHUOYANG. Branch steering/sandbox-foundations exists and is 18 commits behind main. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/ARCHITECTURE.md sections 6 to 8, apps/server/src/core/domain/worker.ts and apps/server/src/app.ts on main. The composition root moved out of main.ts into app.ts in #25: every slice is registered there now, and the comment beside the registrations says steering is the one still to come. Everything you commit is English.
+      prompt: `You are working in the lumen-next repo on the steering slice (apps/server/src/modules/steering, the composer row of apps/web/src/pages/session/Session.tsx), owned by LI ZHUOYANG. Branch steering/sandbox-foundations exists and is 19 commits behind main. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/ARCHITECTURE.md sections 6 to 8, apps/server/src/core/domain/worker.ts and apps/server/src/app.ts on main. The composition root moved out of main.ts into app.ts in #25: every slice is registered there now, and the comment beside the registrations says steering is the one still to come. Everything you commit is English.
 
 Goal: two small pull requests this week, not one large one.
 

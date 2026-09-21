@@ -90,8 +90,21 @@ export function fetchSession(sessionId: string): Promise<SessionSnapshot> {
 }
 
 // The page's state: the snapshot, kept current by the events.
+/** A finding as the Session page lists it. The record itself is the projects slice's. */
+export interface SessionFinding {
+  readonly id: string;
+  readonly taskId: string;
+  readonly text: string;
+}
+
 export interface SessionState {
   readonly snapshot: SessionSnapshot;
+  /**
+   * What the session has kept so far, oldest first. Not part of the snapshot:
+   * findings belong to projects, so the page reads them from there once and
+   * then keeps the list current from `finding.recorded`.
+   */
+  readonly findings: readonly SessionFinding[];
   /** 'open' once the socket is live; the page shows it, nothing else reads it. */
   readonly stream: 'connecting' | 'open' | 'closed';
 }
@@ -110,14 +123,18 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
       // The snapshot may already hold it, if it was read after the event was sent.
       if (snapshot.tasks.some((task) => task.id === event.task.id)) return state;
       return { ...state, snapshot: { ...snapshot, tasks: [...snapshot.tasks, event.task] } };
-    case 'task.status':
+    case 'task.status': {
+      // The event says the status; when it ended follows from it. A task that
+      // runs again (a new turn on the lead) is no longer ended, and one that has
+      // just ended did so now, near enough for a clock in a header. The next
+      // snapshot brings the server's own time.
+      const ended = ['ended', 'stopped', 'failed'].includes(event.status);
+      const patch = { status: event.status, endedAt: ended ? Date.now() : null };
       return {
         ...state,
-        snapshot: {
-          ...snapshot,
-          tasks: patchTask(snapshot.tasks, event.taskId, { status: event.status }),
-        },
+        snapshot: { ...snapshot, tasks: patchTask(snapshot.tasks, event.taskId, patch) },
       };
+    }
     case 'task.cost':
       return {
         ...state,
@@ -146,6 +163,12 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
       return seen
         ? state
         : { ...state, snapshot: { ...snapshot, steps: [...snapshot.steps, step] } };
+    }
+    case 'finding.recorded': {
+      // The first read of the list may already hold it.
+      if (state.findings.some((finding) => finding.id === event.findingId)) return state;
+      const finding = { id: event.findingId, taskId: event.taskId, text: event.text };
+      return { ...state, findings: [...state.findings, finding] };
     }
     default:
       return state;

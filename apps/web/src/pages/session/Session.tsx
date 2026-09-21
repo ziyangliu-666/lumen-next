@@ -1,64 +1,46 @@
-// Owners: LIU ZIYANG (call tree, steps) and LI ZHUOYANG (composer, files).
-// The two halves below are the agreed boundary between them: each owner works
-// inside their own panel and neither restyles the other.
-import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
-import type { ServerEvent, StepKind, Task } from '@lumen/contracts';
-import { cn } from 'cn';
-import { Badge } from '@/ui/badge';
+// Page 04, Session. Owners: LIU ZIYANG (the step stream, the call tree) and
+// LI ZHUOYANG (the composer, the files panel). Layout after docs/spec, 04: what
+// the agent thought and did is the main column; the call tree and the findings
+// are the narrow column beside it; the composer is the foot of the stream.
+import { useEffect, useRef, useState, type JSX } from 'react';
+import type { ServerEvent } from '@lumen/contracts';
 import { Button } from '@/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
-import { Input } from '@/ui/input';
-import { Textarea } from '@/ui/textarea';
+import { Card } from '@/ui/card';
 import { useCurrentAccount } from '@/core/auth';
-import { PageHeader } from '@/core/shell';
 import {
   apply,
   fetchSession,
-  inTreeOrder,
   openStream,
+  request,
+  type SessionFinding,
   type SessionState,
   type Stream,
 } from '@/core/api';
+import { CallTree, Composer, Findings, money, StatusWord, StepStream } from './parts';
+import { elapsed } from './tree';
 
-// One tint per task status, from the theme, so a status means the same colour
-// here as on the project card.
-const TONE: Record<Task['status'], string> = {
-  queued: 'bg-sunken text-muted-foreground',
-  running: 'bg-accent text-accent-foreground',
-  waiting: 'bg-decide-soft text-decide',
-  ended: 'bg-keep-soft text-keep',
-  stopped: 'bg-gap-soft text-gap',
-  failed: 'bg-gap-soft text-gap',
-};
-
-// How far a task sits from the left, by depth. Written out, because Tailwind
-// only ships the classes it can read in the source.
-const INDENT = ['ml-0', 'ml-6', 'ml-12', 'ml-16'] as const;
-
-const KIND_TONE: Record<StepKind, string> = {
-  you: 'text-primary',
-  thinking: 'text-faint',
-  tool: 'text-decide',
-  delegate: 'text-chart-2',
-  reply: 'text-keep',
-};
-
-function money(dollars: number): string {
-  return `$${dollars.toFixed(4)}`;
+interface ProjectTitle {
+  readonly title: string;
 }
 
-/** A text field's value, trimmed. A file field or a missing one is empty. */
-function field(form: FormData, name: string): string {
-  const value = form.get(name);
-  return typeof value === 'string' ? value.trim() : '';
+/** The small capitals over a panel. */
+function PanelTitle({ children, count }: { children: string; count?: number }): JSX.Element {
+  return (
+    <div className="flex items-baseline justify-between px-2 pb-2">
+      <h2 className="font-mono text-xs tracking-widest text-faint uppercase">{children}</h2>
+      {count === undefined ? null : <span className="font-mono text-xs text-faint">{count}</span>}
+    </div>
+  );
 }
 
 export function Session(): JSX.Element {
   const { state: auth } = useCurrentAccount();
-  const account = auth.status === 'ready' ? auth.account.displayName : '';
   const [state, setState] = useState<SessionState | null>(null);
+  const [project, setProject] = useState<ProjectTitle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  // The clock in the header, for a session that is still running.
+  const [now, setNow] = useState(() => Date.now());
   // The socket is an external system, not render state: a ref, so opening it
   // does not itself schedule a render.
   const stream = useRef<Stream | null>(null);
@@ -73,7 +55,7 @@ export function Session(): JSX.Element {
     fetchSession(id).then(
       (snapshot) => {
         if (!active) return;
-        setState({ snapshot, stream: 'connecting' });
+        setState({ snapshot, findings: [], stream: 'connecting' });
         const taskId = query.get('task');
         if (taskId && snapshot.tasks.some((task) => task.id === taskId)) setSelected(taskId);
       },
@@ -86,9 +68,43 @@ export function Session(): JSX.Element {
     };
   }, []);
 
+  // The project's title for the header, and what the session has kept so far.
+  // Both are the projects slice's, so both are read from it, once; after that
+  // `finding.recorded` keeps the list current. A failure here costs the title
+  // and the list, never the page.
+  const sessionId = state?.snapshot.session.id;
+  const projectId = state?.snapshot.session.projectId;
+  useEffect(() => {
+    if (!sessionId || !projectId) return;
+    let active = true;
+    const base = `/api/projects/${encodeURIComponent(projectId)}`;
+    request<{ item: { project: ProjectTitle } }>(base).then(
+      (reply) => active && setProject(reply.item.project),
+      () => undefined,
+    );
+    request<{ items: (SessionFinding & { sessionId: string })[] }>(`${base}/findings`).then(
+      (reply) => {
+        if (!active) return;
+        const mine = reply.items
+          .filter((finding) => finding.sessionId === sessionId)
+          .map(({ id, taskId, text }) => ({ id, taskId, text }))
+          .reverse();
+        setState((current) => {
+          if (!current) return current;
+          const known = new Set(mine.map((finding) => finding.id));
+          const later = current.findings.filter((finding) => !known.has(finding.id));
+          return { ...current, findings: [...mine, ...later] };
+        });
+      },
+      () => undefined,
+    );
+    return () => {
+      active = false;
+    };
+  }, [sessionId, projectId]);
+
   // One socket per open session; closed when the session changes or the page goes.
   useEffect(() => {
-    const sessionId = state?.snapshot.session.id;
     if (!sessionId) return;
     const onEvent = (event: ServerEvent): void =>
       setState((current) => (current ? apply(current, event) : current));
@@ -100,125 +116,100 @@ export function Session(): JSX.Element {
       opened.close();
       stream.current = null;
     };
-  }, [state?.snapshot.session.id]);
-
-  function onSay(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const text = field(new FormData(form), 'say');
-    if (!text || !state || !stream.current) return;
-    stream.current.send({ type: 'session.say', sessionId: state.snapshot.session.id, text });
-    form.reset();
-  }
+  }, [sessionId]);
 
   const snapshot = state?.snapshot;
-  const description = snapshot
-    ? `Project ${snapshot.session.projectId} · signed in as ${account} · stream ${state.stream}`
-    : 'One question, and every agent it reached.';
+  const root = snapshot?.tasks.find((task) => task.parentId === null);
+  const running = root !== undefined && root.endedAt === null;
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+
+  if (!state || !snapshot || !root) {
+    return (
+      <Card className="mx-auto mt-12 max-w-xl space-y-3 p-6 text-sm text-muted-foreground">
+        {error ? <p className="text-gap">{error}</p> : null}
+        <p>
+          A session belongs to a project. Start one from a question, or open one from your projects,
+          and what the agents think and do draws here.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild>
+            <a href="#/">Ask a question</a>
+          </Button>
+          <Button asChild variant="outline">
+            <a href="#/home">Your projects</a>
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  const shown = snapshot.tasks.find((task) => task.id === selected) ?? root;
+  const took = elapsed((root.endedAt ?? now) - root.startedAt);
 
   return (
-    <>
-      <PageHeader title="Session" description={description} />
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        {/* LIU ZIYANG: the call tree and the step list. */}
-        <Card className="min-h-96">
-          <CardHeader>
-            <CardTitle className="text-base">Call tree</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {snapshot ? (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  {snapshot.tasks.length} task{snapshot.tasks.length === 1 ? '' : 's'} · session
-                  spend <span className="font-mono text-ink">{money(snapshot.spend.dollars)}</span>
-                </p>
-                <ul className="space-y-2">
-                  {inTreeOrder(snapshot.tasks).map((task) => {
-                    const open = (selected ?? snapshot.tasks[0]?.id) === task.id;
-                    const total = snapshot.totals[task.id]?.dollars ?? 0;
-                    return (
-                      <li
-                        key={task.id}
-                        className={cn(
-                          'rounded-md bg-sunken',
-                          INDENT[Math.min(task.depth, INDENT.length - 1)],
-                        )}
-                      >
-                        <button
-                          type="button"
-                          aria-expanded={open}
-                          onClick={() => setSelected(task.id)}
-                          className="flex w-full items-center justify-between gap-2 rounded-md p-3 text-left hover:bg-accent"
-                        >
-                          <span className="text-sm text-ink">
-                            <span className="font-mono text-muted-foreground">{task.agent}</span>{' '}
-                            {task.title}
-                          </span>
-                          <span className="flex shrink-0 items-center gap-2">
-                            <span
-                              className="font-mono text-xs text-muted-foreground"
-                              title="own cost / with everything delegated under it"
-                            >
-                              {money(task.ownCost.dollars)} / {money(total)}
-                            </span>
-                            <Badge className={TONE[task.status]}>{task.status}</Badge>
-                          </span>
-                        </button>
-                        {open ? (
-                          <ol className="space-y-1 px-3 pb-3">
-                            {snapshot.steps
-                              .filter((step) => step.taskId === task.id)
-                              .map((step) => (
-                                <li key={step.index} className="text-sm text-muted-foreground">
-                                  <span className={cn('font-mono text-xs', KIND_TONE[step.kind])}>
-                                    {step.kind}
-                                  </span>{' '}
-                                  {step.text}
-                                </li>
-                              ))}
-                          </ol>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-                <form onSubmit={onSay} className="flex gap-2">
-                  <Input name="say" placeholder="Say something to the lead…" />
-                  <Button type="submit" variant="outline" disabled={state.stream !== 'open'}>
-                    Say
-                  </Button>
-                </form>
-              </>
-            ) : (
-              <div className="space-y-3 text-sm text-muted-foreground">
-                {error ? <p className="text-gap">{error}</p> : null}
-                <p>
-                  A session belongs to a project. Start one from a question, or open one from your
-                  projects, and its call tree draws here.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild>
-                    <a href="#/">Ask a question</a>
-                  </Button>
-                  <Button asChild variant="outline">
-                    <a href="#/home">Your projects</a>
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
+    <div className="space-y-3">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h1 className="min-w-0 text-base text-ink">
+          <span className="font-semibold">{project?.title ?? root.title}</span>
+          <span className="text-faint"> / </span>
+          <span className="text-muted-foreground">
+            {snapshot.session.mode === 'seed' ? 'a starting point' : 'free exploration'}
+          </span>
+        </h1>
+        <p className="flex items-baseline gap-3 font-mono text-sm text-muted-foreground">
+          <span>
+            {money(snapshot.spend.dollars)} · {took}
+          </span>
+          <StatusWord status={root.status} />
+          {state.stream === 'open' ? null : (
+            <span className="text-decide" title="The live stream is not connected">
+              {state.stream === 'connecting' ? 'connecting…' : 'offline, retrying'}
+            </span>
+          )}
+        </p>
+      </header>
+
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_17rem]">
+        {/* LIU ZIYANG: the steps of the selected task. LI ZHUOYANG: the composer at its foot. */}
+        <Card className="flex min-h-96 flex-col gap-0 overflow-hidden py-0">
+          <div className="flex-1">
+            <StepStream
+              task={shown}
+              steps={snapshot.steps.filter((step) => step.taskId === shown.id)}
+              tasks={snapshot.tasks}
+              onSelect={setSelected}
+            />
+          </div>
+          <Composer
+            disabled={state.stream !== 'open' || auth.status !== 'ready'}
+            onSay={(text) => {
+              stream.current?.send({ type: 'session.say', sessionId: snapshot.session.id, text });
+              // A new turn is the lead's; show it arrive.
+              setSelected(root.id);
+            }}
+          />
         </Card>
-        {/* LI ZHUOYANG: the composer and the files panel. */}
-        <Card className="min-h-96">
-          <CardHeader>
-            <CardTitle className="text-base">Steer</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Textarea placeholder="Say something to the run…" rows={4} />
-            <Button className="w-full">Queue for the next step</Button>
-          </CardContent>
-        </Card>
+
+        <aside className="space-y-3">
+          <Card className="gap-0 p-2 pt-3">
+            <PanelTitle>call tree</PanelTitle>
+            <CallTree
+              tasks={snapshot.tasks}
+              totals={snapshot.totals}
+              selected={shown.id}
+              onSelect={setSelected}
+            />
+          </Card>
+          <Card className="gap-0 p-2 pt-3">
+            <PanelTitle count={state.findings.length}>findings</PanelTitle>
+            <Findings findings={state.findings} tasks={snapshot.tasks} onSelect={setSelected} />
+          </Card>
+        </aside>
       </div>
-    </>
+    </div>
   );
 }

@@ -10,6 +10,7 @@ import type {
 } from '@lumen/contracts';
 import type { Db, Queryable } from '../../core/db/db.js';
 import type { TaskRecord } from '../../core/domain/task.js';
+import type { SpendRecorder } from './spendRecorder.js';
 import { isEnding, type Trace, type TraceSnapshot } from './trace.js';
 
 // The record in Postgres. Every task and every step is written as it happens,
@@ -98,7 +99,10 @@ function toTask(row: TaskRow): TaskRecord {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class PgTrace implements Trace {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly recordSpend?: SpendRecorder,
+  ) {}
 
   async openSession(projectId: string, accountId: string, mode: SessionMode): Promise<Session> {
     const [row] = await this.db.query<SessionRow>(
@@ -183,16 +187,23 @@ export class PgTrace implements Trace {
     });
   }
 
-  async addCost(taskId: string, amount: Money): Promise<TaskRecord> {
-    // The addition happens in SQL, on the numeric column. Reading the cost,
-    // adding in JS and writing it back would drift, and would lose one of two
-    // spends that arrive together.
-    const updated = await this.db.query(
-      `update tasks set own_cost = own_cost + $2 where id = $1 returning id`,
-      [UUID.test(taskId) ? taskId : null, amount.dollars],
-    );
-    if (updated.length === 0) throw new Error(`trace: no task ${taskId}`);
-    return (await this.task(taskId))!;
+  async addCost(taskId: string, amount: Money, reason = 'task spend'): Promise<TaskRecord> {
+    return this.db.withTransaction(async (tx) => {
+      const updated = await tx.query(
+        `update tasks set own_cost = own_cost + $2 where id = $1 returning id`,
+        [UUID.test(taskId) ? taskId : null, amount.dollars],
+      );
+      if (updated.length === 0) throw new Error(`trace: no task ${taskId}`);
+      const task = (await this.oneTask(tx, 'where t.id = $1', [taskId]))!;
+      if (this.recordSpend) {
+        const [session] = await tx.query<{ account_id: string }>(
+          'select account_id from sessions where id = $1',
+          [task.sessionId],
+        );
+        await this.recordSpend({ accountId: session!.account_id, taskId, amount, reason }, tx);
+      }
+      return task;
+    });
   }
 
   async snapshot(sessionId: string): Promise<TraceSnapshot | null> {

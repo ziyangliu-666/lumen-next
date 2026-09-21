@@ -37,7 +37,7 @@ export interface Trace {
   setStatus(taskId: string, status: TaskStatus): Promise<TaskRecord>;
   appendStep(taskId: string, kind: StepKind, text: string): Promise<Step>;
   /** Add to the task's own cost and return the task with its new total. */
-  addCost(taskId: string, amount: Money): Promise<TaskRecord>;
+  addCost(taskId: string, amount: Money, reason?: string): Promise<TaskRecord>;
   snapshot(sessionId: string): Promise<TraceSnapshot | null>;
   /**
    * Every task still queued, running or waiting, in any session. After a

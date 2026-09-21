@@ -8,9 +8,11 @@ import { demoWorker } from './demoWorker.js';
 import { sessionDirectory, type SessionDirectory } from './directory.js';
 import { Kernel, type FindingSaver } from './kernel.js';
 import { MemoryTrace } from './memoryTrace.js';
+import type { SpendRecorder } from './spendRecorder.js';
 import { PgTrace } from './pgTrace.js';
 import { sessionCommands, sessionRoutes, type ProjectGate } from './routes.js';
 
+export type { SpendRecorder } from './spendRecorder.js';
 export type { Node } from './taskComposite.js';
 export { buildTree, TaskNode } from './taskComposite.js';
 export type { FindingSaver, Kernel } from './kernel.js';
@@ -40,8 +42,10 @@ export function createSessionSlice(deps: {
   requireProject?: ProjectGate;
   /** From the projects slice: where findings are kept. */
   recordFinding?: FindingSaver;
+  /** Ledger writer; participates in the trace transaction when db is provided. */
+  recordSpend?: SpendRecorder;
 }): SessionSlice {
-  const trace = deps.db ? new PgTrace(deps.db) : new MemoryTrace();
+  const trace = deps.db ? new PgTrace(deps.db, deps.recordSpend) : new MemoryTrace();
   const kernel = new Kernel(trace, deps.broker, deps.worker ?? demoWorker, {
     ...(deps.recordFinding ? { saveFinding: deps.recordFinding } : {}),
   });

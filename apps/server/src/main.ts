@@ -44,7 +44,11 @@ async function bootstrap(): Promise<void> {
   const broker = new Broker();
   const billing = createBillingSlice({ db });
   // Sprint 1 runs the echo worker; steering passes its own here when it lands.
-  const session = createSessionSlice({ broker, db });
+  const session = createSessionSlice({
+    broker,
+    db,
+    ...(db ? { recordSpend: billing.record } : {}),
+  });
   // Before anything can connect: tasks left open by the last process are over.
   const orphans = await session.kernel.restore();
 

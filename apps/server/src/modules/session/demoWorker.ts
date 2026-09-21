@@ -97,7 +97,10 @@ export function demoWorker(options: DemoOptions = {}): Worker {
         ? PARTS.map((part) => ({ agent: 'reader', title: `${part}: ${input}` }))
         : [{ agent: 'reader', title: input }];
 
-      await work();
+      // A later turn thinks for a moment. The first one goes straight to its
+      // search, which waits for itself: two waits in a row showed a person
+      // "Nothing yet." for twice the pace on their first visit.
+      if (!firstTurn) await work();
       if (firstTurn) {
         // The lead looks before it delegates, as the spec's does, so the stream
         // a person lands on shows a tool block. It is free: only the readers

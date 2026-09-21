@@ -50,9 +50,12 @@ describe('session: the demo worker', () => {
     const { report, steps } = recording();
     await demoWorker().run(reader, reader.title, report);
 
-    expect(
-      steps.map(([, , detail]) => detail?.durationMs).filter((ms) => ms !== undefined),
-    ).toEqual([0, 0]);
+    const durations = steps
+      .map(([, , detail]) => detail?.durationMs)
+      .filter((ms) => ms !== undefined);
+    // Not exactly 0: the clock can turn over between the two reads.
+    expect(durations).toHaveLength(2);
+    expect(durations.every((ms) => ms <= 1)).toBe(true);
   });
 
   it('has the lead search for nothing, so a first turn costs what the three readers cost', async () => {

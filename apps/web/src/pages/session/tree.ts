@@ -89,3 +89,26 @@ export function took(durationMs: number): string {
   if (ms < 10_000) return `${(ms / 1000).toFixed(1).replace(/\.0$/, '')} s`;
   return elapsed(ms);
 }
+
+/**
+ * What the composer sends for what was typed, or null for "send nothing and
+ * keep the text". Blocked means a run is going or the socket is down: a turn
+ * said then would start a second run beside the first, or be dropped unsent.
+ */
+export function turnToSend(raw: unknown, blocked: boolean): string | null {
+  if (blocked || typeof raw !== 'string') return null;
+  const text = raw.trim();
+  return text === '' ? null : text;
+}
+
+/** How near the foot of the stream still counts as "reading the newest step", in px. */
+const FOOT_PX = 48;
+
+/** True when a scrolling box shows its foot, which is when a new step may pull it down. */
+export function atFoot(box: {
+  scrollHeight: number;
+  scrollTop: number;
+  clientHeight: number;
+}): boolean {
+  return box.scrollHeight - box.scrollTop - box.clientHeight <= FOOT_PX;
+}

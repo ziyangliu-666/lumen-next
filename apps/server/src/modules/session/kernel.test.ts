@@ -406,6 +406,10 @@ describe('session: kernel, what a step carries', () => {
     await expect(
       kernel.appendStep(tasks[0]!.id, 'delegate', 'made up', { childTaskIds: ['not-a-task'] }),
     ).rejects.toThrow(/written by delegate\(\)/);
+    // The kind is not what names them: a tool step may not either.
+    await expect(
+      kernel.appendStep(tasks[0]!.id, 'tool', 'run: x', { childTaskIds: ['not-a-task'] }),
+    ).rejects.toThrow(/written by delegate\(\)/);
     await expect(kernel.appendStep(tasks[0]!.id, 'delegate', 'as main did')).rejects.toThrow(
       /written by delegate\(\)/,
     );
@@ -546,6 +550,29 @@ describe('session: kernel, the delegate step', () => {
       ['lead', 'failed'],
       ['reader', 'stopped'],
       ['reader', 'stopped'],
+      ['reader', 'stopped'],
+    ]);
+  });
+
+  it('stops the children it did open when the record fails part way through the fan-out', async () => {
+    class SecondChildFails extends MemoryTrace {
+      private opened = 0;
+      override openTask(
+        ...args: Parameters<MemoryTrace['openTask']>
+      ): ReturnType<MemoryTrace['openTask']> {
+        // The root is the first task opened, so the second child is the third.
+        this.opened += 1;
+        if (this.opened === 3) return Promise.reject(new Error('connection lost'));
+        return super.openTask(...args);
+      }
+    }
+    const kernel = new Kernel(new SecondChildFails(), new Broker(), demoWorker());
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const { tasks } = await kernel.snapshot(session.id, owner);
+    expect(tasks.map((task) => [task.agent, task.status])).toEqual([
+      ['lead', 'failed'],
       ['reader', 'stopped'],
     ]);
   });

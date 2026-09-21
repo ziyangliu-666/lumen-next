@@ -389,7 +389,7 @@ classDiagram
   }
   class WorkerReport {
     <<interface>>
-    +appendStep(taskId, kind, text, detail) Promise~Step~
+    +appendStep(taskId, kind, text, detail) Promise~void~
     +recordFinding(taskId, text) Promise~Finding~
     +addSpend(taskId, amount, reason)
     +delegate(taskId, tasks) Promise~Task[]~

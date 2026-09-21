@@ -87,6 +87,9 @@ describe('session page: a tool step', () => {
     ]);
 
     expect(html).toMatch(/<pre[^>]*max-h-80[^>]*overflow-auto/);
+    // A block that scrolls takes the focus, or a keyboard cannot scroll it.
+    expect(html).toMatch(/<pre[^>]*tabindex="0"/);
+    expect(html).toMatch(/<pre[^>]*aria-label="run output"/);
     expect(html).toContain('&lt;script&gt;');
     expect(html).not.toContain('<script>alert');
   });

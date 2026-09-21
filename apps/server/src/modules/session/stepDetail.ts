@@ -1,4 +1,4 @@
-import type { StepDetail, StepRow } from '@lumen/contracts';
+import type { Money, StepDetail, StepRow } from '@lumen/contracts';
 
 // What a worker hands to appendStep comes from outside the kernel: a real one
 // will carry the output of a process and the text of a web page. It is kept in
@@ -88,6 +88,14 @@ export function checkedDetail(detail: StepDetail): StepDetail {
         ? `${storable(output.slice(0, MAX_OUTPUT_CHARS))}\n… ${over} more characters not kept`
         : output;
   }
-  if (detail.cost !== undefined) kept.cost = detail.cost;
+  // Null, 0 as a bare number, '' : not Money. The caller's rule would never
+  // see them, because it only looks at a cost that is truthy.
+  if (raw['cost'] !== undefined) {
+    const cost = raw['cost'];
+    if (typeof cost !== 'object' || cost === null || typeof (cost as Money).dollars !== 'number') {
+      throw new Error('step detail: cost must be Money');
+    }
+    kept.cost = cost as Money;
+  }
   return kept;
 }

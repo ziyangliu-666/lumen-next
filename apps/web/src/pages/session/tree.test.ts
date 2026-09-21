@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@lumen/contracts';
-import { childrenByStep, elapsed, took, toolLabel, treeRows } from './tree';
+import { atFoot, childrenByStep, elapsed, took, toolLabel, treeRows, turnToSend } from './tree';
 
 const task = (id: string, parentId: string | null): Task => ({
   id,
@@ -131,5 +131,27 @@ describe('session page: how long a step took', () => {
     expect(took(9_960)).toBe('10 s');
     expect(took(Number.NaN)).toBe('0 ms');
     expect(elapsed(Number.NaN)).toBe('0 s');
+  });
+});
+
+describe('session page: what the composer sends', () => {
+  it('sends the trimmed text, and nothing for an empty line', () => {
+    expect(turnToSend('  push it to n = 11 ', false)).toBe('push it to n = 11');
+    expect(turnToSend('   ', false)).toBeNull();
+    expect(turnToSend(null, false)).toBeNull();
+  });
+
+  it('sends nothing while a run is going or the socket is down, whatever key was pressed', () => {
+    // Enter submits a form that has no submit button, and while a run is going
+    // the only button is Stop. A turn said then started a second run on the lead.
+    expect(turnToSend('a second turn', true)).toBeNull();
+  });
+});
+
+describe('session page: when a new step pulls the stream down', () => {
+  it('follows a reader at the foot, and leaves one who scrolled up', () => {
+    expect(atFoot({ scrollHeight: 1200, scrollTop: 600, clientHeight: 600 })).toBe(true);
+    expect(atFoot({ scrollHeight: 1200, scrollTop: 560, clientHeight: 600 })).toBe(true);
+    expect(atFoot({ scrollHeight: 1200, scrollTop: 300, clientHeight: 600 })).toBe(false);
   });
 });

@@ -221,21 +221,27 @@ export class Kernel implements WorkerReport {
     // Open every child before any of them runs, so the page draws the whole
     // fan-out at once and a stop that arrives now reaches all of them.
     const children: Task[] = [];
-    for (const item of work) {
-      const child = await this.trace.openTask(parent.sessionId, parent.id, item.agent, item.title);
-      this.broker.publish(parent.sessionId, { type: 'task.opened', task: child });
-      children.push(child);
-    }
-    // The delegate step is written here, after the children exist, so that it
-    // can name them, and before any of them runs, so that the page draws the
-    // block first and watches the statuses in it change.
     try {
+      for (const item of work) {
+        const child = await this.trace.openTask(
+          parent.sessionId,
+          parent.id,
+          item.agent,
+          item.title,
+        );
+        this.broker.publish(parent.sessionId, { type: 'task.opened', task: child });
+        children.push(child);
+      }
+      // The delegate step is written here, after the children exist, so that it
+      // can name them, and before any of them runs, so that the page draws the
+      // block first and watches the statuses in it change.
       await this.writeStep(parent.id, 'delegate', `delegated ${children.length} in parallel`, {
         childTaskIds: children.map((child) => child.id),
       });
     } catch (error) {
-      // The children exist and nothing will ever run them. Left queued they
-      // would sit in the tree for the life of the process; end them, then say.
+      // Some children exist and nothing will ever run them: the record failed
+      // part way through the fan-out, or on the step. Left queued they would
+      // sit in the tree for the life of the process; end them, then say.
       for (const child of children) {
         await this.setStatus(child.id, 'stopped').catch(() => undefined);
       }

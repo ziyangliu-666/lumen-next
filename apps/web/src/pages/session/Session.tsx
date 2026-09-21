@@ -17,7 +17,7 @@ import {
   type Stream,
 } from '@/core/api';
 import { CallTree, Composer, Findings, money, StatusWord, StepStream } from './parts';
-import { elapsed } from './tree';
+import { atFoot, elapsed } from './tree';
 
 interface ProjectTitle {
   readonly title: string;
@@ -50,6 +50,10 @@ export function Session(): JSX.Element {
   const stream = useRef<Stream | null>(null);
   // The stream scrolls inside its card, with the composer pinned under it.
   const streamBox = useRef<HTMLDivElement | null>(null);
+  // Whether the reader was at the foot of the stream before the newest step
+  // came. It is written on scroll, not measured after the step is laid out: a
+  // tall step would then count as "the reader scrolled up" and end the follow.
+  const following = useRef(true);
 
   // Another page hands a session over as `?session=<id>&task=<id>` in front of
   // the hash: Landing after it creates a project, Home from a card or a finding.
@@ -144,13 +148,14 @@ export function Session(): JSX.Element {
   }, [running]);
 
   // Keep the newest step in view while the reader is at the foot of the stream;
-  // leave them alone when they have scrolled up to read.
-  const stepCount = snapshot?.steps.length ?? 0;
+  // leave them alone when they have scrolled up to read. Only the steps of the
+  // task that is shown count.
+  const shownId = selected ?? root?.id;
+  const shownSteps = snapshot?.steps.filter((step) => step.taskId === shownId).length ?? 0;
   useEffect(() => {
     const box = streamBox.current;
-    if (!box) return;
-    if (box.scrollHeight - box.scrollTop - box.clientHeight < 160) box.scrollTop = box.scrollHeight;
-  }, [stepCount]);
+    if (box && following.current) box.scrollTop = box.scrollHeight;
+  }, [shownSteps]);
 
   if (!state || !snapshot || !root) {
     return (
@@ -173,12 +178,17 @@ export function Session(): JSX.Element {
   }
 
   const shown = snapshot.tasks.find((task) => task.id === selected) ?? root;
+  const thisSession = snapshot.session.id;
+  const rootId = root.id;
   const took = elapsed((root.endedAt ?? now) - root.startedAt);
 
   // Opening another task replaces the stream, and with it the button that had
-  // the focus. Give the focus to the stream, not to nothing.
+  // the focus. Give the focus to the stream, not to nothing, and start at its
+  // head. Opening the task that is already shown changes nothing.
   function open(taskId: string): void {
+    if (taskId === shown.id) return;
     setSelected(taskId);
+    following.current = false;
     window.requestAnimationFrame(() => {
       if (!streamBox.current) return;
       streamBox.current.scrollTop = 0;
@@ -186,10 +196,26 @@ export function Session(): JSX.Element {
     });
   }
 
+  // A new turn is the lead's. Show it arrive: the lead's stream, at its foot,
+  // following. The focus stays in the input, for the turn after this one.
+  function say(text: string): void {
+    stream.current?.send({ type: 'session.say', sessionId: thisSession, text });
+    setSelected(rootId);
+    following.current = true;
+    window.requestAnimationFrame(() => {
+      if (streamBox.current) streamBox.current.scrollTop = streamBox.current.scrollHeight;
+    });
+  }
+
   return (
     <div className="space-y-3">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <h1 className="min-w-0 text-base text-ink">
+      {/* One line beside the stream: the card's height counts on it. A long
+          question is cut here and whole in the first block of the stream. */}
+      <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 lg:flex-nowrap">
+        <h1
+          className="min-w-0 text-base break-words text-ink lg:truncate"
+          title={project?.title ?? root.title}
+        >
           <span className="font-semibold">{project?.title ?? root.title}</span>
           <span className="text-muted-foreground"> / </span>
           <span className="text-muted-foreground">
@@ -200,7 +226,7 @@ export function Session(): JSX.Element {
             <span className="font-mono text-sm text-primary"> / {shown.agent}</span>
           )}
         </h1>
-        <p className="flex items-baseline gap-3 font-mono text-sm text-muted-foreground">
+        <p className="flex shrink-0 items-baseline gap-3 font-mono text-sm text-muted-foreground">
           <span>
             {money(snapshot.spend.dollars)} · {took}
           </span>
@@ -213,12 +239,15 @@ export function Session(): JSX.Element {
         </p>
       </header>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_17rem]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(0,1fr)_17rem]">
         {/* LIU ZIYANG: the steps of the selected task. LI ZHUOYANG: the composer at its foot. */}
-        <Card className="flex h-[calc(100vh-11rem)] min-h-96 flex-col gap-0 overflow-hidden py-0">
+        <Card className="flex h-[calc(100dvh-11rem)] min-h-96 min-w-0 flex-col gap-0 overflow-hidden py-0">
           <div
             ref={streamBox}
             tabIndex={-1}
+            onScroll={(event) => {
+              following.current = atFoot(event.currentTarget);
+            }}
             aria-label={`Steps of ${shown.agent}`}
             className="flex-1 overflow-y-auto focus:outline-none"
           >
@@ -232,19 +261,17 @@ export function Session(): JSX.Element {
           <Composer
             disabled={state.stream !== 'open' || auth.status !== 'ready'}
             running={running}
-            onSay={(text) => {
-              stream.current?.send({ type: 'session.say', sessionId: snapshot.session.id, text });
-              // A new turn is the lead's; show it arrive.
-              open(root.id);
-            }}
+            onSay={say}
             onStop={() =>
               stream.current?.send({ type: 'session.stop', sessionId: snapshot.session.id })
             }
           />
         </Card>
 
-        {/* One panel, divided by rules, as the spec draws the rail. */}
-        <Card className="gap-0 divide-y divide-border self-start p-0">
+        {/* One panel, divided by rules, as the spec draws the rail. Beside the
+            stream it is no taller than the stream and scrolls inside itself, so
+            a long list of findings does not grow the page. */}
+        <Card className="min-w-0 gap-0 divide-y divide-border self-start p-0 lg:max-h-[calc(100dvh-11rem)] lg:overflow-y-auto">
           <section className="p-2 pt-3">
             <PanelTitle>call tree</PanelTitle>
             <CallTree

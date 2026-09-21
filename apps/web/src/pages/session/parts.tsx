@@ -7,8 +7,9 @@ import type { Step, Task } from '@lumen/contracts';
 import { cn } from 'cn';
 import { Plus, SendHorizontal, Square } from 'lucide-react';
 import { Button } from '@/ui/button';
+import { Input } from '@/ui/input';
 import type { SessionFinding } from '@/core/api';
-import { childrenByStep, took, toolLabel, treeRows } from './tree';
+import { childrenByStep, took, toolLabel, treeRows, turnToSend } from './tree';
 
 // One tint per task status, from the theme, so a status means the same colour
 // here as on the project card. The word is always there too: colour is never
@@ -275,7 +276,7 @@ export function CallTree({
               onClick={() => onSelect(task.id)}
               title={task.title}
               className={cn(
-                'flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1 text-left font-mono text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                'flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1 text-left font-mono text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
                 task.id === selected ? 'bg-accent text-primary' : 'text-body',
               )}
             >
@@ -354,8 +355,12 @@ export function Composer({
     event.preventDefault();
     const form = event.currentTarget;
     const value = new FormData(form).get('say');
-    const text = typeof value === 'string' ? value.trim() : '';
-    if (!text) return;
+    // A form with one field and no submit button still submits on Enter, and
+    // while a run is going the only button is Stop. So the rule is here, not in
+    // which button is drawn: nothing is sent, and the text is kept, while a run
+    // is going or the socket is down.
+    const text = turnToSend(value, disabled || running);
+    if (text === null) return;
     onSay(text);
     form.reset();
   }
@@ -365,12 +370,13 @@ export function Composer({
         <Button type="button" variant="ghost" size="icon-sm" disabled aria-label="Attach a file">
           <Plus />
         </Button>
-        <input
+        {/* The box around it carries the border and the focus colour. */}
+        <Input
           name="say"
           aria-label="Say something to the lead"
           placeholder="Say something to the lead…"
           autoComplete="off"
-          className="h-10 min-w-0 flex-1 bg-transparent font-mono text-sm text-ink placeholder:text-muted-foreground focus:outline-none"
+          className="h-10 flex-1 border-0 px-1 font-mono shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
         {running ? (
           <Button

@@ -69,5 +69,9 @@ describe('session: what a step may carry', () => {
     expect(bad({ durationMs: -1 })).toThrow(/durationMs/);
     expect(bad({ durationMs: Number.NaN })).toThrow(/durationMs/);
     expect(bad({ tool: '' })).toThrow(/tool must be/);
+    // Falsy, so the kernel's own rule for an amount would never look at them.
+    expect(bad({ cost: null })).toThrow(/cost must be Money/);
+    expect(bad({ cost: 0 })).toThrow(/cost must be Money/);
+    expect(bad({ cost: {} })).toThrow(/cost must be Money/);
   });
 });

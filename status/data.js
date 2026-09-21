@@ -14,7 +14,11 @@ window.LUMEN_STATUS = {
     starts: '2026-09-15',
     ends: '2026-09-26',
     dod: [
-      { text: 'Slices run in parallel', done: false, note: 'only session has code on main' },
+      {
+        text: 'Slices run in parallel',
+        done: false,
+        note: 'session and billing on main; identity, projects, steering are not',
+      },
       {
         text: 'A question fans out to workers; the tree is readable and costed',
         done: true,
@@ -23,14 +27,14 @@ window.LUMEN_STATUS = {
       { text: 'Sandbox behind its interface', done: false, note: 'Compute interface not started' },
       {
         text: 'Wallet shows spend; ledger writes',
-        done: false,
-        note: 'written in #19, #20, #21; none merged',
+        done: true,
+        note: '#19, #20, #21 merged 21 Sep',
       },
       { text: 'Container image builds; DAST runs against staging', done: true, note: '#14' },
     ],
   },
   main: {
-    commit: 'bd25121',
+    commit: '069a6f2',
     pipelines: 'CI, Security and Deploy green',
     tests: 115,
     coverage: 98,
@@ -45,12 +49,12 @@ window.LUMEN_STATUS = {
       name: 'LIU ZIYANG',
       slice: 'UC3 session, core, contracts',
       pattern: 'Composite',
-      written: 70,
-      onMain: 70,
+      written: 75,
+      onMain: 75,
       state: 'done',
       stateLabel: 'Sprint 2 part done',
       summary:
-        'core/db, the trace in Postgres, restore after a restart, delegation, cost roll-up, session.open and reconnect, container and DAST, the ports projects plugs into, and this board (#18). 12 pull requests merged.',
+        'core/db, the trace in Postgres, restore after a restart, delegation, cost roll-up, session.open and reconnect, container and DAST, the ports projects plugs into, this board (#18), and the budget seam the kernel asks at three check points (#22). 13 pull requests merged.',
       todo: [
         { text: 'core/db: pool and migrations (#8)', done: true },
         { text: 'Trace in Postgres; restore after a restart (#13)', done: true },
@@ -61,6 +65,10 @@ window.LUMEN_STATUS = {
         { text: 'Review #15 and #16', done: true },
         {
           text: 'BudgetGuard, Charge and Decision in core/domain, called at three check points',
+          done: true,
+        },
+        {
+          text: 'Pass billing budget guard in main.ts once a new account has a default cap',
           done: false,
         },
         { text: '@fastify/helmet: clears 5 of the 8 DAST warnings', done: false },
@@ -116,7 +124,7 @@ Constraints: touch only modules/projects, pages/home, pages/landing, the one mig
       state: 'review',
       stateLabel: 'Changes requested',
       summary:
-        'Password sign-in is complete and sound: scrypt, hashed session tokens, an Origin check, parameterised SQL. OAuth, mail and reset are written but not wired. The pull request also edits billing, the admin page and core, would stop the staging container, and now conflicts with main. No commit since 18 Sep.',
+        'Password sign-in is complete and sound: scrypt, hashed session tokens, an Origin check, parameterised SQL. OAuth, mail and reset are written but not wired. The pull request also edits billing, the admin page and core, would stop the staging container, and conflicts with main in four files, two of them in the billing slice that landed on 21 Sep. No commit since 18 Sep.',
       todo: [
         { text: 'New branch with identity only', done: false },
         { text: 'Staging env vars; smoke test signs in for real', done: false },
@@ -154,7 +162,7 @@ Constraints: no file outside the list in step 1 and the files named in steps 3 t
       state: 'progress',
       stateLabel: 'Code on a branch, no pull request',
       summary:
-        'The core HTTP layer from Sprint 1 is on main. SandboxFs, SteerQueue and the files routes sit on steering/sandbox-foundations, last pushed 17 Sep, 7 commits behind main. The Worker, the Compute interface and the composer are not started. WorkerReport changed in #10 and #17.',
+        'The core HTTP layer from Sprint 1 is on main. SandboxFs, SteerQueue and the files routes sit on steering/sandbox-foundations, last pushed 17 Sep, now 12 commits behind main. The Worker, the Compute interface and the composer are not started. WorkerReport changed in #10 and #17.',
       todo: [
         { text: 'Today: rebase and open the pull request for what exists', done: false },
         { text: 'Compute interface, NullCompute, DockerCompute', done: false },
@@ -162,7 +170,7 @@ Constraints: no file outside the list in step 1 and the files named in steps 3 t
         { text: 'task.steer with the ownership check; composer', done: false },
       ],
       prs: [],
-      prompt: `You are working in the lumen-next repo on the steering slice (apps/server/src/modules/steering, the right half of apps/web/src/pages/session/Session.tsx), owned by LI ZHUOYANG. Branch steering/sandbox-foundations exists and is 7 commits behind main. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/ARCHITECTURE.md sections 6 to 8, and apps/server/src/core/domain/worker.ts on main. Everything you commit is English.
+      prompt: `You are working in the lumen-next repo on the steering slice (apps/server/src/modules/steering, the right half of apps/web/src/pages/session/Session.tsx), owned by LI ZHUOYANG. Branch steering/sandbox-foundations exists and is 12 commits behind main. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/ARCHITECTURE.md sections 6 to 8, and apps/server/src/core/domain/worker.ts on main. Everything you commit is English.
 
 Goal: two small pull requests this week, not one large one.
 
@@ -185,11 +193,11 @@ Constraints: use another slice only through its public index. No new dependency 
       slice: 'UC5 money and administration',
       pattern: 'Chain of Responsibility',
       written: 80,
-      onMain: 25,
-      state: 'review',
-      stateLabel: 'Waiting on review, CI green',
+      onMain: 40,
+      state: 'done',
+      stateLabel: 'Wallet and ledger on main',
       summary:
-        'Three pull requests, stacked one on the next, each with CI, SCA and SAST green: #19 the wallet shell against main, #20 the ledger, the Wallet tab and session writing spend inside the task transaction, #21 the BudgetChain with tests for order, short circuit and a fourth policy. None has a human review yet; the automated reviewer reached its quota on all three. Nothing on main yet, and no caller asks the guard before a worker spends.',
+        'The three stacked pull requests merged on 21 Sep: #19 the wallet shell, #20 the ledger, the Wallet tab and session writing spend inside the task transaction, #21 the BudgetChain with tests for order, short circuit and a fourth policy. Core published Charge, Decision and BudgetGuard in core/domain/budget.ts (#22); billing still keeps its own copies in ports.ts, and main.ts does not pass the guard yet, because the chain fails closed and a new account has no cap of its own. No caller asks the guard before a worker spends.',
       todo: [
         {
           text: 'Today: a draft pull request with the slice shell and GET /api/wallet',
@@ -197,28 +205,28 @@ Constraints: use another slice only through its public index. No new dependency 
         },
         { text: 'Ledger: record(), monthSpend() in SQL, Wallet tab', done: true },
         { text: 'BudgetChain and the tests that prove the pattern', done: true },
+        {
+          text: 'Import Charge, Decision and BudgetGuard from core/domain; delete the ports.ts copies',
+          done: false,
+        },
+        { text: 'A default cap for a new account, so main.ts can pass the guard', done: false },
         { text: 'Decide on the admin routes from #15', done: false },
       ],
-      prs: [
-        { number: 19, label: 'feat(billing): authenticated wallet slice shell' },
-        { number: 20, label: 'feat(billing): persist ledger and connect Wallet to task spend' },
-        { number: 21, label: 'feat(billing): ordered budget checks with fail-closed policies' },
-      ],
-      prompt: `You are working in the lumen-next repo on the billing slice (apps/server/src/modules/billing, apps/web/src/pages/settings, apps/web/src/pages/admin), owned by HE RONG. Three pull requests are open and stacked: #19, the wallet shell, against main; #20, the ledger and the Wallet tab, against #19; #21, the budget chain, against #20. CI, SCA and SAST are green on all three, and none of them has been reviewed by a person: the automated reviewer reached its quota. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/DOD.md and apps/server/src/modules/billing/README.md before you change anything. Everything you commit is English.
+      prs: [],
+      prompt: `You are working in the lumen-next repo on the billing slice (apps/server/src/modules/billing, apps/web/src/pages/settings, apps/web/src/pages/admin), owned by HE RONG. The three stacked pull requests are merged: #19 the wallet shell, #20 the ledger and the Wallet tab, #21 the budget chain. Core then published the shared shapes in apps/server/src/core/domain/budget.ts (#22), and the session kernel asks a BudgetGuard at a turn, before a fan-out and as a delegated task opens. main.ts does not pass billing's guard yet: the chain fails closed and a new account has no cap of its own, so every session would be refused. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/DOD.md, apps/server/src/core/domain/budget.ts and apps/server/src/modules/billing/README.md before you change anything. Everything you commit is English.
 
-Goal: the three land on main in order, and the cap the page shows becomes a cap that holds.
+Goal: the cap the page shows becomes a cap that holds.
 
-Do, in this order:
-1. While they wait for review, do not widen #19, #20 or #21. If main moves, merge main into each branch from the bottom of the stack up, and keep CI green.
-2. When #19 merges, point #20 at main; when #20 merges, point #21 at main. One review at a time, in that order.
-3. Ask the core owner whether Charge, Decision and BudgetGuard should move from modules/billing/ports.ts to core/domain/budget.ts. If they should, do it in a fourth, small pull request that imports from core and deletes the local copies.
-4. Ask the identity owner for an account eligibility check on the public index of modules/identity, and pass it to createBillingSlice as canSpend in main.ts. Until that exists the account handler denies every charge, which is why no caller may ask the guard yet.
-5. With the session owner's agreement, and only after step 4: ask budgetGuard.check before a worker spends, at the three points Charge.at names (turn, fan-out, task-open). A deny ends the step with its reason; escalate stays a denial until approvals land in Sprint 3. Test that an over-cap charge stops the step and one under the cap does not.
-6. Decide the admin routes: either billing takes GET /api/admin/accounts and the admin page out of #15, or identity keeps them. Write the decision in the billing README and tell the identity owner, so #15 can shrink either way.
+Do, in this order, one small pull request each:
+1. Import Charge, Decision, BudgetGuard and CheckPoint from core/domain/budget.ts and delete the copies at the top of modules/billing/ports.ts. Keep Spend and WalletSummary there. The shapes are the same, so this is an import and a deletion, not a redesign.
+2. Give a new account a cap, so that wiring the guard does not refuse every session. Agree the number with the core owner, put it in the wallet migration or the store with a comment saying which, and test that an account with no row of its own is allowed a charge under that cap and refused one over it.
+3. Ask the identity owner for an account eligibility check on the public index of modules/identity, and pass it to createBillingSlice as canSpend in main.ts. Until that exists the account handler denies every charge, which is why no caller may ask the guard yet.
+4. With the session and core owner's agreement, and only after steps 2 and 3: pass billing.budgetGuard to createSessionSlice as budget in main.ts, where #22 left the comment saying why it is not passed. A deny ends the step with its reason; escalate stays a denial until approvals land in Sprint 3. Test that an over-cap charge stops the step and one under the cap does not.
+5. Decide the admin routes: either billing takes GET /api/admin/accounts and the admin page out of #15, or identity keeps them. Write the decision in the billing README and tell the identity owner, so #15 can shrink either way.
 
-Constraints: read another slice only through its public index. No new dependency. Money is added and compared in Postgres numeric, never in JavaScript. Until step 5 is on main, neither the Wallet tab nor the README may describe the cap as something that stops a worker.
+Constraints: read another slice only through its public index. No new dependency. Money is added and compared in Postgres numeric, never in JavaScript. Until step 4 is on main, neither the Wallet tab nor the README may describe the cap as something that stops a worker.
 
-Done means: the three pull requests are on main, npm run verify is green with DATABASE_URL set (docker compose up db), and a test proves that a charge over the cap stops the step it was checked for.`,
+Done means: steps 1 to 4 are on main, npm run verify is green with DATABASE_URL set (docker compose up db), and a test proves that a charge over the cap stops the step it was checked for.`,
     },
   ],
 };

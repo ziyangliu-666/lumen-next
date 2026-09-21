@@ -181,16 +181,25 @@ export interface StepRow {
 export type SessionMode = 'explore' | 'seed';
 export interface Session {
   readonly id: string;
-  readonly projectId: string;
   readonly mode: SessionMode;
-  readonly rootTaskId: string;
-  readonly status: TaskStatus;     // mirrors the root task
-  readonly spend: Money;           // rolled up from every task
+  readonly projectId: string;
+  readonly accountId: string;      // the owner; billing charges this account
   readonly startedAt: number;
-  readonly endedAt: number | null;
+}
+
+// What a page is given to draw a session. Status and end time are the root
+// task's. Every total is summed by the server: the browser never adds.
+export interface SessionSnapshot {
+  readonly session: Session;
+  readonly tasks: readonly Task[];
+  readonly steps: readonly Step[];
+  readonly totals: Readonly<Record<string, Money>>;  // each task with its descendants
+  readonly spend: Money;                              // the root's total
 }
 
 export interface Finding  { readonly id: string; readonly sessionId: string; readonly taskId: string; readonly text: string; readonly createdAt: number }
+
+// Designed, and added by their owners when their slices need them on the wire:
 export interface Approval { readonly id: string; readonly taskId: string; readonly amount: Money; readonly reason: string; readonly status: 'pending' | 'approved' | 'declined'; readonly createdAt: number }
 export type SteerWhen = 'end-of-turn' | 'next-step';
 export interface Steer    { readonly id: string; readonly taskId: string; readonly text: string; readonly when: SteerWhen; readonly status: 'queued' | 'landed' | 'cancelled' }
@@ -230,9 +239,9 @@ sequenceDiagram
 No sequence numbers in v1. The snapshot is the durable record read back.
 
 ```ts
+// On main today.
 export type ServerEvent =
-  | { type: 'session.snapshot'; session: Session; tasks: Task[]; steps: Step[]; findings: Finding[]; approvals: Approval[]; steers: Steer[] }
-  | { type: 'session.updated'; sessionId: string; patch: Partial<Session> }
+  | { type: 'session.snapshot'; snapshot: SessionSnapshot }     // answer to session.open
   | { type: 'task.opened'; task: Task }
   | { type: 'task.status'; taskId: string; status: TaskStatus }
   | { type: 'task.cost'; taskId: string; ownCost: Money }
@@ -241,13 +250,7 @@ export type ServerEvent =
   // there is no open/update/close. Streaming a reply as it is typed is the
   // steering slice's to add, as a new event, when a model is wired in.
   | { type: 'step.appended'; taskId: string; index: number; kind: StepKind; text: string; detail?: StepDetail }
-  | { type: 'finding.recorded'; finding: Finding }              // projects
-  | { type: 'approval.requested'; approval: Approval }          // billing
-  | { type: 'approval.resolved'; approvalId: string; status: 'approved' | 'declined' }
-  | { type: 'steer.queued'; steer: Steer }                      // steering
-  | { type: 'steer.landed'; steerId: string }
-  | { type: 'steer.cancelled'; steerId: string }
-  | { type: 'files.changed'; projectId: string }                // storage
+  | { type: 'finding.recorded'; taskId: string; findingId: string; text: string }
   | { type: 'error'; message: string };
 
 export type ClientCommand =
@@ -255,10 +258,12 @@ export type ClientCommand =
   | { type: 'session.close'; sessionId: string }
   | { type: 'session.say'; sessionId: string; text: string }    // new turn on the root
   | { type: 'session.stop'; sessionId: string }
-  | { type: 'step.full'; stepId: string }
-  | { type: 'task.steer'; taskId: string; text: string; when: SteerWhen }   // steering
-  | { type: 'steer.cancel'; steerId: string }
-  | { type: 'approval.answer'; approvalId: string; approve: boolean };        // billing
+  | { type: 'task.steer'; taskId: string; text: string; when: SteerWhen };   // steering
+
+// Designed, not on the wire yet. Each is added by its owner, as a new member:
+//   billing:   approval.requested, approval.resolved; command approval.answer
+//   steering:  steer.queued, steer.landed, steer.cancelled; command steer.cancel
+//   storage:   files.changed
 ```
 
 One handler per command type, registered by the owning slice at startup.
@@ -385,7 +390,7 @@ the job of whichever of identity and projects lands second. It is not core's.
 classDiagram
   class Worker {
     <<interface>>
-    +run(task, report, signal) Promise~void~
+    +run(task, input, report) Promise~void~
   }
   class WorkerReport {
     <<interface>>
@@ -393,7 +398,6 @@ classDiagram
     +recordFinding(taskId, text) Promise~Finding~
     +addSpend(taskId, amount, reason)
     +delegate(taskId, tasks) Promise~Task[]~
-    +ask(taskId, question) Promise~string~
   }
   class BudgetGuard {
     <<interface>>
@@ -754,27 +758,38 @@ outside. `stopped`, not `failed`.
 
 ### The page
 
+After the annotated spec, page 04. What the agent thought and did is the main
+column. The call tree and the findings are the narrow column beside it.
+
 ```mermaid
 flowchart TB
   subgraph Session page
-    H[header: project / mode · spend · elapsed · status]
-    subgraph L[left: LIU ZIYANG]
-      CT[call tree: every task, its agent, status and cost]
-      SL[step list of the selected task<br/>you · thinking · tool · delegate · reply]
+    H[header: project / mode / agent · spend · elapsed · status]
+    subgraph M[main column]
+      SS[step stream of the open task, scrolls inside its card<br/>you · thinking · tool with rows or output · delegated with its children · reply]
+      CP[composer at the foot: say, or stop while a run is going]
     end
-    subgraph R[right: LI ZHUOYANG]
-      CP[composer: say something, +]
-      FP[files panel]
+    subgraph R[rail]
+      CT[call tree: every task, its agent, status and rolled-up cost]
+      FD[findings, each under the agent that recorded it]
     end
   end
-  API[core/api.ts: fetch + socket, one state update] --> H & SL & CT & CP & FP
+  API[core/api.ts: fetch + socket, one state update] --> H & SS & CT & FD & CP
 ```
 
+LIU ZIYANG owns the stream, the tree and the findings list. LI ZHUOYANG owns
+the composer, and the files panel when it arrives.
+
 One function in `apps/web/src/core/api.ts` applies every `ServerEvent` to one
-state object. Both halves read it; neither restyles the other. The REST calls
-around it go through TanStack Query, which owns caching, refetching and request
-de-duplication. `core/api.ts` keeps the socket, the backoff on reconnect and
-that one reducer. We do not write a cache.
+state object. Every part of the page reads it; neither owner restyles the
+other's part. `core/api.ts` keeps the socket, the backoff on reconnect and that
+one reducer. The REST calls around it go through `request()` in the same file.
+We do not write a cache.
+
+Two limits are known. A worker gets no stop signal, so a step that is in
+flight when the user stops a session still lands, and its cost is recorded: the
+money was spent. `Kernel.say()` does not refuse a turn while the root runs; the
+page does not send one. Both belong to the steering slice's agent loop.
 
 ---
 

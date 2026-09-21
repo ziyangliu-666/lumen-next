@@ -1,8 +1,19 @@
 import type { TaskStatus } from '@lumen/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ProjectCardContext } from './projectCardContext.js';
 
 describe('ProjectCardContext', () => {
+  it('changes Stop execution and cadence only after an authoritative update', async () => {
+    const command = vi.fn().mockResolvedValue(undefined);
+    const context = new ProjectCardContext({ status: 'waiting' });
+    expect(context.pollDelay()).toBe(15000);
+    expect(await context.stop(command)).toBe('stop_requested');
+    expect(context.describe().label).toBe('Waiting for you');
+    context.applySummary({ status: 'ended' });
+    expect(await context.stop(command)).toBe('already_terminal');
+    expect(context.pollDelay()).toBeNull();
+    expect(command).toHaveBeenCalledTimes(1);
+  });
   const expected = {
     queued: {
       label: 'Queued',

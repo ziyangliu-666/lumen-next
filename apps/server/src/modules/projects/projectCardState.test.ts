@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   FailedState,
   FinishedState,
@@ -9,6 +9,30 @@ import {
 } from './projectCardState.js';
 
 describe('project card states', () => {
+  it.each([
+    { State: QueuedState, delay: 5000 },
+    { State: RunningState, delay: 5000 },
+    { State: WaitingState, delay: 15000 },
+  ])('$State.name executes Stop and chooses its polling cadence', async ({ State, delay }) => {
+    const state = new State();
+    const command = vi.fn().mockResolvedValue(undefined);
+    expect(await state.stop(command)).toBe('stop_requested');
+    expect(command).toHaveBeenCalledTimes(1);
+    expect(state.pollDelay()).toBe(delay);
+    command.mockRejectedValue(new Error('unavailable'));
+    await expect(state.stop(command)).rejects.toThrow('unavailable');
+    expect(state.describe().actions).toContain('stop');
+  });
+  it.each([FinishedState, StoppedState, FailedState])(
+    '%s refuses a terminal Stop without calling the session and stops polling',
+    async (State) => {
+      const state = new State();
+      const command = vi.fn().mockResolvedValue(undefined);
+      expect(await state.stop(command)).toBe('already_terminal');
+      expect(command).not.toHaveBeenCalled();
+      expect(state.pollDelay()).toBeNull();
+    },
+  );
   it.each([
     { State: QueuedState, label: 'Queued', tone: 'muted' },
     { State: RunningState, label: 'Running', tone: 'active' },

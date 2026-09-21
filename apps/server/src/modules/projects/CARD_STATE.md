@@ -2,51 +2,51 @@
 
 ## Before: repeated status checks
 
-A brute-force card checks session status to choose a label, checks it again to
-offer Stop, and repeats the check in the list poller. Running and waiting cards
-can then disagree about whether work is active. A new terminal status can stop
-showing Stop while accidentally continuing to poll.
+A brute-force card checks status for a label, the service checks it again before
+calling Stop, and the poller repeats it when choosing a refresh interval.
+A new terminal status can hide Stop while still dispatching it or polling forever.
 
 ```text
 render: running -> Running; waiting -> Waiting for you; ended -> Finished; ...
-actions: queued/running/waiting -> Open session + Stop; otherwise Open session
-poll: queued/running/waiting -> continue; otherwise stop
+stop: queued/running/waiting -> send command; terminal -> refuse
+poll: queued/running -> 5 seconds; waiting -> 15 seconds; terminal -> none
 ```
 
-## After: one state, one descriptor
+The first refactor returned a descriptor from each class. That removed repeated
+presentation checks but was equivalent to a configuration table; review S1
+correctly identified that it did not demonstrate behavioral State delegation.
 
-`ProjectCardContext` selects one of six `ProjectCardState` implementations with
-an exhaustive mapping of the shared `TaskStatus`. Each implementation supplies
-the label, semantic tone, actions, and refresh policy together. Consumers use
-the resulting descriptor instead of separately interpreting session status.
+## After: states own commands and refresh behavior
 
-The context copies the status from a confirmed summary. `applySummary` accepts
-any authoritative snapshot, including skipped transitions or a different latest
-session. It projects session state; it does not enforce session transitions.
-Stop requests and refresh errors do not supply a confirmed summary, so neither
-updates the context. Terminal states retain Open session, including access to
-findings there. The classes perform no IO and start no timers.
+`ProjectCardContext` selects one of six `ProjectCardState` implementations using
+an exhaustive mapping of the shared `TaskStatus`. It delegates `describe()`,
+`stop(command)` and `pollDelay()` to the current state.
 
-`ConfirmedSessionSummary` is an internal status-only projection. The current
-shared `Session` has no status field; this type neither changes that contract
-nor pretends to implement the planned session summary API. State classes and
-the context remain internal to projects and are not public-index exports.
+Queued, Running and Waiting execute the injected Stop command and acknowledge
+only after success. A rejected command propagates without changing the confirmed
+state. Finished, Stopped and Failed return `already_terminal` without invoking
+the command. Waiting polls at 15 seconds, Queued/Running at 5 seconds, and
+terminal states return no interval. The service delegates Stop to the context
+and publishes its interval as `pollAfterMs`; Home consumes it directly.
 
-## Validation and remaining integration
+This places the decision to execute or refuse an action in the current state,
+not in a service conditional. A descriptor table alone cannot execute that
+protocol; it would need a separate dispatcher implementing the same rules.
+A table plus callbacks remains a valid simpler alternative if the behavior does
+not grow; the chosen classes keep each state's presentation and behavior together.
 
-Tests exercise each concrete state, coherent descriptor changes across confirmed
-updates, direct terminal snapshots, repeated snapshots, and retention of the
-last confirmed state until another summary arrives.
+`applySummary` replaces the projection from an authoritative session summary.
+Snapshots can skip lifecycle transitions or describe a new latest session, so
+rejecting such updates would incorrectly enforce session's lifecycle in projects.
+The refused operation tested here is Stop on a terminal state. Neither a Stop
+acknowledgement nor a refresh failure is evidence of a lifecycle transition.
+The context owns no execution state and starts no timers.
 
-The UC2 service now selects the latest confirmed session and passes it into the
-context. HTTP cards contain the resulting label, tone, actions and polling
-policy. Home consumes these values without importing server classes. Its
-refresh scheduler stops periodic reads for terminal cards, retains the last
-confirmed card on transient failures and refreshes after Stop acknowledgement.
-Ownership comes from the unchanged shared auth guard.
+## Validation
 
-The pattern tests preceded the pattern implementation in commits `cfe6e2a` and
-`e538228`. Service, HTTP, store and real-kernel integration tests extend those
-tests. Shared startup/session/client changes remain unapplied owner patches;
-see [the handoff](integration/README.md). No pattern class owns execution or
-changes session state in response to a click.
+Behavior tests were run failing before implementation. They exercise command
+execution in each active state, refusal in each terminal state, rejected commands,
+different intervals, and context delegation after a confirmed summary replacement.
+Service tests verify these behaviors are used in production orchestration.
+The original descriptor tests remain as regression checks, and integration tests
+use session's real public directory. See [integration](integration/README.md).

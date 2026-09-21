@@ -24,7 +24,7 @@ const states = {
   failed: new FailedState(),
 } satisfies Record<TaskStatus, ProjectCardState>;
 
-/** Projects confirmed state without commanding or validating session transitions. */
+/** Projects confirmed state and delegates actions without owning session transitions. */
 export class ProjectCardContext {
   private state: ProjectCardState;
 
@@ -38,5 +38,11 @@ export class ProjectCardContext {
 
   describe(): CardDescriptor {
     return this.state.describe();
+  }
+  stop(command: () => Promise<void>): Promise<'stop_requested' | 'already_terminal'> {
+    return this.state.stop(command);
+  }
+  pollDelay(): number | null {
+    return this.state.pollDelay();
   }
 }

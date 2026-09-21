@@ -7,9 +7,18 @@ export interface CardDescriptor {
 
 export interface ProjectCardState {
   describe(): CardDescriptor;
+  stop(command: () => Promise<void>): Promise<'stop_requested' | 'already_terminal'>;
+  pollDelay(): number | null;
 }
 
 export class QueuedState implements ProjectCardState {
+  async stop(command: () => Promise<void>): Promise<'stop_requested'> {
+    await command();
+    return 'stop_requested';
+  }
+  pollDelay(): number {
+    return 5000;
+  }
   describe(): CardDescriptor {
     return {
       label: 'Queued',
@@ -21,6 +30,13 @@ export class QueuedState implements ProjectCardState {
 }
 
 export class RunningState implements ProjectCardState {
+  async stop(command: () => Promise<void>): Promise<'stop_requested'> {
+    await command();
+    return 'stop_requested';
+  }
+  pollDelay(): number {
+    return 5000;
+  }
   describe(): CardDescriptor {
     return {
       label: 'Running',
@@ -32,6 +48,13 @@ export class RunningState implements ProjectCardState {
 }
 
 export class WaitingState implements ProjectCardState {
+  async stop(command: () => Promise<void>): Promise<'stop_requested'> {
+    await command();
+    return 'stop_requested';
+  }
+  pollDelay(): number {
+    return 15000;
+  }
   describe(): CardDescriptor {
     return {
       label: 'Waiting for you',
@@ -43,6 +66,12 @@ export class WaitingState implements ProjectCardState {
 }
 
 export class FinishedState implements ProjectCardState {
+  stop(_command: () => Promise<void>): Promise<'already_terminal'> {
+    return Promise.resolve('already_terminal');
+  }
+  pollDelay(): null {
+    return null;
+  }
   describe(): CardDescriptor {
     return {
       label: 'Finished',
@@ -54,6 +83,12 @@ export class FinishedState implements ProjectCardState {
 }
 
 export class StoppedState implements ProjectCardState {
+  stop(_command: () => Promise<void>): Promise<'already_terminal'> {
+    return Promise.resolve('already_terminal');
+  }
+  pollDelay(): null {
+    return null;
+  }
   describe(): CardDescriptor {
     return {
       label: 'Stopped',
@@ -65,6 +100,12 @@ export class StoppedState implements ProjectCardState {
 }
 
 export class FailedState implements ProjectCardState {
+  stop(_command: () => Promise<void>): Promise<'already_terminal'> {
+    return Promise.resolve('already_terminal');
+  }
+  pollDelay(): null {
+    return null;
+  }
   describe(): CardDescriptor {
     return {
       label: 'Failed',

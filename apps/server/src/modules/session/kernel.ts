@@ -9,11 +9,13 @@ import type {
   TaskStatus,
 } from '@lumen/contracts';
 import { zero } from '@lumen/contracts';
+import { allowEverything, type BudgetGuard, type CheckPoint } from '../../core/domain/budget.js';
+import { recordable } from '../../core/domain/money.js';
 import type { Delegated, Worker, WorkerReport } from '../../core/domain/worker.js';
 import type { Principal, SessionAccess } from '../../core/http/authGuard.js';
 import { notFound } from '../../core/http/httpError.js';
 import type { Broker } from '../../core/protocol/broker.js';
-import { Delegation } from './delegation.js';
+import { Delegation, DelegationRefused } from './delegation.js';
 import { buildTree } from './taskComposite.js';
 import { isEnding, type Trace } from './trace.js';
 
@@ -38,6 +40,12 @@ export interface KernelOptions {
    * memory: enough for a test or a process with no projects slice, and no more.
    */
   readonly saveFinding?: FindingSaver;
+  /**
+   * Asked before a turn, before a fan-out and before a delegated task opens.
+   * The billing slice supplies the real one. Left out, everything is allowed,
+   * which is right for a test and for a process with no billing slice.
+   */
+  readonly budget?: BudgetGuard;
 }
 
 function findingsInMemory(): FindingSaver {
@@ -60,10 +68,12 @@ export class Kernel implements WorkerReport {
   ) {
     this.delegation = options.delegation ?? new Delegation();
     this.saveFinding = options.saveFinding ?? findingsInMemory();
+    this.budget = options.budget ?? allowEverything;
   }
 
   private readonly delegation: Delegation;
   private readonly saveFinding: FindingSaver;
+  private readonly budget: BudgetGuard;
 
   /** Open a session under a project and start its root task. Does not wait for the worker. */
   async start(
@@ -161,6 +171,10 @@ export class Kernel implements WorkerReport {
   async delegate(taskId: string, work: readonly Delegated[]): Promise<Task[]> {
     const parent = await this.taskOrThrow(taskId);
     this.delegation.check(parent, work);
+    // Check point: fan-out. One question for the whole fan-out, before a single
+    // child exists, so a refusal leaves nothing half-opened on the page.
+    const verdict = await this.ask(parent, 'fan-out', `delegate ${work.length}`);
+    if (verdict !== null) throw new DelegationRefused(`the budget does not allow it: ${verdict}`);
 
     // Open every child before any of them runs, so the page draws the whole
     // fan-out at once and a stop that arrives now reaches all of them.
@@ -192,11 +206,12 @@ export class Kernel implements WorkerReport {
   }
 
   async addSpend(taskId: string, amount: Money, reason: string): Promise<void> {
-    if (!Number.isFinite(amount.dollars) || amount.dollars < 0) {
-      throw new Error(`kernel: a spend must be a non-negative amount, got ${amount.dollars}`);
-    }
+    // One rule for an amount, shared with the ledger: six decimals, as the
+    // column holds it. Without this a worker's 0.1 + 0.2 passed here and was
+    // refused inside the ledger's transaction, and the task failed over a float.
+    const spent = recordable(amount);
     // Postgres commits billing's ledger and the task cost together before events.
-    const task = await this.trace.addCost(taskId, amount, reason);
+    const task = await this.trace.addCost(taskId, spent, reason);
     this.broker.publish(task.sessionId, { type: 'task.cost', taskId, ownCost: task.ownCost });
 
     // The spend changes the total of this task and of every ancestor, and of
@@ -225,6 +240,12 @@ export class Kernel implements WorkerReport {
   private async run(task: Task, input: string, onlyIfQueued = false): Promise<void> {
     try {
       if (onlyIfQueued && (await this.trace.task(task.id))?.status !== 'queued') return;
+      // Check point: a turn of the root, or the opening of a delegated task.
+      const refused = await this.ask(task, onlyIfQueued ? 'task-open' : 'turn', input);
+      if (refused !== null) {
+        await this.appendStep(task.id, 'reply', `Not run: ${refused}.`);
+        return;
+      }
       await this.setStatus(task.id, 'running');
       await this.worker.run({ ...task, status: 'running' }, input, this);
       // The user may have stopped it while the worker ran; that verdict stands.
@@ -235,6 +256,46 @@ export class Kernel implements WorkerReport {
       // caller, so an error that escaped here would be an unhandled rejection.
       await this.setStatus(task.id, 'failed').catch(() => undefined);
     }
+  }
+
+  /**
+   * Ask the budget guard. Null means go ahead. Otherwise the task has been put
+   * where the decision says (waiting for an approval, or stopped) and the
+   * return value is the sentence to show.
+   *
+   * The estimate is zero, which asks "may this account spend, and has it room
+   * left": a worker cannot say yet what a turn will cost. When it can, the
+   * estimate travels in Delegated and lands here.
+   */
+  private async ask(task: Task, at: CheckPoint, reason: string): Promise<string | null> {
+    const session = await this.trace.session(task.sessionId);
+    if (!session) throw new Error(`kernel: task ${task.id} has no session`);
+    let decision;
+    try {
+      decision = await this.budget.check({
+        accountId: session.accountId,
+        taskId: task.id,
+        estimate: zero,
+        at,
+        reason,
+      });
+    } catch {
+      // A guard that could not answer has not said yes.
+      decision = { kind: 'deny' as const, reason: 'the budget could not be checked' };
+    }
+    if (decision.kind === 'allow') return null;
+    if (at === 'fan-out') {
+      // The parent keeps running; it is the fan-out that does not happen.
+      return decision.kind === 'deny' ? decision.reason : 'it needs your approval';
+    }
+    if (decision.kind === 'escalate') {
+      // Resuming from an approval is Sprint 3. Until then the task waits, which
+      // is the truth, and a stop still ends it.
+      await this.setStatus(task.id, 'waiting');
+      return 'it is over the cap and needs your approval';
+    }
+    await this.setStatus(task.id, 'stopped');
+    return decision.reason;
   }
 
   private track(run: Promise<void>): void {

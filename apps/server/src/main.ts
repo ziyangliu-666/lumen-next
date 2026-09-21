@@ -48,6 +48,9 @@ async function bootstrap(): Promise<void> {
     broker,
     db,
     ...(db ? { recordSpend: billing.record } : {}),
+    // Not yet: `budget: billing.budgetGuard`. The chain fails closed, and a new
+    // account's cap is 0, so wiring it today would refuse every session. It goes
+    // in when billing gives a new account a default cap (see the review on #21).
   });
   // Before anything can connect: tasks left open by the last process are over.
   const orphans = await session.kernel.restore();

@@ -11,6 +11,7 @@ import { buildServer, defaultWebRoot } from './core/http/server.js';
 import { Broker } from './core/protocol/broker.js';
 import { createSessionSlice } from './modules/session/index.js';
 import { createBillingSlice } from './modules/billing/index.js';
+import { createIdentitySlice, LoginGate, type IdentitySlice } from './modules/identity/index.js';
 import { createProjectsSlice, type ProjectsSlice } from './modules/projects/index.js';
 
 const DEFAULT_PORT = 4000;
@@ -33,15 +34,40 @@ function port(): number {
  */
 async function database(): Promise<Db | null> {
   const url = process.env['DATABASE_URL'];
-  if (url === undefined || url === '') return null;
+  if (url === undefined || url === '') {
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new Error('DATABASE_URL is required in production');
+    }
+    return null;
+  }
   return openDatabase(url);
+}
+
+function identitySlice(db: Db): IdentitySlice {
+  const origin = process.env['LUMEN_ORIGIN'];
+  if (!origin) throw new Error('LUMEN_ORIGIN is required with DATABASE_URL');
+  const lifetime = Number(process.env['IDENTITY_SESSION_LIFETIME_MS']);
+  if (!Number.isSafeInteger(lifetime) || lifetime <= 0) {
+    throw new Error('IDENTITY_SESSION_LIFETIME_MS must be a positive integer');
+  }
+  const insecure = process.env['IDENTITY_INSECURE_COOKIES'];
+  if (insecure !== undefined && insecure !== 'true' && insecure !== 'false') {
+    throw new Error('IDENTITY_INSECURE_COOKIES must be true or false');
+  }
+  return createIdentitySlice({
+    database: db,
+    origin,
+    sessionLifetimeMs: lifetime,
+    loginGate: new LoginGate(),
+    ...(insecure === undefined ? {} : { secureCookies: insecure !== 'true' }),
+  });
 }
 
 async function bootstrap(): Promise<void> {
   const db = await database();
-  // Sprint 1 trusts `Authorization: stub <id>:<role>`. Identity swaps the real
-  // resolver in here, and nothing else in the server changes.
-  const resolver = headerStub;
+  // Stub credentials are accepted only in database-free, non-production development.
+  const identity = db ? identitySlice(db) : null;
+  const resolver = identity?.principalResolver ?? headerStub;
   const broker = new Broker();
   const billing = createBillingSlice({ db });
   // Sprint 1 runs the echo worker; steering passes its own here when it lands.
@@ -86,6 +112,10 @@ async function bootstrap(): Promise<void> {
   //   projects = createProjectsSlice({ sessions: session.projects, db });
   //   await app.register(projects.registerRoutes);
   await app.register(projects.registerRoutes);
+  if (identity) await app.register(identity.registerRoutes);
+  app.log.info(
+    `active principal resolver: ${identity ? 'identity cookie' : 'development header stub'}`,
+  );
   await app.register(session.registerRoutes);
   await app.register(billing.registerRoutes);
   session.registerCommands(broker);

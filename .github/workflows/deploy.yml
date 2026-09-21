@@ -55,11 +55,24 @@ jobs:
           set -euo pipefail
           curl -fsS http://localhost:4000/api/health
           curl -fsS http://localhost:4000/ | grep -qi '<div id="root"'
-          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:4000/api/projects/demo/sessions \
-            -H 'content-type: application/json' -d '{"text":"x"}')" = 401
-          curl -fsS -X POST http://localhost:4000/api/projects/demo/sessions \
-            -H 'authorization: stub smoke:user' -H 'content-type: application/json' \
-            -d '{"text":"smoke"}' | grep -q '"tasks"'
+          base=http://localhost:4000
+          cookies=$(mktemp)
+          trap 'rm -f "$cookies"' EXIT
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/me")" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/me" \
+            -H 'authorization: stub smoke:staff')" = 401
+          curl -fsS -c "$cookies" -X POST "$base/api/auth/signup" \
+            -H "Origin: $base" -H 'content-type: application/json' \
+            -d '{"email":"smoke@example.test","displayName":"Smoke","password":"staging-test-password"}' | grep -q '"accountId"'
+          curl -fsS -b "$cookies" -X POST "$base/api/auth/signout" -H "Origin: $base"
+          curl -fsS -c "$cookies" -X POST "$base/api/auth/password" \
+            -H "Origin: $base" -H 'content-type: application/json' \
+            -d '{"email":"smoke@example.test","password":"staging-test-password"}' | grep -q '"accountId"'
+          curl -fsS -b "$cookies" "$base/api/me" | grep -q 'smoke@example.test'
+          # Projects is not registered on main yet. Do not bypass its ownership
+          # gate by posting a fabricated project ID to the session endpoint.
+          curl -fsS -b "$cookies" -X POST "$base/api/auth/signout" -H "Origin: $base"
+          test "$(curl -s -b "$cookies" -o /dev/null -w '%{http_code}' "$base/api/me")" = 401
       - name: OWASP ZAP baseline scan
         uses: zaproxy/action-baseline@v0.14.0
         with:

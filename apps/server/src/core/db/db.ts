@@ -12,7 +12,7 @@ import pg from 'pg';
 export type Row = Record<string, unknown>;
 
 export interface Queryable {
-  query<T extends Row = Row>(sql: string, params?: readonly unknown[]): Promise<T[]>;
+  query<T extends object = Row>(sql: string, params?: readonly unknown[]): Promise<T[]>;
 }
 
 export interface Db extends Queryable {
@@ -43,7 +43,10 @@ interface Runs {
 
 function wrap(client: Runs): Queryable {
   return {
-    async query<T extends Row = Row>(sql: string, params: readonly unknown[] = []): Promise<T[]> {
+    async query<T extends object = Row>(
+      sql: string,
+      params: readonly unknown[] = [],
+    ): Promise<T[]> {
       const result = await client.query(sql, [...params]);
       return result.rows as T[];
     },

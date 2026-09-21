@@ -1,33 +1,75 @@
 # identity — LU YI
 
-**Use case:** UC1 — sign up, sign in, manage the account
-**Covers:** identity, email — sign-in, accounts, OAuth, email verification
+UC1: password sign-up, sign-in and account management. Strategy with Template
+Method varies credential verification while sharing session issuance. The
+reviewed authentication core is retained rather than rewritten.
 
-## The design problem (from the proposal, section 6.4)
+## Public index
 
-Four ways to become authenticated: GitHub, Google, email with password, and an
-existing session. Each exchange differs, all of them must end in one session, and
-a fifth must not change the session code.
+`createIdentitySlice(options)` takes core's database, canonical origin, explicit
+session lifetime and LoginGate, plus optional secureCookies, oauthProviders and
+mailSender. It returns `principalResolver`, `registerRoutes`, and the trusted
+account interface `listAccounts`, `getAccount`, `setRole`, `suspend`. Billing must
+call requireStaff before exposing account administration. No billing/admin HTTP
+implementation is part of this slice.
 
-**Candidate pattern:** Strategy with Template Method. This is the starting
-hypothesis from the proposal, not the conclusion. You compare the candidates,
-pick one, and write down why.
+`main.ts` mounts password routes and the cookie resolver whenever DATABASE_URL is
+set. Stub headers then stop working for every slice. Database-free development
+retains the stub; production without DATABASE_URL fails startup. The resolver
+reads current role and suspension on every request, never renewing a session.
 
-## You design this slice
+| Route | Behavior |
+|---|---|
+| POST /api/auth/signup | email, displayName, password; 201 and cookie |
+| POST /api/auth/password | email, password; 200 and cookie |
+| POST /api/auth/signout | revoke current token; 204 |
+| POST /api/auth/signout-all | authenticated; revoke all account tokens; 204 |
+| GET /api/me | authenticated public account |
+| PATCH /api/me | displayName/email; password proof for email |
+| POST /api/me/password | current/new password; revoke other sessions atomically |
+| GET /api/auth/providers | configured providers; false by default |
+| GET /api/auth/mail | enabled flag; false by default |
 
-This folder is empty on purpose: a README and an empty `index.ts`. Nobody has
-decided your classes for you. Write the design first (use case flow, analysis
-class diagram, the pattern and why) in your own design doc, then build it here
-with a unit test for every class that carries the pattern.
+Account deletion is excluded pending shared retention constraints. OAuth, mail
+verification and reset are written/tested but not wired (Sprint 3). Do not enable
+public reset delivery before its timing-enumeration blocker is addressed.
 
-## Boundary
+## Security and storage
 
-Everything this slice exposes to the rest of the monolith is re-exported from
-`index.ts`. Other slices import `modules/identity`, never a file inside it. You
-own every file in this folder (see `/CODEOWNERS`).
+Passwords use salted scrypt; only hashed random session tokens are stored.
+Cookies are HttpOnly/SameSite=Lax/Secure by default. Insecure cookies require an
+explicit loopback HTTP origin. Every identity mutation requires exact Origin.
+LoginGate counts failed actions per direct peer and optional account key, bounds
+tracked keys and concurrent work, and does not trust forwarded headers. It is
+local, not distributed. New passwords have an 8-code-point minimum and a 1024-byte
+ceiling. Signup's duplicate-email response still reveals availability.
 
-## Definition of Done for a story here
+PostgresAccountStore and PostgresAuthSessionStore use core's injected database.
+Password changes compare the verified hash under account-first locking and
+revoke all other sessions in the same transaction. Suspension similarly revokes
+sessions; unsuspension never restores old cookies. Existing WebSocket connections
+retain their handshake principal until core provides revalidation.
 
-See `/docs/DOD.md`. In short: a passing unit test on the behaviour, the pattern
-demonstrated (brute-force version documented, then the refactor), lint and
-typecheck green, and the CI pipeline green.
+Only core's migration runner applies 002/003/004. Migration 002 adds suspended
+and normalized-email uniqueness to accounts; duplicate historical emails block
+migration. No second migration tree or temporary runtime dependency exists.
+Arctic is pinned at 3.7.0; its upstream deprecation remains a Sprint 3 risk.
+
+## Design and acceptance
+
+Without the pattern, each credential branch repeats verification/session code.
+AuthStrategy encapsulates verification; AbstractAuthFlow fixes the sequence and
+SessionAuthFlow supplies the shared completion. SessionStrategy resolves an
+existing cookie but is not a minting strategy in the factory. Pattern unit tests
+prove failure propagation, selection and shared completion without fallback.
+
+SQL/HTTP/concurrency tests use openTestDb and TEST_DATABASE_URL from core. CI
+supplies DATABASE_URL, so these tests run rather than skip. Tests include
+multi-connection locks, rollback, auth isolation and pool-restart persistence.
+`npm run verify` must pass with a real database, alongside build, staging smoke
+and owner review. Local success is not merged delivery.
+
+See [API](../../../../../docs/identity/API.md),
+[local setup](../../../../../docs/identity/LOCAL_AUTH.md),
+[OAuth](../../../../../docs/identity/OAUTH_SETUP.md), and
+[mail](../../../../../docs/identity/MAIL_SETUP.md).

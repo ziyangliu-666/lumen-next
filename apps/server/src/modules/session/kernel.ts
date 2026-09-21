@@ -191,13 +191,12 @@ export class Kernel implements WorkerReport {
     return finding;
   }
 
-  async addSpend(taskId: string, amount: Money, _reason: string): Promise<void> {
+  async addSpend(taskId: string, amount: Money, reason: string): Promise<void> {
     if (!Number.isFinite(amount.dollars) || amount.dollars < 0) {
       throw new Error(`kernel: a spend must be a non-negative amount, got ${amount.dollars}`);
     }
-    // The ledger entry (who pays, and why) is billing's record() and is wired
-    // in when that slice lands. The task's own cost is the trace's, and is here.
-    const task = await this.trace.addCost(taskId, amount);
+    // Postgres commits billing's ledger and the task cost together before events.
+    const task = await this.trace.addCost(taskId, amount, reason);
     this.broker.publish(task.sessionId, { type: 'task.cost', taskId, ownCost: task.ownCost });
 
     // The spend changes the total of this task and of every ancestor, and of

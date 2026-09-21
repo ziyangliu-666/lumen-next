@@ -1,4 +1,5 @@
 // Owner: HE RONG. Page: Settings (account, wallet, keys).
+import { Wallet } from './Wallet';
 import type { JSX } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/tabs';
@@ -25,13 +26,7 @@ export function Settings(): JSX.Element {
           </Card>
         </TabsContent>
         <TabsContent value="wallet" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Balance</CardTitle>
-            </CardHeader>
-            {/* Money is dollars in the contract, four decimals and monospace on screen. */}
-            <CardContent className="font-mono text-2xl text-ink">$0.00</CardContent>
-          </Card>
+          <Wallet />
         </TabsContent>
         <TabsContent value="keys" className="mt-4">
           <Card>

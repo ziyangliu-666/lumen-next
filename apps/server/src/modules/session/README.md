@@ -31,6 +31,7 @@ session, one task, one step, rendered end to end.
 export function createSessionSlice(deps: {
   broker: Broker; worker?: Worker; db?: Db | null;
   requireProject?: ProjectGate;   // from projects: may this principal use this project?
+  recordSpend?: SpendRecorder;   // from billing: ledger write in the trace transaction
   recordFinding?: FindingSaver;   // from projects: where findings are kept
 }): SessionSlice;
 // SessionSlice = { kernel, access, registerRoutes, registerCommands, projects: SessionDirectory }
@@ -48,3 +49,8 @@ every file in this folder (see `/CODEOWNERS`).
 See `/docs/DOD.md`. In short: a passing unit test on the behaviour, the pattern
 demonstrated (brute-force version documented, then the refactor), lint and
 typecheck green, and the CI pipeline green.
+
+With Postgres, `recordSpend(entry, tx)` and the task cost commit or roll back
+together. Billing receives the task owner from the session record, never a
+browser-supplied account. The callback is not used in MemoryTrace development
+mode, where billing reports database unavailability instead of a fake wallet.

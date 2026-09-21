@@ -49,6 +49,18 @@ describe.skipIf(!TEST_DATABASE_URL)('core: database', () => {
     expect(row?.amount).toBe(0.015);
   });
 
+  it('migrates concurrent isolated databases without rejecting a lock contender', async () => {
+    const databases = await Promise.all([openTestDb(), openTestDb()]);
+    try {
+      for (const database of databases) {
+        const rows = await database.db.query('select name from pgmigrations');
+        expect(rows.length).toBeGreaterThan(0);
+      }
+    } finally {
+      await Promise.all(databases.map((database) => database.drop()));
+    }
+  });
+
   it('commits a transaction that resolves', async () => {
     await db.withTransaction(async (tx) => {
       await tx.query(`insert into accounts (email, display_name) values ($1, $2)`, [

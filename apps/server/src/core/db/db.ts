@@ -84,6 +84,9 @@ export async function openDatabase(url: string, options: OpenOptions = {}): Prom
       migrationsTable: 'pgmigrations',
       schema,
       createSchema: true,
+      // Concurrent application starts and isolated test schemas share the
+      // runner's advisory lock. Queue migrations instead of failing startup.
+      advisoryLockMode: 'wait',
       // Five slices add migrations on five branches, and they merge in whatever
       // order review allows. With the order check on, a file numbered below one
       // that is already applied stops the process at startup, so every merge

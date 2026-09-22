@@ -9,7 +9,7 @@
 // - A prompt is pasted into that person's coding agent as it is. Do not put a
 //   backtick or a dollar-brace inside a prompt: it would end the string.
 window.LUMEN_STATUS = {
-  updated: '2026-09-21',
+  updated: '2026-09-22',
   sprint: {
     name: 'Sprint 2',
     starts: '2026-09-15',
@@ -35,9 +35,9 @@ window.LUMEN_STATUS = {
     ],
   },
   main: {
-    commit: '65baeaf',
+    commit: '820d16d',
     pipelines: 'CI, Security and Deploy green',
-    tests: 583,
+    tests: 590,
     coverage: 98,
     gate: 65,
     dast: '0 fail, 8 warn',
@@ -92,28 +92,27 @@ window.LUMEN_STATUS = {
       slice: 'UC2 projects',
       pattern: 'State',
       written: 88,
-      onMain: 85,
-      state: 'review',
-      stateLabel: '#30 open, CI green, in review',
+      onMain: 88,
+      state: 'done',
+      stateLabel: '#30 merged; projects on main',
       summary:
-        'Merged on 21 Sep as #24, reopened on a branch in this repository after the fork pull request #16 was closed, so that CI could run. Five routes, memory and Postgres stores, Landing and Home, and migration 005 in the shared core/db/migrations. The six State classes now carry behaviour rather than constants: each decides the label, the tone, the actions, the refresh policy and which transitions are legal, and a started card is refused a return to Queued. Creation deletes the project when the session fails to start, so no orphan card is left, and a failed read that is not a 401 backs off and stops after five failures. Projects is composed in app.ts through the public SessionDirectory of the session slice, and the end-to-end test (#25) drives a project from the question to its findings. Legacy findings still have a null project id and wait on an owner-approved backfill. Since the merge, the first of the two follow-ups is open as #30 on branch projects/home-current-account (one commit, 21 Sep, three files): Home takes the account and the mode from useCurrentAccount instead of reading sign-in from a 401, a signed-out visitor is pointed at Landing, the list is keyed by mode and account id so a changed account cannot reuse old pages, and the 401 path stays for a cookie that expires while the page is open. Seven rendering tests cover loading, a failed account lookup, signed out and ready in both modes, and a later 401. Quality, web build, dependency audit and CodeQL are green on it; it waits on an owner review, and the automated reviewer did not run because its quota was exhausted.',
+        'Merged on 21 Sep as #24, reopened on a branch in this repository after the fork pull request #16 was closed, so that CI could run. Five routes, memory and Postgres stores, Landing and Home, and migration 005 in the shared core/db/migrations. The six State classes now carry behaviour rather than constants: each decides the label, the tone, the actions, the refresh policy and which transitions are legal, and a started card is refused a return to Queued. Creation deletes the project when the session fails to start, so no orphan card is left, and a failed read that is not a 401 backs off and stops after five failures. Projects is composed in app.ts through the public SessionDirectory of the session slice, and the end-to-end test (#25) drives a project from the question to its findings. Legacy findings still have a null project id and wait on an owner-approved backfill. The first of the two follow-ups merged on 22 Sep as #30 (820d16d): Home takes the account and the mode from useCurrentAccount instead of reading sign-in from a 401, a signed-out visitor is pointed at Landing, the list is keyed by mode and account id so a changed account cannot reuse old pages, and the 401 path stays for a cookie that expires while the page is open. Seven rendering tests cover loading, a failed account lookup, signed out and ready in both modes, and a later 401, and the README records the rule. CI and Deploy are green on main at that commit. The backfill is the one piece of the slice still to write.',
       todo: [
         { text: 'Rebase; migration to core/db/migrations/005_', done: true },
         { text: 'Delete the patches; add the main.ts lines', done: true },
         { text: 'Back off the Home poll; no orphan project', done: true },
         { text: 'State classes need behaviour, not constants', done: true },
-        { text: 'Home asks useCurrentAccount (#26), not a 401 inside usePages', done: false },
+        { text: 'Home asks useCurrentAccount (#26), not a 401 inside usePages (#30)', done: true },
         { text: 'Backfill legacy findings with a project id, so they count on Home', done: false },
       ],
-      prs: [{ number: 30, label: 'Home asks the shared current account: open, CI green, in review' }],
-      prompt: `You are working in the lumen-next repo on the projects slice (apps/server/src/modules/projects, apps/web/src/pages/landing, apps/web/src/pages/home), owned by PENG XUJIAN. Pull request #24 is merged: the routes, both stores, Landing and Home, migration 005 and the six State classes are on main. The fork pull request #16 is closed. The composition root is now apps/server/src/app.ts, not main.ts, and projects is registered there. Read CLAUDE.md, docs/CODING_STANDARDS.md, apps/server/src/modules/projects/README.md and apps/web/src/core/auth.tsx before you change anything. Everything you commit is English.
+      prs: [],
+      prompt: `You are working in the lumen-next repo on the projects slice (apps/server/src/modules/projects, apps/web/src/pages/landing, apps/web/src/pages/home), owned by PENG XUJIAN. Pull requests #24 and #30 are merged: the routes, both stores, Landing and Home, migration 005, the six State classes, and Home taking the account and the mode from useCurrentAccount are all on main. The fork pull request #16 is closed. The composition root is now apps/server/src/app.ts, not main.ts, and projects is registered there. Read CLAUDE.md, docs/CODING_STANDARDS.md, apps/server/src/modules/projects/README.md and apps/web/src/core/auth.tsx before you change anything. Everything you commit is English.
 
-Goal: close the two loose ends the merge left, one small pull request each.
+Goal: close the one loose end the merge left, in one small pull request.
 
 Do, in this order:
-1. Written and waiting on review: pull request #30, on branch projects/home-current-account, makes Home take the account and the mode from useCurrentAccount instead of deciding from a 401 inside usePages, keeps the 401 path for a cookie that expires while the page is open, and points a signed-out visitor at Landing. CI is green on it. Do not write it a second time; answer its review, and rebase it if main moves under it.
-2. Backfill the legacy findings. Migration 005 added findings.project_id as nullable, so a finding written before it has no project and never reaches Home. Agree the rule with the core owner, write it as a new migration under apps/server/src/core/db/migrations, and test that a finding whose session has a project is given that project, and that one with a stub session id is left alone rather than deleted.
-3. If either step changes a State class, add the before and after to CARD_STATE.md, so the Sprint 4 refactor record stays true.
+1. Backfill the legacy findings. Migration 005 added findings.project_id as nullable, so a finding written before it has no project and never reaches Home. Agree the rule with the core owner, write it as a new migration under apps/server/src/core/db/migrations, and test that a finding whose session has a project is given that project, and that one with a stub session id is left alone rather than deleted.
+2. If that change touches a State class, add the before and after to CARD_STATE.md, so the Sprint 4 refactor record stays true.
 
 Constraints: touch only modules/projects, pages/home, pages/landing and the one new migration. Use another slice only through its public index. No new dependency. Done means npm run verify is green with DATABASE_URL set (docker compose up db), and CI is green on a branch in this repository, not on a fork.`,
     },
@@ -167,7 +166,7 @@ Constraints: no file outside apps/server/src/modules/identity, apps/web/src/page
       state: 'progress',
       stateLabel: 'Code on a branch, no pull request',
       summary:
-        'The core HTTP layer from Sprint 1 is on main (#5). SandboxFs, SteerQueue and the files routes sit on steering/sandbox-foundations, last pushed 17 Sep, now 19 commits behind main. The Worker, the Compute interface and the composer are not started. WorkerReport changed in #10 and #17, and again in #28: appendStep now takes an optional StepDetail, a detail.cost is charged in the same call, and delegate() writes the delegate step itself, so a worker may not name child tasks. The composition root moved from main.ts to apps/server/src/app.ts in #25, where the comment beside the registrations says steering is the one slice still to come. The Session page was rebuilt in #27: the composer is one row at the foot of the step stream, and it is left as the region of this slice.',
+        'The core HTTP layer from Sprint 1 is on main (#5). SandboxFs, SteerQueue and the files routes sit on steering/sandbox-foundations, last pushed 17 Sep, now 20 commits behind main. The Worker, the Compute interface and the composer are not started. WorkerReport changed in #10 and #17, and again in #28: appendStep now takes an optional StepDetail, a detail.cost is charged in the same call, and delegate() writes the delegate step itself, so a worker may not name child tasks. The composition root moved from main.ts to apps/server/src/app.ts in #25, where the comment beside the registrations says steering is the one slice still to come. The Session page was rebuilt in #27: the composer is one row at the foot of the step stream, and it is left as the region of this slice.',
       todo: [
         { text: 'Today: rebase and open the pull request for what exists', done: false },
         { text: 'Register the steering routes in app.ts, not main.ts (#25)', done: false },
@@ -176,7 +175,7 @@ Constraints: no file outside apps/server/src/modules/identity, apps/web/src/page
         { text: 'task.steer with the ownership check; composer', done: false },
       ],
       prs: [],
-      prompt: `You are working in the lumen-next repo on the steering slice (apps/server/src/modules/steering, the composer row of apps/web/src/pages/session/Session.tsx), owned by LI ZHUOYANG. Branch steering/sandbox-foundations exists and is 19 commits behind main. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/ARCHITECTURE.md sections 6 to 8, apps/server/src/core/domain/worker.ts and apps/server/src/app.ts on main. The composition root moved out of main.ts into app.ts in #25: every slice is registered there now, and the comment beside the registrations says steering is the one still to come. Everything you commit is English.
+      prompt: `You are working in the lumen-next repo on the steering slice (apps/server/src/modules/steering, the composer row of apps/web/src/pages/session/Session.tsx), owned by LI ZHUOYANG. Branch steering/sandbox-foundations exists and is 20 commits behind main. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/ARCHITECTURE.md sections 6 to 8, apps/server/src/core/domain/worker.ts and apps/server/src/app.ts on main. The composition root moved out of main.ts into app.ts in #25: every slice is registered there now, and the comment beside the registrations says steering is the one still to come. Everything you commit is English.
 
 Goal: two small pull requests this week, not one large one.
 

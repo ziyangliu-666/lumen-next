@@ -9,7 +9,16 @@ reviewed authentication core is retained rather than rewritten.
 `createIdentitySlice(options)` takes core's database, canonical origin, explicit
 session lifetime and LoginGate, plus optional secureCookies, oauthProviders and
 mailSender. It returns `principalResolver`, `registerRoutes`, and the trusted
-account interface `listAccounts`, `getAccount`, `setRole`, `suspend`. Billing must
+account interface `listAccounts`, `getAccount`, `setRole`, `suspend`.
+`oauthProvidersFromEnvironment(environment, origin)` constructs optional GitHub
+and Google adapters from explicitly supplied server configuration, without
+reading process.env or making network calls. Empty credential pairs disable a
+provider; partial/malformed pairs fail with value-free errors. Enabled providers
+require a canonical HTTPS origin by default and use fixed callback paths. An
+explicit `{ allowLoopbackHttp: true }` third argument permits canonical loopback
+HTTP for local acceptance only; production callers must not opt in. Core must inject
+its result through oauthProviders; this export alone does not enable OAuth.
+Billing must
 call requireStaff before exposing account administration. No billing/admin HTTP
 implementation is part of this slice.
 
@@ -68,6 +77,9 @@ supplies DATABASE_URL, so these tests run rather than skip. Tests include
 multi-connection locks, rollback, auth isolation and pool-restart persistence.
 `npm run verify` must pass with a real database, alongside build, staging smoke
 and owner review. Local success is not merged delivery.
+
+Track public acceptance scope and remaining work in
+[delivery status](../../../../../docs/identity/DELIVERY.md).
 
 See [API](../../../../../docs/identity/API.md),
 [local setup](../../../../../docs/identity/LOCAL_AUTH.md),

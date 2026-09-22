@@ -62,6 +62,7 @@ function identityConfig(): IdentityConfig {
 async function bootstrap(): Promise<void> {
   const db = await database();
   const webRoot = defaultWebRoot();
+  const volumeRoot = process.env['LUMEN_VOLUME_ROOT'];
   const { server, orphans, resolver } = await composeApp({
     db,
     // Real sign-in whenever there is a database; the stub only without one.
@@ -71,6 +72,7 @@ async function bootstrap(): Promise<void> {
     // without this and do not wait.
     worker: demoWorker({ paceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']) }),
     ...(webRoot ? { webRoot } : {}),
+    ...(volumeRoot ? { volumeRoot } : {}),
   });
 
   await server.listen({ port: port(), host: '0.0.0.0' });

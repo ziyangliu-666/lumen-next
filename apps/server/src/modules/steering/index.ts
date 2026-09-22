@@ -2,10 +2,11 @@
 // Everything the rest of the monolith may use from here is re-exported from
 // this file and nowhere else.
 import type { FastifyInstance } from 'fastify';
-import { steeringRoutes } from './routes.js';
+import { steeringRoutes, type ProjectGate } from './routes.js';
 
 export type { FileEntry, Scope } from './sandboxFs.js';
 export { SandboxFs, SandboxPathError, SandboxQuotaError } from './sandboxFs.js';
+export type { ProjectGate } from './routes.js';
 
 export interface SteeringSlice {
   readonly registerRoutes: (app: FastifyInstance) => void;
@@ -20,8 +21,12 @@ export interface SteeringSlice {
  * routes. See apps/server/src/modules/steering/DESIGN.md for what shipped
  * and what is still open.
  */
-export function createSteeringSlice(deps: { volumeRoot: string }): SteeringSlice {
+export function createSteeringSlice(deps: {
+  volumeRoot: string;
+  /** From the projects slice: may this principal touch this project? Untrusted :id without one. */
+  requireProject?: ProjectGate;
+}): SteeringSlice {
   return {
-    registerRoutes: steeringRoutes(deps.volumeRoot),
+    registerRoutes: steeringRoutes(deps.volumeRoot, deps.requireProject),
   };
 }

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requireUser } from '../../core/http/authGuard.js';
+import { requireUser, type Principal } from '../../core/http/authGuard.js';
 import { badRequest, notFound } from '../../core/http/httpError.js';
 import { SandboxFs, SandboxPathError, type Scope } from './sandboxFs.js';
 
@@ -9,6 +9,14 @@ import { SandboxFs, SandboxPathError, type Scope } from './sandboxFs.js';
 // sandboxFs.ts), because a running sandbox's scratch space is not this
 // endpoint's job. Thin handlers, like session's routes.ts: ownership and path
 // safety are decided one layer down, never re-decided here.
+
+/**
+ * Same shape as session's own `ProjectGate`: resolves when `principal` may
+ * touch `projectId`, rejects (or throws) otherwise. Optional so a test can
+ * build these routes without a projects slice; app.ts always supplies
+ * `projects.requireProject`.
+ */
+export type ProjectGate = (principal: Principal, projectId: string) => Promise<unknown>;
 
 const SCOPES: readonly Scope[] = ['upload', 'output'];
 
@@ -49,19 +57,21 @@ function asHttpError(error: unknown): unknown {
 
 export function steeringRoutes(
   volumeRoot: string,
+  requireProject?: ProjectGate,
   makeFs: (projectId: string) => SandboxFs = (projectId) => new SandboxFs(volumeRoot, projectId),
 ): (app: FastifyInstance) => void {
   return (app) => {
-    // The project id is taken on trust in Sprint 1: there is no project store
-    // to ask. Projects' `projectOf` closes that when it lands — same gap
-    // session's routes.ts documents for its own :id param.
     app.get<{ Params: { id: string }; Querystring: { scope?: string; path?: string } }>(
       '/api/projects/:id/files',
       async (request) => {
-        requireUser(request);
+        const principal = requireUser(request);
         const scope = scopeOf(request.query);
         const path = pathOf(request.query);
         try {
+          // Validate first, authorise second, touch disk last — same order
+          // session's routes.ts uses, for the same reason: a refused request
+          // should not have to explain what it would have found.
+          await requireProject?.(principal, request.params.id);
           const sandbox = makeFs(request.params.id);
           return await sandbox.list(`/mnt/${scope}${path}`);
         } catch (error) {
@@ -73,8 +83,9 @@ export function steeringRoutes(
     app.get<{ Params: { id: string; '*': string } }>(
       '/api/projects/:id/files/*',
       async (request, reply) => {
-        requireUser(request);
+        const principal = requireUser(request);
         try {
+          await requireProject?.(principal, request.params.id);
           const sandbox = makeFs(request.params.id);
           const data = await sandbox.readFile(`/mnt/${request.params['*']}`);
           return await reply.type('application/octet-stream').send(data);

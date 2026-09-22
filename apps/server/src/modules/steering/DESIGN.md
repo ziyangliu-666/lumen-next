@@ -1,7 +1,7 @@
 # steering — design doc: sandbox path virtualization & the steer queue
 
 **Slice:** `steering` (owner: LI ZHUOYANG) · **Use case:** UC4 — steer a running session, run a command
-**Status:** `SandboxFs`/`SteerCommand` implemented; the files routes are now wired into `main.ts` · branch `steering/sandbox-foundations`
+**Status:** `SandboxFs`/`SteerCommand` implemented; the files routes are wired into `app.ts`, ownership-checked via `projects.requireProject` · branch `steering/sandbox-foundations`, rebased on main 22 Sep
 **Source:** `sandboxFs.ts` / `sandboxFs.test.ts`, `steerCommand.ts` / `steerCommand.test.ts`, `routes.ts` / `routes.test.ts`, `index.ts`
 
 This covers the first two of UC4's three pieces. Both are deliberately
@@ -180,9 +180,11 @@ a single agent's own script.
 
 ## 6. Boundary and follow-ups
 
-`index.ts` now exports `createSteeringSlice({ volumeRoot })`, which gives
-`main.ts` a `registerRoutes` for the two files routes (§7 of
-`docs/ARCHITECTURE.md`):
+`index.ts` now exports `createSteeringSlice({ volumeRoot, requireProject })`,
+which gives `app.ts` a `registerRoutes` for the two files routes (§7 of
+`docs/ARCHITECTURE.md`). (Slice wiring moved from `main.ts` to `app.ts` in
+the walking-skeleton rewrite; `main.ts` now only reads the environment and
+calls `composeApp`.)
 
 - `GET /api/projects/:id/files?scope=upload|output&path=/sub` — one
   directory's listing (`SandboxFs.list`, non-recursive; the caller pages
@@ -209,26 +211,32 @@ into one `notFound()` — a caller should not be able to tell "that file does
 not exist" apart from "that path was rejected as unsafe" by the status code
 alone.
 
-**`LUMEN_VOLUME_ROOT` is a new env var** (`.env.example`, read in `main.ts`),
-defaulting to `.data` next to the running server if unset. `apps/server/.data/`
-is gitignored.
+**`LUMEN_VOLUME_ROOT` is a new env var** (`.env.example`, read in `main.ts`,
+passed through `app.ts`), defaulting to `.data` next to the running server if
+unset. `apps/server/.data/` is gitignored.
+
+**The ownership check is closed, not a placeholder.** `projects` landed
+`requireProject(principal, projectId)` (throws `notFound` unless `principal`
+owns the project) while this slice was on its own branch; `app.ts` wires it
+into steering the same way it wires `requireProject` into session's own
+routes — `createSteeringSlice({ volumeRoot, requireProject: (p, id) =>
+projects.requireProject(p, id) })`. `routes.ts` calls it before touching
+`SandboxFs`, same order as session: validate, authorise, then touch disk.
+Verified against a real, running server: created a project as one stub
+account, confirmed a second account gets 404 on that project's files, not
+its contents.
 
 **Deliberately out of scope for this piece:**
 
-- **The ownership check is a placeholder, not closed.** The routes trust
-  `:id` the same way session's `routes.ts` trusts its own `:id` — no
-  `projects.projectOf` exists yet to ask. Unlike session's `SessionAccess`
-  (which now answers from session's own record of who opened it), steering
-  has no equivalent record for "who owns this project"; that is `projects`'
-  domain alone. This is a real hole reachable over HTTP now that the routes
-  are live, not just a gap in a class nobody could call yet — close it before
-  this reaches anything but local dev.
 - **`DockerCompute`** — needs `SandboxFs.hostMounts` as its bind-mount source,
   which is why `SandboxFs` had to land first.
 - **`task.steer` / `steer.cancel` and `worker: Worker`** — `core/domain/worker.ts`
-  landed with session's walking skeleton (`session.echoWorker` is the Sprint 1
-  stand-in); steering's own `Worker` implementation and command wiring are
-  still to come.
+  grew substantially with session's walking skeleton (`appendStep` now takes a
+  `kind`/`detail`, plus `delegate`/`recordFinding`/`addSpend`; `Worker.run` now
+  takes a turn's `input`, not just the task). `session.demoWorker` (renamed
+  from the Sprint 1 `echoWorker`) is the stand-in until steering's own `Worker`
+  implementation and command wiring land — read the current interface before
+  building against it, it has moved since this doc was first written.
 - **Durable quota counter** — `usageBytes` walks the tree on every call,
   which is fine for sprint 1. A running counter belongs in the database once
   tasks and spend are persisted there too.

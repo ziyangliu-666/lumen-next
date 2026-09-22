@@ -71,6 +71,7 @@ window.LUMEN_STATUS = {
         },
         { text: 'The whole application end to end in the gate (#25)', done: true },
         { text: 'The Session page as the spec draws it (#27)', done: true },
+        { text: 'Review #31: the obsolete backfill notes, no SQL change', done: false },
         {
           text: 'Pass billing budget guard in app.ts once a new account has a default cap',
           done: false,
@@ -93,10 +94,10 @@ window.LUMEN_STATUS = {
       pattern: 'State',
       written: 88,
       onMain: 88,
-      state: 'done',
-      stateLabel: '#30 merged; projects on main',
+      state: 'review',
+      stateLabel: '#31 docs-only, waiting on review',
       summary:
-        'Merged on 21 Sep as #24, reopened on a branch in this repository after the fork pull request #16 was closed, so that CI could run. Five routes, memory and Postgres stores, Landing and Home, and migration 005 in the shared core/db/migrations. The six State classes now carry behaviour rather than constants: each decides the label, the tone, the actions, the refresh policy and which transitions are legal, and a started card is refused a return to Queued. Creation deletes the project when the session fails to start, so no orphan card is left, and a failed read that is not a 401 backs off and stops after five failures. Projects is composed in app.ts through the public SessionDirectory of the session slice, and the end-to-end test (#25) drives a project from the question to its findings. Legacy findings still have a null project id and wait on an owner-approved backfill. The first of the two follow-ups merged on 22 Sep as #30 (820d16d): Home takes the account and the mode from useCurrentAccount instead of reading sign-in from a 401, a signed-out visitor is pointed at Landing, the list is keyed by mode and account id so a changed account cannot reuse old pages, and the 401 path stays for a cookie that expires while the page is open. Seven rendering tests cover loading, a failed account lookup, signed out and ready in both modes, and a later 401, and the README records the rule. CI and Deploy are green on main at that commit. The backfill is the one piece of the slice still to write.',
+        'Merged on 21 Sep as #24, reopened on a branch in this repository after the fork pull request #16 was closed, so that CI could run. Five routes, memory and Postgres stores, Landing and Home, and migration 005 in the shared core/db/migrations. The six State classes now carry behaviour rather than constants: each decides the label, the tone, the actions, the refresh policy and which transitions are legal, and a started card is refused a return to Queued. Creation deletes the project when the session fails to start, so no orphan card is left, and a failed read that is not a 401 backs off and stops after five failures. Projects is composed in app.ts through the public SessionDirectory of the session slice, and the end-to-end test (#25) drives a project from the question to its findings. Legacy findings still have a null project id and wait on an owner-approved backfill. The first of the two follow-ups merged on 22 Sep as #30 (820d16d): Home takes the account and the mode from useCurrentAccount instead of reading sign-in from a 401, a signed-out visitor is pointed at Landing, the list is keyed by mode and account id so a changed account cannot reuse old pages, and the 401 path stays for a cookie that expires while the page is open. Seven rendering tests cover loading, a failed account lookup, signed out and ready in both modes, and a later 401, and the README records the rule. CI and Deploy are green on main at that commit. The legacy findings backfill is closed without a migration: the core owner answered on #24 on 22 Sep that every finding written since migration 005 already carries a project id, and the only databases that ran 001 to 004 without it are CI runs and the staging container, both recreated from scratch, so the repair rule agreed on that thread is kept for the day a real database needs it rather than run now. #31, opened 22 Sep, does what that answer asked instead: it deletes the line in migration 005 that said legacy findings stay session-readable and the two README paragraphs that said a backfill was owed. Two lines added and four removed across three files; no SQL statement and no behaviour changed. Its five checks are green and it is waiting on the core owner, who is the requested reviewer.',
       todo: [
         { text: 'Rebase; migration to core/db/migrations/005_', done: true },
         { text: 'Delete the patches; add the main.ts lines', done: true },
@@ -104,17 +105,20 @@ window.LUMEN_STATUS = {
         { text: 'State classes need behaviour, not constants', done: true },
         { text: 'Home asks useCurrentAccount (#26), not a 401 inside usePages (#30)', done: true },
         { text: 'Backfill legacy findings with a project id, so they count on Home', done: false },
+        { text: 'No backfill after all: remove the notes that say one is owed (#31)', done: false },
       ],
-      prs: [],
+      prs: [{ number: 31, label: 'docs(projects): remove obsolete findings backfill notes' }],
       prompt: `You are working in the lumen-next repo on the projects slice (apps/server/src/modules/projects, apps/web/src/pages/landing, apps/web/src/pages/home), owned by PENG XUJIAN. Pull requests #24 and #30 are merged: the routes, both stores, Landing and Home, migration 005, the six State classes, and Home taking the account and the mode from useCurrentAccount are all on main. The fork pull request #16 is closed. The composition root is now apps/server/src/app.ts, not main.ts, and projects is registered there. Read CLAUDE.md, docs/CODING_STANDARDS.md, apps/server/src/modules/projects/README.md and apps/web/src/core/auth.tsx before you change anything. Everything you commit is English.
 
-Goal: close the one loose end the merge left, in one small pull request.
+Goal: land the correction that closes the backfill question, in the pull request that is already open.
 
 Do, in this order:
-1. Backfill the legacy findings. Migration 005 added findings.project_id as nullable, so a finding written before it has no project and never reaches Home. Agree the rule with the core owner, write it as a new migration under apps/server/src/core/db/migrations, and test that a finding whose session has a project is given that project, and that one with a stub session id is left alone rather than deleted.
-2. If that change touches a State class, add the before and after to CARD_STATE.md, so the Sprint 4 refactor record stays true.
+1. Do not write a backfill migration. The core owner answered on #24 on 22 Sep: every finding written since migration 005 carries a project id, and the only databases that ran 001 to 004 without it are recreated from scratch, so there is no data to repair. The SQL rule you proposed was accepted as the rule to apply if a real database with a null project id ever appears, not as work that is owed now.
+2. Pull request #31 is open and is what that answer asked for: the line in migration 005 that says legacy findings stay session-readable is deleted, and the two README paragraphs that said a backfill was owed are corrected. Its checks are green and the core owner is the requested reviewer. Keep it to that: no new migration, no new test, no widening. Answer the review, and rebase on main if it moves.
+3. If the review asks where the agreed rule now lives, record it in the projects README as the rule to apply should such a database appear, and say plainly that none exists today.
+4. Once #31 is merged, this slice has no loose end left in Sprint 2. Agree the Sprint 3 work with the core owner rather than reopening this one.
 
-Constraints: touch only modules/projects, pages/home, pages/landing and the one new migration. Use another slice only through its public index. No new dependency. Done means npm run verify is green with DATABASE_URL set (docker compose up db), and CI is green on a branch in this repository, not on a fork.`,
+Constraints: touch only the projects documentation, the comment in migration 005, and modules/projects, pages/home, pages/landing if a review asks for it. No new migration. Use another slice only through its public index. No new dependency. Done means #31 is merged with CI green on a branch in this repository, not on a fork, and no file in the repository still says a backfill is owed.`,
     },
     {
       id: 'luyi',

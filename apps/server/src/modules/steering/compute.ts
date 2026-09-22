@@ -1,0 +1,138 @@
+import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import type { Scope } from './sandboxFs.js';
+
+// The sandbox behind its own interface (Sprint 2's outcome, docs/DOD.md): a
+// worker asks Compute to run one command and never learns whether that meant
+// a container or nothing at all.
+
+export interface ComputeResult {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+export interface Compute {
+  run(command: string, options: { cwd: string; timeoutMs: number }): Promise<ComputeResult>;
+}
+
+/**
+ * Null Object: every run answers with a readable failure and never throws, so
+ * a worker built against `Compute` needs no branch for "there is no provider" —
+ * running with no Docker on the host behaves like running against a compute
+ * provider that always declines, not like a missing dependency.
+ */
+export const NullCompute: Compute = {
+  run(): Promise<ComputeResult> {
+    return Promise.resolve({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'no compute provider is configured: nothing ran',
+    });
+  },
+};
+
+/** No tool a "no model yet" worker runs needs more than this; raise it once one does. */
+const DEFAULT_MEMORY = '512m';
+/** Pinned, not `:latest`: a worker's output must not change because an image did. */
+const DEFAULT_IMAGE = 'alpine:3.20';
+
+export interface DockerComputeOptions {
+  readonly image?: string;
+  readonly memory?: string;
+}
+
+/**
+ * Runs the command in a container, `SandboxFs.hostMounts` bind-mounted at the
+ * same paths the agent already addresses them by, no network, a memory limit
+ * and the caller's timeout. `upload` is mounted read-only — the container
+ * cannot use a shell to do what `SandboxFs.writeFile` already refuses.
+ *
+ * The container is named so a timeout can `docker kill` it by name: killing
+ * the local `docker run` process alone does not stop a container that is not
+ * detached, it only stops streaming its logs. `--rm` then removes it once it
+ * has actually stopped, on either path.
+ */
+export class DockerCompute implements Compute {
+  private readonly image: string;
+  private readonly memory: string;
+
+  constructor(
+    private readonly hostMounts: Readonly<Record<Scope, string>>,
+    options: DockerComputeOptions = {},
+  ) {
+    this.image = options.image ?? DEFAULT_IMAGE;
+    this.memory = options.memory ?? DEFAULT_MEMORY;
+  }
+
+  run(command: string, options: { cwd: string; timeoutMs: number }): Promise<ComputeResult> {
+    const name = `lumen-${randomUUID()}`;
+    const args = [
+      'run',
+      '--rm',
+      '--name',
+      name,
+      '--network',
+      'none',
+      '--memory',
+      this.memory,
+      '--workdir',
+      options.cwd,
+      '-v',
+      `${this.hostMounts.upload}:/mnt/upload:ro`,
+      '-v',
+      `${this.hostMounts.workspace}:/mnt/workspace`,
+      '-v',
+      `${this.hostMounts.output}:/mnt/output`,
+      this.image,
+      'sh',
+      '-c',
+      command,
+    ];
+
+    return new Promise((resolve) => {
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
+      const child = spawn('docker', args);
+
+      const timer = setTimeout(() => {
+        timedOut = true;
+        // Best-effort: if the container already finished, this just fails
+        // quietly, and 'close' below has already fired or is about to.
+        spawn('docker', ['kill', name]).on('error', () => undefined);
+      }, options.timeoutMs);
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString('utf8');
+      });
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString('utf8');
+      });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({
+          exitCode: timedOut ? 124 : (code ?? 1),
+          stdout,
+          stderr: timedOut ? `${stderr}\ntimed out after ${options.timeoutMs}ms` : stderr,
+        });
+      });
+      child.on('error', (error) => {
+        clearTimeout(timer);
+        resolve({ exitCode: 1, stdout, stderr: `docker: ${error.message}` });
+      });
+    });
+  }
+}
+
+/**
+ * Selects a provider. `hostMounts` is a specific sandbox's, so this is called
+ * once per task run, not once at startup — there is no long-lived Compute to
+ * hand out ahead of knowing which sandbox it runs against.
+ */
+export function compute(
+  provider: 'docker' | 'none',
+  hostMounts: Readonly<Record<Scope, string>>,
+): Compute {
+  return provider === 'docker' ? new DockerCompute(hostMounts) : NullCompute;
+}

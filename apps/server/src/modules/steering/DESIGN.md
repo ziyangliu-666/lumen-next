@@ -1,13 +1,14 @@
-# steering — design doc: sandbox path virtualization & the steer queue
+# steering — design doc: the sandbox, the steer queue, and the agent loop
 
 **Slice:** `steering` (owner: LI ZHUOYANG) · **Use case:** UC4 — steer a running session, run a command
-**Status:** `SandboxFs`/`SteerCommand` implemented; the files routes are wired into `app.ts`, ownership-checked via `projects.requireProject` · branch `steering/sandbox-foundations`, rebased on main 22 Sep
-**Source:** `sandboxFs.ts` / `sandboxFs.test.ts`, `steerCommand.ts` / `steerCommand.test.ts`, `routes.ts` / `routes.test.ts`, `index.ts`
+**Status:** All of UC4 has a first, real (not demo) implementation and is wired end to end · branch `steering/sandbox-foundations`, rebased on main 22 Sep
+**Source:** `sandboxFs.ts`, `steerCommand.ts`, `steerRegistry.ts`, `compute.ts`, `worker.ts`, `routes.ts`, `commands.ts`, `index.ts` (each with a `.test.ts`)
 
-This covers the first two of UC4's three pieces. Both are deliberately
-Docker-free: `SandboxFs` is built before `DockerCompute` because the compute
-piece consumes `SandboxFs.hostMounts` as its bind-mount source, so the mount
-paths have to exist and be trustworthy first.
+Built in the order each piece needed the last: `SandboxFs` before `DockerCompute`
+(compute binds `SandboxFs.hostMounts`); `SteerCommand`/`SteerQueue` before
+`SteerRegistry` (the registry is what lets a `task.steer` arriving on the
+broker find the right queue); both before `worker.ts`, which is the first
+thing in the slice that uses all of it at once.
 
 ## 1. Scope
 
@@ -15,9 +16,14 @@ paths have to exist and be trustworthy first.
 |---|---|---|
 | `SandboxFs` | `sandboxFs.ts` | Translates the agent's flat `/mnt/{upload,workspace,output}` view into real host paths, and refuses anything that would escape them. |
 | `SteerCommand` / `SteerQueue` | `steerCommand.ts` | Queues a user's mid-turn message and applies it at a chosen moment; cancellable before it lands. |
+| `Compute` / `NullCompute` / `DockerCompute` | `compute.ts` | Runs one command somewhere — nowhere, or a locked-down container — behind one interface. |
+| `SteerRegistry` | `steerRegistry.ts` | The seam between a `task.steer` arriving at any moment and the one running turn it must land in. |
+| The worker | `worker.ts` | The `Worker` implementation: no model, but a lead that really delegates and a reader that really runs a command. |
+| The files routes | `routes.ts` | `GET /api/projects/:id/files`, `GET /api/projects/:id/files/*`. |
+| `task.steer` | `commands.ts` | The broker command a landed steer arrives as. |
 
-Not in this piece of work: `DockerCompute`, and the route/command wiring that
-would expose either class to an HTTP handler (see §6).
+Not in this piece of work: `steer.cancel` (not in the frozen contract), the
+composer's attach button, a model.
 
 ## 2. Use case flow
 
@@ -38,20 +44,51 @@ container addresses files only through `/mnt/upload`, `/mnt/workspace`,
    per-file and per-project quota before touching disk.
 6. Only then does the real `fs/promises` call run.
 
-**Steering a running turn (UC4, steer part).**
+**Steering a running turn (UC4, steer part), now end to end.**
 
-1. A user sends a message mid-turn. The caller (not yet wired) builds a
-   `SteerCommand` with a `when` ("between turns" / "between steps", per the
-   contract's `ClientCommand` union) and enqueues it on the session's
-   `SteerQueue`.
-2. The user may cancel it any time before it lands — `SteerQueue.cancel(id)`
-   removes it and calls `undo()`.
-3. At each of the two moments the worker loop names, it calls
-   `flush(when)`. Every queued command whose `when` matches is applied (its
-   `sink` delivers `{taskId, text}` to the worker) and removed from the
-   queue in the same pass.
-4. Once a command has landed, `undo()` throws `AlreadyLandedError` instead of
-   pretending the delivery can be taken back.
+1. The browser sends `task.steer { taskId, text, when }` on the socket.
+   `commands.ts` resolves the task's session (`session.projects.taskSession`)
+   and the session's owner (`session.projects.context`) and refuses — same
+   404 whether the task is unknown or somebody else's — unless the caller
+   owns it or is staff. wsBridge.ts's own comment is explicit that this check
+   is steering's to make: a `taskId` travels under the session-level check
+   every other command gets.
+2. `SteerRegistry.steer` looks up the queue for that task's *current run* —
+   `worker.ts` registers one at the top of `Worker.run` and drops it at the
+   end — and enqueues a `SteerCommand` there. No active run for that task id
+   (it isn't running right now) throws `NoActiveRun`, caught and swallowed:
+   there is no `steer.queued`/`steer.landed` event in the contract yet to
+   explain that to the browser, and the composer only offers this control
+   while the task is shown as running.
+3. Between the reader's one tool step and recording its finding, and again
+   at the very end of the turn (`finally`, so it runs even if the turn
+   threw), the worker calls `queue.flush('next-step')` / `flush('end-of-turn')`.
+   Every queued command whose `when` matches is applied — its `sink` calls
+   `report.appendStep(taskId, 'you', text)`, landing it as the same kind of
+   step a fresh turn's words get — and removed from the queue in the same
+   pass.
+4. The user may cancel a steer any time before it lands — `SteerQueue.cancel(id)`
+   removes it and calls `undo()`. Once landed, `undo()` throws
+   `AlreadyLandedError` instead of pretending the delivery can be taken back.
+   (Nothing calls `cancel` yet: `steer.cancel` isn't in the frozen contract.)
+
+**Running a command (UC4, the third piece, now real).**
+
+1. `session`'s kernel calls `Worker.run(task, input, report)`. A `lead` task
+   writes one thinking step, delegates one `reader` (through `report.delegate`,
+   the kernel's own machinery — this worker opens no tasks itself), and
+   replies once the reader has come to rest.
+2. A `reader` task resolves its session to a project (`context`), opens a
+   `SandboxFs` for `{volumeRoot, projectId, task.sessionId}`, and asks
+   `compute(provider, sandbox.hostMounts)` to run a fixed diagnostic command —
+   fixed, not built from the task's title: there is no model here deciding
+   what is safe to run, so nothing derived from a user's words is trusted as
+   a shell command yet.
+3. The result becomes a `tool` step (`detail.output`), a file under
+   `/mnt/workspace/<taskId>.log` (through `SandboxFs.writeFile`, so it passes
+   every check §4 documents), a finding, and a `reply` step — whether or not
+   a provider actually ran anything: `NullCompute` completes this exact path
+   with a readable failure instead of a result.
 
 ## 3. Analysis class diagram
 
@@ -115,6 +152,57 @@ classDiagram
   SteerCommand ..> AlreadyLandedError : throws
 ```
 
+**Compute, SteerRegistry, and the worker that uses both:**
+
+```mermaid
+classDiagram
+  class Compute {
+    <<interface>>
+    +run(command, options) Promise~ComputeResult~
+  }
+  class NullCompute {
+    +run(command, options) Promise~ComputeResult~
+  }
+  class DockerCompute {
+    -hostMounts Record~Scope, string~
+    -image string
+    -memory string
+    +run(command, options) Promise~ComputeResult~
+  }
+  class ComputeResult {
+    +exitCode number
+    +stdout string
+    +stderr string
+  }
+  Compute <|.. NullCompute
+  Compute <|.. DockerCompute
+  Compute ..> ComputeResult : resolves
+
+  class SteerRegistry {
+    -active Map~string, Entry~
+    +begin(taskId, report) SteerQueue
+    +end(taskId) void
+    +steer(taskId, text, when) void
+  }
+  class NoActiveRun
+  SteerRegistry o-- SteerQueue
+  SteerRegistry --> WorkerReport : holds, per active task
+  SteerRegistry ..> SteerCommand : builds, on steer()
+  SteerRegistry ..> NoActiveRun : throws
+
+  class Worker {
+    <<interface>>
+    +run(task, input, report) Promise
+  }
+  class createWorker {
+    <<factory>>
+  }
+  createWorker ..|> Worker : returns one
+  Worker ..> SandboxFs : opens, per reader run
+  Worker ..> Compute : asks, per reader run
+  Worker --> SteerRegistry : begin()/end() every run
+```
+
 ## 4. Design problem and pattern
 
 ### SteerCommand / SteerQueue — Command
@@ -142,6 +230,34 @@ lands.
 needs a landed-check of its own — finding the command still in the queue *is*
 the proof it's still cancellable.
 
+### Compute / NullCompute / DockerCompute — Null Object
+
+The design problem (proposal, and `steerCommand.ts`'s own header, which named
+this the day it was written): a worker must run a command somewhere, and a
+host with no Docker — most contributors' machines, and this environment —
+must not be a special case the worker branches on.
+
+**Candidate considered and set aside:** a `provider: Compute | null` field,
+checked with `if (this.provider)` at every call site. Every one of those
+checks is a place a worker author can forget the check, and the failure mode
+of forgetting is a crash, not a graceful "nothing ran." Two call sites exist
+today (`worker.ts`); a model wiring in later adds more, each a fresh chance to
+forget.
+
+**Null Object fits** because the interface has exactly one thing a caller
+does with it — `run()` — and "no compute available" is answerable *as* a
+`Compute`, not as an absence of one: `NullCompute.run()` resolves with the
+same `ComputeResult` shape a real run would, `exitCode` nonzero and `stderr`
+saying why. `worker.ts` never learns which it got; `compute(provider,
+hostMounts)` is the only place that knows, and it is a factory, not a branch
+the worker carries.
+
+**Test that proves the reason for it:** `compute.test.ts`'s `NullCompute`
+suite asserts it never throws and always answers a `ComputeResult` — the
+worker's own tests (`worker.test.ts`) then exercise a full reader run with no
+Docker in this environment and no special-case code for it, which is the
+point being tested as much as the message.
+
 ### SandboxFs — not a GoF pattern; a threat model
 
 This piece isn't structured around a design pattern — it's path arithmetic
@@ -167,13 +283,34 @@ a single agent's own script.
 
 ## 5. Testing
 
-- 78 tests, 85.12% line coverage (`npm run verify` gate).
+- 69 tests in the slice, 62 passing / 7 skipped, 86.8% line coverage
+  (`npm run verify` gate is 60%, repo-wide). Full repo: 554 passing / 106
+  skipped (the rest need a real Postgres, same as everywhere else in the repo).
 - Every check that isn't a plain string/format assertion was verified by
   temporarily removing it and watching the corresponding test fail — notably
   the UUID guard and the backslash-segment guard. The backslash guard turned
   out to be defense-in-depth rather than the sole barrier (the final prefix
   check also catches the Windows escape it produces); the comment in the
   source says so rather than overclaiming.
+- Two independent things are skipped, not faked, on a machine that can't do
+  them, each probed once and synchronously before Vitest collects the suite:
+  a symlink test needs Administrator or Developer Mode on Windows
+  (`sandboxFs.test.ts`); a `DockerCompute` test needs a reachable Docker
+  daemon (`compute.test.ts`) — true in this environment (`docker info`
+  fails: Docker Desktop is installed but not running), so those four cases
+  are unverified here and need a machine with Docker running before they
+  can be trusted.
+- The worker (`worker.test.ts`) is tested against a fake `WorkerReport`, and
+  separately, live: built and ran the compiled server, created a real
+  project and session, and watched the real `Kernel` accept every step the
+  worker wrote (nothing here invents its own validation to satisfy) — lead
+  delegates one reader, reader runs, writes its log to the real volume,
+  records a finding, both tasks end clean. Also sent `task.steer` over a
+  live socket for a finished task (silently ignored, logged, no crash) and
+  for another account's task with no session opened on that socket at all
+  (refused with `no such task`, logged server-side, nothing sent to the
+  caller) — the exact gap wsBridge.ts's own comment says is steering's to
+  close.
 - Symlink tests are skipped, not faked, when the host can't create a symlink
   (Windows without Administrator or Developer Mode) — probed once,
   synchronously, before Vitest collects the suite.
@@ -193,8 +330,13 @@ calls `composeApp`.)
   `<scope>/<subpath>`.
 
 Both are project-scoped and only ever address `upload`/`output` — see the
-`SandboxFs` change below. `SteerCommand`/`SteerQueue` and `worker`/`compute`
-are still internal; only the files routes are wired.
+`SandboxFs` change below.
+
+`createSteeringSlice` also returns `worker` (a `Worker`) and `registerCommands`
+(claims `task.steer`), both wired into `app.ts` now too — see below for how
+each reaches what it needs from `session` and `projects`, declared as
+closures before either exists, the same trick `app.ts` already used for
+`session` and `projects` needing each other.
 
 **`SandboxFs`'s `sessionId` is now optional.** The files routes have a
 project id but no session id (there is no running sandbox behind a project's
@@ -226,17 +368,56 @@ Verified against a real, running server: created a project as one stub
 account, confirmed a second account gets 404 on that project's files, not
 its contents.
 
+**The worker is built, wired, and off by default.** `app.ts`'s
+`createSessionSlice({ worker })` still defaults to `session.demoWorker()`
+when neither `worker` nor `useSteeringWorker` is given — deliberately, not
+because this worker is unready: `e2e.test.ts` (the test that exists to catch
+two slices that no longer fit together) asserts the demo worker's exact
+three-reader fan-out and finding count, and that is also what the rest of
+the team's staging and local runs have shown since Sprint 1. Flipping that
+shared default is a call for the team, not a side effect of this branch.
+`LUMEN_WORKER=steering` (or `useSteeringWorker: true` to `composeApp`)
+opts in; `worker`, if given, still wins over either default. `steering.
+registerCommands(broker)` runs unconditionally either way — claiming
+`task.steer` costs nothing when the active worker never calls
+`SteerRegistry.begin()`, since `steer()` then always finds no active run.
+
+**`task.steer`'s ownership check is closed the way `commands.ts` describes
+above** — through `session.projects.taskSession`/`context`, not through
+`projects.requireProject` (that answers "whose *project*", not "whose
+*task*"; a `task.steer` never carries a project id). Verified live, twice:
+a steer for a task with nobody watching its session, sent by the account
+that does not own it, refused with `no such task`, nothing sent back,
+logged server-side — the same shape as a HTTP 404 that will not say which
+half of "not found or not yours" it means.
+
+**The composer sends `task.steer`.** `parts.tsx`'s `Composer` gained a
+`steerable` prop (is the task currently shown itself running?) and an
+`onSteer` handler; while the root is busy, the same field that starts a
+fresh turn instead steers whichever task the stream is showing, always at
+`when: 'next-step'` — a `when` picker (`'next-step'` vs `'end-of-turn'`) is
+cut from this pass, not designed away: the underlying command already
+carries either.
+
 **Deliberately out of scope for this piece:**
 
-- **`DockerCompute`** — needs `SandboxFs.hostMounts` as its bind-mount source,
-  which is why `SandboxFs` had to land first.
-- **`task.steer` / `steer.cancel` and `worker: Worker`** — `core/domain/worker.ts`
-  grew substantially with session's walking skeleton (`appendStep` now takes a
-  `kind`/`detail`, plus `delegate`/`recordFinding`/`addSpend`; `Worker.run` now
-  takes a turn's `input`, not just the task). `session.demoWorker` (renamed
-  from the Sprint 1 `echoWorker`) is the stand-in until steering's own `Worker`
-  implementation and command wiring land — read the current interface before
-  building against it, it has moved since this doc was first written.
-- **Durable quota counter** — `usageBytes` walks the tree on every call,
+- **A model.** `worker.ts`'s reader runs a fixed command
+  (`echo "no model is wired in yet"; date`), never one built from a task's
+  title — there is no model here to decide what is safe to run, and a title
+  built from a user's words is not a shell command this worker gets to
+  trust yet.
+- **`steer.cancel`.** Not in the frozen `ClientCommand` union
+  (`packages/contracts/src/events.ts`); `SteerQueue.cancel` exists and is
+  tested, nothing calls it from a command yet.
+- **The composer's attach button.** Still `disabled` in the markup. Wiring
+  it needs a way to write into `upload` that isn't `SandboxFs.writeFile` —
+  that method refuses the scope outright, for the agent, and an attach flow
+  is the user, not the agent, writing there. Needs its own method, not a
+  bypass of the existing one.
+- **Durable quota counter.** `usageBytes` walks the tree on every call,
   which is fine for sprint 1. A running counter belongs in the database once
   tasks and spend are persisted there too.
+- **`DockerCompute`, unverified here.** Built to the same care as everything
+  else in this file, but this environment has Docker Desktop installed and
+  not running (`docker info` fails to reach the daemon) — its four tests
+  skip, they do not fake, and nobody has watched it run a real container yet.

@@ -207,6 +207,13 @@ export function Session(): JSX.Element {
     });
   }
 
+  // Steers the task the stream shows, not necessarily the root: a person
+  // reading a reader's own stream steers that reader, not the lead. Lands at
+  // the worker's next step, the soonest moment a steer can reach it.
+  function steer(text: string): void {
+    stream.current?.send({ type: 'task.steer', taskId: shown.id, text, when: 'next-step' });
+  }
+
   return (
     <div className="space-y-3">
       {/* One line beside the stream: the card's height counts on it. A long
@@ -261,7 +268,9 @@ export function Session(): JSX.Element {
           <Composer
             disabled={state.stream !== 'open' || auth.status !== 'ready'}
             running={running}
+            steerable={shown.status === 'running'}
             onSay={say}
+            onSteer={steer}
             onStop={() =>
               stream.current?.send({ type: 'session.stop', sessionId: snapshot.session.id })
             }

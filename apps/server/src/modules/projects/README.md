@@ -79,7 +79,7 @@ transaction; session owns any partially written session records.
 Memory and PostgreSQL stores implement the same port. SQL reads and writes only
 the owned projects/findings tables. Migration `005_projects_read_model.sql` lives in `core/db/migrations` and is applied on normal startup. It accommodates
 arbitrary temporary account IDs without changing authGuard, and adds finding
-project associations and pagination indexes. See the handoff for legacy data.
+project associations and pagination indexes.
 
 Landing preserves question/mode in tab storage. Home and Landing obtain the
 account and identity/stub mode from the shared `useCurrentAccount()` hook. Home

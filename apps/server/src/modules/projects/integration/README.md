@@ -39,8 +39,7 @@ worker execution belongs to session; projects does not implement its own kernel.
 - Session snapshots do not yet include persisted findings. Home displays them
   through projects; source links open the existing session/task deep link.
 - Real identity sign-in and restoring identity foreign keys remain identity work.
-- Legacy findings have nullable project IDs and need an owner-approved backfill
-  before they count on Home. Down migration fails on arbitrary non-UUID stub IDs
+- Down migration fails on arbitrary non-UUID stub IDs
   rather than deleting data. Review legacy timestamp precision for pagination.
 - The shared Deploy workflow still creates a session under the placeholder project
   ID `demo`. The newly wired ownership gate correctly rejects that request.

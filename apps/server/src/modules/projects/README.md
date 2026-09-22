@@ -81,8 +81,11 @@ the owned projects/findings tables. Migration `005_projects_read_model.sql` live
 arbitrary temporary account IDs without changing authGuard, and adds finding
 project associations and pagination indexes. See the handoff for legacy data.
 
-Landing preserves question/mode in tab storage and uses the existing development
-sign-in helper on localhost. Home supports loaded-project search/status filters,
+Landing preserves question/mode in tab storage. Home and Landing obtain the
+account and identity/stub mode from the shared `useCurrentAccount()` hook. Home
+mounts its project list only after the account is ready, links signed-out visitors
+to Landing, and distinguishes lookup failures from signed-out state. Changing
+the account or mode remounts the list; a later 401 still clears private data. Home supports loaded-project search/status filters,
 pagination, safe literal finding text and source-session links. Queued/running cards refresh every five seconds; waiting cards every fifteen
 seconds; terminal and unconfirmed cards refresh manually or on window focus.
 Fetches abort on unmount, hidden tabs pause polling, and errors retain loaded

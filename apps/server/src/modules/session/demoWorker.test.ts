@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { StepDetail, StepKind } from '@lumen/contracts';
 import { makeTask } from '../../core/domain/task.js';
 import type { WorkerReport } from '../../core/domain/worker.js';
+import { ModelError, type ModelProvider } from '../../core/model/index.js';
 import { DEFAULT_PACE_MS, demoWorker, paceFromEnv } from './demoWorker.js';
 
 /** A report that only records what the worker wrote. */
@@ -87,5 +88,52 @@ describe('session: the demo pace from the environment', () => {
     for (const raw of [' ', '1e3', '0x10', '-1', '1.5', '10001', 'fast']) {
       expect(() => paceFromEnv(raw), raw).toThrow(/LUMEN_DEMO_PACE_MS/);
     }
+  });
+});
+
+describe('session: the demo lead with a model', () => {
+  const answered = (text: string, dollars: number): ModelProvider => ({
+    name: 'fake',
+    model: 'fake-1',
+    complete: () =>
+      Promise.resolve({
+        text,
+        toolCalls: [],
+        stopReason: 'end' as const,
+        usage: { inputTokens: 10, outputTokens: 5 },
+        cost: { dollars },
+        model: 'fake-1',
+        durationMs: 7,
+      }),
+  });
+
+  it("thinks and replies in the model's words, and puts what each answer cost on the step", async () => {
+    const { report, steps } = recording();
+    await demoWorker({ model: answered('Check the literature first.', 0.000123) }).run(
+      lead,
+      lead.title,
+      report,
+    );
+
+    const thinking = steps.find(([kind]) => kind === 'thinking')!;
+    const reply = steps.find(([kind]) => kind === 'reply')!;
+    expect(thinking[1]).toBe('Check the literature first.');
+    expect(thinking[2]).toEqual({ tool: 'fake', durationMs: 7, cost: { dollars: 0.000123 } });
+    expect(reply[2]?.cost).toEqual({ dollars: 0.000123 });
+  });
+
+  it('goes on without the model when it fails, at no cost, and says so in the step', async () => {
+    const failing: ModelProvider = {
+      name: 'fake',
+      model: 'fake-1',
+      complete: () => Promise.reject(new ModelError('auth', 'fake: HTTP 401')),
+    };
+    const { report, steps } = recording();
+    await demoWorker({ model: failing }).run(lead, lead.title, report);
+
+    const thinking = steps.find(([kind]) => kind === 'thinking')!;
+    expect(thinking[1]).toMatch(/did not answer \(auth: fake: HTTP 401\)/);
+    expect(thinking[2]).toBeUndefined();
+    expect(steps.some(([kind]) => kind === 'reply')).toBe(true);
   });
 });

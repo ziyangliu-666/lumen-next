@@ -1,13 +1,16 @@
 import type { StepRow } from '@lumen/contracts';
 import type { Worker, WorkerReport } from '../../core/domain/worker.js';
+import { ModelError, type ModelProvider } from '../../core/model/index.js';
 
 // A worker with no model and no sandbox. It plays the shape of a real run so
 // that the whole path can be seen and tested before the steering slice supplies
 // the agent loop behind the same interface: a lead that thinks, searches, fans
 // the question out to readers and answers; readers that search, run something,
-// keep a finding and reply. Nothing here reaches a network or starts a process,
-// and every line it writes says so. The durations are measured, not invented:
-// they are how long the demo waited.
+// keep a finding and reply. Nothing here starts a process, and every line it
+// writes says so. The durations are measured, not invented: they are how long
+// the demo waited. Given a ModelProvider, the lead's thinking and reply come
+// from a real model, and what that cost goes through the step into the ledger:
+// the one path money takes, proven end to end before the agent loop lands.
 
 const PARTS = ['what is already known', 'what changed recently', 'what is still open'] as const;
 const SEARCH_COST = { dollars: 0.01 };
@@ -18,7 +21,15 @@ export interface DemoOptions {
    * watching the page needs a moment between steps to see that it is live.
    */
   readonly paceMs?: number;
+  /**
+   * A model for the lead to think and reply with. Left out, the lead says its
+   * fixed lines. The readers never call it: their part is the fan-out.
+   */
+  readonly model?: ModelProvider;
 }
+
+/** The most a lead may spend on one answer. A demo never runs up a bill. */
+const MAX_ANSWER_TOKENS = 200;
 
 /** How long a step pretends to work when nothing says otherwise: slow enough to watch. */
 export const DEFAULT_PACE_MS = 900;
@@ -37,6 +48,37 @@ export function paceFromEnv(raw: string | undefined): number {
 
 export function demoWorker(options: DemoOptions = {}): Worker {
   const paceMs = options.paceMs ?? 0;
+  const model = options.model;
+
+  /**
+   * One line from the model, written as a step of the given kind, with what
+   * it cost on the step. A model that fails is a line that says so, at no
+   * cost: the demo goes on, because the fan-out is what it is here to show.
+   */
+  async function ask(
+    report: WorkerReport,
+    taskId: string,
+    kind: 'thinking' | 'reply',
+    system: string,
+    prompt: string,
+  ): Promise<void> {
+    if (!model) return;
+    try {
+      const reply = await model.complete({
+        system,
+        messages: [{ role: 'user', content: prompt }],
+        maxTokens: MAX_ANSWER_TOKENS,
+      });
+      await report.appendStep(taskId, kind, reply.text || '(the model said nothing)', {
+        tool: model.name,
+        durationMs: reply.durationMs,
+        cost: reply.cost,
+      });
+    } catch (error) {
+      const why = error instanceof ModelError ? `${error.kind}: ${error.message}` : String(error);
+      await report.appendStep(taskId, kind, `The model did not answer (${why}).`);
+    }
+  }
 
   /** Wait as a tool would, and say how long it took. */
   async function work(): Promise<number> {
@@ -111,21 +153,41 @@ export function demoWorker(options: DemoOptions = {}): Worker {
           { source: 'demo', text: 'has anybody written it up', result: 'nothing', empty: true },
         ]);
       }
-      await report.appendStep(
-        task.id,
-        'thinking',
-        firstTurn
-          ? `Before anything else, find out what is already known about "${input}": a result that is rediscovered is worth nothing. Then split it ${parts.length} ways.`
-          : `"${input}" is one line of enquiry. One reader.`,
-      );
+      if (model) {
+        await ask(
+          report,
+          task.id,
+          'thinking',
+          'You lead a small research team. In two sentences, say what must be checked first and why. Plain words, no list.',
+          firstTurn ? `The question is: ${input}` : `The user now says: ${input}`,
+        );
+      } else {
+        await report.appendStep(
+          task.id,
+          'thinking',
+          firstTurn
+            ? `Before anything else, find out what is already known about "${input}": a result that is rediscovered is worth nothing. Then split it ${parts.length} ways.`
+            : `"${input}" is one line of enquiry. One reader.`,
+        );
+      }
       // delegate() writes the delegate step itself, naming the tasks it opened.
       const children = await report.delegate(task.id, parts);
       const ended = children.filter((child) => child.status === 'ended').length;
-      await report.appendStep(
-        task.id,
-        'reply',
-        `${ended} of ${children.length} readers finished. No model is wired in yet, so there is nothing to conclude.`,
-      );
+      if (model) {
+        await ask(
+          report,
+          task.id,
+          'reply',
+          'You lead a small research team. Your readers have reported. In two sentences, tell the user what was found and what you would do next. Be honest that the readers are a demo and found nothing real.',
+          `Question: ${input}. ${ended} of ${children.length} readers finished; each recorded one demo finding.`,
+        );
+      } else {
+        await report.appendStep(
+          task.id,
+          'reply',
+          `${ended} of ${children.length} readers finished. No model is wired in yet, so there is nothing to conclude.`,
+        );
+      }
     },
   };
 }

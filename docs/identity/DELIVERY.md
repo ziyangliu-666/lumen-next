@@ -9,17 +9,19 @@
 - Shared-auth refresh after successful password login/signup and account changes.
 - Compact signin/account layouts and honest provider availability/retry feedback.
 - Unit, SSR and real-PostgreSQL tests for these changes.
-- Minimal startup and frontend integration patches for the relevant owners.
+- Startup wiring in `main.ts` and `app.ts`, approved by the core owner, that
+  passes configured OAuth providers to the slice.
+- Shell and Settings composition in `core/shell.tsx`, `main.tsx` and
+  `Settings.tsx`: the header account slot, nested Settings routes and the
+  Account tab as a content slot. `Settings.tsx` awaits its owner's answer on
+  the pull request.
 
-## Not yet integrated into tracked shared source
+## Shared files touched
 
-The identity changes do not edit another owner's startup, shell or Settings files.
-Consequently, a standard build does not automatically enable OAuth, mount Account
-in Settings or add the header actions until the corresponding patch is applied
-and reviewed. Local preview acceptance is not merged production delivery.
-
-- [Startup handoff](OAUTH_SETUP.md): oauth-startup.patch.
-- [Shell and Settings handoff](ACCOUNT_INTEGRATION.md): account-shell-integration.patch.
+These files belong to other owners and are changed here with their review:
+`apps/server/src/main.ts`, `apps/server/src/app.ts`, `apps/web/src/core/shell.tsx`,
+`apps/web/src/main.tsx` and `apps/web/src/pages/settings/Settings.tsx`. Global
+shell spacing is unchanged; it is a separate shell decision.
 
 ## Validation
 
@@ -42,7 +44,7 @@ submitted revision. Historical local checks do not substitute for those gates.
 | Goal | Remaining delivery requirement |
 | --- | --- |
 | Application acceptance | Staff routing and cross-account browser checks. |
-| Account composition | Review, apply, test and merge the shared frontend patch. |
+| Account composition | Settings owner answer on the pull request, then merge. |
 | OAuth | Review/apply startup wiring; deployment-owned HTTPS configuration; remaining live negative/logout/staff cases; Arctic maintenance review. |
 | Mail verification/recovery | Reviewed durable delivery design addressing the timing-enumeration blocker, retry/abuse controls and real mailbox acceptance. Public recovery remains disabled. |
 | Account deletion | Team retention policy, reauthentication/revocation design, transaction tests and implementation. No destructive endpoint is enabled. |

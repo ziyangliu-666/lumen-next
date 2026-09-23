@@ -27,5 +27,10 @@ services:
       LUMEN_ORIGIN: http://localhost:4000
       IDENTITY_SESSION_LIFETIME_MS: '86400000'
       IDENTITY_INSECURE_COOKIES: 'true'
+      # A model for the demo lead, from the shell that runs compose. Unset: none.
+      LUMEN_MODEL_PROVIDER: ${LUMEN_MODEL_PROVIDER:-none}
+      LUMEN_MODEL: ${LUMEN_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     ports:
       - '4000:4000'

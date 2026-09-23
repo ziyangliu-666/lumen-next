@@ -10,3 +10,6 @@ coverage/
 *.tsbuildinfo
 /tmp/
 .claude/
+
+# SandboxFs's default local volume (LUMEN_VOLUME_ROOT)
+apps/server/.data/

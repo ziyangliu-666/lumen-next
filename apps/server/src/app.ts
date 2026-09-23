@@ -5,6 +5,7 @@
 // It does not read the environment and it does not listen. main.ts does both,
 // so that a test can build the whole application, exactly as production builds
 // it, against a database of its own (e2e.test.ts).
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from './core/db/db.js';
 import { headerStub } from './core/http/authGuard.js';
@@ -15,6 +16,7 @@ import { createBillingSlice } from './modules/billing/index.js';
 import { createIdentitySlice, LoginGate } from './modules/identity/index.js';
 import { createProjectsSlice, type ProjectsSlice } from './modules/projects/index.js';
 import { createSessionSlice, type SessionSlice } from './modules/session/index.js';
+import { createSteeringSlice } from './modules/steering/index.js';
 
 export interface IdentityConfig {
   /** The one origin the browser uses. Every request that is not a GET must name it. */
@@ -37,6 +39,8 @@ export interface AppOptions {
   readonly logLevel?: string;
   /** The agent loop. Left out, the session slice runs its demo worker. */
   readonly worker?: Worker;
+  /** Where SandboxFs stores project files on this host. `.data` next to the process if omitted. */
+  readonly volumeRoot?: string;
 }
 
 export interface App {
@@ -80,6 +84,10 @@ export async function composeApp(options: AppOptions): Promise<App> {
     // in when billing gives a new account a default cap (see the review on #21).
   });
   const projects: ProjectsSlice = createProjectsSlice({ sessions: session.projects, db });
+  const steering = createSteeringSlice({
+    volumeRoot: options.volumeRoot ?? join(process.cwd(), '.data'),
+    requireProject: (principal, id) => projects.requireProject(principal, id),
+  });
 
   // Before anything can connect: tasks left open by the last process are over.
   const orphans = await session.kernel.restore();
@@ -99,11 +107,13 @@ export async function composeApp(options: AppOptions): Promise<App> {
   }));
 
   // A slice goes in with these lines and no others: register its routes, and
-  // claim its commands if it has any. Steering is the one still to come.
+  // claim its commands if it has any. Steering's files routes are wired;
+  // task.steer, worker and compute follow the same pattern once they land.
   if (identity) await server.register(identity.registerRoutes);
   await server.register(projects.registerRoutes);
   await server.register(session.registerRoutes);
   await server.register(billing.registerRoutes);
+  await server.register(steering.registerRoutes);
   session.registerCommands(broker);
 
   return {

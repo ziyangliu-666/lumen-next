@@ -1,5 +1,5 @@
-import { GitHub, Google } from 'arctic';
 import type { OAuthProvider } from './oauth.js';
+import { GitHubClient, GoogleClient } from './oauthClients.js';
 import { githubProvider, googleProvider } from './oauthProviders.js';
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -67,14 +67,22 @@ export function oauthProvidersFromEnvironment(
   if (github) {
     providers.push(
       githubProvider(
-        new GitHub(github.clientId, github.clientSecret, `${origin}/api/auth/github/callback`),
+        new GitHubClient(
+          github.clientId,
+          github.clientSecret,
+          `${origin}/api/auth/github/callback`,
+        ),
       ),
     );
   }
   if (google) {
     providers.push(
       googleProvider(
-        new Google(google.clientId, google.clientSecret, `${origin}/api/auth/google/callback`),
+        new GoogleClient(
+          google.clientId,
+          google.clientSecret,
+          `${origin}/api/auth/google/callback`,
+        ),
       ),
     );
   }

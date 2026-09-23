@@ -8,7 +8,7 @@ import { createIdentitySlice, LoginGate, oauthProvidersFromEnvironment } from '.
 const origin = 'https://lumen.example';
 
 describe.skipIf(!TEST_DATABASE_URL)(
-  'identity: configured Arctic providers with PostgreSQL routes',
+  'identity: configured OAuth providers with PostgreSQL routes',
   () => {
     let fixture: Awaited<ReturnType<typeof openTestDb>>;
     let app: FastifyInstance;

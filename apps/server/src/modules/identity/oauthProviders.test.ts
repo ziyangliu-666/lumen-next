@@ -1,14 +1,13 @@
 import { createHash } from 'node:crypto';
-import { GitHub, Google } from 'arctic';
 import { describe, expect, it, vi } from 'vitest';
+import { GitHubClient, GoogleClient } from './oauthClients.js';
 import { githubProvider, googleProvider } from './oauthProviders.js';
 import { OAuthStrategy } from './oauth.js';
 
-it('identity: real Arctic adapters generate registered callbacks and Google S256 PKCE', () => {
-  const library = { GitHub, Google };
+it('identity: real OAuth clients generate registered callbacks and Google S256 PKCE', () => {
   const callback = 'https://lumen.example/api/auth/google/callback';
   const verifier = 'v'.repeat(43);
-  const google = googleProvider(new library.Google('test-client', 'test-secret', callback));
+  const google = googleProvider(new GoogleClient('test-client', 'test-secret', callback));
   const url = google.authorizationURL('test-state', verifier);
   expect(url.origin).toBe('https://accounts.google.com');
   expect(url.searchParams.get('redirect_uri')).toBe(callback);
@@ -18,7 +17,7 @@ it('identity: real Arctic adapters generate registered callbacks and Google S256
     createHash('sha256').update(verifier).digest('base64url'),
   );
   const github = githubProvider(
-    new library.GitHub(
+    new GitHubClient(
       'test-client',
       'test-secret',
       'https://lumen.example/api/auth/github/callback',

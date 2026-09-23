@@ -4,32 +4,13 @@ import { Button } from '@/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
+import { accountRequest as request } from './accountClient';
 
 interface Account {
   id: string;
   email: string;
   displayName: string;
   role: 'user' | 'staff';
-}
-async function request(path: string, method: string, body?: object): Promise<unknown> {
-  const response = await fetch(path, {
-    method,
-    credentials: 'same-origin',
-    cache: 'no-store',
-    ...(body
-      ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-      : {}),
-  });
-  if (!response.ok) {
-    if (response.status === 401)
-      throw new Error(
-        'Sign in again or check your current password. Provider-only accounts cannot use password reauthentication.',
-      );
-    if (response.status === 429) throw new Error('Too many attempts. Wait a minute and try again.');
-    if (response.status === 409) throw new Error('The account changed or the email is taken.');
-    throw new Error('The operation failed. Check your input and try again.');
-  }
-  return response.status === 204 ? null : response.json();
 }
 function accountOf(value: unknown): Account {
   if (
@@ -48,7 +29,7 @@ function accountOf(value: unknown): Account {
   return { id: value.id, email: value.email, displayName: value.displayName, role: value.role };
 }
 
-/** Shell owner mounts this component and handles shared auth/cache invalidation. */
+/** AccountSettings guards access; successful mutations notify shared auth readers. */
 export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void }): JSX.Element {
   const [account, setAccount] = useState<Account | null>(null);
   const [name, setName] = useState('');
@@ -105,11 +86,12 @@ export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void
     onSignedOut();
   }
   return (
-    <Card>
-      <CardHeader>
+    <Card className="gap-4 py-0">
+      <CardHeader className="flex-row items-center justify-between p-4 pb-0 md:flex md:px-6">
         <CardTitle>Account</CardTitle>
+        {account ? <p className="text-sm text-muted-foreground">Role: {account.role}</p> : null}
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 p-4 pt-0 md:px-6">
         {error ? (
           <p role="alert" className="rounded-md bg-gap-soft p-3 text-sm text-gap">
             {error}
@@ -125,125 +107,128 @@ export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void
             {error ? 'Account unavailable.' : 'Loading account…'}
           </p>
         ) : (
-          <>
-            <p className="text-sm text-muted-foreground">Role: {account.role}</p>
-            <div className="space-y-2">
-              <Label htmlFor="account-current-password">
-                Current password (required for sensitive changes)
-              </Label>
-              <Input
-                id="account-current-password"
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                disabled={pending}
-                maxLength={1024}
-              />
-            </div>
-            <form
-              className="space-y-3"
-              onSubmit={(event) =>
-                submit(event, async () => {
-                  const changedEmail = email.trim().toLowerCase() !== account.email;
-                  const updated = accountOf(
-                    await request('/api/me', 'PATCH', {
-                      displayName: name,
-                      ...(changedEmail ? { email, currentPassword } : {}),
-                    }),
-                  );
-                  setAccount(updated);
-                  setName(updated.displayName);
-                  setEmail(updated.email);
-                  setMessage('Profile updated.');
-                })
-              }
-            >
-              <Label htmlFor="account-name">Name</Label>
-              <Input
-                id="account-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                maxLength={80}
-                disabled={pending}
-              />
-              <Label htmlFor="account-email">Email</Label>
-              <Input
-                id="account-email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                maxLength={320}
-                disabled={pending}
-              />
-              <Button type="submit" disabled={pending}>
-                Save profile
-              </Button>
-            </form>
-            <form
-              className="space-y-3"
-              onSubmit={(event) =>
-                submit(event, async () => {
-                  if (newPassword !== confirmation) throw new Error('Passwords do not match.');
-                  if (
-                    [...newPassword].length < 8 ||
-                    new TextEncoder().encode(newPassword).length > 1024
-                  )
-                    throw new Error('Use at least 8 characters and at most 1024 UTF-8 bytes.');
-                  await request('/api/me/password', 'POST', { currentPassword, newPassword });
-                  setMessage('Password changed. Other sessions have been signed out.');
-                })
-              }
-            >
-              <Label htmlFor="account-new-password">New password</Label>
-              <Input
-                id="account-new-password"
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                required
-                disabled={pending}
-                maxLength={1024}
-              />
-              <Label htmlFor="account-confirm-password">Confirm new password</Label>
-              <Input
-                id="account-confirm-password"
-                type="password"
-                autoComplete="new-password"
-                value={confirmation}
-                onChange={(event) => setConfirmation(event.target.value)}
-                required
-                disabled={pending}
-                maxLength={1024}
-              />
-              <Button type="submit" disabled={pending}>
-                Change password
-              </Button>
-            </form>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                disabled={pending}
-                onClick={() => {
-                  void run(() => signout(false));
-                }}
+          <div className="grid gap-4 md:grid-cols-2 md:gap-6">
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="account-current-password">
+                  Current password (required for sensitive changes)
+                </Label>
+                <Input
+                  id="account-current-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  disabled={pending}
+                  maxLength={1024}
+                />
+              </div>
+              <form
+                className="space-y-3"
+                onSubmit={(event) =>
+                  submit(event, async () => {
+                    const changedEmail = email.trim().toLowerCase() !== account.email;
+                    const updated = accountOf(
+                      await request('/api/me', 'PATCH', {
+                        displayName: name,
+                        ...(changedEmail ? { email, currentPassword } : {}),
+                      }),
+                    );
+                    setAccount(updated);
+                    setName(updated.displayName);
+                    setEmail(updated.email);
+                    setMessage('Profile updated.');
+                  })
+                }
               >
-                Sign out
-              </Button>
-              <Button
-                variant="outline"
-                disabled={pending}
-                onClick={() => {
-                  void run(() => signout(true));
-                }}
-              >
-                Sign out everywhere
-              </Button>
+                <Label htmlFor="account-name">Name</Label>
+                <Input
+                  id="account-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  required
+                  maxLength={80}
+                  disabled={pending}
+                />
+                <Label htmlFor="account-email">Email</Label>
+                <Input
+                  id="account-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  maxLength={320}
+                  disabled={pending}
+                />
+                <Button type="submit" disabled={pending}>
+                  Save profile
+                </Button>
+              </form>
             </div>
-          </>
+            <div className="space-y-4">
+              <form
+                className="space-y-3"
+                onSubmit={(event) =>
+                  submit(event, async () => {
+                    if (newPassword !== confirmation) throw new Error('Passwords do not match.');
+                    if (
+                      [...newPassword].length < 8 ||
+                      new TextEncoder().encode(newPassword).length > 1024
+                    )
+                      throw new Error('Use at least 8 characters and at most 1024 UTF-8 bytes.');
+                    await request('/api/me/password', 'POST', { currentPassword, newPassword });
+                    setMessage('Password changed. Other sessions have been signed out.');
+                  })
+                }
+              >
+                <Label htmlFor="account-new-password">New password</Label>
+                <Input
+                  id="account-new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  required
+                  disabled={pending}
+                  maxLength={1024}
+                />
+                <Label htmlFor="account-confirm-password">Confirm new password</Label>
+                <Input
+                  id="account-confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmation}
+                  onChange={(event) => setConfirmation(event.target.value)}
+                  required
+                  disabled={pending}
+                  maxLength={1024}
+                />
+                <Button type="submit" disabled={pending}>
+                  Change password
+                </Button>
+              </form>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => {
+                    void run(() => signout(false));
+                  }}
+                >
+                  Sign out
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => {
+                    void run(() => signout(true));
+                  }}
+                >
+                  Sign out everywhere
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>

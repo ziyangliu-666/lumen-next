@@ -8,8 +8,8 @@ are cleared after attempts. Signup requires 8 Unicode code points. Users go to
 
 AccountActions provides shell-injected Account and Sign out controls. Successful
 signup/password login also refreshes the shared account hook, so a persistent
-header updates without a reload. Canonical navigation wiring is supplied as an
-owner-review patch and has been exercised in the local integration preview.
+header updates without a reload. `main.tsx` passes it to the shell's
+`accountActions` slot.
 
 AccountSettings is reachable through Manage signed-in account. It uses the shared
 account hook to guard AccountPanel, with loading, retry, signed-out and stub states.

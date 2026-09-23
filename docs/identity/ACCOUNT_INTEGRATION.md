@@ -1,9 +1,8 @@
 # Account navigation and Settings integration
 
-Identity components are implemented and locally verified. The complete shared
-composition was exercised as an integration preview, but tracked shared owner
-files remain unchanged. [account-shell-integration.patch](account-shell-integration.patch)
-is the exact proposed integration for shell and Settings owner review.
+Identity components are implemented and locally verified. The shared
+composition is part of the identity pull request, under the shell and Settings
+owners' review.
 
 ## Identity components
 
@@ -20,14 +19,15 @@ is the exact proposed integration for shell and Settings owner review.
 - Account revalidation retains a disabled editor so feedback is not discarded.
   A changed account ID remounts the editor and discards the previous form state.
 
-## Shared composition patch
+## Shared composition
 
-The patch changes only three shared files:
+The composition changes three shared files:
 
 1. Settings.tsx accepts accountContent, tab and onTabChange. The Account
    placeholder becomes a content slot; Wallet and Keys content is unchanged.
 2. core/shell.tsx accepts optional accountActions, wraps navigation on narrow
-   screens, highlights nested Settings routes and reduces excess padding.
+   highlights nested Settings routes and labels the main navigation. Header
+   and page spacing are unchanged.
 3. main.tsx composes the identity components and Settings routes.
 
 Routes: #/settings retains Wallet as the default, #/settings/account opens Account,
@@ -35,18 +35,7 @@ and #/settings/keys opens Keys. Tab selection updates the route. Reloading a dee
 link or using the Account shortcut after visiting Wallet selects the correct tab.
 Only the composition root imports both pages; there is no page-to-page import.
 
-The patch requires the relevant owners' review under CODEOWNERS and depends on
-this branch's identity components. Applying it to baseline main alone is not
-supported.
-
-```sh
-git apply --check docs/identity/account-shell-integration.patch
-# Apply only as the owner-reviewed integration change.
-git apply docs/identity/account-shell-integration.patch
-# Export a disposable DATABASE_URL before verification.
-npm run verify
-npm run build
-```
+These files require the relevant owners' review under CODEOWNERS.
 
 ## Layout and accessibility
 
@@ -80,7 +69,6 @@ screen or every data set fits one viewport.
   screenshots, browser profiles, account identities, secrets or databases ship
   with this change.
 
-A generated preview does not make the normal build contain unapplied shared
-patches. Remaining work includes owner application/review, remote CI, staging,
+Remaining work includes owner review, remote CI, staging,
 GitHub logout/relogin, live negative/staff cases and merged delivery. See
 [delivery status](DELIVERY.md).

@@ -46,7 +46,15 @@ export class SteerRegistry {
       // A landed steer becomes a 'you' step: the same kind a fresh turn's
       // words get, because from the trace's point of view that is what it is
       // — the user spoke, mid-turn instead of between them.
-      void entry.report.appendStep(id, 'you', landedText);
+      //
+      // apply() is synchronous, so this cannot be awaited, and on Node an
+      // unhandled rejection ends the process. If the kernel refuses the step
+      // (the task was stopped a moment earlier, or the record failed), this
+      // one steer is lost — and that must be the whole of the damage, not the
+      // server and every other session with it. Awaiting it, so a steer also
+      // lands in order before the step after it, comes with the model loop,
+      // where a flush becomes "before the next model call".
+      entry.report.appendStep(id, 'you', landedText).catch(() => undefined);
     });
     entry.queue.enqueue(command);
   }

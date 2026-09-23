@@ -75,4 +75,41 @@ describe('SteerRegistry', () => {
     expect(reportA.appendStep).toHaveBeenCalledWith('task-a', 'you', 'for a');
     expect(reportB.appendStep).not.toHaveBeenCalled();
   });
+
+  it('does not let a steer that fails to land become an unhandled rejection', async () => {
+    // On Node an unhandled rejection ends the process: one refused step (the
+    // task stopped a moment earlier, or the record failed) would take the
+    // whole server down, every other session with it.
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const registry = new SteerRegistry();
+      const calls: unknown[][] = [];
+      const report = {
+        ...fakeReport(),
+        // A plain function, not vi.fn(): vitest's spy attaches its own .then()
+        // to every promise it returns (to record settledResults), which marks
+        // the rejection handled and hides exactly the bug this test is for.
+        appendStep: (...args: unknown[]): Promise<void> => {
+          calls.push(args);
+          return Promise.reject(new Error('kernel: no task task-1'));
+        },
+      };
+      const queue = registry.begin('task-1', report as unknown as WorkerReport);
+
+      registry.steer('task-1', 'lost', 'next-step');
+      queue.flush('next-step');
+      // Node reports an unhandled rejection once the microtask queue drains;
+      // a macrotask later it has either been reported or it never will be.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(calls).toEqual([['task-1', 'you', 'lost']]);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
 });

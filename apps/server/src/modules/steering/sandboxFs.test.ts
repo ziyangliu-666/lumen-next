@@ -190,14 +190,21 @@ describe('SandboxFs: path validation', () => {
     );
   });
 
-  it('shows the platform behaviour the guard above is written for', () => {
-    // Does not touch SandboxFs — it proves path.resolve really does resolve a
-    // backslash-laden segment as a traversal on this OS, so the test above is
-    // not guarding against a bug that was never real here.
-    const root = join(volumeRoot, PROJECT, 'sessions', SESSION, 'workspace');
-    const escaped = resolvePath(root, 'evil\\..\\..\\..\\secrets');
-    expect(escaped.startsWith(root)).toBe(false);
-  });
+  // Windows only. Elsewhere a backslash is an ordinary filename character and
+  // path.resolve leaves it inside root, so there is no escape to prove — the
+  // guard above still refuses the segment on every platform, which is the
+  // behaviour that matters; this only shows why it was written.
+  it.skipIf(process.platform !== 'win32')(
+    'shows the platform behaviour the guard above is written for',
+    () => {
+      // Does not touch SandboxFs — it proves path.resolve really does resolve a
+      // backslash-laden segment as a traversal on this OS, so the test above is
+      // not guarding against a bug that was never real here.
+      const root = join(volumeRoot, PROJECT, 'sessions', SESSION, 'workspace');
+      const escaped = resolvePath(root, 'evil\\..\\..\\..\\secrets');
+      expect(escaped.startsWith(root)).toBe(false);
+    },
+  );
 });
 
 describe('SandboxFs: quota', () => {

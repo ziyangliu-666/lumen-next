@@ -17,8 +17,8 @@ window.LUMEN_STATUS = {
     dod: [
       {
         text: 'Slices run in parallel',
-        done: false,
-        note: 'session, billing, identity (#23) and projects (#24) are composed in app.ts; steering registers its routes in #32 and its commands in #33, neither on main',
+        done: true,
+        note: 'all five slices are composed in app.ts on main: session, billing, identity (#23), projects (#24), and steering since #32 merged on 23 Sep (0a96cf3)',
       },
       {
         text: 'A question fans out to workers; the tree is readable and costed',
@@ -28,7 +28,7 @@ window.LUMEN_STATUS = {
       {
         text: 'Sandbox behind its interface',
         done: false,
-        note: 'Compute, NullCompute and DockerCompute moved into #33, stacked on #32; neither is on main',
+        note: 'SandboxFs, the steer queue and the files routes landed with #32; Compute, NullCompute and DockerCompute are still in #33, which now conflicts with main',
       },
       {
         text: 'Wallet shows spend; ledger writes',
@@ -39,10 +39,10 @@ window.LUMEN_STATUS = {
     ],
   },
   main: {
-    commit: 'fbec491',
+    commit: '0a96cf3',
     pipelines: 'CI, Security and Deploy green',
-    tests: 590,
-    coverage: 98,
+    tests: 653,
+    coverage: 97,
     gate: 65,
     dast: '0 fail, 8 warn',
   },
@@ -54,12 +54,12 @@ window.LUMEN_STATUS = {
       name: 'LIU ZIYANG',
       slice: 'UC3 session, core, contracts',
       pattern: 'Composite',
-      written: 90,
-      onMain: 90,
+      written: 92,
+      onMain: 92,
       state: 'done',
-      stateLabel: 'Sprint 2 part done',
+      stateLabel: 'Model layer on main (#35)',
       summary:
-        'core/db, the trace in Postgres, restore after a restart, delegation, cost roll-up, session.open and reconnect, container and DAST, the ports projects plugs into, this board (#18), and the budget seam the kernel asks at three check points (#22). Since then: the composition root moved out of main.ts into app.ts, and the whole application now runs end to end in the gate over HTTP, a cookie and one socket (#25); one answer to who is signed in, after #23 and #24 each shut the front door on the other (#26); the Session page rebuilt the way the spec draws it, with the step stream as the main column and the call tree beside it (#27); and a step that carries what it did (#28), with StepDetail in the contract, a jsonb column in migration 008, a step and its charge written in one transaction, and the page drawing a tool step with its rows, output, time and cost and a delegate step naming its own children. The architecture doc and the session README now say what main does in place of the Sprint 1 text (#29): the contract as it stands, the events and commands on the wire today, and the page layout that #27 and #28 built. On 22 Sep the projects correction was reviewed and merged as #31 (fbec491): the line in migration 005 and the two README paragraphs that said a legacy findings backfill was owed are gone from main, with no SQL statement changed. Nothing has merged since; main is still fbec491, with CI, Security and Deploy green on it, 590 tests passing and 98 per cent of lines covered. Three pull requests are open, and the steering stack is the core owner\'s to answer: #32 for the sandbox and the routes, and #33 on top of it for the worker, Compute and task.steer. #32 was reviewed on 22 Sep and changes were requested. The review reads the whole stack, says the shape is right, and names three things: the red quality check on sandboxFs.test.ts is the blocker, the dropped promise at steerRegistry.ts line 49 is a should-fix because an unhandled rejection there ends the process, and the personal /test-health.ps1 entry added to the repository .gitignore is a nit; hardening the container, which today runs as root with no process or CPU limit, is named as work for a later pull request rather than this one. #33 has had no review and still has the core owner as its requested reviewer. #34, identity, does not edit app.ts or main.ts itself but offers the OAuth startup wiring as docs/identity/oauth-startup.patch for the core owner to take or refuse; no reviewer is requested on it yet. 18 pull requests merged.',
+        'core/db, the trace in Postgres, restore after a restart, delegation, cost roll-up, session.open and reconnect, container and DAST, the ports projects plugs into, this board (#18), and the budget seam the kernel asks at three check points (#22). Since then: the composition root moved out of main.ts into app.ts, and the whole application now runs end to end in the gate over HTTP, a cookie and one socket (#25); one answer to who is signed in, after #23 and #24 each shut the front door on the other (#26); the Session page rebuilt the way the spec draws it, with the step stream as the main column and the call tree beside it (#27); and a step that carries what it did (#28), with StepDetail in the contract, a jsonb column in migration 008, a step and its charge written in one transaction, and the page drawing a tool step with its rows, output, time and cost and a delegate step naming its own children. The architecture doc and the session README now say what main does in place of the Sprint 1 text (#29): the contract as it stands, the events and commands on the wire today, and the page layout that #27 and #28 built. On 22 Sep the projects correction was reviewed and merged as #31 (fbec491): the line in migration 005 and the two README paragraphs that said a legacy findings backfill was owed are gone from main, with no SQL statement changed. Two more merged on 23 Sep. #35 (186e734) is the model layer in core: a worker asks a ModelProvider and gets text, tool calls, tokens and what the call cost, and never sees a key, an HTTP client or a vendor wire format. OpenAICompatible covers every vendor that speaks chat completions, with a timeout, bounded retries that honour the vendor Retry-After, and an answer it cannot read refused rather than charged; pricing.ts carries a list price per model with the date it was read, so a model with no row cannot be priced and is not silently free; nullModel is what CI and a keyless demo run against; and modelFromEnv reads LUMEN_MODEL_PROVIDER, LUMEN_MODEL and the vendor key. The demo lead now thinks and replies with the model when one is configured, and the cost goes on the step as detail.cost and so into the ledger. 15 recorded-response tests, plus a live test that spends a few tokens per vendor when a key is in the environment. Then #32, the steering foundation, was reviewed again and merged as 0a96cf3: the two blocking points from the 22 Sep review came back fixed, the platform assertion in sandboxFs.test.ts now skips off Windows without weakening the guard, and /test-health.ps1 is out of the repository .gitignore. Steering registers its routes in app.ts like every other slice, so all five slices are now composed there. Main is 0a96cf3, with CI, Security and Deploy green on it, 653 tests passing, 97 per cent of lines covered and the ZAP baseline still at 0 fail and 8 warn. Three pull requests are open. #33, the rest of the steering stack, carries the worker, Compute and task.steer and now includes the fix for the dropped promise at steerRegistry.ts line 49, with a regression test; it still has the core owner as its requested reviewer and has had no review, and now conflicts with main on .env.example, app.ts, main.ts and the steering files, because #32 went in squashed. #36, also steering, adds the six environment variables the server reads that .env.example never named, two of them from #35, and asks the core and identity owners to check the comments on their own; it is documentation only and conflicts with main on .env.example. #34, identity, merges cleanly, does not edit app.ts or main.ts itself but offers the OAuth startup wiring as docs/identity/oauth-startup.patch for the core owner to take or refuse; no reviewer is requested on it yet. 20 pull requests merged.',
       todo: [
         { text: 'core/db: pool and migrations (#8)', done: true },
         { text: 'Trace in Postgres; restore after a restart (#13)', done: true },
@@ -77,8 +77,10 @@ window.LUMEN_STATUS = {
         { text: 'The Session page as the spec draws it (#27)', done: true },
         { text: 'Review #31: the obsolete backfill notes, no SQL change', done: true },
         { text: 'Review #32: the steering sandbox, the steer queue and the files routes', done: true },
-        { text: 'Re-review #32 once the blocker and the dropped promise are fixed', done: false },
+        { text: 'Re-review #32 once the blocker and the dropped promise are fixed', done: true },
+        { text: 'The model layer in core: one door to a language model, priced per call (#35)', done: true },
         { text: 'Review #33: Compute, the worker, task.steer and the composer row', done: false },
+        { text: 'Review #36: the six environment variables .env.example never named', done: false },
         { text: 'Take or refuse the app.ts and main.ts OAuth wiring patch offered by #34', done: false },
         {
           text: 'Pass billing budget guard in app.ts once a new account has a default cap',
@@ -126,7 +128,7 @@ Do, in this order:
 2. Pull request #31 is merged, as fbec491. The line in migration 005 that said legacy findings stay session-readable is gone, and so are the two README paragraphs that said a backfill was owed. No SQL statement and no behaviour changed. Nothing in the repository still says a backfill is owed; check that before you write anything new that mentions it.
 3. If anyone asks where the agreed rule now lives, record it in the projects README as the rule to apply should such a database ever appear, and say plainly that none exists today. That is a documentation change, not a migration.
 4. Sprint 3 in docs/DOD.md is a session steerable from the composer that stays inside its cap, restore after a restart, GitHub and Google OAuth, and Stripe top-up in test mode. None of those is obviously the projects slice. Agree with the core owner which part, if any, touches modules/projects, pages/home or pages/landing, and write the answer down, before you open a branch.
-5. Keep an eye on #32, the steering slice: it registers its own routes in app.ts and reads projects.requireProject from your public index. If its review changes that shape, it is your index that has to say so.
+5. #32, the steering slice, merged on 23 Sep: it registers its own routes in app.ts and reads projects.requireProject from your public index, with that shape unchanged by the review. #33 is still open on top of it; if its review changes that shape, it is your index that has to say so.
 
 Constraints: touch only the projects documentation and modules/projects, pages/home, pages/landing. No new migration. Use another slice only through its public index. No new dependency. Done means the Sprint 3 work for this slice is agreed and written down, on a branch in this repository, not on a fork, and no file in the repository says a backfill is owed.`,
     },
@@ -156,6 +158,7 @@ Constraints: touch only the projects documentation and modules/projects, pages/h
         { text: 'Sprint 3: mail verification and password reset', done: false },
         { text: 'Sprint 3: account deletion, DELETE /api/me', done: false },
         { text: 'Find owners for the two wiring patches #34 offers, and a reviewer for #34', done: false },
+        { text: 'Check the three identity mail variables #36 adds to .env.example', done: false },
       ],
       prs: [
         {
@@ -182,46 +185,49 @@ Constraints: no file outside apps/server/src/modules/identity, apps/web/src/page
       slice: 'UC4 steering and sandbox',
       pattern: 'Command',
       written: 85,
-      onMain: 30,
+      onMain: 55,
       state: 'review',
-      stateLabel: '#32 changes requested; quality red',
+      stateLabel: '#32 on main; #33 and #36 conflict',
       summary:
-        "The core HTTP layer from Sprint 1 is on main (#5); nothing else of this slice is, so main still holds only the steering README and its index. The branch that carried the whole slice is now a stack of two pull requests. #32, from steering/sandbox-foundations, is the foundation: three commits, 1352 lines added across 12 files, rebased on main and not behind it. It moves the old main.ts wiring into apps/server/src/app.ts, where every other slice is registered, and closes the ownership hole its own DESIGN.md had flagged by taking projects.requireProject from the projects public index: a project's files are refused to every account but its owner. With it: SandboxFs, which maps the flat /mnt upload, workspace and output namespace onto the host volume and refuses traversal, a planted symlink, a Windows reserved name and anything over quota; SteerCommand and SteerQueue, the Command pattern, with the comparison against Strategy and Null Object written down in the module header; and the two project files routes, where an unsafe path and a missing file answer alike. #33, opened the same afternoon from steering/worker-and-compute on top of #32, is one commit, 1233 lines added and 79 removed across 16 files, and carries the rest: Compute with NullCompute and DockerCompute behind it, which is Sprint 2's own outcome, the sandbox behind its interface; SteerRegistry, which brackets a run so a task.steer arriving at any moment can find the queue inside it; a Worker on the interface #28 left, with no model, that delegates one reader, runs a fixed command through Compute and records a finding; task.steer with the task ownership check that wsBridge.ts says the owning slice must make; and the composer row, which steers whichever task the stream is showing while the root is busy. The worker is opt-in behind LUMEN_WORKER=steering rather than the new default, because the end-to-end test of #25 asserts the demo worker's fan-out, and DockerCompute's four tests skip because no Docker daemon was reachable. On both pull requests four of the five checks are green and quality fails on the same single test, sandboxFs.test.ts line 193, which asserts Windows path.resolve behaviour for a backslash segment and does not hold on the Linux runner: 636 of 637 tests pass on #32 and 659 of 660 on #33, and the guard that test documents is not the test that failed. The core owner reviewed #32 on 22 Sep and requested changes, reading the whole stack: the shape is right, the slice goes into app.ts with the same lines as every other slice, task.steer checks ownership through the session slice's own taskSession and context, the files routes go through projects.requireProject, and the Docker run is pinned, network-less and memory-bounded. Three points came back. The blocker is that same red quality check: make the platform assertion skip off Windows, or delete it and keep the sentence in the comment, and never weaken the guard to make a test pass. The should-fix is steerRegistry.ts line 49, where the appendStep promise is dropped with void: if the kernel refuses the step the rejection is unhandled, which on Node ends the process, so it should be awaited inside flush or caught with a comment saying why. The nit is the personal /test-health.ps1 entry added to the repository .gitignore, which belongs in a global excludes file. Hardening the container, which runs as root with no process or CPU limit, is named as work for a later pull request. Fix the first two and the core owner merges. #33 has had no review yet and still has the core owner as its requested reviewer. Neither is on main, so onMain stays at 30.",
+        "#32 merged on 23 Sep as 0a96cf3, so the first half of this slice is on main: SandboxFs, which maps the flat /mnt upload, workspace and output namespace onto the host volume and refuses traversal, a planted symlink, a Windows reserved name, a backslash segment and anything over quota; SteerCommand and SteerQueue, the Command pattern, with the comparison against Strategy and Null Object written down in the module header and eleven tests that exercise it; the two project files routes, where an unsafe path and a missing file answer alike; and the registration in apps/server/src/app.ts, with projects.requireProject taken from the projects public index, so a project's files are refused to every account but its owner. That is the slice registered like every other one, its pattern proven by a test and its cross-slice ownership check closed, which is why onMain moves from 30 to 55. It is not the whole slice: Compute, the worker, task.steer and the composer row are still on a branch, and no page of this slice is on main. Both blocking points from the 22 Sep review came back answered before the merge. The platform assertion in sandboxFs.test.ts now runs under it.skipIf(process.platform !== 'win32') instead of being weakened, and quality is green: on main that file reports 27 tests with one skipped. The personal /test-health.ps1 entry is out of the repository .gitignore. The dropped promise at steerRegistry.ts line 49 belongs to #33 after the split and was fixed there on 23 Sep (f007050): the appendStep call now carries a catch with a comment saying why swallowing it is right, so a steer that cannot land loses itself and not the server, and the regression test uses a plain function rather than a spy, because a spy attaches its own handler and hides the unhandled rejection. #33 is six commits, 2585 lines added and 35 removed across 23 files; quality, build-web and the dependency audit are green and CodeQL was still running at the last look. It has had no review and still has the core owner as its requested reviewer. Because #32 went in squashed, #33 now conflicts with main on .env.example, apps/server/src/app.ts, apps/server/src/main.ts and several steering files, and has to take 0a96cf3 in before it can be read or merged. #36, opened on 23 Sep from steering/env-example-gaps, is documentation only: twelve lines that give .env.example the six variables the server reads and never named, two of them from the model layer #35 put in core, each with its default and a one-line comment, and it asks the core and identity owners to check the comments on their own. It conflicts with main on .env.example as well.",
       todo: [
         { text: 'Rebase and open the pull request for what exists (#32)', done: true },
         { text: 'Split the worker, Compute and task.steer into #33, stacked on #32', done: true },
-        { text: 'Register the steering routes in app.ts, not main.ts (#25)', done: false },
+        { text: 'Register the steering routes in app.ts, not main.ts (#25)', done: true },
         { text: 'Compute interface, NullCompute, DockerCompute', done: false },
         { text: 'A Worker on the current interface', done: false },
         { text: 'task.steer with the ownership check; composer', done: false },
-        { text: 'Green #32 and #33: the sandboxFs platform test fails on the Linux runner', done: false },
-        { text: 'Review of #32: do not drop the appendStep promise at steerRegistry.ts line 49', done: false },
-        { text: 'Review of #32: take the personal /test-health.ps1 out of the repository .gitignore', done: false },
+        { text: 'Green #32 and #33: the sandboxFs platform test fails on the Linux runner', done: true },
+        { text: 'Review of #32: do not drop the appendStep promise at steerRegistry.ts line 49', done: true },
+        { text: 'Review of #32: take the personal /test-health.ps1 out of the repository .gitignore', done: true },
+        { text: 'Rebase #33 on 0a96cf3: .env.example, app.ts, main.ts and steering files conflict', done: false },
+        { text: 'Rebase #36 on 0a96cf3: .env.example conflicts with the LUMEN_VOLUME_ROOT line', done: false },
+        { text: 'Agree container hardening as Sprint 3 work: non-root user, process and CPU limits', done: false },
       ],
       prs: [
-        {
-          number: 32,
-          label: 'feat(steering): sandbox path virtualization, the steer queue, and the files routes',
-        },
         {
           number: 33,
           label: 'feat(steering): the sandbox behind its interface, a real worker, and task.steer',
         },
+        {
+          number: 36,
+          label: 'docs: list every env var the server reads in .env.example',
+        },
       ],
-      prompt: `You are working in the lumen-next repo on the steering slice (apps/server/src/modules/steering, the composer row of apps/web/src/pages/session/parts.tsx), owned by LI ZHUOYANG. The slice is open as a stack of two pull requests: #32 from steering/sandbox-foundations, rebased on main, with SandboxFs, SteerCommand and SteerQueue, the files routes and the app.ts wiring; and #33 from steering/worker-and-compute, based on #32, with Compute, NullCompute and DockerCompute, SteerRegistry, the Worker, task.steer and the composer row. Four of the five checks are green on each. The core owner reviewed #32 on 22 Sep, read the whole stack, and requested changes: the shape is right and the Composer change and the two lines in Session.tsx are accepted, but three things came back and the first two block the merge. #33 has had no review yet and still has the core owner as its requested reviewer. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/ARCHITECTURE.md sections 6 to 8, apps/server/src/core/domain/worker.ts and apps/server/src/app.ts on main. Everything you commit is English.
+      prompt: `You are working in the lumen-next repo on the steering slice (apps/server/src/modules/steering, the composer row of apps/web/src/pages/session/parts.tsx), owned by LI ZHUOYANG. #32 is merged, as 0a96cf3: SandboxFs, SteerCommand and SteerQueue, the two project files routes and the app.ts wiring are on main, with projects.requireProject closing the ownership check and both blocking review points fixed. Two pull requests are open. #33, from steering/worker-and-compute, carries Compute, NullCompute and DockerCompute, SteerRegistry, the Worker, task.steer and the composer row; quality, build-web and the dependency audit are green on it, CodeQL was still running at the last look, it has had no review, and the core owner is its requested reviewer. #36, from steering/env-example-gaps, is twelve documentation-only lines for .env.example. Read CLAUDE.md, docs/CODING_STANDARDS.md, docs/ARCHITECTURE.md sections 6 to 8, apps/server/src/core/domain/worker.ts, apps/server/src/core/model/provider.ts and apps/server/src/app.ts on main. Everything you commit is English.
 
-Goal: clear the three review points, get #32 green and merged, then #33 behind it. Do not open a third pull request, and do not add anything new to either of these two.
+Goal: get #33 mergeable and reviewed, then #36 behind it. Do not open a third pull request, and do not add anything new to either of these two.
 
 Do, in this order:
-1. Fix the one failing test, which the review calls the blocker. It is in #32, and #33 inherits it, which is why both are red on the same check. quality fails at apps/server/src/modules/steering/sandboxFs.test.ts line 193, in the case named "shows the platform behaviour the guard above is written for": it asserts that resolving a path whose segments are separated by backslashes escapes the scope root. That is Windows path.resolve behaviour. On the Linux runner a backslash is an ordinary filename character, the resolved path stays under the root, and the assertion fails. The guard itself is right to refuse backslashes on every platform and this test is not what proves it. Make the assertion platform-aware with it.skipIf(process.platform !== "win32"), the way the symlink tests already skip rather than fake, or delete the case and keep the sentence in the comment above the guard. Never weaken the guard to make a test pass.
-2. Fix the dropped promise the review asks to be fixed with it. At apps/server/src/modules/steering/steerRegistry.ts line 49 the appendStep call is discarded with void. If the kernel refuses the step, because the task was stopped a moment earlier or the record fails, the rejection is unhandled, and on Node that ends the process. Await it inside flush, or catch it and say in a comment why swallowing it is right. A steer that could not land must not take the server down.
-3. Take /test-health.ps1 out of the repository .gitignore. A personal scratch file belongs in your own global excludes file, set with git config core.excludesFile. This is the review's nit, and it is one line.
-4. Push the three fixes to steering/sandbox-foundations, so #32 goes green; then bring them into steering/worker-and-compute so #33 does too. Check all five checks on both, and ask the core owner to look again.
-5. Answer the rest of the review rather than widening either branch. The worker is opt-in behind LUMEN_WORKER=steering and not the new default, because #25's end-to-end test asserts the demo worker's three-reader fan-out; DockerCompute's four tests skip because no Docker daemon was reachable, so it is not yet trusted; and the reader runs a fixed command, not one built from the task's title, because there is no model here to decide what a user's words are safe to run. The container hardening the review raises, a non-root user in the image, a process limit and a CPU bound, is named there as work for a later pull request: agree it as Sprint 3 work, do not add it here.
-6. Rebase on main if it moves, #32 first and #33 on top of it. Main is at fbec491 and has not moved since #31 on 22 Sep, a documentation-only change to the projects slice.
-7. Once #33 is merged, the Sprint 2 outcome "sandbox behind its interface" is on main and steering is composed in app.ts like every other slice. Merging only #32 gets the routes on main; it does not close that outcome, because Compute lives in #33. Agree the Sprint 3 work, a session steerable from the composer that stays inside its cap, with the core owner and the billing owner before starting it, rather than growing this branch.
+1. #33 conflicts with main and cannot be read or merged until that is fixed. #32 went in squashed, so the four commits it shared with your branch are on main under one new commit and git sees both sides as changed. Bring main into steering/worker-and-compute and resolve .env.example, apps/server/src/app.ts, apps/server/src/main.ts and the steering files against 0a96cf3, keeping what #32 already landed and only your new work on top. What is left should be Compute, SteerRegistry, the Worker, task.steer, the composer row and their tests, and nothing else.
+2. Do the same for #36. It conflicts on .env.example alone, because #32 added LUMEN_VOLUME_ROOT to the same file. Keep both sets of variables.
+3. Both blocking points from the review on #32 are answered, on main or on #33: the platform assertion skips off Windows, /test-health.ps1 is out of the repository .gitignore, and steerRegistry.ts no longer drops the appendStep promise. Do not redo any of them, and never weaken the backslash guard to make a test pass.
+4. main moved twice on 23 Sep. #35 put a model layer in core: ModelProvider, OpenAICompatible, a price per call and modelFromEnv. The worker in #33 runs a fixed command and asks no model, which is still the right shape for this pull request, because nothing here decides what a user's words are safe to run. Say that on the thread rather than wiring the model in.
+5. Run npm run verify with DATABASE_URL set, check all five checks on both pull requests once the rebases are pushed, and ask the core owner to review #33. Ask the core and identity owners to confirm the comments on their own variables in #36.
+6. Answer the rest of the review rather than widening either branch. The worker is opt-in behind LUMEN_WORKER=steering and not the new default, because the end-to-end test of #25 asserts the demo worker's three-reader fan-out; DockerCompute's four tests skip because no Docker daemon was reachable, so it is not yet trusted. The container hardening the review raises, a non-root user in the image, a process limit and a CPU bound, is Sprint 3 work: agree it with the core owner, do not add it here.
+7. Once #33 is merged, the Sprint 2 outcome, the sandbox behind its interface, is on main. #32 got the routes and the sandbox there; it did not close that outcome, because Compute lives in #33. Agree the Sprint 3 work, a session steerable from the composer that stays inside its cap, with the core owner and the billing owner before starting it, rather than growing this branch.
 
-Constraints: use another slice only through its public index. No new dependency without asking the core owner. Do not change which worker is the default; that is the team's call, not this branch's. Do not touch the call tree column or open a second socket. Done means #32 and then #33 are merged with CI, Security and Deploy green, and a session started with LUMEN_WORKER=steering shows the output of a command as a tool step.`,
+Constraints: use another slice only through its public index. No new dependency without asking the core owner. Do not change which worker is the default; that is the team's call, not this branch's. Do not touch the call tree column or open a second socket. Done means #33 and then #36 are merged with CI, Security and Deploy green, and a session started with LUMEN_WORKER=steering shows the output of a command as a tool step.`,
     },
     {
       id: 'herong',

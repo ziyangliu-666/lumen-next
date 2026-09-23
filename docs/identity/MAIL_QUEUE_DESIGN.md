@@ -1,6 +1,6 @@
 # Queued mail delivery — design draft
 
-Owner: LU YI. Status: draft for core-owner review. Baseline: main `2613a84`.
+Owner: LU YI. Status: implemented with this change; for core-owner review. Baseline: main `2613a84`.
 Resolves the blocker in `MAIL_SETUP.md`: inline delivery makes response time
 depend on whether an address is eligible (PR #15 S5).
 
@@ -176,11 +176,10 @@ Written before the implementation; they fail against today's code:
 10. **Per-address cap**: the fourth request in an hour is dropped silently,
     with the same response.
 
-## Open questions for review
+## Decisions taken in this change (open to review)
 
-- Should the worker run in every process, or only where an environment flag
-  enables it? `skip locked` makes both safe.
-- Where should the HMAC key come from: a new environment variable, or one
-  derived from an existing server secret?
-- Should verification also be queued? It is authenticated, so timing is not a
-  leak, but one path is simpler to reason about.
+- The worker runs in every process that has mail configured; `skip locked`
+  keeps that safe.
+- The HMAC key is a new variable, `IDENTITY_MAIL_KEY`, required whenever mail
+  is enabled.
+- Verification is queued too, so there is one delivery path.

@@ -39,8 +39,10 @@ reads current role and suspension on every request, never renewing a session.
 | GET /api/auth/providers | configured providers; false by default |
 | GET /api/auth/mail | enabled flag; false by default |
 
-Account deletion is excluded pending shared retention constraints. OAuth, mail
-verification and reset are written/tested but not wired (Sprint 3). Do not enable
+Account deletion is excluded pending shared retention constraints. main.ts wires
+OAuth through oauthProvidersFromEnvironment; a provider is enabled only when its
+credential pair is set. Mail verification and reset are written/tested but not
+wired (Sprint 3). Do not enable
 public reset delivery before its timing-enumeration blocker is addressed.
 
 ## Security and storage

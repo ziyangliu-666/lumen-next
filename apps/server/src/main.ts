@@ -9,6 +9,7 @@ import { composeApp, type IdentityConfig } from './app.js';
 import { openDatabase, type Db } from './core/db/db.js';
 import { defaultWebRoot } from './core/http/server.js';
 import { modelFromEnv } from './core/model/index.js';
+import { oauthProvidersFromEnvironment } from './modules/identity/index.js';
 import { demoWorker, paceFromEnv } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
@@ -56,6 +57,9 @@ function identityConfig(): IdentityConfig {
   return {
     origin,
     sessionLifetimeMs: lifetime,
+    oauthProviders: oauthProvidersFromEnvironment(process.env, origin, {
+      allowLoopbackHttp: process.env['NODE_ENV'] !== 'production' && insecure === 'true',
+    }),
     ...(insecure === undefined ? {} : { secureCookies: insecure !== 'true' }),
   };
 }

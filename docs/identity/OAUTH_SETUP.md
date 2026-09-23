@@ -30,32 +30,21 @@ fragment, userinfo or trailing slash. Callbacks are derived from that origin:
 
 For explicit local acceptance, `{ allowLoopbackHttp: true }` permits canonical
 HTTP only for localhost, 127.0.0.1 or [::1]. LAN addresses, wildcard interfaces,
-noncanonical IP aliases and remote HTTP remain prohibited. The proposed startup
-patch permits this exception only outside production with the explicit insecure
+noncanonical IP aliases and remote HTTP remain prohibited. Startup permits
+this exception only outside production with the explicit insecure
 cookie flag. Production remains HTTPS-only.
 
 ## Shared startup handoff
 
-[oauth-startup.patch](oauth-startup.patch) contains the minimal proposed changes:
+The composition root wires providers in two places:
 
 1. main.ts constructs providers from server configuration through identity's
    public index.
 2. app.ts accepts an optional readonly OAuthProvider array in IdentityConfig and
    forwards it to createIdentitySlice. composeApp does not read the environment.
 
-The patch is supplied for the core owner's review; it is not applied to tracked
-shared files. It depends on this change's new public export.
-
-```sh
-git apply --check docs/identity/oauth-startup.patch
-# Apply only as the owner-reviewed integration change.
-git apply docs/identity/oauth-startup.patch
-# Export a disposable DATABASE_URL before verification.
-npm run verify
-npm run build
-```
-
-Patch applicability is not production acceptance. Add composition-level coverage
+The core owner approved both files on the identity pull request. A green
+build is not production acceptance. Add composition-level coverage
 for disabled, single-provider and dual-provider configuration, then verify the
 applied source. Do not enable mail as part of this change.
 

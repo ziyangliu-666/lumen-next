@@ -24,6 +24,7 @@ export { AUTH_COOKIE, SessionStrategy, SessionPrincipalResolver } from './sessio
 export { SessionAuthFlow } from './sessionAuthFlow.js';
 export { AccountService } from './accountService.js';
 export { resendMailSender, type MailSender, type IdentityMail } from './mail.js';
+export { MailWorker, type MailEvent } from './mailQueue.js';
 export {
   OAuthStrategy,
   OAuthAccounts,

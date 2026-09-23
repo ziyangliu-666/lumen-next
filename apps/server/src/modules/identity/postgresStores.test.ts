@@ -372,13 +372,16 @@ describe('identity: atomic suspension', () => {
     expect(db.calls).toHaveLength(0);
     expect(db.transactions).toHaveLength(0);
   });
-  it('suspends and revokes all sessions on the same transaction connection', async () => {
+  it('suspends, revokes all sessions and purges recovery mail on one transaction connection', async () => {
     const db = new RecordingDatabase();
-    db.results.push([account], []);
+    db.results.push([account], [], [], []);
     await new PostgresAccountStore(db).suspend(account.id, true);
     expect(db.calls[0]?.values).toEqual([account.id, true]);
     expect(db.calls[1]?.sql).toBe('delete from auth_sessions where account_id = $1');
     expect(db.calls[1]?.values).toEqual([account.id]);
+    expect(db.calls[2]?.sql).toBe('delete from identity_mail_tokens where account_id = $1');
+    expect(db.calls[3]?.sql).toMatch(/^delete from identity_mail_requests where state = 'pending'/);
+    expect(db.calls.slice(2).every((call) => call.values[0] === account.id)).toBe(true);
     expect(db.calls.every((call) => call.transaction)).toBe(true);
     expect(db.transactions).toEqual(['begin', 'commit']);
   });

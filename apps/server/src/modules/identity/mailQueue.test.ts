@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openTestDb, TEST_DATABASE_URL } from '../../core/db/testDb.js';
-import type { IdentityDatabase, IdentitySql } from './identityDatabase.js';
+import type { IdentityDatabase } from './identityDatabase.js';
 import type { IdentityMail } from './mail.js';
 import { MailActions } from './mailActions.js';
 import { MailQueue, MailWorker, type MailEvent } from './mailQueue.js';
@@ -69,23 +69,29 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: queued mail delivery', () => {
     return db.query('select token_hash from identity_mail_tokens', []);
   }
 
-  it('admits every well-formed address with the same single statement and no send', async () => {
+  it('admits every well-formed address with the same statements and no send', async () => {
     const eligible = await passwordAccount();
     const suspended = await passwordAccount();
     await accounts.suspend(suspended.id, true);
     await providerOnlyAccount('provider@example.test');
-    const statements: string[][] = [];
+    const statements: string[] = [];
     const recording: IdentityDatabase = {
       query: (text, values) => {
-        statements.push([text]);
+        statements.push(text);
         return db.query(text, values);
       },
-      withTransaction: () => {
-        throw new Error('admission must not open a transaction');
-      },
+      withTransaction: (work) =>
+        db.withTransaction((sql) =>
+          work({
+            query: (text, values) => {
+              statements.push(text);
+              return sql.query(text, values);
+            },
+          }),
+        ),
     };
     const recorded = new MailActions(recording, new MailQueue(recording, { key }));
-    const shapes: string[][][] = [];
+    const shapes: string[] = [];
     for (const email of [
       'unknown@example.test',
       eligible.email,
@@ -94,12 +100,121 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: queued mail delivery', () => {
     ]) {
       statements.length = 0;
       await recorded.requestReset(email);
-      shapes.push([...statements]);
+      shapes.push(JSON.stringify(statements));
     }
-    expect(shapes.every((shape) => shape.length === 1)).toBe(true);
-    expect(new Set(shapes.map((shape) => shape[0]![0])).size).toBe(1);
+    // No account table is read on the public path, and every address runs the same SQL.
+    expect(shapes[0]).not.toMatch(/accounts|credentials/);
+    expect(new Set(shapes).size).toBe(1);
     expect(send).not.toHaveBeenCalled();
     expect(await requests()).toHaveLength(4);
+  });
+
+  it('holds the per-address cap under concurrent requests', async () => {
+    const account = await passwordAccount();
+    await actions.requestReset(account.email);
+    await actions.requestReset(account.email);
+    const emailKey = createHmac('sha256', key).update(account.email).digest('hex');
+    let inserted = (): void => {};
+    const insertedPromise = new Promise<void>((resolve) => (inserted = resolve));
+    let commit = (): void => {};
+    const committed = new Promise<void>((resolve) => (commit = resolve));
+    // A concurrent admission that has inserted the third request but not committed yet.
+    const concurrent = db.withTransaction(async (sql) => {
+      await sql.query("select pg_advisory_xact_lock(hashtext('identity_mail'), hashtext($1))", [
+        emailKey,
+      ]);
+      await sql.query(
+        `insert into identity_mail_requests (purpose, email, email_key) values ('reset', $1, $2)`,
+        [account.email, emailKey],
+      );
+      inserted();
+      await committed;
+    });
+    await insertedPromise;
+    const fourth = actions.requestReset(account.email);
+    for (let i = 0; i < 100; i++) {
+      const waiting = await db.query<{ n: number }>(
+        'select count(*)::int as n from pg_locks where not granted',
+        [],
+      );
+      if (waiting[0]!.n > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    commit();
+    await concurrent;
+    await fourth;
+    expect(await requests()).toHaveLength(3);
+    expect(events.filter((e) => e === 'dropped')).toHaveLength(1);
+  });
+
+  it('lets a suspension and a worker claim on the same account both finish without deadlock', async () => {
+    const account = await passwordAccount();
+    await actions.requestReset(account.email);
+    let suspendedRowLocked = (): void => {};
+    const locked = new Promise<void>((resolve) => (suspendedRowLocked = resolve));
+    let releaseSuspension = (): void => {};
+    const release = new Promise<void>((resolve) => (releaseSuspension = resolve));
+    // Suspension takes the account lock, then pauses before purging mail requests.
+    const pausing: IdentityDatabase = {
+      query: (text, values) => db.query(text, values),
+      withTransaction: (work) =>
+        db.withTransaction((sql) =>
+          work({
+            async query(text, values) {
+              const rows = await sql.query(text, values);
+              if (text.startsWith('update accounts set suspended')) {
+                suspendedRowLocked();
+                await release;
+              }
+              return rows as never;
+            },
+          }),
+        ),
+    };
+    const suspension = new PostgresAccountStore(pausing).suspend(account.id, true);
+    await locked;
+    const tick = worker.tick();
+    // Wait until the worker is really blocked in PostgreSQL behind the account lock.
+    for (let i = 0; i < 250; i++) {
+      const waiting = await db.query<{ n: number }>(
+        'select count(*)::int as n from pg_locks where not granted',
+        [],
+      );
+      if (waiting[0]!.n > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    releaseSuspension();
+    await expect(suspension).resolves.toBeUndefined();
+    await expect(tick).resolves.toBeUndefined();
+    expect(send).not.toHaveBeenCalled();
+    expect(await requests()).toEqual([]);
+  }, 20_000);
+
+  it('stops between requests instead of finishing the whole batch', async () => {
+    for (let n = 0; n < 3; n++) await actions.requestReset((await passwordAccount()).email);
+    let stopping: Promise<void> | undefined;
+    send.mockImplementationOnce((message) => {
+      sent.push(message);
+      stopping = worker.stop();
+      return Promise.resolve();
+    });
+    await worker.tick();
+    await stopping;
+    expect(sent).toHaveLength(1);
+  });
+
+  it('reports a failed tick as a value-free error event', async () => {
+    const broken: IdentityDatabase = {
+      query: () => Promise.reject(new Error('private database failure')),
+      withTransaction: () => Promise.reject(new Error('private database failure')),
+    };
+    const failing = new MailWorker(broken, { send }, origin, { event: (e) => events.push(e) });
+    failing.start(5);
+    for (let i = 0; i < 100 && !events.includes('error'); i++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    await failing.stop();
+    expect(events).toContain('error');
+    expect(JSON.stringify(events)).not.toContain('private');
   });
 
   it('sends only to eligible addresses and marks the rest done without a code', async () => {
@@ -275,7 +390,10 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: queued mail delivery', () => {
   });
 
   it('rejects a queue key too short to protect the address index', () => {
-    const sql: IdentitySql = { query: () => Promise.resolve([]) };
+    const sql: IdentityDatabase = {
+      query: () => Promise.resolve([]),
+      withTransaction: () => Promise.reject(new Error('unused')),
+    };
     expect(() => new MailQueue(sql, { key: 'short' })).toThrow('Invalid mail queue key');
   });
 });

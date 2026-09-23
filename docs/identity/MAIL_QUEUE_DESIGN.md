@@ -35,7 +35,8 @@ fresh code per attempt is acceptable), and mandatory verification at sign-in
 ### Admission (request path)
 
 `POST /api/auth/forgot-password` and `POST /api/me/email/verification` validate
-the input, then run **one insert** into `identity_mail_requests`:
+the input, then run the same two statements for every address: a per-address
+advisory lock, then one insert into `identity_mail_requests`:
 
 ```sql
 insert into identity_mail_requests (purpose, email, account_id)
@@ -66,11 +67,13 @@ It lets the cap work without an index on plaintext addresses.
 `MailWorker` lives in the identity slice. It is started by the composition
 root and stopped on shutdown, like the session kernel. Each tick:
 
-1. Claim up to N due rows: `select … for update skip locked`, where
-   `state = 'pending' and not_before <= now()`.
-2. Resolve eligibility inside the same transaction: the account exists and is
-   not suspended, and for a reset it has a password credential. If the address
-   is ineligible, mark the row `done` and send nothing.
+1. Pick the oldest due row (`state = 'pending' and not_before <= now()`)
+   without locking it.
+2. Lock the account first (not suspended, and for a reset with a password
+   credential), then lock the request row `for update skip locked` and recheck
+   it. This is the account-first order that suspension and every credential
+   change use, so a claim cannot deadlock with them. If the address is
+   ineligible, mark the row `done` and send nothing.
 3. Generate a 32-byte code, store its hash in `identity_mail_tokens`
    (replacing any previous one; `unique(account_id, purpose)` already holds),
    and commit.
@@ -82,7 +85,9 @@ root and stopped on shutdown, like the session kernel. Each tick:
 A retry generates a new code. If a send actually succeeded but was reported as
 failed, the user may receive two mails; only the newest code works.
 
-The tick interval is 2 s with jitter. `skip locked` makes concurrent workers
+The tick interval is 2 s with jitter. `stop()` lets the current request finish
+and skips the rest of the batch; a failed tick reports a value-free `error`
+event. `skip locked` makes concurrent workers
 safe. The queue is in PostgreSQL, so it is not an unbounded in-memory job.
 
 ### Limits and expiry

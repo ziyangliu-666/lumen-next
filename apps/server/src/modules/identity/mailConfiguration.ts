@@ -15,6 +15,16 @@ export interface MailConfigurationOptions {
   readonly outboxDirectory?: string;
   /** True in production, where outbox mode is refused. */
   readonly production?: boolean;
+  /** The canonical origin. Outbox mode, which writes codes to disk, needs a loopback one. */
+  readonly origin?: string;
+}
+
+function loopback(origin: string | undefined): boolean {
+  try {
+    return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin ?? '').hostname);
+  } catch {
+    return false;
+  }
 }
 
 function printable(value: string): boolean {
@@ -65,7 +75,8 @@ export function mailFromEnvironment(
       }),
     };
   }
-  if (options.production) throw new Error('Mail outbox is for local development only');
+  if (options.production || !loopback(options.origin))
+    throw new Error('Mail outbox is for local development only');
   if (!options.outboxDirectory) throw new Error('Mail outbox needs a local directory');
   return { key, sender: outboxSender(options.outboxDirectory) };
 }

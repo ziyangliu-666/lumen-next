@@ -58,6 +58,7 @@ function identityConfig(): IdentityConfig {
   const mail = mailFromEnvironment(process.env, {
     outboxDirectory: join(process.cwd(), '.data', 'identity-mail-outbox'),
     production: process.env['NODE_ENV'] === 'production',
+    origin,
   });
   return {
     origin,

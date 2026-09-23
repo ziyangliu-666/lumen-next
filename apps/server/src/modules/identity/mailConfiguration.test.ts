@@ -79,7 +79,7 @@ describe('identity: mail configuration from explicit environment', () => {
     const directory = await outbox();
     const config = mailFromEnvironment(
       { IDENTITY_MAIL_MODE: 'outbox', IDENTITY_MAIL_KEY: key },
-      { outboxDirectory: directory },
+      { outboxDirectory: directory, origin: 'http://localhost:4000' },
     );
     await config!.sender.send({ to: 'u@example.test', subject: 'Subject', text: 'Body' });
     const files = await readdir(directory);
@@ -88,12 +88,22 @@ describe('identity: mail configuration from explicit environment', () => {
       'To: u@example.test\nSubject: Subject\n\nBody\n',
     );
     expect(() =>
-      mailFromEnvironment({ IDENTITY_MAIL_MODE: 'outbox', IDENTITY_MAIL_KEY: key }, {}),
+      mailFromEnvironment(
+        { IDENTITY_MAIL_MODE: 'outbox', IDENTITY_MAIL_KEY: key },
+        { origin: 'http://localhost:4000' },
+      ),
     ).toThrow('Mail outbox needs a local directory');
+    // Without NODE_ENV=production, a public origin still refuses plaintext codes on disk.
     expect(() =>
       mailFromEnvironment(
         { IDENTITY_MAIL_MODE: 'outbox', IDENTITY_MAIL_KEY: key },
-        { outboxDirectory: directory, production: true },
+        { outboxDirectory: directory, origin: 'https://lumen.example' },
+      ),
+    ).toThrow('Mail outbox is for local development only');
+    expect(() =>
+      mailFromEnvironment(
+        { IDENTITY_MAIL_MODE: 'outbox', IDENTITY_MAIL_KEY: key },
+        { outboxDirectory: directory, production: true, origin: 'http://localhost:4000' },
       ),
     ).toThrow('Mail outbox is for local development only');
   });

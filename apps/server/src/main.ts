@@ -99,6 +99,9 @@ async function bootstrap(): Promise<void> {
   // slices test asserts its exact fan-out — that default does not move here.
   const useSteeringWorker = workerChoice() === 'steering';
   const provider = computeProvider();
+  // LUMEN_MODEL_PROVIDER: who either worker thinks and replies with. Without
+  // it the model is the one that does nothing, and nothing is spent.
+  const model = modelFromEnv(process.env);
   const { server, orphans, resolver } = await composeApp({
     db,
     // Real sign-in whenever there is a database; the stub only without one.
@@ -107,17 +110,16 @@ async function bootstrap(): Promise<void> {
       ? { useSteeringWorker: true }
       : {
           // Paced, so that a person can see the page is live. Tests build the
-          // application without this and do not wait. LUMEN_MODEL_PROVIDER
-          // gives the lead a real model to think and reply with; without it the
-          // lead says its fixed lines and nothing is spent on a model.
+          // application without this and do not wait.
           worker: demoWorker({
             paceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']),
-            model: modelFromEnv(process.env),
+            model,
           }),
         }),
     ...(webRoot ? { webRoot } : {}),
     ...(volumeRoot ? { volumeRoot } : {}),
     ...(provider ? { computeProvider: provider } : {}),
+    model,
   });
 
   await server.listen({ port: port(), host: '0.0.0.0' });

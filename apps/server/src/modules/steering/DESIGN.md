@@ -18,7 +18,7 @@ thing in the slice that uses all of it at once.
 | `SteerCommand` / `SteerQueue` | `steerCommand.ts` | Queues a user's mid-turn message and applies it at a chosen moment; cancellable before it lands. |
 | `Compute` / `NullCompute` / `DockerCompute` | `compute.ts` | Runs one command somewhere — nowhere, or a locked-down container — behind one interface. |
 | `SteerRegistry` | `steerRegistry.ts` | The seam between a `task.steer` arriving at any moment and the one running turn it must land in. |
-| The worker | `worker.ts` | The `Worker` implementation: no model, but a lead that really delegates and a reader that really runs a command. |
+| The worker | `worker.ts` | The `Worker` implementation: a tool-calling loop over `core/model`'s `ModelProvider`. A lead delegates to readers; a reader runs commands and reads and writes files in its sandbox. |
 | The files routes | `routes.ts` | `GET /api/projects/:id/files`, `GET /api/projects/:id/files/*`. |
 | `task.steer` | `commands.ts` | The broker command a landed steer arrives as. |
 
@@ -60,13 +60,19 @@ container addresses files only through `/mnt/upload`, `/mnt/workspace`,
    there is no `steer.queued`/`steer.landed` event in the contract yet to
    explain that to the browser, and the composer only offers this control
    while the task is shown as running.
-3. Between the reader's one tool step and recording its finding, and again
-   at the very end of the turn (`finally`, so it runs even if the turn
-   threw), the worker calls `queue.flush('next-step')` / `flush('end-of-turn')`.
-   Every queued command whose `when` matches is applied — its `sink` calls
-   `report.appendStep(taskId, 'you', text)`, landing it as the same kind of
-   step a fresh turn's words get — and removed from the queue in the same
-   pass.
+3. Before every model call the worker flushes `'next-step'`. Every queued
+   command whose `when` matches is applied — its `sink` hands the words to
+   the run's own inbox — and removed from the queue in the same pass. The
+   worker then writes each one, awaited and in order, as a `'you'` step (the
+   same kind a fresh turn's words get) and adds it to the conversation as the
+   user's next message, so the model reads it on that very call.
+   When the model answers without calling a tool, the worker flushes both
+   moments before accepting that as the end: if anything landed, what the
+   model wrote becomes a thinking step, the steer follows, and the loop goes
+   on. `'end-of-turn'` means exactly that — heard when the model would
+   otherwise stop. After the run, `end()` is called first (so nothing new can
+   arrive) and whatever the queue still holds is written to the trace, not
+   dropped.
 4. The user may cancel a steer any time before it lands — `SteerQueue.cancel(id)`
    removes it and calls `undo()`. Once landed, `undo()` throws
    `AlreadyLandedError` instead of pretending the delivery can be taken back.
@@ -74,21 +80,24 @@ container addresses files only through `/mnt/upload`, `/mnt/workspace`,
 
 **Running a command (UC4, the third piece, now real).**
 
-1. `session`'s kernel calls `Worker.run(task, input, report)`. A `lead` task
-   writes one thinking step, delegates one `reader` (through `report.delegate`,
-   the kernel's own machinery — this worker opens no tasks itself), and
-   replies once the reader has come to rest.
-2. A `reader` task resolves its session to a project (`context`), opens a
-   `SandboxFs` for `{volumeRoot, projectId, task.sessionId}`, and asks
-   `compute(provider, sandbox.hostMounts)` to run a fixed diagnostic command —
-   fixed, not built from the task's title: there is no model here deciding
-   what is safe to run, so nothing derived from a user's words is trusted as
-   a shell command yet.
-3. The result becomes a `tool` step (`detail.output`), a file under
-   `/mnt/workspace/<taskId>.log` (through `SandboxFs.writeFile`, so it passes
-   every check §4 documents), a finding, and a `reply` step — whether or not
-   a provider actually ran anything: `NullCompute` completes this exact path
-   with a readable failure instead of a result.
+1. `session`'s kernel calls `Worker.run(task, input, report)`. The task is
+   one conversation with the model (`ModelProvider.complete`, at most 12
+   calls a turn): ask, run the tools it called, hand back what they returned,
+   ask again, until it answers in plain text — that answer is the `reply`
+   step, carrying the call's cost as its receipt.
+2. A `lead` gets `delegate`, `list_files` and `read_file`. `delegate` goes
+   through `report.delegate` (the kernel's own machinery — this worker opens
+   no tasks itself) and hands the lead back each reader's final answer.
+3. A `reader` gets `run`, `list_files`, `read_file`, `write_file` and
+   `record_finding`. Its session is resolved to a project (`context`) the
+   first time a tool needs files, and every path goes through `SandboxFs`,
+   so it passes every check §4 documents. `run` asks
+   `compute(provider, sandbox.hostMounts)`; `NullCompute` answers with a
+   readable failure, which the model reads like any other result.
+4. A tool call the model got wrong (a bad path, a quota, a missing argument,
+   a tool it does not have) is said back to it as `error: …` and the turn
+   goes on. A model that cannot be reached ends the turn: the reason is
+   written as a `reply` step and the task fails.
 
 ## 3. Analysis class diagram
 
@@ -180,13 +189,12 @@ classDiagram
 
   class SteerRegistry {
     -active Map~string, Entry~
-    +begin(taskId, report) SteerQueue
+    +begin(taskId, sink) SteerQueue
     +end(taskId) void
     +steer(taskId, text, when) void
   }
   class NoActiveRun
   SteerRegistry o-- SteerQueue
-  SteerRegistry --> WorkerReport : holds, per active task
   SteerRegistry ..> SteerCommand : builds, on steer()
   SteerRegistry ..> NoActiveRun : throws
 
@@ -198,8 +206,9 @@ classDiagram
     <<factory>>
   }
   createWorker ..|> Worker : returns one
-  Worker ..> SandboxFs : opens, per reader run
-  Worker ..> Compute : asks, per reader run
+  Worker ..> ModelProvider : asks, every round
+  Worker ..> SandboxFs : opens, when a tool needs files
+  Worker ..> Compute : asks, per run call
   Worker --> SteerRegistry : begin()/end() every run
 ```
 
@@ -401,11 +410,9 @@ carries either.
 
 **Deliberately out of scope for this piece:**
 
-- **A model.** `worker.ts`'s reader runs a fixed command
-  (`echo "no model is wired in yet"; date`), never one built from a task's
-  title — there is no model here to decide what is safe to run, and a title
-  built from a user's words is not a shell command this worker gets to
-  trust yet.
+- **Memory across turns.** Each turn starts a fresh conversation from its
+  input; a follow-up `session.say` does not see the turns before it. The
+  history is in the trace, but `WorkerReport` has no way to read it back yet.
 - **`steer.cancel`.** Not in the frozen `ClientCommand` union
   (`packages/contracts/src/events.ts`); `SteerQueue.cancel` exists and is
   tested, nothing calls it from a command yet.

@@ -1,34 +1,45 @@
 import { randomUUID } from 'node:crypto';
-import type { WorkerReport } from '../../core/domain/worker.js';
 import { SteerCommand, SteerQueue, type SteerWhen } from './steerCommand.js';
 
 // The seam between task.steer (arrives on the broker, at any moment, for
 // whichever task the browser names) and a running Worker.run() (which alone
-// holds the WorkerReport a landed steer must write through). Neither can see
-// the other directly: the command handler runs outside any particular run,
-// and a run's WorkerReport is only ever a call-scoped argument.
+// holds the conversation a landed steer must reach). Neither can see the other
+// directly: the command handler runs outside any particular run, and a run's
+// conversation lives only inside that run.
 //
-// A task run registers itself once, at the top of Worker.run(); every
-// task.steer for that task id finds it there until the run ends.
+// A task run registers itself once, at the top of Worker.run(), with the sink
+// a landed steer goes to; every task.steer for that task id finds it there
+// until the run ends.
 
 export class NoActiveRun extends Error {}
 
+/**
+ * Where a landed steer goes: the running worker's own inbox. Synchronous on
+ * purpose — it only hands the words over. Writing them to the trace and into
+ * the model's conversation is the worker's, in order, awaited, at the moment
+ * it chooses.
+ */
+export type SteerSink = (text: string) => void;
+
 interface Entry {
   readonly queue: SteerQueue;
-  readonly report: WorkerReport;
+  readonly sink: SteerSink;
 }
 
 export class SteerRegistry {
   private readonly active = new Map<string, Entry>();
 
   /** Called once at the top of a task's run. Returns the queue that run's Worker flushes. */
-  begin(taskId: string, report: WorkerReport): SteerQueue {
+  begin(taskId: string, sink: SteerSink): SteerQueue {
     const queue = new SteerQueue();
-    this.active.set(taskId, { queue, report });
+    this.active.set(taskId, { queue, sink });
     return queue;
   }
 
-  /** Called once the run has settled. Whatever never got flushed goes with it. */
+  /**
+   * Called once the run is over. From here task.steer refuses this task; what
+   * the queue still holds stays with the worker, which drains it itself.
+   */
   end(taskId: string): void {
     this.active.delete(taskId);
   }
@@ -42,20 +53,9 @@ export class SteerRegistry {
   steer(taskId: string, text: string, when: SteerWhen): void {
     const entry = this.active.get(taskId);
     if (!entry) throw new NoActiveRun(`task ${taskId} is not running`);
-    const command = new SteerCommand(randomUUID(), taskId, text, when, (id, landedText) => {
-      // A landed steer becomes a 'you' step: the same kind a fresh turn's
-      // words get, because from the trace's point of view that is what it is
-      // — the user spoke, mid-turn instead of between them.
-      //
-      // apply() is synchronous, so this cannot be awaited, and on Node an
-      // unhandled rejection ends the process. If the kernel refuses the step
-      // (the task was stopped a moment earlier, or the record failed), this
-      // one steer is lost — and that must be the whole of the damage, not the
-      // server and every other session with it. Awaiting it, so a steer also
-      // lands in order before the step after it, comes with the model loop,
-      // where a flush becomes "before the next model call".
-      entry.report.appendStep(id, 'you', landedText).catch(() => undefined);
-    });
+    const command = new SteerCommand(randomUUID(), taskId, text, when, (_id, landedText) =>
+      entry.sink(landedText),
+    );
     entry.queue.enqueue(command);
   }
 }

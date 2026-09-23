@@ -7,9 +7,10 @@ There is no active disk outbox or environment-driven mail composition.
 
 ## Optional factory contract
 
-An owner-reviewed composition can inject `mailSender` and an optional value-free
-`mailDeliveryFailed` callback. Apply the shared runner's
-`core/db/migrations/004_identity_mail.sql` first. The Resend adapter uses a fixed
+An owner-reviewed composition can inject `mailSender`, a server-only `mailKey`
+(32+ characters) and an optional value-free `mailEvent` callback, then start the
+returned `mailWorker` and stop it on shutdown. Migrations 004 and 009 must be
+applied. The Resend adapter uses a fixed
 HTTPS endpoint, native fetch, plain-text messages and a ten-second deadline.
 Configure a verified sender and server-side credentials privately; never record
 mail bodies, recipients, codes or provider error details in telemetry.
@@ -32,14 +33,15 @@ policy. OAuth verified emails do not automatically populate verification records
 
 ## Blockers before enabling delivery
 
-- Delivery is currently awaited inline for eligible addresses. Although response
-  text is generic, timing may reveal account eligibility (PR #15 S5). Implement
-  an owner-reviewed queued delivery design before enabling public reset routes.
-- No durable retry, delivery queue, bounce tracking or exactly-once guarantee is
-  implemented. A 202 response does not prove mailbox delivery.
-- Review distributed/per-account mail abuse controls and cleanup scheduling.
-- Decide whether suspension must revoke outstanding recovery proofs. It blocks
-  their use while suspended but does not purge them.
+- Delivery is queued (`MAIL_QUEUE_DESIGN.md`): a public request is one
+  address-independent insert, and MailWorker resolves eligibility, retries up
+  to 5 times with backoff, and cleans up. The design awaits core-owner review,
+  and main.ts/app.ts do not start the worker yet.
+- No bounce tracking or exactly-once guarantee: a retry sends a fresh code. A
+  202 response does not prove mailbox delivery.
+- Per-address admission is capped at 3 per hour per purpose, plus LoginGate per
+  peer. Both are local to one database, not a distributed abuse service.
+- Suspension purges outstanding recovery codes and pending requests.
 - Core does not invalidate already-open WebSockets when login sessions change.
 
 Unit tests simulate transport. Real PostgreSQL SQL/HTTP tests exercise purpose

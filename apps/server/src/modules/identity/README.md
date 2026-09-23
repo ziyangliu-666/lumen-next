@@ -14,6 +14,8 @@ mailSender, mailKey and mailEvent. It returns `principalResolver`,
 (`MailWorker`: `start()`, `stop()`, `tick()`), which the composition root must
 start and stop on shutdown. A mailSender requires a server-only mailKey of at
 least 32 characters. `MailEvent` names the value-free delivery counters.
+`mailFromEnvironment(environment, { outboxDirectory, production })` builds the
+optional mail configuration from explicitly supplied variables.
 `oauthProvidersFromEnvironment(environment, origin)` constructs optional GitHub
 and Google adapters from explicitly supplied server configuration, without
 reading process.env or making network calls. Empty credential pairs disable a
@@ -45,8 +47,9 @@ reads current role and suspension on every request, never renewing a session.
 
 Account deletion is excluded pending shared retention constraints. main.ts wires
 OAuth through oauthProvidersFromEnvironment; a provider is enabled only when its
-credential pair is set. Mail verification and reset are written/tested but not
-wired (Sprint 3). Mail requests are queued: a public request is one insert, and
+credential pair is set. main.ts enables mail verification and reset only when
+`mailFromEnvironment` returns a configuration (IDENTITY_MAIL_MODE outbox or
+resend, plus IDENTITY_MAIL_KEY); it is off by default. Mail requests are queued: a public request is one insert, and
 MailWorker decides eligibility and delivers later, so response time no longer
 depends on the address (see docs/identity/MAIL_QUEUE_DESIGN.md).
 

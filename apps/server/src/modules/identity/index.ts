@@ -26,6 +26,11 @@ export { AccountService } from './accountService.js';
 export { resendMailSender, type MailSender, type IdentityMail } from './mail.js';
 export { MailWorker, type MailEvent } from './mailQueue.js';
 export {
+  mailFromEnvironment,
+  type MailConfiguration,
+  type MailConfigurationOptions,
+} from './mailConfiguration.js';
+export {
   OAuthStrategy,
   OAuthAccounts,
   OAuthAttempts,

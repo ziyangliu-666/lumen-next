@@ -5,11 +5,12 @@
 // This file is the process: it reads the environment, opens the database,
 // builds the application (app.ts), listens, and shuts down cleanly. What the
 // application is made of is in app.ts.
+import { join } from 'node:path';
 import { composeApp, type IdentityConfig } from './app.js';
 import { openDatabase, type Db } from './core/db/db.js';
 import { defaultWebRoot } from './core/http/server.js';
 import { modelFromEnv } from './core/model/index.js';
-import { oauthProvidersFromEnvironment } from './modules/identity/index.js';
+import { mailFromEnvironment, oauthProvidersFromEnvironment } from './modules/identity/index.js';
 import { demoWorker, paceFromEnv } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
@@ -54,9 +55,14 @@ function identityConfig(): IdentityConfig {
   if (insecure !== undefined && insecure !== 'true' && insecure !== 'false') {
     throw new Error('IDENTITY_INSECURE_COOKIES must be true or false');
   }
+  const mail = mailFromEnvironment(process.env, {
+    outboxDirectory: join(process.cwd(), '.data', 'identity-mail-outbox'),
+    production: process.env['NODE_ENV'] === 'production',
+  });
   return {
     origin,
     sessionLifetimeMs: lifetime,
+    ...(mail ? { mail } : {}),
     oauthProviders: oauthProvidersFromEnvironment(process.env, origin, {
       allowLoopbackHttp: process.env['NODE_ENV'] !== 'production' && insecure === 'true',
     }),
@@ -68,7 +74,7 @@ async function bootstrap(): Promise<void> {
   const db = await database();
   const webRoot = defaultWebRoot();
   const volumeRoot = process.env['LUMEN_VOLUME_ROOT'];
-  const { server, orphans, resolver } = await composeApp({
+  const { server, orphans, resolver, mailWorker } = await composeApp({
     db,
     // Real sign-in whenever there is a database; the stub only without one.
     identity: db ? identityConfig() : null,
@@ -86,12 +92,14 @@ async function bootstrap(): Promise<void> {
   });
 
   await server.listen({ port: port(), host: '0.0.0.0' });
+  mailWorker?.start();
   server.log.info(`active principal resolver: ${resolver}`);
   if (webRoot) server.log.info(`serving the built web app from ${webRoot}`);
   if (orphans > 0) server.log.info(`stopped ${orphans} task(s) left open by the last process`);
   server.log.info(
     db ? 'database connected, migrations applied' : 'no DATABASE_URL: in-memory mode',
   );
+  if (mailWorker) server.log.info('identity mail worker started');
 
   // Drain in-flight work before exiting, so a rolling deploy does not cut a
   // browser off mid-event. Fastify's close() also runs the websocket plugin's
@@ -101,6 +109,7 @@ async function bootstrap(): Promise<void> {
       server.log.info(`${signal} received, closing`);
       server
         .close()
+        .then(() => mailWorker?.stop())
         .then(() => db?.close())
         .then(
           () => process.exit(0),

@@ -1,7 +1,7 @@
 name: Deploy
 
 # Continuous delivery: build the container, bring it up as staging with a real
-# database, run DAST against it, then wait at a manual gate before production.
+# database, run DAST against it, deploy to staging; production only by hand.
 #
 # DAST runs against a stack on the runner: the image that was just built and a
 # Postgres beside it. After the scan, the same image deploys to Fly.io
@@ -115,8 +115,11 @@ jobs:
 
   production:
     needs: staging-and-dast
-    if: github.event_name == 'push'
+    # The gate is the manual run: production only goes out from a
+    # workflow_dispatch, never from a push. (A required-reviewer rule on the
+    # environment needs a paid plan on a private repository.)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: production # protection rule = manual approval gate
+    environment: production
     steps:
-      - run: echo "Promote ${{ github.sha }} to production after approval."
+      - run: echo "Promote ${{ github.sha }} to production."

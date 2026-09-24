@@ -40,7 +40,7 @@ Reauthentication is the confirmation:
   session making the request must have been issued within the last 10 minutes,
   so the person signs in with the provider again first. Otherwise 401. Sending
   a password for such an account is also 401.
-- Failures count against LoginGate per direct peer and per account, as for a
+- Failures count against the account's LoginGate budget, as for a
   password change. Missing sign-in is 401; wrong Origin is 403.
 
 The `accounts` row stays as a tombstone, because other slices' rows keep its

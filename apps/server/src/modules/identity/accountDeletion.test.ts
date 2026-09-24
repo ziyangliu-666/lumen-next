@@ -57,7 +57,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: account deletion on PostgreSQL', 
       database: db,
       origin,
       sessionLifetimeMs: 60 * 60_000,
-      loginGate: new LoginGate({ attempts: 50 }),
+      loginGate: new LoginGate(),
     });
     const app = await buildServer({
       broker: new Broker(),

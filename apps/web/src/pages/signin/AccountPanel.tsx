@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { accountRequest as request } from './accountClient';
+import { DeleteAccountSection } from './DeleteAccountSection';
 
 interface Account {
   id: string;
@@ -227,6 +228,9 @@ export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void
                   Sign out everywhere
                 </Button>
               </div>
+            </div>
+            <div className="md:col-span-2">
+              <DeleteAccountSection onDeleted={onSignedOut} />
             </div>
           </div>
         )}

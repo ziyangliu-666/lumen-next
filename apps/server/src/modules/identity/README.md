@@ -72,8 +72,8 @@ retain their handshake principal until core provides revalidation.
 Only core's migration runner applies 002/003/004/009. Migration 002 adds suspended
 and normalized-email uniqueness to accounts; duplicate historical emails block
 migration. No second migration tree or temporary runtime dependency exists.
-Arctic is pinned at 3.7.0 and deprecated upstream; replace it before public OAuth
-(docs/identity/ARCTIC_REVIEW.md).
+GitHub and Google use the in-slice clients in `oauthClients.ts` (native fetch, no
+OAuth library); the deprecated `arctic` dependency has been removed.
 
 ## Design and acceptance
 

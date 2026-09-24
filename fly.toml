@@ -1,0 +1,36 @@
+# Staging on Fly.io: the image the Deploy workflow builds, on one machine that
+# stops when idle. Postgres is the machine in deploy/fly/postgres.toml.
+#
+#   flyctl deploy --remote-only
+app = "lumen-next-staging"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  LUMEN_PORT = "4000"
+  LUMEN_ORIGIN = "https://lumen-next-staging.fly.dev"
+  LUMEN_LOG_LEVEL = "info"
+  IDENTITY_SESSION_LIFETIME_MS = "86400000"
+  IDENTITY_INSECURE_COOKIES = "false"
+  LUMEN_MODEL_PROVIDER = "openai"
+  LUMEN_DEMO_PACE_MS = "300"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runner } from 'node-pg-migrate';
 import pg from 'pg';
+import { nullLog, type Log } from '../log/log.js';
 
 // The one database connection for the whole monolith. A slice never builds its
 // own pool and never imports `pg`: it is handed a Db and writes SQL against
@@ -58,6 +59,8 @@ export interface OpenOptions {
   readonly migrate?: boolean;
   /** Schema to work in. Tests use one each, so they can run side by side. */
   readonly schema?: string;
+  /** Where a pooled connection that died while idle is reported. */
+  readonly log?: Log;
 }
 
 /**
@@ -77,7 +80,9 @@ export async function openDatabase(url: string, options: OpenOptions = {}): Prom
   });
   // A pooled connection that dies while idle emits here. Without a listener
   // that is an unhandled 'error' event, and it takes the process down.
-  pool.on('error', (error) => console.error('db: idle connection failed', error));
+  pool.on('error', (error) =>
+    (options.log ?? nullLog).error({ err: error }, 'db: idle connection failed'),
+  );
 
   if (options.migrate !== false) {
     await runner({

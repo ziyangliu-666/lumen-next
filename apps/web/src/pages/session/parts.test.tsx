@@ -187,15 +187,39 @@ describe('session page: the rail', () => {
     ).toContain('Nothing recorded yet.');
   });
 
-  it('offers Stop while a run is going and Send when it is not, each with a name', () => {
-    const composer = (running: boolean): string =>
+  it('offers Steer and Stop while a run is going, and Send when it is not, each with a name', () => {
+    const composer = (running: boolean, steerable = true): string =>
       renderToStaticMarkup(
-        <Composer disabled={false} running={running} onSay={noop} onStop={noop} />,
+        <Composer
+          disabled={false}
+          running={running}
+          steerable={steerable}
+          onSay={noop}
+          onSteer={noop}
+          onStop={noop}
+        />,
       );
 
     expect(composer(true)).toContain('aria-label="Stop"');
+    expect(composer(true)).toContain('aria-label="Steer"');
     expect(composer(true)).not.toContain('aria-label="Send"');
+    expect(composer(true)).toContain('aria-label="Steer the task shown"');
     expect(composer(false)).toContain('aria-label="Send"');
     expect(composer(false)).toContain('aria-label="Say something to the lead"');
+  });
+
+  it('disables the field once the task shown is not the one running', () => {
+    const html = renderToStaticMarkup(
+      <Composer
+        disabled={false}
+        running={true}
+        steerable={false}
+        onSay={noop}
+        onSteer={noop}
+        onStop={noop}
+      />,
+    );
+    expect(html).toContain('disabled=""');
+    expect(html).toContain('nothing to steer');
   });
 });

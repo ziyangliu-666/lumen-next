@@ -51,6 +51,11 @@ npm run dev --workspace @lumen/web
 
 需要 Node 22 以上。把 `.env.example` 复制成 `.env`，填上你这条线要用的密钥。
 
+## 线上 staging
+
+<https://lumen-next-staging.fly.dev>。main 每次合并，Deploy workflow 跑完 DAST 后把同一个镜像
+部署到 Fly.io。配置在 `fly.toml` 和 `deploy/fly/`。
+
 ## 怎么协作
 
 两周一个 sprint，每个 sprint 结束交一份进度报告。从第一个 sprint 起，每个 PR 都会

@@ -113,7 +113,7 @@ describe('identity: explicit OAuth environment configuration', () => {
   it('does not require HTTPS when OAuth is disabled for local password development', () => {
     expect(oauthProvidersFromEnvironment({}, 'http://localhost:4000')).toEqual([]);
   });
-  it('constructs actual Arctic clients with fixed callbacks and no outbound requests', () => {
+  it('constructs the in-slice OAuth clients with fixed callbacks and no outbound requests', () => {
     const fetcher = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetcher);
     const providers = oauthProvidersFromEnvironment({ ...github, ...google }, origin);

@@ -7,9 +7,10 @@ startup wiring is reviewed and applied.**
 
 ## Configuration contract
 
-`oauthProvidersFromEnvironment(environment, origin, options?)` constructs Arctic
-adapters from an explicitly supplied readonly environment map. It does not read
-ambient process environment, log configuration values or contact providers.
+`oauthProvidersFromEnvironment(environment, origin, options?)` constructs the
+in-slice OAuth clients (`oauthClients.ts`) from an explicitly supplied readonly
+environment map. It does not read ambient process environment, log configuration
+values or contact providers.
 
 | Variable | Purpose |
 | --- | --- |
@@ -79,10 +80,15 @@ not part of this delivery.
 
 ## Security and maintenance limits
 
-Arctic 3.7.0 is pinned in the server manifest and lockfile. Its deprecation and
-transitive maintenance risks require review before public deployment. Google
-supports S256 PKCE; the pinned GitHub client does not expose PKCE. Do not claim
-GitHub PKCE support.
+The GitHub and Google clients live in `oauthClients.ts` and use native fetch; no
+OAuth library is a dependency (the deprecated Arctic 3.7.0 was replaced with
+clients that send the same requests). Token requests are POSTed form-encoded with
+HTTP Basic client credentials, refuse redirects and time out after ten seconds.
+A non-200 status, a non-JSON body, an OAuth `error` field (GitHub reports failures
+as 200) or a missing `access_token` fails the exchange with a fixed message that
+carries no secret or provider detail. Google uses S256 PKCE and rejects a verifier
+outside RFC 7636's shape; the GitHub client does not use PKCE. Do not claim GitHub
+PKCE support.
 
 Attempts expire after ten minutes. State and separate browser binding are hashed;
 the verifier remains short-lived server-side. Attempts are consumed once before

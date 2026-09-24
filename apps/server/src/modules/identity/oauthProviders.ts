@@ -4,7 +4,7 @@ import type { OAuthProfile, OAuthProvider } from './oauth.js';
 export interface OAuthTokens {
   accessToken(): string;
 }
-/** Structural ports implemented by Arctic 3.x; the composition root supplies clients. */
+/** Structural ports implemented by oauthClients.ts; the composition root supplies clients. */
 export interface GitHubOAuthClient {
   createAuthorizationURL(state: string, scopes: string[]): URL;
   validateAuthorizationCode(code: string): Promise<OAuthTokens>;

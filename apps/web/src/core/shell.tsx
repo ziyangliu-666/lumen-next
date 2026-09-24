@@ -17,7 +17,7 @@ const NAV: readonly NavItem[] = [
 ];
 
 function NavLink({ item, current }: { item: NavItem; current: string }): JSX.Element {
-  const active = current === item.href.slice(1);
+  const active = current === item.href.slice(1) || current.startsWith(`${item.href.slice(1)}/`);
   return (
     <a
       href={item.href}
@@ -32,7 +32,15 @@ function NavLink({ item, current }: { item: NavItem; current: string }): JSX.Ele
   );
 }
 
-export function AppShell({ path, children }: { path: string; children: ReactNode }): JSX.Element {
+export function AppShell({
+  path,
+  children,
+  accountActions,
+}: {
+  path: string;
+  children: ReactNode;
+  accountActions?: ReactNode;
+}): JSX.Element {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 border-b border-rule bg-surface/80 backdrop-blur">
@@ -40,11 +48,12 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
           <a href="#/" className="font-mono text-sm font-semibold tracking-tight text-ink">
             lumen
           </a>
-          <nav className="flex items-center gap-1">
+          <nav aria-label="Main" className="flex items-center gap-1">
             {NAV.map((item) => (
               <NavLink key={item.href} item={item} current={path} />
             ))}
           </nav>
+          <div className="ml-auto">{accountActions}</div>
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">{children}</main>

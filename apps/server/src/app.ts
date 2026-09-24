@@ -13,7 +13,7 @@ import { buildServer } from './core/http/server.js';
 import { Broker } from './core/protocol/broker.js';
 import type { Worker } from './core/domain/worker.js';
 import { createBillingSlice } from './modules/billing/index.js';
-import { createIdentitySlice, LoginGate } from './modules/identity/index.js';
+import { createIdentitySlice, LoginGate, type OAuthProvider } from './modules/identity/index.js';
 import { createProjectsSlice, type ProjectsSlice } from './modules/projects/index.js';
 import { createSessionSlice, type SessionSlice } from './modules/session/index.js';
 import { createSteeringSlice } from './modules/steering/index.js';
@@ -22,6 +22,8 @@ export interface IdentityConfig {
   /** The one origin the browser uses. Every request that is not a GET must name it. */
   readonly origin: string;
   readonly sessionLifetimeMs: number;
+  /** Constructed from explicit server configuration by main.ts, never from request data. */
+  readonly oauthProviders?: readonly OAuthProvider[];
   /** False only for plain HTTP on a loopback or a staging container. */
   readonly secureCookies?: boolean;
 }
@@ -74,6 +76,9 @@ export async function composeApp(options: AppOptions): Promise<App> {
           origin: options.identity.origin,
           sessionLifetimeMs: options.identity.sessionLifetimeMs,
           loginGate: new LoginGate(),
+          ...(options.identity.oauthProviders
+            ? { oauthProviders: options.identity.oauthProviders }
+            : {}),
           ...(options.identity.secureCookies === undefined
             ? {}
             : { secureCookies: options.identity.secureCookies }),

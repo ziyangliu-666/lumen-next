@@ -1,5 +1,5 @@
 // Public index for the identity slice. Owner: LU YI.
-// SQL-backed composition is available; main.ts wiring awaits core database setup.
+// SQL-backed password authentication is wired; optional providers are explicitly injected.
 // Other slices never import this slice's internal files.
 export {
   AbstractAuthFlow,
@@ -33,6 +33,10 @@ export {
   type OAuthProvider,
   type OAuthProfile,
 } from './oauth.js';
+export {
+  oauthProvidersFromEnvironment,
+  type OAuthConfigurationOptions,
+} from './oauthConfiguration.js';
 export {
   githubProvider,
   googleProvider,

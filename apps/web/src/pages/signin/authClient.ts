@@ -12,7 +12,7 @@ export type AuthSubmission =
       readonly displayName: string;
     };
 
-/** Page-local transport until the shell owner provides shared auth state. */
+/** Page-local transport; successful authentication refreshes shared shell readers. */
 export async function submitAuthentication(input: AuthSubmission): Promise<SignedInPrincipal> {
   const path = input.mode === 'signup' ? '/api/auth/signup' : '/api/auth/password';
   const body =
@@ -61,5 +61,6 @@ export async function submitAuthentication(input: AuthSubmission): Promise<Signe
   ) {
     throw new Error('The server returned an invalid sign-in response.');
   }
+  window.dispatchEvent(new Event('lumen:auth-changed'));
   return { accountId: value.accountId, role: value.role };
 }

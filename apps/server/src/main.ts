@@ -8,6 +8,8 @@
 import { composeApp, type IdentityConfig } from './app.js';
 import { openDatabase, type Db } from './core/db/db.js';
 import { defaultWebRoot } from './core/http/server.js';
+import { modelFromEnv } from './core/model/index.js';
+import { oauthProvidersFromEnvironment } from './modules/identity/index.js';
 import { demoWorker, paceFromEnv } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
@@ -65,6 +67,9 @@ function identityConfig(): IdentityConfig {
   return {
     origin,
     sessionLifetimeMs: lifetime,
+    oauthProviders: oauthProvidersFromEnvironment(process.env, origin, {
+      allowLoopbackHttp: process.env['NODE_ENV'] !== 'production' && insecure === 'true',
+    }),
     ...(insecure === undefined ? {} : { secureCookies: insecure !== 'true' }),
   };
 }
@@ -85,9 +90,16 @@ async function bootstrap(): Promise<void> {
     identity: db ? identityConfig() : null,
     ...(useSteeringWorker
       ? { useSteeringWorker: true }
-      : // Paced, so that a person can see the page is live. Tests build the
-        // application without this and do not wait.
-        { worker: demoWorker({ paceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']) }) }),
+      : {
+          // Paced, so that a person can see the page is live. Tests build the
+          // application without this and do not wait. LUMEN_MODEL_PROVIDER
+          // gives the lead a real model to think and reply with; without it the
+          // lead says its fixed lines and nothing is spent on a model.
+          worker: demoWorker({
+            paceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']),
+            model: modelFromEnv(process.env),
+          }),
+        }),
     ...(webRoot ? { webRoot } : {}),
     ...(volumeRoot ? { volumeRoot } : {}),
     ...(provider ? { computeProvider: provider } : {}),

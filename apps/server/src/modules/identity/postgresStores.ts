@@ -155,7 +155,16 @@ export class PostgresAccountStore implements AccountStore, PasswordAccountStore 
         [accountId, on],
       );
       if (rows.length !== 1) throw new AdminAccountFailure('account_not_found');
-      if (on) await sql.query('delete from auth_sessions where account_id = $1', [accountId]);
+      if (on) {
+        await sql.query('delete from auth_sessions where account_id = $1', [accountId]);
+        // Recovery proofs must not survive into a later unsuspension.
+        await sql.query('delete from identity_mail_tokens where account_id = $1', [accountId]);
+        await sql.query(
+          `delete from identity_mail_requests where state = 'pending' and (account_id = $1
+           or email = (select lower(btrim(email)) from accounts where id = $1))`,
+          [accountId],
+        );
+      }
     });
   }
 

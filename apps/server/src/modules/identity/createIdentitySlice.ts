@@ -1,6 +1,7 @@
 import type { IdentityAuthentication } from './identityAuthentication.js';
 import { AccountService } from './accountService.js';
 import { MailActions } from './mailActions.js';
+import { MailQueue, MailWorker, type MailEvent } from './mailQueue.js';
 import type { MailSender } from './mail.js';
 import type { AdminAccounts } from './adminAccounts.js';
 import { AuthSessions } from './authSessions.js';
@@ -21,10 +22,17 @@ export interface IdentitySliceOptions {
   readonly secureCookies?: boolean;
   readonly oauthProviders?: readonly OAuthProvider[];
   readonly mailSender?: MailSender;
-  readonly mailDeliveryFailed?: () => void;
+  /** Server-only HMAC key (32+ characters) for the mail queue's per-address index. */
+  readonly mailKey?: string;
+  /** Value-free delivery telemetry. */
+  readonly mailEvent?: (event: MailEvent) => void;
 }
 
-export type IdentitySlice = IdentityAuthentication & AdminAccounts;
+export type IdentitySlice = IdentityAuthentication &
+  AdminAccounts & {
+    /** Present with a mailSender; the composition root starts it and stops it on shutdown. */
+    readonly mailWorker?: MailWorker;
+  };
 
 /**
  * main.ts supplies core's database after migrations. No private pool, migration
@@ -44,6 +52,16 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
     throw new Error('Invalid OAuth provider configuration');
   }
   const oauthAccounts = new OAuthAccounts(options.database);
+  const mailEvent = options.mailEvent ? { event: options.mailEvent } : {};
+  const mail = options.mailSender
+    ? {
+        actions: new MailActions(
+          options.database,
+          new MailQueue(options.database, { key: options.mailKey ?? '', ...mailEvent }),
+        ),
+        worker: new MailWorker(options.database, options.mailSender, options.origin, mailEvent),
+      }
+    : null;
   const flow = new SessionAuthFlow(
     [
       new PasswordStrategy(accounts),
@@ -57,21 +75,13 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
     getAccount: (id) => accounts.getAdminAccount(id),
     setRole: (id, role) => accounts.setRole(id, role),
     suspend: (accountId, on) => accounts.suspend(accountId, on),
+    ...(mail ? { mailWorker: mail.worker } : {}),
     registerRoutes: identityRoutes({
       flow,
       sessions,
       accounts,
       management: new AccountService(accounts),
-      ...(options.mailSender
-        ? {
-            mail: new MailActions(
-              options.database,
-              options.mailSender,
-              options.origin,
-              options.mailDeliveryFailed,
-            ),
-          }
-        : {}),
+      ...(mail ? { mail: mail.actions } : {}),
       origin: options.origin,
       loginGate: options.loginGate,
       ...(providers.length

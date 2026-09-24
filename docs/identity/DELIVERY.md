@@ -13,8 +13,8 @@
   passes configured OAuth providers to the slice.
 - Shell and Settings composition in `core/shell.tsx`, `main.tsx` and
   `Settings.tsx`: the header account slot, nested Settings routes and the
-  Account tab as a content slot. `Settings.tsx` awaits its owner's answer on
-  the pull request.
+  Account tab as a content slot. Merged in PR #34; the Settings owner may
+  reshape the slot in a follow-up.
 
 ## Shared files touched
 

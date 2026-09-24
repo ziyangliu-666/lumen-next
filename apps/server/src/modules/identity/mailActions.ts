@@ -1,9 +1,8 @@
-import { randomBytes } from 'node:crypto';
 import { AccountFailure } from './accounts.js';
 import { newPasswordOf } from './accountService.js';
 import { AuthFailure } from './authFlow.js';
 import type { IdentityDatabase } from './identityDatabase.js';
-import type { MailSender } from './mail.js';
+import type { MailQueue } from './mailQueue.js';
 import { oauthHash } from './oauth.js';
 import { hashPassword } from './passwordHash.js';
 
@@ -24,9 +23,7 @@ interface TokenRow {
 export class MailActions {
   constructor(
     private readonly db: IdentityDatabase,
-    private readonly sender: MailSender,
-    private readonly origin: string,
-    private readonly deliveryFailed: () => void = () => undefined,
+    private readonly queue: MailQueue,
   ) {}
 
   async status(accountId: string): Promise<{ verified: boolean }> {
@@ -40,6 +37,7 @@ export class MailActions {
     return rows[0];
   }
 
+  /** Admission only: the worker decides eligibility, so every address costs the same. */
   async requestReset(emailInput: unknown): Promise<void> {
     if (
       typeof emailInput !== 'string' ||
@@ -48,66 +46,17 @@ export class MailActions {
     ) {
       throw new AccountFailure('invalid_body', 'Enter a valid email address');
     }
-    const rows = await this.db.query<{ id: string }>(
-      `select a.id from accounts a join credentials c on c.account_id = a.id
-       and c.kind = 'password' where lower(btrim(a.email)) = $1 and not a.suspended`,
-      [emailInput.trim().toLowerCase()],
-    );
-    if (rows[0]) await this.issue(rows[0].id, 'reset');
+    await this.queue.admit('reset', emailInput.trim().toLowerCase(), null);
   }
 
+  /** Authenticated, so looking the account up first reveals nothing new. */
   async requestVerification(accountId: string): Promise<void> {
-    await this.issue(accountId, 'verify');
-  }
-
-  private async issue(accountId: string, purpose: 'verify' | 'reset'): Promise<void> {
-    const token = randomBytes(32).toString('base64url');
-    const issued = await this.db.withTransaction(async (sql) => {
-      const accounts = await sql.query<{ email: string }>(
-        'select email from accounts where id = $1 and not suspended for update',
-        [accountId],
-      );
-      const account = accounts[0];
-      if (!account) return null;
-      const hashes = await sql.query<{ passwordHash: string }>(
-        `select password_hash as "passwordHash" from credentials where account_id = $1 and kind = 'password'`,
-        [accountId],
-      );
-      if (purpose === 'reset' && !hashes[0]) return null;
-      await sql.query(
-        'delete from identity_mail_tokens where expires_at <= now() or (account_id = $1 and purpose = $2)',
-        [accountId, purpose],
-      );
-      await sql.query(
-        `insert into identity_mail_tokens (token_hash, account_id, purpose, email, password_hash, expires_at)
-         values ($1, $2, $3, $4, $5, now() + interval '15 minutes')`,
-        [
-          oauthHash(token),
-          accountId,
-          purpose,
-          account.email,
-          purpose === 'reset' ? hashes[0]!.passwordHash : null,
-        ],
-      );
-      return account;
-    });
-    if (!issued) return;
-    try {
-      await this.sender.send({
-        to: issued.email,
-        subject: purpose === 'reset' ? 'Reset your lumen password' : 'Verify your lumen email',
-        // The code is deliberately not in a URL: keep it out of access/referrer logs.
-        text: `Open ${this.origin}/#/signin and choose Forgot password / email verification.\n\nYour ${purpose === 'reset' ? 'password reset' : 'email verification'} code is:\n${token}\n\nIt expires in 15 minutes and can be used once. If you did not request this, ignore this email.`,
-      });
-    } catch {
-      // Public reset responses must not disclose whether an address is registered.
-      // Report a value-free delivery metric, never addresses/tokens/provider errors.
-      try {
-        this.deliveryFailed();
-      } catch {
-        // Optional telemetry must not turn an eligible-address response into a 500.
-      }
-    }
+    const rows = await this.db.query<{ email: string }>(
+      'select email from accounts where id = $1 and not suspended',
+      [accountId],
+    );
+    if (!rows[0]) throw new AuthFailure('invalid_credentials');
+    await this.queue.admit('verify', rows[0].email, accountId);
   }
 
   async verifyEmail(accountId: string, code: unknown): Promise<void> {

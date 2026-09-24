@@ -7,9 +7,15 @@ reviewed authentication core is retained rather than rewritten.
 ## Public index
 
 `createIdentitySlice(options)` takes core's database, canonical origin, explicit
-session lifetime and LoginGate, plus optional secureCookies, oauthProviders and
-mailSender. It returns `principalResolver`, `registerRoutes`, and the trusted
-account interface `listAccounts`, `getAccount`, `setRole`, `suspend`.
+session lifetime and LoginGate, plus optional secureCookies, oauthProviders,
+mailSender, mailKey and mailEvent. It returns `principalResolver`,
+`registerRoutes`, the trusted account interface `listAccounts`, `getAccount`,
+`setRole`, `suspend`, and, when a mailSender is given, `mailWorker`
+(`MailWorker`: `start()`, `stop()`, `tick()`), which the composition root must
+start and stop on shutdown. A mailSender requires a server-only mailKey of at
+least 32 characters. `MailEvent` names the value-free delivery counters.
+`mailFromEnvironment(environment, { outboxDirectory, production })` builds the
+optional mail configuration from explicitly supplied variables.
 `oauthProvidersFromEnvironment(environment, origin)` constructs optional GitHub
 and Google adapters from explicitly supplied server configuration, without
 reading process.env or making network calls. Empty credential pairs disable a
@@ -41,9 +47,11 @@ reads current role and suspension on every request, never renewing a session.
 
 Account deletion is excluded pending shared retention constraints. main.ts wires
 OAuth through oauthProvidersFromEnvironment; a provider is enabled only when its
-credential pair is set. Mail verification and reset are written/tested but not
-wired (Sprint 3). Do not enable
-public reset delivery before its timing-enumeration blocker is addressed.
+credential pair is set. main.ts enables mail verification and reset only when
+`mailFromEnvironment` returns a configuration (IDENTITY_MAIL_MODE outbox or
+resend, plus IDENTITY_MAIL_KEY); it is off by default. Mail requests are queued: a public request is one insert, and
+MailWorker decides eligibility and delivers later, so response time no longer
+depends on the address (see docs/identity/MAIL_QUEUE_DESIGN.md).
 
 ## Security and storage
 
@@ -58,10 +66,10 @@ ceiling. Signup's duplicate-email response still reveals availability.
 PostgresAccountStore and PostgresAuthSessionStore use core's injected database.
 Password changes compare the verified hash under account-first locking and
 revoke all other sessions in the same transaction. Suspension similarly revokes
-sessions; unsuspension never restores old cookies. Existing WebSocket connections
+sessions and purges pending mail requests and codes; unsuspension restores neither. Existing WebSocket connections
 retain their handshake principal until core provides revalidation.
 
-Only core's migration runner applies 002/003/004. Migration 002 adds suspended
+Only core's migration runner applies 002/003/004/009. Migration 002 adds suspended
 and normalized-email uniqueness to accounts; duplicate historical emails block
 migration. No second migration tree or temporary runtime dependency exists.
 GitHub and Google use the in-slice clients in `oauthClients.ts` (native fetch, no

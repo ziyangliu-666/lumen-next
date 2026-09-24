@@ -14,7 +14,13 @@ import { createLog, type Log } from './core/log/log.js';
 import { Broker } from './core/protocol/broker.js';
 import type { Worker } from './core/domain/worker.js';
 import { createBillingSlice } from './modules/billing/index.js';
-import { createIdentitySlice, LoginGate, type OAuthProvider } from './modules/identity/index.js';
+import {
+  createIdentitySlice,
+  LoginGate,
+  type MailConfiguration,
+  type MailWorker,
+  type OAuthProvider,
+} from './modules/identity/index.js';
 import { createProjectsSlice, type ProjectsSlice } from './modules/projects/index.js';
 import { createSessionSlice, type SessionSlice } from './modules/session/index.js';
 import { createSteeringSlice } from './modules/steering/index.js';
@@ -25,6 +31,8 @@ export interface IdentityConfig {
   readonly sessionLifetimeMs: number;
   /** Constructed from explicit server configuration by main.ts, never from request data. */
   readonly oauthProviders?: readonly OAuthProvider[];
+  /** Built by main.ts from explicit configuration. Left out, mail routes are off. */
+  readonly mail?: MailConfiguration;
   /** False only for plain HTTP on a loopback or a staging container. */
   readonly secureCookies?: boolean;
 }
@@ -67,6 +75,8 @@ export interface App {
   /** How many tasks the last process left open, now stopped. */
   readonly orphans: number;
   readonly resolver: 'identity cookie' | 'development header stub';
+  /** Present when mail is configured. main.ts starts it after listen and stops it on shutdown. */
+  readonly mailWorker?: MailWorker;
 }
 
 export async function composeApp(options: AppOptions): Promise<App> {
@@ -81,6 +91,9 @@ export async function composeApp(options: AppOptions): Promise<App> {
           loginGate: new LoginGate(),
           ...(options.identity.oauthProviders
             ? { oauthProviders: options.identity.oauthProviders }
+            : {}),
+          ...(options.identity.mail
+            ? { mailSender: options.identity.mail.sender, mailKey: options.identity.mail.key }
             : {}),
           ...(options.identity.secureCookies === undefined
             ? {}
@@ -156,5 +169,6 @@ export async function composeApp(options: AppOptions): Promise<App> {
     session,
     orphans,
     resolver: identity ? 'identity cookie' : 'development header stub',
+    ...(identity?.mailWorker ? { mailWorker: identity.mailWorker } : {}),
   };
 }

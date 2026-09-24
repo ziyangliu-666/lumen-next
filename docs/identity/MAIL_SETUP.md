@@ -1,15 +1,25 @@
-# Mail verification and recovery: not wired
+# Mail verification and recovery
 
-`MailActions`, `MailSender`, `IdentityMail` and `resendMailSender` are implemented.
-**main.ts injects no mailSender**, so verification and password-reset routes are
-not enabled in this Sprint 2 PR. `GET /api/auth/mail` returns `{ enabled: false }`.
-There is no active disk outbox or environment-driven mail composition.
+Mail is **off by default**: `GET /api/auth/mail` returns `{ enabled: false }` and
+the verification and reset routes are not registered. main.ts turns it on only
+through `mailFromEnvironment`:
 
-## Optional factory contract
+| Variable | Meaning |
+|---|---|
+| `IDENTITY_MAIL_MODE` | `off` (default), `outbox` or `resend` |
+| `IDENTITY_MAIL_KEY` | Required when enabled: 32+ printable characters, server-only HMAC key for the queue |
+| `RESEND_API_KEY`, `MAIL_FROM` | Required for `resend`: the API key and a verified sender |
 
-An owner-reviewed composition can inject `mailSender` and an optional value-free
-`mailDeliveryFailed` callback. Apply the shared runner's
-`core/db/migrations/004_identity_mail.sql` first. The Resend adapter uses a fixed
+`outbox` writes each message to `.data/identity-mail-outbox/` next to the process
+for local development and is refused in production. Configuration errors never
+contain the values. With mail enabled, main.ts starts the identity mail worker
+after listen and stops it before the database closes.
+
+## Factory contract
+
+`createIdentitySlice` takes `mailSender`, a server-only `mailKey` and an optional
+value-free `mailEvent` callback, and returns `mailWorker`. Migrations 004 and 009
+must be applied. The Resend adapter uses a fixed
 HTTPS endpoint, native fetch, plain-text messages and a ten-second deadline.
 Configure a verified sender and server-side credentials privately; never record
 mail bodies, recipients, codes or provider error details in telemetry.
@@ -30,16 +40,17 @@ sessions in one transaction. Email changes invalidate old verification status.
 Unverified accounts are not blocked from signing in; enforcement needs a team
 policy. OAuth verified emails do not automatically populate verification records.
 
-## Blockers before enabling delivery
+## Known limits
 
-- Delivery is currently awaited inline for eligible addresses. Although response
-  text is generic, timing may reveal account eligibility (PR #15 S5). Implement
-  an owner-reviewed queued delivery design before enabling public reset routes.
-- No durable retry, delivery queue, bounce tracking or exactly-once guarantee is
-  implemented. A 202 response does not prove mailbox delivery.
-- Review distributed/per-account mail abuse controls and cleanup scheduling.
-- Decide whether suspension must revoke outstanding recovery proofs. It blocks
-  their use while suspended but does not purge them.
+- Delivery is queued (`MAIL_QUEUE_DESIGN.md`): a public request is one
+  address-independent insert, and MailWorker resolves eligibility, retries up
+  to 5 times with backoff, and cleans up. main.ts starts the worker when mail
+  is configured.
+- No bounce tracking or exactly-once guarantee: a retry sends a fresh code. A
+  202 response does not prove mailbox delivery.
+- Per-address admission is capped at 3 per hour per purpose, plus LoginGate per
+  peer. Both are local to one database, not a distributed abuse service.
+- Suspension purges outstanding recovery codes and pending requests.
 - Core does not invalidate already-open WebSockets when login sessions change.
 
 Unit tests simulate transport. Real PostgreSQL SQL/HTTP tests exercise purpose

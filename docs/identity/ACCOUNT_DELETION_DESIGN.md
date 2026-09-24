@@ -45,7 +45,7 @@ what it does with its own rows:
 | Slice | Question for its owner |
 | --- | --- |
 | projects | Delete projects and findings, or keep them anonymized? |
-| session | Stop running tasks and delete the trace, or keep it for cost audit? |
+| session | **Answered (session owner, PR #39):** keep `sessions`, `tasks`, `steps` and ledger references. `sessions.account_id` has no FK on purpose, so the record stays intact and unowned; the Session page refuses any viewer who is not the owner or staff, which a tombstone can never be. No cascade and no port. |
 | billing | How long are ledger entries retained, and is a positive balance refunded or forfeited? |
 
 ## Recent authentication
@@ -59,9 +59,10 @@ what it does with its own rows:
 
 ## Active work and revocation
 
-- A running session must be stopped before anonymization, or the worker would
-  keep spending on a deleted account. Session's port answers "stop all tasks
-  for this account" and waits for the kernel to acknowledge.
+- Session needs no deletion port (answered above). Still open: a task that is
+  running at the moment of deletion keeps its worker until it finishes. Ask the
+  session owner whether that is acceptable or whether deletion should refuse
+  while the account has a running task.
 - Cookies stop working immediately, because `auth_sessions` rows are deleted
   in the transaction.
 - **Open WebSockets keep their handshake principal** until core adds
@@ -91,6 +92,6 @@ policy decision; the default in this draft is **irreversible**.
 ## Decisions needed from the team
 
 1. Anonymize with a tombstone (this draft) or hard delete?
-2. For each slice, what happens to its rows (table above)?
+2. For projects and billing, what happens to their rows (table above)? Session is answered.
 3. Is there a grace period, and how long?
 4. Who may delete: only the user, or staff too, from the admin page?

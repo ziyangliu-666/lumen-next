@@ -1,7 +1,7 @@
 // The pieces of the Session page, after docs/spec, page 04. Owner: LIU ZIYANG,
 // except Composer, which is LI ZHUOYANG's: it sits where the spec puts it, it
-// says a new turn to the lead and stops a run, and steering a running task and
-// attachments are his to add.
+// says a new turn to the lead, steers the task shown while it runs, and stops
+// a run. Attachments are still his to add.
 import type { FormEvent, JSX, ReactNode } from 'react';
 import type { Step, Task } from '@lumen/contracts';
 import { cn } from 'cn';
@@ -343,25 +343,35 @@ export function Findings({
 export function Composer({
   disabled,
   running,
+  steerable,
   onSay,
+  onSteer,
   onStop,
 }: {
   disabled: boolean;
+  /** The root is busy: Stop is offered, and a fresh session.say is not. */
   running: boolean;
+  /** The task currently shown is itself running: steering it means something right now. */
+  steerable: boolean;
   onSay: (text: string) => void;
+  onSteer: (text: string) => void;
   onStop: () => void;
 }): JSX.Element {
+  // Blocked for a reason a run.status can change without a fresh render of
+  // this form's own props, so this is computed at submit time, not baked into
+  // one boolean passed in.
+  const blocked = disabled || (running && !steerable);
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     const form = event.currentTarget;
     const value = new FormData(form).get('say');
-    // A form with one field and no submit button still submits on Enter, and
-    // while a run is going the only button is Stop. So the rule is here, not in
-    // which button is drawn: nothing is sent, and the text is kept, while a run
-    // is going or the socket is down.
-    const text = turnToSend(value, disabled || running);
+    // A form with one field still submits on Enter. Nothing is sent, and the
+    // text is kept, while the socket is down, or the root is busy with a task
+    // that is not the one shown (there is nothing here to steer).
+    const text = turnToSend(value, blocked);
     if (text === null) return;
-    onSay(text);
+    if (running) onSteer(text);
+    else onSay(text);
     form.reset();
   }
   return (
@@ -373,24 +383,36 @@ export function Composer({
         {/* The box around it carries the border and the focus colour. */}
         <Input
           name="say"
-          aria-label="Say something to the lead"
-          placeholder="Say something to the lead…"
+          aria-label={running ? 'Steer the task shown' : 'Say something to the lead'}
+          placeholder={
+            running
+              ? steerable
+                ? 'Steer this task before its next step…'
+                : 'This task is not running — nothing to steer'
+              : 'Say something to the lead…'
+          }
           autoComplete="off"
+          disabled={running && !steerable}
           className="h-10 flex-1 border-0 px-1 font-mono shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
         {running ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            disabled={disabled}
-            onClick={onStop}
-            aria-label="Stop"
-          >
-            <Square />
-          </Button>
+          <>
+            <Button type="submit" size="icon-sm" disabled={blocked} aria-label="Steer">
+              <SendHorizontal />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              disabled={disabled}
+              onClick={onStop}
+              aria-label="Stop"
+            >
+              <Square />
+            </Button>
+          </>
         ) : (
-          <Button type="submit" size="icon-sm" disabled={disabled} aria-label="Send">
+          <Button type="submit" size="icon-sm" disabled={blocked} aria-label="Send">
             <SendHorizontal />
           </Button>
         )}

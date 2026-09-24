@@ -43,6 +43,16 @@ async function database(): Promise<Db | null> {
   return openDatabase(url);
 }
 
+/** LUMEN_COMPUTE_PROVIDER: which Compute steering's worker runs a reader's command against. */
+function computeProvider(): 'docker' | 'none' | undefined {
+  const raw = process.env['LUMEN_COMPUTE_PROVIDER'];
+  if (raw === undefined || raw === '') return undefined;
+  if (raw !== 'docker' && raw !== 'none') {
+    throw new Error(`LUMEN_COMPUTE_PROVIDER must be "docker" or "none", got "${raw}"`);
+  }
+  return raw;
+}
+
 function identityConfig(): IdentityConfig {
   const origin = process.env['LUMEN_ORIGIN'];
   if (!origin) throw new Error('LUMEN_ORIGIN is required with DATABASE_URL');
@@ -68,21 +78,31 @@ async function bootstrap(): Promise<void> {
   const db = await database();
   const webRoot = defaultWebRoot();
   const volumeRoot = process.env['LUMEN_VOLUME_ROOT'];
+  // LUMEN_WORKER=steering runs steering's own agent loop instead of the demo
+  // worker. Off by default: the demo worker is what the whole team's staging
+  // and local runs have shown since Sprint 1, and e2e.test.ts's join-the-
+  // slices test asserts its exact fan-out — that default does not move here.
+  const useSteeringWorker = process.env['LUMEN_WORKER'] === 'steering';
+  const provider = computeProvider();
   const { server, orphans, resolver } = await composeApp({
     db,
     // Real sign-in whenever there is a database; the stub only without one.
     identity: db ? identityConfig() : null,
-    // Until steering supplies the agent loop, the demo worker runs, paced so
-    // that a person can see the page is live. Tests build the application
-    // without this and do not wait.
-    // LUMEN_MODEL_PROVIDER gives the lead a real model to think and reply with;
-    // without it the lead says its fixed lines and nothing is spent on a model.
-    worker: demoWorker({
-      paceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']),
-      model: modelFromEnv(process.env),
-    }),
+    ...(useSteeringWorker
+      ? { useSteeringWorker: true }
+      : {
+          // Paced, so that a person can see the page is live. Tests build the
+          // application without this and do not wait. LUMEN_MODEL_PROVIDER
+          // gives the lead a real model to think and reply with; without it the
+          // lead says its fixed lines and nothing is spent on a model.
+          worker: demoWorker({
+            paceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']),
+            model: modelFromEnv(process.env),
+          }),
+        }),
     ...(webRoot ? { webRoot } : {}),
     ...(volumeRoot ? { volumeRoot } : {}),
+    ...(provider ? { computeProvider: provider } : {}),
   });
 
   await server.listen({ port: port(), host: '0.0.0.0' });

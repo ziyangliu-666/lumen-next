@@ -65,7 +65,7 @@ describe.skipIf(!TEST_DATABASE_URL)(
         database,
         origin,
         sessionLifetimeMs: 60_000,
-        loginGate: new LoginGate({ attempts: 50 }),
+        loginGate: new LoginGate({ accountAttempts: 50 }),
       });
       const broker = new Broker();
       const sessionOwner = (id: string): string | undefined =>

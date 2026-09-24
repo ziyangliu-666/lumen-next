@@ -58,9 +58,11 @@ depends on the address (see docs/identity/MAIL_QUEUE_DESIGN.md).
 Passwords use salted scrypt; only hashed random session tokens are stored.
 Cookies are HttpOnly/SameSite=Lax/Secure by default. Insecure cookies require an
 explicit loopback HTTP origin. Every identity mutation requires exact Origin.
-LoginGate counts failed actions per direct peer and optional account key, bounds
-tracked keys and concurrent work, and does not trust forwarded headers. It is
-local, not distributed. New passwords have an 8-code-point minimum and a 1024-byte
+LoginGate counts failed actions per account key (5 a minute) when a request names
+one, and per direct peer (100 a minute) only when it does not, so one failing
+client behind a shared proxy locks out no other user. It bounds tracked keys,
+queues work beyond 4 concurrent actions (refusing only past 64 waiting), and does
+not trust forwarded headers. It is local, not distributed. New passwords have an 8-code-point minimum and a 1024-byte
 ceiling. Signup's duplicate-email response still reveals availability.
 
 PostgresAccountStore and PostgresAuthSessionStore use core's injected database.

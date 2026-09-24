@@ -130,7 +130,7 @@ async function setup(): Promise<FastifyInstance> {
       management: new AccountService(store, codec),
       sessions,
       flow: new SessionAuthFlow([strategy], sessions),
-      loginGate: new LoginGate({ attempts: 100 }),
+      loginGate: new LoginGate({ accountAttempts: 100 }),
     }),
   );
   return app;

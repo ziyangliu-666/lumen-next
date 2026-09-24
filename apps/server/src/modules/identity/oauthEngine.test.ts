@@ -58,7 +58,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: OAuth and mail SQL/HTTP workflows
       database: db,
       origin,
       sessionLifetimeMs: 60_000,
-      loginGate: new LoginGate({ attempts: 50 }),
+      loginGate: new LoginGate({ accountAttempts: 50 }),
       mailSender,
       mailKey: 'test-mail-queue-key-0123456789abcdef',
       mailEvent,

@@ -84,7 +84,7 @@ async function setup(
       },
       origin: options.origin ?? origin,
       secureCookies: options.secureCookies ?? true,
-      loginGate: new LoginGate({ attempts: options.attempts ?? 100 }),
+      loginGate: new LoginGate({ accountAttempts: options.attempts ?? 100 }),
     }),
   );
   return { app, sessions, getAccount };
@@ -135,6 +135,29 @@ describe('identity: HTTP routes', () => {
       payload: { email: ` ${account.email.toUpperCase()} `, password: 'wrong' },
     });
     expect(second.statusCode).toBe(429);
+  });
+
+  it('still signs a user in after another client behind the same proxy keeps failing', async () => {
+    const { app } = await setup({ attempts: 5 });
+    const proxy = '10.0.0.1';
+    for (let i = 0; i < 30; i++) {
+      const guess = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password',
+        headers: { origin },
+        remoteAddress: proxy,
+        payload: { email: `victim-${i % 3}@example.edu`, password: 'wrong' },
+      });
+      expect(guess.statusCode).toBe(i < 15 ? 401 : 429);
+    }
+    const signIn = await app.inject({
+      method: 'POST',
+      url: '/api/auth/password',
+      headers: { origin },
+      remoteAddress: proxy,
+      payload: { email: account.email, password: 'correct password' },
+    });
+    expect(signIn.statusCode).toBe(200);
   });
 
   it('does not distinguish missing accounts from incorrect passwords', async () => {

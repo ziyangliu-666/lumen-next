@@ -118,8 +118,10 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
       app.post('/api/me/email/verification', async (request, reply) => {
         const principal = requireUser(request);
         await accountAction(() =>
-          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
-            mail.requestVerification(principal.accountId),
+          deps.loginGate.run(
+            request.raw.socket.remoteAddress ?? 'unknown',
+            () => mail.requestVerification(principal.accountId),
+            principal.accountId,
           ),
         );
         return reply
@@ -130,8 +132,10 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
         const principal = requireUser(request);
         const body = bodyFields(request.body, ['code']);
         await accountAction(() =>
-          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
-            mail.verifyEmail(principal.accountId, body['code']),
+          deps.loginGate.run(
+            request.raw.socket.remoteAddress ?? 'unknown',
+            () => mail.verifyEmail(principal.accountId, body['code']),
+            principal.accountId,
           ),
         );
         return reply.code(204).send();
@@ -139,8 +143,10 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
       app.post('/api/auth/forgot-password', { bodyLimit: 8192 }, async (request, reply) => {
         const body = bodyFields(request.body, ['email']);
         await accountAction(() =>
-          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
-            mail.requestReset(body['email']),
+          deps.loginGate.run(
+            request.raw.socket.remoteAddress ?? 'unknown',
+            () => mail.requestReset(body['email']),
+            emailLimitKey(body),
           ),
         );
         return reply
@@ -195,8 +201,8 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
       },
       async (request, reply) => {
         try {
-          // Never trust arbitrary forwarded addresses. Successful users sharing
-          // a proxy consume no failure budget; account limits span direct peers.
+          // Never trust arbitrary forwarded addresses. The email key limits this
+          // account across peers, and users sharing a proxy never share a budget.
           const issued = await deps.loginGate.run(
             request.raw.socket.remoteAddress ?? 'unknown',
             () => deps.flow.authenticate('password', request.body),

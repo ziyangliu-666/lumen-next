@@ -5,6 +5,7 @@ import type { ClientCommand, ServerEvent, SessionSnapshot } from '@lumen/contrac
 import { composeApp, type App } from './app.js';
 import type { Db } from './core/db/db.js';
 import { openTestDb, TEST_DATABASE_URL } from './core/db/testDb.js';
+import { oauthProvidersFromEnvironment } from './modules/identity/index.js';
 
 // End to end: the whole application, composed exactly as production composes
 // it (app.ts), on a real Postgres with every migration applied, driven only
@@ -325,6 +326,34 @@ describe.skipIf(!TEST_DATABASE_URL)('end to end: sign up, ask, watch, pay', () =
       expect(again.orphans).toBe(0);
     } finally {
       await again.server.close();
+    }
+  });
+
+  it('offers only the sign-in providers the composition root was given', async () => {
+    expect((await call('GET', '/api/auth/providers')).body).toEqual({
+      github: false,
+      google: false,
+    });
+
+    const withGithub = await composeApp({
+      db,
+      identity: {
+        origin: ORIGIN,
+        sessionLifetimeMs: 3_600_000,
+        secureCookies: false,
+        oauthProviders: oauthProvidersFromEnvironment(
+          { GITHUB_OAUTH_CLIENT_ID: 'github-client', GITHUB_OAUTH_CLIENT_SECRET: 'github-secret' },
+          ORIGIN,
+          { allowLoopbackHttp: true },
+        ),
+      },
+      logLevel: 'silent',
+    });
+    try {
+      const providers = await withGithub.server.inject({ url: '/api/auth/providers' });
+      expect(providers.json()).toEqual({ github: true, google: false });
+    } finally {
+      await withGithub.server.close();
     }
   });
 });

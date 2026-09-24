@@ -2,17 +2,16 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
 import { PageHeader } from '@/core/shell';
 import { Button } from '@/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/ui/card';
+import { Card, CardContent } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Separator } from '@/ui/separator';
 import { submitAuthentication } from './authClient.js';
-import { AccountPanel } from './AccountPanel.js';
 import { RecoveryPanel } from './RecoveryPanel.js';
+import { offersProviders, ProviderSignIn, type ProviderStatus } from './ProviderSignIn.js';
 
 export function SignIn(): JSX.Element {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
-  const [showAccount, setShowAccount] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -28,6 +27,21 @@ export function SignIn(): JSX.Element {
         : null;
   });
   const [providers, setProviders] = useState({ github: false, google: false });
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus>('loading');
+  const [mailEnabled, setMailEnabled] = useState(false);
+  useEffect(() => {
+    // Recovery is offered only when the server can actually deliver a code.
+    const controller = new AbortController();
+    void fetch('/api/auth/mail', { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        const body: unknown = response.ok ? await response.json() : null;
+        if (!controller.signal.aborted && typeof body === 'object' && body !== null)
+          setMailEnabled('enabled' in body && body.enabled === true);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+  const [providerRevision, setProviderRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     void fetch('/api/auth/providers', {
@@ -36,20 +50,27 @@ export function SignIn(): JSX.Element {
       signal: controller.signal,
     })
       .then(async (response) => {
-        if (!response.ok) return;
+        if (!response.ok) throw new Error('Provider lookup failed');
         const value: unknown = await response.json();
-        if (!controller.signal.aborted && typeof value === 'object' && value !== null) {
-          setProviders({
-            github: 'github' in value && value.github === true,
-            google: 'google' in value && value.google === true,
-          });
+        if (
+          typeof value !== 'object' ||
+          value === null ||
+          !('github' in value) ||
+          typeof value.github !== 'boolean' ||
+          !('google' in value) ||
+          typeof value.google !== 'boolean'
+        )
+          throw new Error('Invalid provider response');
+        if (!controller.signal.aborted) {
+          setProviders({ github: value.github, google: value.google });
+          setProviderStatus('ready');
         }
       })
       .catch(() => {
-        /* Unconfigured/offline providers remain unavailable. */
+        if (!controller.signal.aborted) setProviderStatus('error');
       });
     return () => controller.abort();
-  }, []);
+  }, [providerRevision]);
   const submitting = useRef(false);
   const feedback = useRef<HTMLParagraphElement>(null);
   const signup = mode === 'signup';
@@ -111,65 +132,54 @@ export function SignIn(): JSX.Element {
 
   if (showRecovery)
     return (
-      <>
-        <PageHeader title="Recover and verify" description="Use a one-time code from your email." />
+      <div className="mx-auto grid w-full max-w-md gap-4">
+        <PageHeader
+          title="Reset your password"
+          description="Use the one-time code from your email."
+        />
         <RecoveryPanel />
         <Button variant="ghost" onClick={() => setShowRecovery(false)}>
           Back to sign in
         </Button>
-      </>
+      </div>
     );
 
-  if (showAccount)
-    return (
-      <>
-        <PageHeader title="Account" description="Manage the account signed in on this browser." />
-        <AccountPanel
-          onSignedOut={() => {
-            setShowAccount(false);
-            window.location.hash = '/signin';
-          }}
-        />
-        <Button
-          variant="outline"
-          onClick={() => {
-            setShowAccount(false);
-            setShowRecovery(true);
-          }}
-        >
-          Verify email / recover password
-        </Button>
-        <Button variant="ghost" onClick={() => setShowAccount(false)}>
-          Back to sign in
-        </Button>
-      </>
-    );
-
+  const showProviders = offersProviders(providerStatus, providers);
   return (
-    <>
-      <PageHeader
-        title={signup ? 'Create an account' : 'Sign in'}
-        description="Your research starts here."
-      />
-      <Card className="mx-auto w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>{signup ? 'Join lumen' : 'Welcome back'}</CardTitle>
-          <CardDescription>
-            {signup
-              ? 'Create an account with your email.'
-              : 'Continue with your email and password.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <div className="mx-auto grid w-full max-w-sm gap-6 pt-4 sm:pt-10">
+      <div className="grid gap-1 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">
+          {signup ? 'Create your lumen account' : 'Sign in to lumen'}
+        </h1>
+        <p className="text-sm text-muted-foreground">Your research starts here.</p>
+      </div>
+      <Card className="gap-0 py-0">
+        <CardContent className="grid gap-4 p-6">
+          <ProviderSignIn
+            status={providerStatus}
+            providers={providers}
+            pending={pending}
+            onRefresh={() => {
+              setProviderStatus('loading');
+              setProviderRevision((value) => value + 1);
+            }}
+          />
+          {showProviders ? (
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">or use email</span>
+              <Separator className="flex-1" />
+            </div>
+          ) : null}
           <form
             onSubmit={(event) => {
               void submit(event);
             }}
             aria-busy={pending}
-            className="space-y-4"
+            className="grid gap-3"
           >
             {signup ? (
-              <div className="space-y-2">
+              <div className="grid gap-2">
                 <Label htmlFor="auth-name">Name</Label>
                 <Input
                   id="auth-name"
@@ -183,7 +193,7 @@ export function SignIn(): JSX.Element {
                 />
               </div>
             ) : null}
-            <div className="space-y-2">
+            <div className="grid gap-2">
               <Label htmlFor="auth-email">Email</Label>
               <Input
                 id="auth-email"
@@ -198,8 +208,25 @@ export function SignIn(): JSX.Element {
                 onChange={(event) => setEmail(event.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="auth-password">Password</Label>
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="auth-password">Password</Label>
+                {!signup && mailEnabled ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    disabled={pending}
+                    onClick={() => {
+                      setPassword('');
+                      setShowRecovery(true);
+                    }}
+                  >
+                    Forgot password?
+                  </Button>
+                ) : null}
+              </div>
               <Input
                 id="auth-password"
                 name="password"
@@ -213,13 +240,13 @@ export function SignIn(): JSX.Element {
                 onChange={(event) => setPassword(event.target.value)}
               />
               {signup ? (
-                <p id="password-policy" className="text-sm text-muted-foreground">
+                <p id="password-policy" className="text-xs text-muted-foreground">
                   At least 8 characters. Spaces and Unicode are welcome.
                 </p>
               ) : null}
             </div>
             {signup ? (
-              <div className="space-y-2">
+              <div className="grid gap-2">
                 <Label htmlFor="auth-confirmation">Confirm password</Label>
                 <Input
                   id="auth-confirmation"
@@ -244,72 +271,27 @@ export function SignIn(): JSX.Element {
                 {error}
               </p>
             ) : null}
-            <Button type="submit" className="w-full" disabled={pending}>
+            <Button type="submit" className="mt-1 w-full" disabled={pending}>
               {pending ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}
             </Button>
             <p role="status" className="sr-only">
               {pending ? 'Submitting your request.' : ''}
             </p>
           </form>
-          <Button
-            type="button"
-            variant="ghost"
-            className="w-full"
-            onClick={switchMode}
-            disabled={pending}
-          >
-            {signup ? 'Already have an account? Sign in' : 'New here? Create an account'}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="w-full"
-            disabled={pending}
-            onClick={() => setShowAccount(true)}
-          >
-            Manage signed-in account
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="w-full"
-            disabled={pending}
-            onClick={() => {
-              setPassword('');
-              setConfirmation('');
-              setShowRecovery(true);
-            }}
-          >
-            Forgot password / email verification
-          </Button>
-          <Separator />
-          <div className="space-y-2" aria-describedby="oauth-status">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              disabled={pending || !providers.github}
-              onClick={() => window.location.assign('/api/auth/github')}
-            >
-              Continue with GitHub
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              disabled={pending || !providers.google}
-              onClick={() => window.location.assign('/api/auth/google')}
-            >
-              Continue with Google
-            </Button>
-            <p id="oauth-status" className="text-sm text-muted-foreground">
-              {providers.github && providers.google
-                ? 'Continue securely through your provider.'
-                : 'Unavailable providers have not been configured on this server.'}
-            </p>
-          </div>
         </CardContent>
       </Card>
-    </>
+      <p className="text-center text-sm text-muted-foreground">
+        {signup ? 'Already have an account?' : 'New to lumen?'}{' '}
+        <Button
+          type="button"
+          variant="link"
+          className="h-auto p-0"
+          onClick={switchMode}
+          disabled={pending}
+        >
+          {signup ? 'Sign in' : 'Create an account'}
+        </Button>
+      </p>
+    </div>
   );
 }

@@ -58,6 +58,17 @@ secureCookies?, oauthProviders?, mailSender?, mailDeliveryFailed? })` returns:
   displayName, role, suspended and createdAt, never credentials or tokens.
   Missing reads return null; mutations throw typed `AdminAccountFailure`.
 
+`oauthProvidersFromEnvironment(environment, origin)` returns optional GitHub and
+Google providers built on the in-slice OAuth clients. The caller explicitly supplies server-only
+configuration; the helper does not read global environment or contact providers.
+Empty credential pairs disable providers; partial/malformed pairs fail without
+echoing values. Enabled providers require a canonical HTTPS origin by default.
+A third argument `{ allowLoopbackHttp: true }` explicitly permits only canonical
+loopback HTTP for local acceptance; the default and production wiring stay HTTPS.
+The caller
+must inject the returned providers into createIdentitySlice; production startup
+has not yet been changed to do so. See [OAuth setup](OAUTH_SETUP.md).
+
 Core owns the pool and migration runner. Only `core/db/migrations/002_identity_auth`,
 `003_identity_oauth`, and `004_identity_mail` are applied. Migration 002 adds
 `accounts.suspended` and uniqueness on normalized email. Existing duplicate

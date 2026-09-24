@@ -43,7 +43,24 @@ export interface AccountStore extends AccountReader {
     newHash: string,
     keepTokenHash?: string,
   ): Promise<boolean>;
+  /**
+   * Anonymize the account into a tombstone and delete everything identity
+   * stores about the person, in one transaction, only if the proof still holds
+   * under the account lock. False means unavailable or stale proof; nothing
+   * changed.
+   */
+  deleteAccount(accountId: string, proof: DeletionProof): Promise<boolean>;
 }
+
+/**
+ * What reauthentication proved before deletion. A password account proves its
+ * current password (checked again here as the verified hash). An account with
+ * no password proves a recent sign-in: the request's own session was issued at
+ * or after issuedAfter (epoch milliseconds).
+ */
+export type DeletionProof =
+  | { readonly kind: 'password'; readonly expectedHash: string }
+  | { readonly kind: 'recent-session'; readonly tokenHash: string; readonly issuedAfter: number };
 
 export type AccountFailureCode =
   | 'invalid_body'

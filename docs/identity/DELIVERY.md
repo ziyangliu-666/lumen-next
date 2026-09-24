@@ -47,7 +47,7 @@ submitted revision. Historical local checks do not substitute for those gates.
 | Account composition | Settings owner answer on the pull request, then merge. |
 | OAuth | Review/apply startup wiring; deployment-owned HTTPS configuration; remaining live negative/logout/staff cases; Arctic maintenance review. |
 | Mail verification/recovery | Reviewed durable delivery design addressing the timing-enumeration blocker, retry/abuse controls and real mailbox acceptance. Public recovery remains disabled. |
-| Account deletion | Implemented as `DELETE /api/me` with a tombstone, per the PR #39 decisions. Remaining: owner review, the projects owner's retention answer (default keeps rows), and a policy for deleting the last staff account. |
+| Account deletion | Implemented as `DELETE /api/me` with a tombstone, per the PR #39 decisions. Deleting the last staff account is allowed on purpose; if no staff remain, one is promoted in the database. Remaining: owner review and the projects owner's retention answer (default keeps rows). |
 | Final DOD | Reviewed PR, green CI/security/deployment gates and staging acceptance. |
 
 Existing WebSockets retain their handshake principal after authentication state

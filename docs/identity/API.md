@@ -59,7 +59,7 @@ secureCookies?, oauthProviders?, mailSender?, mailDeliveryFailed? })` returns:
   Missing reads return null; mutations throw typed `AdminAccountFailure`.
 
 `oauthProvidersFromEnvironment(environment, origin)` returns optional GitHub and
-Google providers built on Arctic. The caller explicitly supplies server-only
+Google providers built on the in-slice OAuth clients. The caller explicitly supplies server-only
 configuration; the helper does not read global environment or contact providers.
 Empty credential pairs disable providers; partial/malformed pairs fail without
 echoing values. Enabled providers require a canonical HTTPS origin by default.

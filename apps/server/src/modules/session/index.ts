@@ -1,5 +1,6 @@
 // Public index for the session slice. Owner: LIU ZIYANG.
 import type { FastifyInstance } from 'fastify';
+import type { Log } from '../../core/log/log.js';
 import type { Db } from '../../core/db/db.js';
 import type { BudgetGuard } from '../../core/domain/budget.js';
 import type { Worker } from '../../core/domain/worker.js';
@@ -48,11 +49,14 @@ export function createSessionSlice(deps: {
   budget?: BudgetGuard;
   /** Ledger writer; participates in the trace transaction when db is provided. */
   recordSpend?: SpendRecorder;
+  /** The process's logger; the slice writes through a child of it. */
+  log?: Log;
 }): SessionSlice {
   const trace = deps.db ? new PgTrace(deps.db, deps.recordSpend) : new MemoryTrace();
   const kernel = new Kernel(trace, deps.broker, deps.worker ?? demoWorker(), {
     ...(deps.recordFinding ? { saveFinding: deps.recordFinding } : {}),
     ...(deps.budget ? { budget: deps.budget } : {}),
+    ...(deps.log ? { log: deps.log.child({ slice: 'session' }) } : {}),
   });
   return {
     kernel,

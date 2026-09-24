@@ -1,4 +1,5 @@
 import type { Finding, Money, StepDetail, StepKind, Task } from '@lumen/contracts';
+import type { Log } from '../log/log.js';
 
 // The seam between the kernel (session slice) and the agent (steering slice).
 // The kernel runs a task by handing it to a Worker; the Worker reports back
@@ -16,6 +17,12 @@ export interface Delegated {
 }
 
 export interface WorkerReport {
+  /**
+   * The log for this task run. Its lines already carry sessionId, taskId and
+   * accountId. Write what the worker did (a model call, a command, a tool);
+   * never prompt text, file contents or a credential (docs/LOGGING.md).
+   */
+  readonly log: Log;
   /**
    * Append one line to the task's trace. Resolves once it is recorded. `text`
    * alone must say what happened; `detail` is what it carried (the tool, the

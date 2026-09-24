@@ -57,6 +57,11 @@ export default tseslint.config(
       ],
     },
   },
+  // The server: one logger (core/log), never console.
+  {
+    files: ['apps/server/src/**/*.ts'],
+    rules: { 'no-console': 'error' },
+  },
   // The web app: React rules, accessibility, and the theme.
   {
     files: ['apps/web/src/**/*.{ts,tsx}'],

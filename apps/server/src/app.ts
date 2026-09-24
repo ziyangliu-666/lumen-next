@@ -10,6 +10,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Db } from './core/db/db.js';
 import { headerStub } from './core/http/authGuard.js';
 import { buildServer } from './core/http/server.js';
+import { createLog, type Log } from './core/log/log.js';
 import { Broker } from './core/protocol/broker.js';
 import type { Worker } from './core/domain/worker.js';
 import { createBillingSlice } from './modules/billing/index.js';
@@ -38,6 +39,8 @@ export interface AppOptions {
    */
   readonly identity: IdentityConfig | null;
   readonly webRoot?: string;
+  /** The process's logger. Built here from logLevel when not given. */
+  readonly log?: Log;
   readonly logLevel?: string;
   /** The agent loop. Left out, the session slice runs its demo worker (or steering's, see useSteeringWorker). */
   readonly worker?: Worker;
@@ -85,6 +88,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
         })
       : null;
 
+  const log = options.log ?? createLog({ level: options.logLevel ?? 'info' });
   const broker = new Broker();
   const billing = createBillingSlice({ db });
   // Steering needs session's SessionDirectory to check a task.steer's
@@ -113,6 +117,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
     requireProject: (principal, id) => projects.requireProject(principal, id),
     recordFinding: (sessionId, taskId, text) => projects.recordFinding(sessionId, taskId, text),
     ...(db ? { recordSpend: billing.record } : {}),
+    log,
     // Not yet: `budget: billing.budgetGuard`. The chain fails closed, and a new
     // account's cap is 0, so wiring it today would refuse every session. It goes
     // in when billing gives a new account a default cap (see the review on #21).
@@ -128,7 +133,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
     // The session slice knows who opened a session, so it answers who may watch it.
     access: session.access,
     ...(options.webRoot ? { webRoot: options.webRoot } : {}),
-    ...(options.logLevel ? { logLevel: options.logLevel } : {}),
+    log,
   });
 
   server.get('/api/health', () => ({

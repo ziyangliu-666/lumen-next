@@ -8,11 +8,19 @@
 import { composeApp, type IdentityConfig } from './app.js';
 import { openDatabase, type Db } from './core/db/db.js';
 import { defaultWebRoot } from './core/http/server.js';
+import { createLog } from './core/log/log.js';
 import { modelFromEnv } from './core/model/index.js';
 import { oauthProvidersFromEnvironment } from './modules/identity/index.js';
 import { demoWorker, paceFromEnv } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
+
+// JSON lines on stdout, where a host collects them; readable lines on a
+// terminal (docs/LOGGING.md).
+const log = createLog({
+  level: process.env['LUMEN_LOG_LEVEL'] ?? 'info',
+  pretty: process.stdout.isTTY === true && process.env['NODE_ENV'] !== 'production',
+});
 
 /** A misspelt port should say so, not arrive at listen() as NaN. */
 function port(): number {
@@ -40,7 +48,7 @@ async function database(): Promise<Db | null> {
     }
     return null;
   }
-  return openDatabase(url);
+  return openDatabase(url, { log });
 }
 
 /** LUMEN_COMPUTE_PROVIDER: which Compute steering's worker runs a reader's command against. */
@@ -86,6 +94,7 @@ async function bootstrap(): Promise<void> {
   const provider = computeProvider();
   const { server, orphans, resolver } = await composeApp({
     db,
+    log,
     // Real sign-in whenever there is a database; the stub only without one.
     identity: db ? identityConfig() : null,
     ...(useSteeringWorker
@@ -131,6 +140,6 @@ async function bootstrap(): Promise<void> {
 }
 
 bootstrap().catch((error: unknown) => {
-  console.error('lumen failed to start', error);
+  log.fatal({ err: error }, 'lumen failed to start');
   process.exit(1);
 });

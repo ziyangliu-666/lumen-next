@@ -4,6 +4,8 @@ import { nullModel } from './nullModel.js';
 import { OpenAICompatible } from './openaiCompatible.js';
 import { costOf, priceOf } from './pricing.js';
 import { ModelError, type ModelRequest } from './provider.js';
+import { withLog } from './logged.js';
+import { capture } from '../log/testLog.js';
 
 // No network here. Every answer is a recorded body, so what is tested is the
 // adapter: what it sends, what it makes of an answer, and what it does when
@@ -295,5 +297,34 @@ describe('core/model: the process picks its provider from the environment', () =
     expect([deepseek.name, deepseek.model]).toEqual(['deepseek', 'deepseek-v4-pro']);
     expect(() => modelFromEnv({ LUMEN_MODEL_PROVIDER: 'anthropic' })).toThrow(PROVIDERS.join(', '));
     expect(() => modelFromEnv({ LUMEN_MODEL_PROVIDER: 'openai' })).toThrow(/API key/);
+  });
+});
+
+describe('core/model: a call is logged, its text is not', () => {
+  it('writes model, tokens, cost and duration for an answer, and the kind for a failure', async () => {
+    const { log, lines } = capture();
+    const { provider } = adapter([json(answer()), json({ error: { message: 'no' } }, 401)]);
+    const logged = withLog(provider, log);
+
+    await logged.complete(ask);
+    await logged.complete(ask).catch(() => undefined);
+
+    const [ok, failed] = lines();
+    expect(ok).toMatchObject({
+      provider: 'openai',
+      model: 'gpt-4.1-nano-2025-04-14',
+      inputTokens: 20,
+      outputTokens: 2,
+      cost: 0.000003,
+      stopReason: 'end',
+      msg: 'model call',
+    });
+    expect(failed).toMatchObject({
+      provider: 'openai',
+      kind: 'auth',
+      status: 401,
+      msg: 'model call failed',
+    });
+    expect(JSON.stringify(lines())).not.toMatch(/sky|Blue/);
   });
 });

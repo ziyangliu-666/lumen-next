@@ -58,6 +58,11 @@ npm run dev --workspace @lumen/web
 Requires Node 22 or later. Copy `.env.example` to `.env` and fill in the keys your
 module needs.
 
+## Staging
+
+<https://lumen-next-staging.fly.dev>. On every merge to main, the Deploy workflow runs DAST and
+then deploys the same image to Fly.io. The configuration is in `fly.toml` and `deploy/fly/`.
+
 ## How we work together
 
 Sprints are two weeks long, and each ends with a progress report. From the first sprint

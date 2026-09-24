@@ -4,6 +4,7 @@ import type { BudgetGuard, Charge, Decision } from '../../core/domain/budget.js'
 import type { Worker } from '../../core/domain/worker.js';
 import type { Principal } from '../../core/http/authGuard.js';
 import { HttpError } from '../../core/http/httpError.js';
+import { capture } from '../../core/log/testLog.js';
 import { Broker } from '../../core/protocol/broker.js';
 import { Delegation } from './delegation.js';
 import { demoWorker } from './demoWorker.js';
@@ -79,6 +80,45 @@ describe('session: kernel', () => {
       'step.appended',
       'task.status',
     ]);
+  });
+
+  it('logs a task started, ended or failed, with the ids on every line and the worker given the same log', async () => {
+    const { log, lines } = capture();
+    const seen: string[] = [];
+    const worker: Worker = {
+      run: (task, _input, report) => {
+        report.log.info('worker line');
+        seen.push(task.id);
+        return task.agent === 'lead' ? Promise.resolve() : Promise.reject(new Error('boom'));
+      },
+    };
+    const kernel = new Kernel(new MemoryTrace(), new Broker(), worker, { log });
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+
+    const root = seen[0];
+    expect(lines()).toMatchObject([
+      {
+        sessionId: session.id,
+        taskId: root,
+        accountId: owner.accountId,
+        agent: 'lead',
+        msg: 'task started',
+      },
+      { sessionId: session.id, taskId: root, msg: 'worker line' },
+      { sessionId: session.id, taskId: root, status: 'ended', msg: 'task ended' },
+    ]);
+    expect(lines()[2]).toHaveProperty('durationMs');
+
+    const failing = new Kernel(
+      new MemoryTrace(),
+      new Broker(),
+      { run: () => Promise.reject(new Error('boom')) },
+      { log },
+    );
+    await failing.start('p1', owner.accountId, 'q');
+    await failing.idle();
+    expect(lines().at(-1)).toMatchObject({ msg: 'task failed', err: { message: 'boom' } });
   });
 
   it('marks the task failed when the worker throws, and does not throw itself', async () => {

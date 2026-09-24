@@ -15,6 +15,7 @@ import { recordable } from '../../core/domain/money.js';
 import type { Delegated, Worker, WorkerReport } from '../../core/domain/worker.js';
 import type { Principal, SessionAccess } from '../../core/http/authGuard.js';
 import { notFound } from '../../core/http/httpError.js';
+import { nullLog, taskLog, type Log } from '../../core/log/log.js';
 import type { Broker } from '../../core/protocol/broker.js';
 import { Delegation, DelegationRefused } from './delegation.js';
 import { checkedDetail, storable } from './stepDetail.js';
@@ -48,6 +49,8 @@ export interface KernelOptions {
    * which is right for a test and for a process with no billing slice.
    */
   readonly budget?: BudgetGuard;
+  /** The slice's logger. Each task run writes through a child of it. */
+  readonly log?: Log;
 }
 
 function findingsInMemory(): FindingSaver {
@@ -59,7 +62,7 @@ function findingsInMemory(): FindingSaver {
   };
 }
 
-export class Kernel implements WorkerReport {
+export class Kernel {
   private readonly inFlight = new Set<Promise<void>>();
 
   constructor(
@@ -71,11 +74,13 @@ export class Kernel implements WorkerReport {
     this.delegation = options.delegation ?? new Delegation();
     this.saveFinding = options.saveFinding ?? findingsInMemory();
     this.budget = options.budget ?? allowEverything;
+    this.log = options.log ?? nullLog;
   }
 
   private readonly delegation: Delegation;
   private readonly saveFinding: FindingSaver;
   private readonly budget: BudgetGuard;
+  private readonly log: Log;
 
   /** Open a session under a project and start its root task. Does not wait for the worker. */
   async start(
@@ -163,6 +168,25 @@ export class Kernel implements WorkerReport {
     canWatch: (principal, sessionId) => this.mayRead(principal, sessionId),
   };
 
+  /**
+   * The WorkerReport for one task run: the kernel's methods, and a log whose
+   * lines carry this task's ids. The kernel is one object for every task, so
+   * the log cannot live on it.
+   */
+  private reportFor(task: Task, accountId: string | undefined): WorkerReport {
+    return {
+      log: taskLog(this.log, {
+        sessionId: task.sessionId,
+        taskId: task.id,
+        ...(accountId ? { accountId } : {}),
+      }),
+      appendStep: (taskId, kind, text, detail) => this.appendStep(taskId, kind, text, detail),
+      delegate: (taskId, work) => this.delegate(taskId, work),
+      recordFinding: (taskId, text) => this.recordFinding(taskId, text),
+      addSpend: (taskId, amount, reason) => this.addSpend(taskId, amount, reason),
+    };
+  }
+
   // WorkerReport: the one door out of the worker.
   async appendStep(
     taskId: string,
@@ -216,7 +240,10 @@ export class Kernel implements WorkerReport {
     // Check point: fan-out. One question for the whole fan-out, before a single
     // child exists, so a refusal leaves nothing half-opened on the page.
     const verdict = await this.ask(parent, 'fan-out', `delegate ${work.length}`);
-    if (verdict !== null) throw new DelegationRefused(`the budget does not allow it: ${verdict}`);
+    if (verdict !== null) {
+      this.log.warn({ sessionId: parent.sessionId, taskId: parent.id, verdict }, 'fan-out refused');
+      throw new DelegationRefused(`the budget does not allow it: ${verdict}`);
+    }
 
     // Open every child before any of them runs, so the page draws the whole
     // fan-out at once and a stop that arrives now reaches all of them.
@@ -309,22 +336,40 @@ export class Kernel implements WorkerReport {
    * opposite case, an ended task that runs again on purpose.
    */
   private async run(task: Task, input: string, onlyIfQueued = false): Promise<void> {
+    const startedAt = Date.now();
+    const session = await this.trace.session(task.sessionId).catch(() => null);
+    const report = this.reportFor(task, session?.accountId);
+    const { log } = report;
     try {
       if (onlyIfQueued && (await this.trace.task(task.id))?.status !== 'queued') return;
       // Check point: a turn of the root, or the opening of a delegated task.
       const refused = await this.ask(task, onlyIfQueued ? 'task-open' : 'turn', input);
       if (refused !== null) {
+        log.warn({ agent: task.agent, refused }, 'task refused by the budget');
         await this.appendStep(task.id, 'reply', `Not run: ${refused}.`);
         return;
       }
       await this.setStatus(task.id, 'running');
-      await this.worker.run({ ...task, status: 'running' }, input, this);
+      log.info({ agent: task.agent, parentId: task.parentId }, 'task started');
+      await this.worker.run({ ...task, status: 'running' }, input, report);
       // The user may have stopped it while the worker ran; that verdict stands.
       const now = await this.trace.task(task.id);
       if (now?.status === 'running') await this.setStatus(task.id, 'ended');
-    } catch {
+      log.info(
+        {
+          agent: task.agent,
+          status: now?.status === 'running' ? 'ended' : now?.status,
+          durationMs: Date.now() - startedAt,
+        },
+        'task ended',
+      );
+    } catch (error) {
       // The record itself may be what failed. A run is never awaited by a
       // caller, so an error that escaped here would be an unhandled rejection.
+      log.error(
+        { agent: task.agent, err: error, durationMs: Date.now() - startedAt },
+        'task failed',
+      );
       await this.setStatus(task.id, 'failed').catch(() => undefined);
     }
   }

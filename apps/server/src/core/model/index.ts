@@ -14,6 +14,7 @@ export type {
 } from './provider.js';
 export { ModelError } from './provider.js';
 export { nullModel } from './nullModel.js';
+export { withLog } from './logged.js';
 export { OpenAICompatible, type OpenAICompatibleOptions } from './openaiCompatible.js';
 export { costOf, priceOf } from './pricing.js';
 export { modelFromEnv, PROVIDERS, type ProviderName } from './fromEnv.js';

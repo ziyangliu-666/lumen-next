@@ -3,7 +3,8 @@ import { join, resolve } from 'node:path';
 import cookie from '@fastify/cookie';
 import staticFiles from '@fastify/static';
 import websocket from '@fastify/websocket';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import { createLog, type Log } from '../log/log.js';
 import type { Broker } from '../protocol/broker.js';
 import type { Principal, PrincipalResolver, SessionAccess } from './authGuard.js';
 import { HttpError } from './httpError.js';
@@ -45,6 +46,9 @@ export interface ServerDeps {
   readonly access: SessionAccess;
   /** Where the built SPA lives. Absent in development: Vite serves it instead. */
   readonly webRoot?: string;
+  /** The process's logger. Request lines and every slice's lines go through it. */
+  readonly log?: Log;
+  /** Level for the logger built here when none is given. */
   readonly logLevel?: string;
 }
 
@@ -52,8 +56,12 @@ export interface ServerDeps {
 export type RegisterRoutes = (app: FastifyInstance) => void | Promise<void>;
 
 export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
+  // Typed as Fastify's own logger interface, so the instance type stays the
+  // default one every route file already names.
+  const logger: FastifyBaseLogger =
+    deps.log ?? createLog({ level: deps.logLevel ?? process.env['LUMEN_LOG_LEVEL'] ?? 'info' });
   const app = Fastify({
-    logger: { level: deps.logLevel ?? process.env['LUMEN_LOG_LEVEL'] ?? 'info' },
+    loggerInstance: logger,
     // Behind a load balancer this is what makes request.ip the real client.
     trustProxy: true,
     bodyLimit: 1024 * 1024,

@@ -53,10 +53,8 @@ npm run dev --workspace @lumen/web
 
 ## 线上 staging
 
-<https://lumen-next-staging.fly.dev>：main 每次合并，Deploy workflow 先在 runner 上起一套临时
-staging 跑 DAST，扫过了再把同一个镜像部署到 Fly.io。这是 OAuth 回调、邮件链接这类
-需要真实域名的功能能试的地方。配置在 `fly.toml` 和 `deploy/fly/`，密钥只在 Fly 的
-secrets 里，仓库里没有。要往上放自己这条线的密钥，私下交给 LIU ZIYANG。
+<https://lumen-next-staging.fly.dev>。main 每次合并，Deploy workflow 跑完 DAST 后把同一个镜像
+部署到 Fly.io。配置在 `fly.toml` 和 `deploy/fly/`。
 
 ## 怎么协作
 

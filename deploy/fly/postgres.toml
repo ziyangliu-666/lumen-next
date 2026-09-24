@@ -1,11 +1,7 @@
-# The staging database: one Fly machine running the official Postgres image
-# with a 1 GB volume, reachable only on the private network as
-# lumen-next-staging-db.internal:5432. Not Fly's managed Postgres: staging
-# holds nothing worth a managed service, and this costs a few cents a day.
+# The staging database: postgres:17 on one Fly machine with a 1 GB volume,
+# reachable on the private network as lumen-next-staging-db.internal:5432.
 #
 #   flyctl deploy --config deploy/fly/postgres.toml
-#
-# POSTGRES_PASSWORD is a secret on the app, set once with flyctl secrets set.
 app = "lumen-next-staging-db"
 primary_region = "sin"
 
@@ -20,9 +16,6 @@ primary_region = "sin"
 [mounts]
   source = "pgdata"
   destination = "/var/lib/postgresql/data"
-
-# No [http_service] and no [[services]]: nothing is published outside the
-# private network. The app reaches it by its .internal name.
 
 [[vm]]
   size = "shared-cpu-1x"

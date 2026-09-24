@@ -1,11 +1,7 @@
-# Hosted staging on Fly.io: the same image the Deploy workflow builds and
-# scans, on one small machine that stops when idle. Postgres is the machine in
-# deploy/fly/postgres.toml, reached over the private network.
+# Staging on Fly.io: the image the Deploy workflow builds, on one machine that
+# stops when idle. Postgres is the machine in deploy/fly/postgres.toml.
 #
 #   flyctl deploy --remote-only
-#
-# Secrets (set once with flyctl secrets set, never in this file): DATABASE_URL,
-# OPENAI_API_KEY, and the OAuth client pairs when identity hands them over.
 app = "lumen-next-staging"
 primary_region = "sin"
 

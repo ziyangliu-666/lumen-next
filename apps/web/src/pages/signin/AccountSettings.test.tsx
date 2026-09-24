@@ -1,10 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCurrentAccount, type AuthState } from '@/core/auth';
+import { AccountPanel } from './AccountPanel';
 import { AccountSettings } from './AccountSettings';
 
 vi.mock('@/core/auth', () => ({ useCurrentAccount: vi.fn() }));
-vi.mock('./AccountPanel', () => ({ AccountPanel: () => <p>Account editor</p> }));
+vi.mock('./AccountPanel', () => ({ AccountPanel: vi.fn(() => <p>Account editor</p>) }));
 const refresh = vi.fn();
 const account = {
   id: 'alice',
@@ -18,6 +19,7 @@ function render(state: AuthState): string {
   return renderToStaticMarkup(<AccountSettings />);
 }
 beforeEach(() => vi.clearAllMocks());
+afterEach(() => vi.unstubAllGlobals());
 describe('Account settings access', () => {
   it('waits for the shared account before mounting the editor', () => {
     const html = render({ status: 'loading' });
@@ -49,5 +51,19 @@ describe('Account settings access', () => {
     expect(render({ status: 'ready', mode: 'identity', account: { ...account, role } })).toContain(
       'Account editor',
     );
+  });
+  it('sends the user to sign-in after signing out or deleting the account', () => {
+    const location = { hash: '#/settings/account' };
+    vi.stubGlobal('window', { location });
+    const onSignedOut = vi.fn();
+    vi.mocked(useCurrentAccount).mockReturnValue({
+      state: { status: 'ready', mode: 'identity', account },
+      refresh,
+    });
+    renderToStaticMarkup(<AccountSettings onSignedOut={onSignedOut} />);
+    const props = vi.mocked(AccountPanel).mock.calls[0]?.[0];
+    props?.onSignedOut();
+    expect(location.hash).toBe('/signin');
+    expect(onSignedOut).toHaveBeenCalledTimes(1);
   });
 });

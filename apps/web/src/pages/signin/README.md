@@ -11,25 +11,26 @@ signup/password login also refreshes the shared account hook, so a persistent
 header updates without a reload. `main.tsx` passes it to the shell's
 `accountActions` slot.
 
-AccountSettings is reachable through Manage signed-in account. It uses the shared
+AccountSettings is mounted by `main.tsx` in the Settings Account tab
+(`#/settings/account`), reached from the header's Account link. It uses the shared
 account hook to guard AccountPanel, with loading, retry, signed-out and stub states.
 AccountPanel supports profile/password changes and signout-one/all. Successful
 mutations announce the existing shared auth event; refresh temporarily disables
 the editor without discarding success feedback. A password change revokes other
-sessions. Deletion is deliberately absent. Canonical Settings composition still
-requires shell and Settings owner review; no cross-page imports were added. See
-[the integration handoff](../../../../../docs/identity/ACCOUNT_INTEGRATION.md).
+sessions. Deletion is deliberately absent. No cross-page imports. See
+[the integration notes](../../../../../docs/identity/ACCOUNT_INTEGRATION.md).
 
-The sign-in card uses two columns on desktop and stacks on narrow screens.
-Account profile/password controls also reflow rather than relying on browser zoom.
-Controls keep their normal text/input sizes; long/error states may scroll normally.
+The sign-in page is one focused column: a single heading, the configured
+providers, an "or use email" divider, the email form with one primary action, and
+the sign-up switch as a text link. Account profile/password controls reflow rather
+than relying on browser zoom; long/error states may scroll normally.
 
-OAuth buttons use `/api/auth/providers` and remain disabled when unconfigured.
-ProviderSignIn names each unavailable provider, distinguishes loading and network
-errors from missing configuration, and offers a refresh action after configuration
-changes. A disabled GitHub button cannot be fixed by styling or zoom.
-RecoveryPanel uses `/api/auth/mail`; mail is not wired by main.ts. These Sprint 3
-capabilities are not claimed as live integrations.
+ProviderSignIn uses `/api/auth/providers`. With no provider configured it renders
+nothing, so the page advertises no dead buttons. When only one is configured, the
+other is shown disabled and named as unconfigured. Loading and a failed lookup are
+distinct, and only a failed lookup offers "Try again".
+"Forgot password?" appears next to the password field only when `/api/auth/mail`
+reports mail enabled; RecoveryPanel then handles the one-time code.
 
 The normal monolith now mounts password authentication with DATABASE_URL. See
 [API](../../../../../docs/identity/API.md) and

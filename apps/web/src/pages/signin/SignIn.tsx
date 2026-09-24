@@ -2,18 +2,16 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
 import { PageHeader } from '@/core/shell';
 import { Button } from '@/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/ui/card';
+import { Card, CardContent } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Separator } from '@/ui/separator';
 import { submitAuthentication } from './authClient.js';
-import { AccountSettings } from './AccountSettings.js';
 import { RecoveryPanel } from './RecoveryPanel.js';
-import { ProviderSignIn } from './ProviderSignIn.js';
+import { offersProviders, ProviderSignIn, type ProviderStatus } from './ProviderSignIn.js';
 
 export function SignIn(): JSX.Element {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
-  const [showAccount, setShowAccount] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -29,7 +27,20 @@ export function SignIn(): JSX.Element {
         : null;
   });
   const [providers, setProviders] = useState({ github: false, google: false });
-  const [providerStatus, setProviderStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus>('loading');
+  const [mailEnabled, setMailEnabled] = useState(false);
+  useEffect(() => {
+    // Recovery is offered only when the server can actually deliver a code.
+    const controller = new AbortController();
+    void fetch('/api/auth/mail', { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        const body: unknown = response.ok ? await response.json() : null;
+        if (!controller.signal.aborted && typeof body === 'object' && body !== null)
+          setMailEnabled('enabled' in body && body.enabled === true);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
   const [providerRevision, setProviderRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
@@ -121,198 +132,166 @@ export function SignIn(): JSX.Element {
 
   if (showRecovery)
     return (
-      <>
-        <PageHeader title="Recover and verify" description="Use a one-time code from your email." />
+      <div className="mx-auto grid w-full max-w-md gap-4">
+        <PageHeader
+          title="Reset your password"
+          description="Use the one-time code from your email."
+        />
         <RecoveryPanel />
         <Button variant="ghost" onClick={() => setShowRecovery(false)}>
           Back to sign in
         </Button>
-      </>
+      </div>
     );
 
-  if (showAccount)
-    return (
-      <>
-        <PageHeader title="Account" description="Manage the account signed in on this browser." />
-        <AccountSettings
-          onSignedOut={() => {
-            setShowAccount(false);
-            window.location.hash = '/signin';
-          }}
-        />
-        <Button
-          variant="outline"
-          onClick={() => {
-            setShowAccount(false);
-            setShowRecovery(true);
-          }}
-        >
-          Verify email / recover password
-        </Button>
-        <Button variant="ghost" onClick={() => setShowAccount(false)}>
-          Back to sign in
-        </Button>
-      </>
-    );
-
+  const showProviders = offersProviders(providerStatus, providers);
   return (
-    <>
-      <PageHeader
-        title={signup ? 'Create an account' : 'Sign in'}
-        description="Your research starts here."
-      />
-      <Card className="mx-auto w-full max-w-3xl gap-4 py-0">
-        <CardHeader className="p-4 pb-0 md:px-6">
-          <CardTitle>{signup ? 'Join lumen' : 'Welcome back'}</CardTitle>
-          <CardDescription>
-            {signup
-              ? 'Create an account with your email.'
-              : 'Continue with your email and password.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 p-4 pt-0 md:grid-cols-2 md:gap-6 md:px-6">
-          <div className="space-y-3">
-            <form
-              onSubmit={(event) => {
-                void submit(event);
-              }}
-              aria-busy={pending}
-              className="space-y-3"
-            >
-              {signup ? (
-                <div className="space-y-2">
-                  <Label htmlFor="auth-name">Name</Label>
-                  <Input
-                    id="auth-name"
-                    name="displayName"
-                    autoComplete="name"
-                    required
-                    maxLength={80}
-                    value={displayName}
-                    disabled={pending}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                  />
-                </div>
-              ) : null}
-              <div className="space-y-2">
-                <Label htmlFor="auth-email">Email</Label>
+    <div className="mx-auto grid w-full max-w-sm gap-6 pt-4 sm:pt-10">
+      <div className="grid gap-1 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">
+          {signup ? 'Create your lumen account' : 'Sign in to lumen'}
+        </h1>
+        <p className="text-sm text-muted-foreground">Your research starts here.</p>
+      </div>
+      <Card className="gap-0 py-0">
+        <CardContent className="grid gap-4 p-6">
+          <ProviderSignIn
+            status={providerStatus}
+            providers={providers}
+            pending={pending}
+            onRefresh={() => {
+              setProviderStatus('loading');
+              setProviderRevision((value) => value + 1);
+            }}
+          />
+          {showProviders ? (
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">or use email</span>
+              <Separator className="flex-1" />
+            </div>
+          ) : null}
+          <form
+            onSubmit={(event) => {
+              void submit(event);
+            }}
+            aria-busy={pending}
+            className="grid gap-3"
+          >
+            {signup ? (
+              <div className="grid gap-2">
+                <Label htmlFor="auth-name">Name</Label>
                 <Input
-                  id="auth-email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
+                  id="auth-name"
+                  name="displayName"
+                  autoComplete="name"
                   required
-                  maxLength={320}
-                  placeholder="you@example.edu"
-                  value={email}
+                  maxLength={80}
+                  value={displayName}
                   disabled={pending}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event) => setDisplayName(event.target.value)}
                 />
               </div>
-              <div className="space-y-2">
+            ) : null}
+            <div className="grid gap-2">
+              <Label htmlFor="auth-email">Email</Label>
+              <Input
+                id="auth-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                maxLength={320}
+                placeholder="you@example.edu"
+                value={email}
+                disabled={pending}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="auth-password">Password</Label>
-                <Input
-                  id="auth-password"
-                  name="password"
-                  type="password"
-                  autoComplete={signup ? 'new-password' : 'current-password'}
-                  required
-                  maxLength={1024}
-                  value={password}
-                  disabled={pending}
-                  aria-describedby={signup ? 'password-policy' : undefined}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-                {signup ? (
-                  <p id="password-policy" className="text-sm text-muted-foreground">
-                    At least 8 characters. Spaces and Unicode are welcome.
-                  </p>
+                {!signup && mailEnabled ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    disabled={pending}
+                    onClick={() => {
+                      setPassword('');
+                      setShowRecovery(true);
+                    }}
+                  >
+                    Forgot password?
+                  </Button>
                 ) : null}
               </div>
+              <Input
+                id="auth-password"
+                name="password"
+                type="password"
+                autoComplete={signup ? 'new-password' : 'current-password'}
+                required
+                maxLength={1024}
+                value={password}
+                disabled={pending}
+                aria-describedby={signup ? 'password-policy' : undefined}
+                onChange={(event) => setPassword(event.target.value)}
+              />
               {signup ? (
-                <div className="space-y-2">
-                  <Label htmlFor="auth-confirmation">Confirm password</Label>
-                  <Input
-                    id="auth-confirmation"
-                    name="passwordConfirmation"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    maxLength={1024}
-                    value={confirmation}
-                    disabled={pending}
-                    onChange={(event) => setConfirmation(event.target.value)}
-                  />
-                </div>
-              ) : null}
-              {error ? (
-                <p
-                  ref={feedback}
-                  tabIndex={-1}
-                  role="alert"
-                  className="rounded-md bg-gap-soft p-3 text-sm text-gap"
-                >
-                  {error}
+                <p id="password-policy" className="text-xs text-muted-foreground">
+                  At least 8 characters. Spaces and Unicode are welcome.
                 </p>
               ) : null}
-              <Button type="submit" className="w-full" disabled={pending}>
-                {pending ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}
-              </Button>
-              <p role="status" className="sr-only">
-                {pending ? 'Submitting your request.' : ''}
-              </p>
-            </form>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="w-full whitespace-normal"
-              onClick={switchMode}
-              disabled={pending}
-            >
-              {signup ? 'Already have an account? Sign in' : 'New here? Create an account'}
-            </Button>
-          </div>
-          <aside className="space-y-3 border-t border-border pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6">
-            <ProviderSignIn
-              status={providerStatus}
-              providers={providers}
-              pending={pending}
-              onRefresh={() => {
-                setProviderStatus('loading');
-                setProviderRevision((value) => value + 1);
-              }}
-            />
-            <Separator />
-            <div className="flex flex-col items-start gap-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-auto justify-start py-2 text-left whitespace-normal"
-                disabled={pending}
-                onClick={() => setShowAccount(true)}
-              >
-                Manage signed-in account
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-auto justify-start py-2 text-left whitespace-normal"
-                disabled={pending}
-                onClick={() => {
-                  setPassword('');
-                  setConfirmation('');
-                  setShowRecovery(true);
-                }}
-              >
-                Forgot password / email verification
-              </Button>
             </div>
-          </aside>
+            {signup ? (
+              <div className="grid gap-2">
+                <Label htmlFor="auth-confirmation">Confirm password</Label>
+                <Input
+                  id="auth-confirmation"
+                  name="passwordConfirmation"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  maxLength={1024}
+                  value={confirmation}
+                  disabled={pending}
+                  onChange={(event) => setConfirmation(event.target.value)}
+                />
+              </div>
+            ) : null}
+            {error ? (
+              <p
+                ref={feedback}
+                tabIndex={-1}
+                role="alert"
+                className="rounded-md bg-gap-soft p-3 text-sm text-gap"
+              >
+                {error}
+              </p>
+            ) : null}
+            <Button type="submit" className="mt-1 w-full" disabled={pending}>
+              {pending ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}
+            </Button>
+            <p role="status" className="sr-only">
+              {pending ? 'Submitting your request.' : ''}
+            </p>
+          </form>
         </CardContent>
       </Card>
-    </>
+      <p className="text-center text-sm text-muted-foreground">
+        {signup ? 'Already have an account?' : 'New to lumen?'}{' '}
+        <Button
+          type="button"
+          variant="link"
+          className="h-auto p-0"
+          onClick={switchMode}
+          disabled={pending}
+        >
+          {signup ? 'Sign in' : 'Create an account'}
+        </Button>
+      </p>
+    </div>
   );
 }

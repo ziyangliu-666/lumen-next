@@ -42,10 +42,20 @@ reads current role and suspension on every request, never renewing a session.
 | GET /api/me | authenticated public account |
 | PATCH /api/me | displayName/email; password proof for email |
 | POST /api/me/password | current/new password; revoke other sessions atomically |
+| DELETE /api/me | reauthenticate, tombstone the account, revoke all sessions; 204, cookie cleared |
 | GET /api/auth/providers | configured providers; false by default |
 | GET /api/auth/mail | enabled flag; false by default |
 
-Account deletion is excluded pending shared retention constraints. main.ts wires
+Account deletion (`DELETE /api/me`, AccountService.deleteAccount) is immediate
+and irreversible, and only the user can do it. Reauthentication is the current
+password; an account without one must have signed in within the last 10 minutes
+(RECENT_SIGN_IN_MS) on the requesting session. The accounts row stays as a
+tombstone (`deleted+<id>@invalid`, "Deleted account", role user, suspended,
+deleted_at set) so other slices' rows keep a valid id; identity deletes the
+credentials (password and OAuth), sessions, mail codes, verified addresses and
+queued mail in the same transaction. Admin methods treat a tombstone as not
+found, and migration 010 keeps it suspended. See
+[API](../../../../../docs/identity/API.md#account-deletion). main.ts wires
 OAuth through oauthProvidersFromEnvironment; a provider is enabled only when its
 credential pair is set. main.ts enables mail verification and reset only when
 `mailFromEnvironment` returns a configuration (IDENTITY_MAIL_MODE outbox or
@@ -69,7 +79,9 @@ revoke all other sessions in the same transaction. Suspension similarly revokes
 sessions and purges pending mail requests and codes; unsuspension restores neither. Existing WebSocket connections
 retain their handshake principal until core provides revalidation.
 
-Only core's migration runner applies 002/003/004/009. Migration 002 adds suspended
+Only core's migration runner applies 002/003/004/009/010. Migration 010 adds
+`accounts.deleted_at` and a tombstone-stays-suspended check to the shared
+accounts table. Migration 002 adds suspended
 and normalized-email uniqueness to accounts; duplicate historical emails block
 migration. No second migration tree or temporary runtime dependency exists.
 GitHub and Google use the in-slice clients in `oauthClients.ts` (native fetch, no

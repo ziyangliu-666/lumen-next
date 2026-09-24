@@ -3,10 +3,11 @@ name: Deploy
 # Continuous delivery: build the container, bring it up as staging with a real
 # database, run DAST against it, then wait at a manual gate before production.
 #
-# Staging runs on the workflow runner: the image that was just built and a
-# Postgres beside it. That is a real deployment of the real artefact, and it
-# needs no hosting account. When the team has one, the `staging` job deploys
-# there instead and `dast` takes its URL; nothing else changes.
+# Two stagings, on purpose. The runner-local one (the image that was just
+# built and a Postgres beside it) is where DAST runs: it is disposable, so the
+# scan can do what it likes. The hosted one on Fly.io (fly.toml,
+# https://lumen-next-staging.fly.dev) is where a person, an OAuth callback or
+# a mail link can reach the build; it deploys only after the scan passed.
 on:
   push:
     branches: [main]
@@ -99,6 +100,23 @@ jobs:
       - name: Stop staging
         if: always()
         run: docker compose -f docker-compose.staging.yml down -v
+
+  staging-fly:
+    name: Deploy to the hosted staging
+    needs: staging-and-dast
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency: fly-staging # one deploy at a time; a second push waits
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Built on Fly's builder from the same Dockerfile; the runner-local image
+      # is not pushed anywhere, so it cannot be reused here.
+      - run: flyctl deploy --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: The deployed build answers
+        run: curl -fsS --retry 5 --retry-delay 5 https://lumen-next-staging.fly.dev/api/health
 
   production:
     needs: staging-and-dast

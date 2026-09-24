@@ -47,6 +47,7 @@ async function setup(limit = 10): Promise<{
         signup: () => Promise.reject(new Error('Unexpected signup')),
         update: () => Promise.reject(new Error('Unexpected update')),
         changePassword: () => Promise.resolve(),
+        deleteAccount: () => Promise.reject(new Error('Unexpected deletion')),
       },
       loginGate: new LoginGate({ attempts: limit }),
       oauth: {

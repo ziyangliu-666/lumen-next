@@ -53,7 +53,10 @@ export interface IdentityRouteDeps {
   readonly flow: Pick<SessionAuthFlow, 'authenticate'>;
   readonly sessions: Pick<AuthSessions, 'issue' | 'revoke' | 'revokeAll'>;
   readonly accounts: AccountReader;
-  readonly management: Pick<AccountService, 'signup' | 'update' | 'changePassword'>;
+  readonly management: Pick<
+    AccountService,
+    'signup' | 'update' | 'changePassword' | 'deleteAccount'
+  >;
   readonly origin: string;
   readonly secureCookies?: boolean;
   readonly loginGate: LoginGate;
@@ -261,6 +264,28 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
           principal.accountId,
         ),
       );
+      return reply.code(204).send();
+    });
+
+    // Only the signed-in user deletes, and only their own account: the id comes
+    // from the principal, never the body. Staff have no deletion route; they
+    // suspend through billing's admin page.
+    app.delete('/api/me', { bodyLimit: 8192 }, async (request, reply) => {
+      const principal = requireUser(request);
+      await accountAction(() =>
+        deps.loginGate.run(
+          request.raw.socket.remoteAddress ?? 'unknown',
+          () =>
+            deps.management.deleteAccount(
+              principal.accountId,
+              request.body,
+              request.cookies[AUTH_COOKIE],
+            ),
+          principal.accountId,
+        ),
+      );
+      // Every session row is already gone; the cookie goes with it.
+      void reply.clearCookie(AUTH_COOKIE, cookieOptions);
       return reply.code(204).send();
     });
 

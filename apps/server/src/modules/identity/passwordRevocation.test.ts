@@ -104,6 +104,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: password change session revocatio
           (await app.inject({ url: '/api/me', cookies: { lumen_session: token } })).statusCode,
         ).toBe(status);
       }
+      // The replacement password, not the old one, is now the deletion proof.
       expect(
         (
           await app.inject({
@@ -114,7 +115,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: password change session revocatio
             payload: { currentPassword: 'replacement-password' },
           })
         ).statusCode,
-      ).toBe(404);
+      ).toBe(204);
     } finally {
       await app.close();
     }

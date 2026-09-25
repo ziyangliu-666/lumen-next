@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import type { Log } from '../../core/log/log.js';
 import { AuthFailure } from './authFlow.js';
+import { logRefusal } from './identityLog.js';
 import type { LoginGate } from './loginGate.js';
 import { LoginLimited } from './loginGate.js';
 import { OAuthEmailConflict, type OAuthAttempts, type OAuthProvider } from './oauth.js';
@@ -16,6 +18,7 @@ export function registerOAuthRoutes(
   flow: Pick<SessionAuthFlow, 'authenticate'>,
   gate: LoginGate,
   secure: boolean,
+  log: Log,
 ): void {
   const providers = options?.providers ?? [];
   app.get('/api/auth/providers', () => ({
@@ -37,6 +40,7 @@ export function registerOAuthRoutes(
         void reply.setCookie(cookieName, attempt.binding, { ...cookieOptions, maxAge: 600 });
         return reply.redirect(url.href);
       } catch (error) {
+        logRefusal(log, `${provider.kind} sign-in`, error);
         if (error instanceof LoginLimited)
           return reply.code(429).send({ error: 'Too many login attempts' });
         throw error;
@@ -79,8 +83,14 @@ export function registerOAuthRoutes(
           // Fixed destinations; never reflect an external returnTo or provider text.
           return reply.redirect(issued.principal.role === 'staff' ? '/#/admin' : '/#/home');
         } catch (error) {
-          if (error instanceof OAuthEmailConflict)
+          logRefusal(log, `${provider.kind} sign-in`, error);
+          if (error instanceof OAuthEmailConflict) {
+            log.warn(
+              { action: `${provider.kind} sign-in`, reason: 'email_conflict' },
+              'identity refused',
+            );
             return reply.redirect('/?authError=oauth_email_conflict#/signin');
+          }
           if (error instanceof AuthFailure || error instanceof LoginLimited)
             return reply.redirect('/?authError=oauth_failed#/signin');
           throw error;

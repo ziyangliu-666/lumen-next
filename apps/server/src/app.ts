@@ -82,6 +82,7 @@ export interface App {
 export async function composeApp(options: AppOptions): Promise<App> {
   const { db } = options;
   if (options.identity && !db) throw new Error('identity needs a database');
+  const log = options.log ?? createLog({ level: options.logLevel ?? 'info' });
   const identity =
     options.identity && db
       ? createIdentitySlice({
@@ -89,6 +90,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
           origin: options.identity.origin,
           sessionLifetimeMs: options.identity.sessionLifetimeMs,
           loginGate: new LoginGate(),
+          log,
           ...(options.identity.oauthProviders
             ? { oauthProviders: options.identity.oauthProviders }
             : {}),
@@ -101,7 +103,6 @@ export async function composeApp(options: AppOptions): Promise<App> {
         })
       : null;
 
-  const log = options.log ?? createLog({ level: options.logLevel ?? 'info' });
   const broker = new Broker();
   const billing = createBillingSlice({ db });
   // Steering needs session's SessionDirectory to check a task.steer's

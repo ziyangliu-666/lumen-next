@@ -8,7 +8,7 @@ reviewed authentication core is retained rather than rewritten.
 
 `createIdentitySlice(options)` takes core's database, canonical origin, explicit
 session lifetime and LoginGate, plus optional secureCookies, oauthProviders,
-mailSender, mailKey and mailEvent. It returns `principalResolver`,
+mailSender, mailKey, mailEvent and core's `log`. It returns `principalResolver`,
 `registerRoutes`, the trusted account interface `listAccounts`, `getAccount`,
 `setRole`, `suspend`, and, when a mailSender is given, `mailWorker`
 (`MailWorker`: `start()`, `stop()`, `tick()`), which the composition root must
@@ -74,6 +74,12 @@ client behind a shared proxy locks out no other user. It bounds tracked keys,
 queues work beyond 4 concurrent actions (refusing only past 64 waiting), and does
 not trust forwarded headers. It is local, not distributed. New passwords have an 8-code-point minimum and a 1024-byte
 ceiling. Signup's duplicate-email response still reveals availability.
+
+The slice logs through `log.child({ slice: 'identity' })` (docs/LOGGING.md): a
+warn line with a fixed `action` and `reason` when a sign-in or an account action
+is refused or rate-limited, and one line per mail event (info for admitted and
+sent, warn for dropped, retry and ineligible, error for failed and error). A line
+never carries an address, a password, a code, a token or provider text.
 
 PostgresAccountStore and PostgresAuthSessionStore use core's injected database.
 Password changes compare the verified hash under account-first locking and

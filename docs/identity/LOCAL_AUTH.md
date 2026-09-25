@@ -34,7 +34,8 @@ without DATABASE_URL. Tell all slice owners before merging this switch.
 
 Account management is reachable from the sign-in page. Password changes sign out
 other sessions while retaining the current one. Sign-out-all invalidates every
-session. Account deletion is unavailable. Settings composition belongs to the
+session. Account deletion is in the Account settings and needs the current
+password, or a sign-in in the last 10 minutes for a provider-only account. Settings composition belongs to the
 shell owner; no cross-page import was added. StaffGuard protects the existing
 admin route, but this PR does not implement billing's admin endpoints.
 

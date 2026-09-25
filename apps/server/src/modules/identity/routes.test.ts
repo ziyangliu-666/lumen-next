@@ -81,6 +81,7 @@ async function setup(
         signup: () => Promise.resolve(account),
         update: () => Promise.resolve(account),
         changePassword: () => Promise.resolve(),
+        deleteAccount: () => Promise.resolve(),
       },
       origin: options.origin ?? origin,
       secureCookies: options.secureCookies ?? true,

@@ -331,7 +331,9 @@ describe('identity: admin account query contract', () => {
       const db = new RecordingDatabase();
       db.results.push([{ id: account.id }]);
       await new PostgresAccountStore(db).setRole(account.id, role);
-      expect(db.calls[0]?.sql).toBe('update accounts set role = $2 where id = $1 returning id');
+      expect(db.calls[0]?.sql).toBe(
+        'update accounts set role = $2 where id = $1 and deleted_at is null returning id',
+      );
       expect(db.calls[0]?.values).toEqual([account.id, role]);
     },
   );

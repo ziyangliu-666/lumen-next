@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { accountRequest } from './accountClient';
+import { accountRequest, AccountRequestError } from './accountClient';
 
 const fetchMock = vi.fn<typeof fetch>();
 const dispatchEvent = vi.fn();
@@ -27,6 +27,7 @@ describe('Account transport and shared auth invalidation', () => {
     ['/api/me/password', 'POST', 204],
     ['/api/auth/signout', 'POST', 204],
     ['/api/auth/signout-all', 'POST', 204],
+    ['/api/me', 'DELETE', 204],
   ] as const)('refreshes shared auth after successful %s', async (path, method, status) => {
     fetchMock.mockResolvedValue(new Response(status === 204 ? null : '{}', { status }));
     await accountRequest(path, method, { proof: 'test-only' });
@@ -42,6 +43,14 @@ describe('Account transport and shared auth invalidation', () => {
       expect(dispatchEvent).not.toHaveBeenCalled();
     },
   );
+  it('carries the HTTP status so a panel can word its own refusal', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 401 }));
+    const failure: unknown = await accountRequest('/api/me', 'DELETE', {}).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(AccountRequestError);
+    expect((failure as AccountRequestError).status).toBe(401);
+  });
   it('does not announce a mutation when the network fails', async () => {
     fetchMock.mockRejectedValue(new Error('offline'));
     await expect(accountRequest('/api/auth/signout', 'POST')).rejects.toThrow('offline');

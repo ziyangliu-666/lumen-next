@@ -17,7 +17,10 @@ account hook to guard AccountPanel, with loading, retry, signed-out and stub sta
 AccountPanel supports profile/password changes and signout-one/all. Successful
 mutations announce the existing shared auth event; refresh temporarily disables
 the editor without discarding success feedback. A password change revokes other
-sessions. Deletion is deliberately absent. No cross-page imports. See
+sessions. DeleteAccountSection asks for the current password (empty for a
+provider-only account that signed in within 10 minutes), confirms in an
+AlertDialog, calls `DELETE /api/me` and then leaves for `#/signin`. No
+cross-page imports. See
 [the integration notes](../../../../../docs/identity/ACCOUNT_INTEGRATION.md).
 
 The sign-in page is one focused column: a single heading, the configured

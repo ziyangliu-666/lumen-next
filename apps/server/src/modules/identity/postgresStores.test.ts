@@ -261,6 +261,23 @@ describe('identity: PostgreSQL account query contract', () => {
     expect(db.calls).toHaveLength(2);
   });
 
+  it('answers canSpend false for a malformed id without querying', async () => {
+    const db = new RecordingDatabase();
+    const store = new PostgresAccountStore(db);
+    for (const id of ['', ' ', 'account-id', "x' or '1'='1"]) {
+      expect(await store.canSpend(id)).toBe(false);
+    }
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('propagates a storage failure from canSpend instead of reading it as a refusal', async () => {
+    const db = new RecordingDatabase();
+    db.results.push(new Error('connection lost'));
+    await expect(
+      new PostgresAccountStore(db).canSpend('00000000-0000-4000-8000-000000000000'),
+    ).rejects.toThrow('connection lost');
+  });
+
   it('replaces the password with compare-and-set after locking in account-first order', async () => {
     const db = new RecordingDatabase();
     db.results.push([account], [{ passwordHash: 'old' }], [{ id: 'credential-id' }], []);

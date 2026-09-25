@@ -103,7 +103,11 @@ export async function composeApp(options: AppOptions): Promise<App> {
 
   const log = options.log ?? createLog({ level: options.logLevel ?? 'info' });
   const broker = new Broker();
-  const billing = createBillingSlice({ db });
+  // Without identity there are no real accounts, and billing keeps denying.
+  const billing = createBillingSlice({
+    db,
+    ...(identity ? { canSpend: identity.canSpend } : {}),
+  });
   // Steering needs session's SessionDirectory to check a task.steer's
   // ownership and to find a task's project; session may run steering's own
   // worker. Each is given closures over the other, declared first — same

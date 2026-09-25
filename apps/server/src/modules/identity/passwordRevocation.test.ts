@@ -50,6 +50,8 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: password change session revocatio
     expect(await sessions.verify(issued.token)).toBeNull();
   });
 
+  // Six scrypt operations at N=2^15 (two signups, a login, a change that verifies and rehashes,
+  // a delete) can outlast the default 5 s on a loaded machine.
   it('keeps the current cookie, revokes other cookies, and isolates other accounts', async () => {
     const origin = 'https://lumen.example';
     const identity = createIdentitySlice({
@@ -118,5 +120,5 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: password change session revocatio
     } finally {
       await app.close();
     }
-  });
+  }, 20_000);
 });

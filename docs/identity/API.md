@@ -40,10 +40,13 @@ proof, 429 admission limit, 500 infrastructure failure. Do not branch on an
 English message. Signup currently exposes email availability through 409; public
 release needs an explicit enumeration policy.
 
-`LoginGate` bounds concurrent work and tracked keys. It counts rejected actions,
-not successful sign-ins or profile updates, with direct-peer and account limits.
-Email keys are normalized and hashed. It does not trust `X-Forwarded-For` and is
-not a distributed limiter. A proxy's failed requests still share a peer budget.
+`LoginGate` counts rejected actions, not successful sign-ins or profile updates.
+A request that names an account (email or signed-in account) is limited by that
+account alone, 5 failures a minute across peers, so clients behind one proxy
+never share a budget. Only requests with no account key (reset codes, OAuth)
+fall back to the direct peer, at 100 failures a minute. Work beyond 4 concurrent
+actions waits in a queue of 64. Email keys are normalized and hashed. It does not
+trust `X-Forwarded-For` and is not a distributed limiter.
 
 ## Public index and persistence
 

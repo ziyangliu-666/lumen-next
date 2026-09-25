@@ -56,7 +56,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: password change session revocatio
       database: fixture.db,
       origin,
       sessionLifetimeMs: 60000,
-      loginGate: new LoginGate({ attempts: 50 }),
+      loginGate: new LoginGate({ accountAttempts: 50 }),
     });
     const app = await buildServer({
       broker: new Broker(),

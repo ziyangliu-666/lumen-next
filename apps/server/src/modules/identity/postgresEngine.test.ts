@@ -58,7 +58,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: PostgreSQL HTTP and store accepta
       database: db,
       origin,
       sessionLifetimeMs: 60_000,
-      loginGate: new LoginGate({ attempts: 50 }),
+      loginGate: new LoginGate({ accountAttempts: 50 }),
     });
     const app = await buildServer({
       broker: new Broker(),
@@ -218,7 +218,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: PostgreSQL HTTP and store accepta
       database: db,
       origin,
       sessionLifetimeMs: 60_000,
-      loginGate: new LoginGate({ attempts: 50 }),
+      loginGate: new LoginGate({ accountAttempts: 50 }),
     });
     const broker = new Broker();
     const session = createSessionSlice({ broker });

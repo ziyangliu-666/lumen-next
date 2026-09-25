@@ -48,7 +48,7 @@ async function setup(limit = 10): Promise<{
         update: () => Promise.reject(new Error('Unexpected update')),
         changePassword: () => Promise.resolve(),
       },
-      loginGate: new LoginGate({ attempts: limit }),
+      loginGate: new LoginGate({ peerAttempts: limit }),
       oauth: {
         attempts,
         providers: [

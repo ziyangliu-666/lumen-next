@@ -34,6 +34,8 @@ export class AccountHandler implements BudgetHandler {
   }
 }
 
+// Historical class name retained for callers. The cap is now flat (#52).
+// This checks, but does not reserve: simultaneous work can exceed the cap.
 export class MonthlyCapHandler implements BudgetHandler {
   constructor(private readonly fits: (accountId: string, estimate: Money) => Promise<boolean>) {}
 

@@ -4,12 +4,13 @@ import { badRequest } from '../../core/http/httpError.js';
 import type { Spend, WalletSummary } from './ports.js';
 import { cursorId, money, UUID } from './validation.js';
 
-const MONTH_TOTALS = `
+// PM/core decision in #52 (28 Sep): a flat USD 1 account cap lives in the
+// store, not a monthly reset or migration default. COALESCE preserves saved 0.
+// Display and guard must use this same numeric SQL projection.
+const ACCOUNT_TOTALS = `
       select coalesce((select sum(amount) from ledger_entries
-        where account_id = $1
-          and created_at >= (date_trunc('month', $2::timestamptz at time zone 'UTC') at time zone 'UTC')
-          and created_at < ((date_trunc('month', $2::timestamptz at time zone 'UTC') + interval '1 month') at time zone 'UTC')), 0) as spent,
-        coalesce((select cap from billing_wallets where account_id = $1), 0) as cap`;
+        where account_id = $1), 0) as spent,
+        coalesce((select cap from billing_wallets where account_id = $1), 1.000000::numeric) as cap`;
 
 export interface LedgerEntry {
   readonly id: string;
@@ -25,10 +26,7 @@ export interface LedgerPage {
 
 /** Owns ledger_entries and billing_wallets; reads no other slice's table. */
 export class Ledger {
-  constructor(
-    private readonly db: Db,
-    private readonly now: () => Date = () => new Date(),
-  ) {}
+  constructor(private readonly db: Db) {}
 
   async record(entry: Spend, tx: Queryable = this.db): Promise<void> {
     money(entry.amount);
@@ -45,11 +43,9 @@ export class Ledger {
     );
   }
 
+  /** Historical port name; Sprint 3 now reports all-time account spend, with no reset. */
   async monthSpend(accountId: string): Promise<WalletSummary> {
-    const [row] = await this.db.query<{ spent: number; cap: number }>(MONTH_TOTALS, [
-      accountId,
-      this.now(),
-    ]);
+    const [row] = await this.db.query<{ spent: number; cap: number }>(ACCOUNT_TOTALS, [accountId]);
     return { spent: { dollars: row!.spent }, cap: { dollars: row!.cap } };
   }
 
@@ -57,8 +53,9 @@ export class Ledger {
   async fits(accountId: string, estimate: Money): Promise<boolean> {
     money(estimate);
     const [row] = await this.db.query<{ fits: boolean }>(
-      `select spent + $3::numeric <= cap as fits from (${MONTH_TOTALS}) as wallet`,
-      [accountId, this.now(), estimate.dollars],
+      `select case when $2::numeric = 0 then spent < cap
+        else spent + $2::numeric <= cap end as fits from (${ACCOUNT_TOTALS}) as wallet`,
+      [accountId, estimate.dollars],
     );
     return row!.fits;
   }

@@ -76,8 +76,9 @@ review. No shared contract or dependency is changed. Identity's real resolver
 will authenticate these routes through core when its PR lands.
 
 Do not import billing internals from another slice. Import this public index.
-The admin implementation in identity PR #15 should be excluded from that PR;
-it will be evaluated in a separate billing PR after the Sprint 2 money path.
+Billing takes ownership of the read-only admin routes and page omitted from
+identity PR #23; the closed PR #15 is a reference, not a dependency to merge.
+See the decision below.
 
 A reviewed merge and green CI, Security and Deploy checks are required by
 `docs/DOD.md`; local tests alone do not mean the story is delivered.
@@ -115,3 +116,35 @@ Saving a cap therefore does not claim to stop a running worker in Sprint 2.
 Verification includes handler order, short-circuit, all three checkpoint labels,
 account rejection, exact decimal equality at the cap, over-cap refusal, a fourth
 policy with unchanged callers, empty-chain denial and propagated store errors.
+
+## Admin ownership decision 28 September 2026
+
+HE RONG will implement `GET /api/admin/accounts`,
+`GET /api/admin/accounts/:id` and `pages/admin` in a separate billing PR.
+Reuse the read-only approach from closed PR #15, adapted to the existing
+billing factory rather than replacing its wallet, ledger or budget ports.
+The decision was communicated to LU YI on
+[identity PR #50](https://github.com/ziyangliu-666/lumen-next/pull/50#issuecomment-5862186602).
+This section assigns the work; it does not claim those routes exist on main.
+
+Identity owns account storage and exposes `AdminAccounts` through its public
+index. Billing owns HTTP authorization and presentation: require staff on both
+routes, validate IDs, return only account summaries, and prevent caching.
+The page will use the shared web request helper and the existing shell staff
+guard, with loading, empty, error, list and detail states. No billing query
+will read identity's tables.
+
+Account deletion from #49 is already on main. A detail lookup returning null
+must return 404 and show that the account is unavailable, including deleted
+accounts. Do not recreate identities or reconnect records by email. Preserve
+the agreed tombstone account association and ledger history. The current
+monthly cap is not prepaid balance. Stripe credit and the treatment of any
+future positive balance on deletion remain separate product decisions in #52;
+no refund or forfeiture policy is implied by this admin decision.
+
+Acceptance for the implementation PR includes anonymous 401 and member 403 on
+both list and detail before calling identity, staff success, invalid ID 400,
+missing/deleted account 404, sanitized storage errors, no credential fields,
+no-store responses and browser verification of direct member navigation and
+mobile layout. Role and suspension mutations, invites and emergency stop are
+excluded until their authorization and session-revocation rules are agreed.

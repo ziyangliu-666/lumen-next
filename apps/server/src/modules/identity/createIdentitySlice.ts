@@ -1,4 +1,6 @@
+import { nullLog, type Log } from '../../core/log/log.js';
 import type { IdentityAuthentication } from './identityAuthentication.js';
+import { logMailEvent } from './identityLog.js';
 import { AccountService } from './accountService.js';
 import { MailActions } from './mailActions.js';
 import { MailQueue, MailWorker, type MailEvent } from './mailQueue.js';
@@ -24,8 +26,10 @@ export interface IdentitySliceOptions {
   readonly mailSender?: MailSender;
   /** Server-only HMAC key (32+ characters) for the mail queue's per-address index. */
   readonly mailKey?: string;
-  /** Value-free delivery telemetry. */
+  /** Value-free delivery telemetry, called beside the log line for each event. */
   readonly mailEvent?: (event: MailEvent) => void;
+  /** Core's logger; the slice writes through log.child({ slice: 'identity' }). */
+  readonly log?: Log;
 }
 
 export type IdentitySlice = IdentityAuthentication &
@@ -57,7 +61,13 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
     throw new Error('Invalid OAuth provider configuration');
   }
   const oauthAccounts = new OAuthAccounts(options.database);
-  const mailEvent = options.mailEvent ? { event: options.mailEvent } : {};
+  const log = (options.log ?? nullLog).child({ slice: 'identity' });
+  const mailEvent = {
+    event: (event: MailEvent): void => {
+      logMailEvent(log, event);
+      options.mailEvent?.(event);
+    },
+  };
   const mail = options.mailSender
     ? {
         actions: new MailActions(
@@ -90,6 +100,7 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
       ...(mail ? { mail: mail.actions } : {}),
       origin: options.origin,
       loginGate: options.loginGate,
+      log,
       ...(providers.length
         ? { oauth: { providers, attempts: new OAuthAttempts(options.database) } }
         : {}),

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { buildServer } from '../../core/http/server.js';
+import type { Log } from '../../core/log/log.js';
+import { capture } from '../../core/log/testLog.js';
 import { Broker } from '../../core/protocol/broker.js';
 import { AuthSessions, type StoredAuthSession } from './authSessions.js';
 import { PasswordStrategy } from './passwordStrategy.js';
@@ -30,7 +32,7 @@ interface Fixture {
 }
 
 async function setup(
-  options: { origin?: string; secureCookies?: boolean; attempts?: number } = {},
+  options: { origin?: string; secureCookies?: boolean; attempts?: number; log?: Log } = {},
 ): Promise<Fixture> {
   const records = new Map<string, StoredAuthSession>();
   const sessions = new AuthSessions(
@@ -86,6 +88,7 @@ async function setup(
       origin: options.origin ?? origin,
       secureCookies: options.secureCookies ?? true,
       loginGate: new LoginGate({ accountAttempts: options.attempts ?? 100 }),
+      ...(options.log ? { log: options.log } : {}),
     }),
   );
   return { app, sessions, getAccount };
@@ -136,6 +139,43 @@ describe('identity: HTTP routes', () => {
       payload: { email: ` ${account.email.toUpperCase()} `, password: 'wrong' },
     });
     expect(second.statusCode).toBe(429);
+  });
+
+  it('logs a refused and a rate-limited sign-in without the address or the password', async () => {
+    const { log, lines } = capture();
+    const { app } = await setup({ attempts: 1, log });
+    for (const expected of [401, 429]) {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password',
+        headers: { origin },
+        payload: { email: account.email, password: 'wrong guess' },
+      });
+      expect(response.statusCode).toBe(expected);
+    }
+    expect(lines()).toMatchObject([
+      {
+        level: 40,
+        action: 'password sign-in',
+        reason: 'invalid_credentials',
+        msg: 'identity refused',
+      },
+      { level: 40, action: 'password sign-in', msg: 'identity rate-limited' },
+    ]);
+    expect(JSON.stringify(lines())).not.toMatch(/a@example.edu|wrong guess/);
+  });
+
+  it('writes nothing for a sign-in that succeeds', async () => {
+    const { log, lines } = capture();
+    const { app } = await setup({ log });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/auth/password',
+      headers: { origin },
+      payload: { email: account.email, password: 'correct password' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(lines()).toEqual([]);
   });
 
   it('still signs a user in after another client behind the same proxy keeps failing', async () => {

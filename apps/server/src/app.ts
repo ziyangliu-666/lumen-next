@@ -136,7 +136,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
     recordFinding: (sessionId, taskId, text) => projects.recordFinding(sessionId, taskId, text),
     ...(db ? { recordSpend: billing.record } : {}),
     log,
-    budget: billing.budgetGuard,
+    ...(db ? { budget: billing.budgetGuard } : {}),
   });
   const projects: ProjectsSlice = createProjectsSlice({ sessions: session.projects, db });
 

@@ -131,7 +131,7 @@ describe.skipIf(!TEST_DATABASE_URL)('composed application budget enforcement', (
   });
 });
 
-it('does not let the development stub bypass account eligibility', async () => {
+it('runs development stub sessions in database-free memory mode', async () => {
   const run = vi.fn<Worker['run']>().mockResolvedValue(undefined);
   const app = await composeApp({ db: null, identity: null, worker: { run }, logLevel: 'silent' });
   try {
@@ -140,7 +140,7 @@ it('does not let the development stub bypass account eligibility', async () => {
       method: 'POST',
       url: '/api/projects',
       headers,
-      payload: { question: 'Must not run without identity', mode: 'explore' },
+      payload: { question: 'Develop a page without a database', mode: 'explore' },
     });
     expect(created.statusCode).toBe(201);
     await app.session.kernel.idle();
@@ -149,8 +149,8 @@ it('does not let the development stub bypass account eligibility', async () => {
       headers,
     });
     expect(snapshot.statusCode).toBe(200);
-    expect(run).not.toHaveBeenCalled();
-    expect(snapshot.json<SessionSnapshot>().tasks.map((task) => task.status)).toEqual(['stopped']);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(snapshot.json<SessionSnapshot>().tasks.map((task) => task.status)).toEqual(['ended']);
   } finally {
     await app.session.kernel.idle();
     await app.server.close();

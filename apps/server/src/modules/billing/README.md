@@ -24,9 +24,10 @@ Billing never queries or changes session's tables.
 
 Without `DATABASE_URL`, authenticated wallet requests return 503. They do not
 invent zero balances or accept non-durable writes. Session's existing memory
-mode remains available for development without billing persistence. The guard
-integration deliberately denies worker execution without real identity; the
-development stub cannot establish spending eligibility.
+mode remains available for development without billing persistence. As requested
+in core/session review on #56, the guard integration is enabled only when a Db
+exists, just like `recordSpend`. Database-free development sessions can run; a
+database-backed process still requires real identity eligibility.
 
 ## API
 
@@ -120,7 +121,8 @@ execution checkpoints and persisting approvals remain separate integration PRs.
 The current main composition injects `canSpend` but does not call `budgetGuard`.
 Saving a cap therefore does not yet stop a running worker.
 
-The next integration passes `billing.budgetGuard` to session in `app.ts`, following
+The next integration passes `billing.budgetGuard` to session in `app.ts` when a Db
+exists, following
 PM/core approval in #52 and the merged prerequisites #50 and #55. Once that PR is
 on main, the existing turn, fan-out and task-open checkpoints consult the chain.
 A denial prevents the checked work. Turn refusal records its reason in the trace;

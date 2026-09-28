@@ -6,6 +6,7 @@
 // builds the application (app.ts), listens, and shuts down cleanly. What the
 // application is made of is in app.ts.
 import { join } from 'node:path';
+import { parseArgs } from 'node:util';
 import { composeApp, type IdentityConfig } from './app.js';
 import { openDatabase, type Db } from './core/db/db.js';
 import { defaultWebRoot } from './core/http/server.js';
@@ -62,6 +63,21 @@ function computeProvider(): 'docker' | 'none' | undefined {
   return raw;
 }
 
+/**
+ * Which worker runs a task: `demo` (default) or `steering`. The flag
+ * (`--worker=steering`, e.g. `npm start -- --worker=steering`) wins over
+ * LUMEN_WORKER, so one .env can be started either way without editing it.
+ */
+function workerChoice(): 'demo' | 'steering' {
+  const { values } = parseArgs({ options: { worker: { type: 'string' } } });
+  const raw = values.worker ?? process.env['LUMEN_WORKER'];
+  if (raw === undefined || raw === '') return 'demo';
+  if (raw !== 'demo' && raw !== 'steering') {
+    throw new Error(`--worker / LUMEN_WORKER must be "demo" or "steering", got "${raw}"`);
+  }
+  return raw;
+}
+
 function identityConfig(): IdentityConfig {
   const origin = process.env['LUMEN_ORIGIN'];
   if (!origin) throw new Error('LUMEN_ORIGIN is required with DATABASE_URL');
@@ -93,12 +109,14 @@ async function bootstrap(): Promise<void> {
   const db = await database();
   const webRoot = defaultWebRoot();
   const volumeRoot = process.env['LUMEN_VOLUME_ROOT'];
-  // LUMEN_WORKER=steering runs steering's own agent loop instead of the demo
-  // worker. Off by default: the demo worker is what the whole team's staging
+  // The demo worker stays the default: it is what the whole team's staging
   // and local runs have shown since Sprint 1, and e2e.test.ts's join-the-
   // slices test asserts its exact fan-out — that default does not move here.
-  const useSteeringWorker = process.env['LUMEN_WORKER'] === 'steering';
+  const useSteeringWorker = workerChoice() === 'steering';
   const provider = computeProvider();
+  // LUMEN_MODEL_PROVIDER: who either worker thinks and replies with. Without
+  // it the model is the one that does nothing, and nothing is spent.
+  const model = modelFromEnv(process.env);
   const { server, orphans, resolver, mailWorker } = await composeApp({
     db,
     log,
@@ -108,17 +126,16 @@ async function bootstrap(): Promise<void> {
       ? { useSteeringWorker: true }
       : {
           // Paced, so that a person can see the page is live. Tests build the
-          // application without this and do not wait. LUMEN_MODEL_PROVIDER
-          // gives the lead a real model to think and reply with; without it the
-          // lead says its fixed lines and nothing is spent on a model.
+          // application without this and do not wait.
           worker: demoWorker({
             paceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']),
-            model: modelFromEnv(process.env),
+            model,
           }),
         }),
     ...(webRoot ? { webRoot } : {}),
     ...(volumeRoot ? { volumeRoot } : {}),
     ...(provider ? { computeProvider: provider } : {}),
+    model,
   });
 
   await server.listen({ port: port(), host: '0.0.0.0' });

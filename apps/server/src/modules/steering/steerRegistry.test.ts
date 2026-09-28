@@ -1,25 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { WorkerReport } from '../../core/domain/worker.js';
+import { describe, expect, it } from 'vitest';
 import { NoActiveRun, SteerRegistry } from './steerRegistry.js';
 
-// Typed as a record of mocks, not as WorkerReport itself: a variable typed
-// with the interface makes `report.appendStep` an "unbound method" as far as
-// eslint's rule is concerned, on every read, not just a call. Cast only where
-// something asks for the real interface (registry.begin).
-interface FakeReport {
-  readonly appendStep: ReturnType<typeof vi.fn>;
-  readonly delegate: ReturnType<typeof vi.fn>;
-  readonly recordFinding: ReturnType<typeof vi.fn>;
-  readonly addSpend: ReturnType<typeof vi.fn>;
-}
-
-function fakeReport(): FakeReport {
-  return {
-    appendStep: vi.fn().mockResolvedValue(undefined),
-    delegate: vi.fn().mockResolvedValue([]),
-    recordFinding: vi.fn(),
-    addSpend: vi.fn().mockResolvedValue(undefined),
-  };
+/** A sink that only remembers what reached it, in order. */
+function inbox(): { readonly landed: string[]; readonly sink: (text: string) => void } {
+  const landed: string[] = [];
+  return { landed, sink: (text) => landed.push(text) };
 }
 
 describe('SteerRegistry', () => {
@@ -28,88 +13,64 @@ describe('SteerRegistry', () => {
     expect(() => registry.steer('task-1', 'hello', 'next-step')).toThrow(NoActiveRun);
   });
 
-  it('queues a steer and delivers it as a "you" step once the worker flushes', () => {
+  it('queues a steer and hands it to the sink once the worker flushes', () => {
     const registry = new SteerRegistry();
-    const report = fakeReport();
-    const queue = registry.begin('task-1', report as unknown as WorkerReport);
+    const { landed, sink } = inbox();
+    const queue = registry.begin('task-1', sink);
 
     registry.steer('task-1', 'change course', 'next-step');
     expect(queue.size).toBe(1);
+    expect(landed).toEqual([]);
 
     queue.flush('next-step');
 
-    expect(report.appendStep).toHaveBeenCalledWith('task-1', 'you', 'change course');
+    expect(landed).toEqual(['change course']);
     expect(queue.size).toBe(0);
   });
 
   it('does not deliver a steer queued for the other moment', () => {
     const registry = new SteerRegistry();
-    const report = fakeReport();
-    const queue = registry.begin('task-1', report as unknown as WorkerReport);
+    const { landed, sink } = inbox();
+    const queue = registry.begin('task-1', sink);
 
     registry.steer('task-1', 'wait for the end', 'end-of-turn');
     queue.flush('next-step');
 
-    expect(report.appendStep).not.toHaveBeenCalled();
+    expect(landed).toEqual([]);
     expect(queue.size).toBe(1);
   });
 
   it('refuses a steer once the run has ended', () => {
     const registry = new SteerRegistry();
-    registry.begin('task-1', fakeReport() as unknown as WorkerReport);
+    registry.begin('task-1', () => undefined);
     registry.end('task-1');
 
     expect(() => registry.steer('task-1', 'too late', 'next-step')).toThrow(NoActiveRun);
   });
 
+  it('leaves what was queued before end() with the queue, for the worker to drain', () => {
+    const registry = new SteerRegistry();
+    const { landed, sink } = inbox();
+    const queue = registry.begin('task-1', sink);
+
+    registry.steer('task-1', 'just in time', 'next-step');
+    registry.end('task-1');
+    queue.flush('next-step');
+
+    expect(landed).toEqual(['just in time']);
+  });
+
   it('keeps two tasks independent', () => {
     const registry = new SteerRegistry();
-    const reportA = fakeReport();
-    const reportB = fakeReport();
-    const queueA = registry.begin('task-a', reportA as unknown as WorkerReport);
-    registry.begin('task-b', reportB as unknown as WorkerReport);
+    const a = inbox();
+    const b = inbox();
+    const queueA = registry.begin('task-a', a.sink);
+    registry.begin('task-b', b.sink);
 
     registry.steer('task-a', 'for a', 'end-of-turn');
     queueA.flush('end-of-turn');
 
-    expect(reportA.appendStep).toHaveBeenCalledWith('task-a', 'you', 'for a');
-    expect(reportB.appendStep).not.toHaveBeenCalled();
-  });
-
-  it('does not let a steer that fails to land become an unhandled rejection', async () => {
-    // On Node an unhandled rejection ends the process: one refused step (the
-    // task stopped a moment earlier, or the record failed) would take the
-    // whole server down, every other session with it.
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown): void => {
-      unhandled.push(reason);
-    };
-    process.on('unhandledRejection', onUnhandled);
-    try {
-      const registry = new SteerRegistry();
-      const calls: unknown[][] = [];
-      const report = {
-        ...fakeReport(),
-        // A plain function, not vi.fn(): vitest's spy attaches its own .then()
-        // to every promise it returns (to record settledResults), which marks
-        // the rejection handled and hides exactly the bug this test is for.
-        appendStep: (...args: unknown[]): Promise<void> => {
-          calls.push(args);
-          return Promise.reject(new Error('kernel: no task task-1'));
-        },
-      };
-      const queue = registry.begin('task-1', report as unknown as WorkerReport);
-
-      registry.steer('task-1', 'lost', 'next-step');
-      queue.flush('next-step');
-      // Node reports an unhandled rejection once the microtask queue drains;
-      // a macrotask later it has either been reported or it never will be.
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      expect(calls).toEqual([['task-1', 'you', 'lost']]);
-      expect(unhandled).toEqual([]);
-    } finally {
-      process.off('unhandledRejection', onUnhandled);
-    }
+    expect(a.landed).toEqual(['for a']);
+    expect(b.landed).toEqual([]);
   });
 });

@@ -13,6 +13,7 @@ import { buildServer } from './core/http/server.js';
 import { createLog, type Log } from './core/log/log.js';
 import { Broker } from './core/protocol/broker.js';
 import type { Worker } from './core/domain/worker.js';
+import type { ModelProvider } from './core/model/index.js';
 import { createBillingSlice } from './modules/billing/index.js';
 import {
   createIdentitySlice,
@@ -56,6 +57,8 @@ export interface AppOptions {
   readonly volumeRoot?: string;
   /** Which Compute steering's worker runs a reader's command against. Defaults to 'none': no Docker required. */
   readonly computeProvider?: 'docker' | 'none';
+  /** Who steering's worker thinks with. The model that does nothing if omitted. */
+  readonly model?: ModelProvider;
   /**
    * Run every session's worker on steering's own agent loop instead of the
    * demo worker — false by default, deliberately, not because it is unready:
@@ -120,6 +123,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
     taskSession: (taskId) => session.projects.taskSession(taskId),
     sessionContext: (sessionId) => session.projects.context(sessionId),
     ...(options.computeProvider ? { computeProvider: options.computeProvider } : {}),
+    ...(options.model ? { model: options.model } : {}),
   });
   // Session and projects need each other: a session is opened under a project,
   // and a project shows its sessions. Session is given closures and projects is

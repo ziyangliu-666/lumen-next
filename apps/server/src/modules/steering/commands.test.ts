@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { Principal } from '../../core/http/authGuard.js';
 import { Broker } from '../../core/protocol/broker.js';
 import { steeringCommands } from './commands.js';
@@ -28,8 +28,7 @@ function wire(
 describe('steeringCommands: task.steer', () => {
   it("queues a steer for the task's owner", async () => {
     const registry = new SteerRegistry();
-    const report = { appendStep: vi.fn().mockResolvedValue(undefined) } as never;
-    const queue = registry.begin('task-1', report);
+    const queue = registry.begin('task-1', () => undefined);
     const broker = wire(registry, { 'task-1': 'session-1' }, { 'session-1': OWNER.accountId });
 
     await broker.dispatch(
@@ -42,7 +41,7 @@ describe('steeringCommands: task.steer', () => {
 
   it('refuses a task belonging to another account', async () => {
     const registry = new SteerRegistry();
-    registry.begin('task-1', { appendStep: vi.fn() } as never);
+    registry.begin('task-1', () => undefined);
     const broker = wire(registry, { 'task-1': 'session-1' }, { 'session-1': OWNER.accountId });
 
     await expect(
@@ -64,7 +63,7 @@ describe('steeringCommands: task.steer', () => {
 
   it('lets staff steer a task that is not theirs', async () => {
     const registry = new SteerRegistry();
-    const queue = registry.begin('task-1', { appendStep: vi.fn() } as never);
+    const queue = registry.begin('task-1', () => undefined);
     const broker = wire(registry, { 'task-1': 'session-1' }, { 'session-1': OWNER.accountId });
 
     await broker.dispatch(

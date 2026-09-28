@@ -3,6 +3,7 @@
 // this file and nowhere else.
 import type { FastifyInstance } from 'fastify';
 import type { Worker } from '../../core/domain/worker.js';
+import type { ModelProvider } from '../../core/model/index.js';
 import type { Broker } from '../../core/protocol/broker.js';
 import { steeringCommands, type SessionContext, type TaskSession } from './commands.js';
 import { steeringRoutes, type ProjectGate } from './routes.js';
@@ -43,6 +44,8 @@ export function createSteeringSlice(deps: {
   sessionContext?: SessionContext;
   /** Which Compute a reader runs against. Defaults to 'none': no Docker required to run this slice. */
   computeProvider?: 'docker' | 'none';
+  /** Who the worker thinks with. Defaults to the model that does nothing. */
+  model?: ModelProvider;
 }): SteeringSlice {
   const registry = new SteerRegistry();
   const sessionContext = deps.sessionContext ?? noSessionContext;
@@ -59,6 +62,7 @@ export function createSteeringSlice(deps: {
       context: sessionContext,
       registry,
       ...(deps.computeProvider ? { provider: deps.computeProvider } : {}),
+      ...(deps.model ? { model: deps.model } : {}),
     }),
   };
 }

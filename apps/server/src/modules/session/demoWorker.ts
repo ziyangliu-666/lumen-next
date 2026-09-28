@@ -1,6 +1,6 @@
 import type { StepRow } from '@lumen/contracts';
 import type { Worker, WorkerReport } from '../../core/domain/worker.js';
-import { ModelError, type ModelProvider } from '../../core/model/index.js';
+import { ModelError, withLog, type ModelProvider } from '../../core/model/index.js';
 
 // A worker with no model and no sandbox. It plays the shape of a real run so
 // that the whole path can be seen and tested before the steering slice supplies
@@ -64,7 +64,7 @@ export function demoWorker(options: DemoOptions = {}): Worker {
   ): Promise<void> {
     if (!model) return;
     try {
-      const reply = await model.complete({
+      const reply = await withLog(model, report.log).complete({
         system,
         messages: [{ role: 'user', content: prompt }],
         maxTokens: MAX_ANSWER_TOKENS,

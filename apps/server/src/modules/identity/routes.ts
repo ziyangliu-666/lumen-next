@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
 import { requireUser } from '../../core/http/authGuard.js';
+import { nullLog, type Log } from '../../core/log/log.js';
+import { logRefusal } from './identityLog.js';
 import { badRequest, forbidden, HttpError, unauthorized } from '../../core/http/httpError.js';
 import { AuthFailure } from './authFlow.js';
 import type { AuthSessions } from './authSessions.js';
@@ -36,10 +38,11 @@ function publicAccount(account: AccountView): AccountView {
   };
 }
 
-async function accountAction<T>(action: () => Promise<T>): Promise<T> {
+async function accountAction<T>(log: Log, name: string, action: () => Promise<T>): Promise<T> {
   try {
     return await action();
   } catch (error) {
+    logRefusal(log, name, error);
     if (error instanceof AccountFailure) {
       throw new HttpError(error.code === 'invalid_body' ? 400 : 409, error.message);
     }
@@ -53,12 +56,17 @@ export interface IdentityRouteDeps {
   readonly flow: Pick<SessionAuthFlow, 'authenticate'>;
   readonly sessions: Pick<AuthSessions, 'issue' | 'revoke' | 'revokeAll'>;
   readonly accounts: AccountReader;
-  readonly management: Pick<AccountService, 'signup' | 'update' | 'changePassword'>;
+  readonly management: Pick<
+    AccountService,
+    'signup' | 'update' | 'changePassword' | 'deleteAccount'
+  >;
   readonly origin: string;
   readonly secureCookies?: boolean;
   readonly loginGate: LoginGate;
   readonly oauth?: OAuthRouteOptions;
   readonly mail?: MailActions;
+  /** The slice's child of core's logger. Left out, nothing is written. */
+  readonly log?: Log;
 }
 
 /** Register as a Fastify plugin so cache/origin hooks affect identity only. */
@@ -76,6 +84,7 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
   }
   if (secure && origin.protocol !== 'https:') throw new Error('Secure cookies require HTTPS');
   const cookieOptions = { path: '/', httpOnly: true, secure, sameSite: 'lax' as const };
+  const log = deps.log ?? nullLog;
 
   return (app): Promise<void> => {
     // Also covers failures from core's earlier principal-resolution hook.
@@ -97,7 +106,7 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
       done();
     });
 
-    registerOAuthRoutes(app, deps.oauth, deps.flow, deps.loginGate, secure);
+    registerOAuthRoutes(app, deps.oauth, deps.flow, deps.loginGate, secure, log);
     app.get('/api/auth/mail', () => ({ enabled: Boolean(deps.mail) }));
     if (deps.mail) {
       const mail = deps.mail;
@@ -113,13 +122,15 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
       };
       app.get('/api/me/email-status', (request) => {
         const principal = requireUser(request);
-        return accountAction(() => mail.status(principal.accountId));
+        return accountAction(log, 'email status', () => mail.status(principal.accountId));
       });
       app.post('/api/me/email/verification', async (request, reply) => {
         const principal = requireUser(request);
-        await accountAction(() =>
-          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
-            mail.requestVerification(principal.accountId),
+        await accountAction(log, 'email verification', () =>
+          deps.loginGate.run(
+            request.raw.socket.remoteAddress ?? 'unknown',
+            () => mail.requestVerification(principal.accountId),
+            principal.accountId,
           ),
         );
         return reply
@@ -129,18 +140,22 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
       app.post('/api/me/email/verify', { bodyLimit: 8192 }, async (request, reply) => {
         const principal = requireUser(request);
         const body = bodyFields(request.body, ['code']);
-        await accountAction(() =>
-          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
-            mail.verifyEmail(principal.accountId, body['code']),
+        await accountAction(log, 'email verify', () =>
+          deps.loginGate.run(
+            request.raw.socket.remoteAddress ?? 'unknown',
+            () => mail.verifyEmail(principal.accountId, body['code']),
+            principal.accountId,
           ),
         );
         return reply.code(204).send();
       });
       app.post('/api/auth/forgot-password', { bodyLimit: 8192 }, async (request, reply) => {
         const body = bodyFields(request.body, ['email']);
-        await accountAction(() =>
-          deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
-            mail.requestReset(body['email']),
+        await accountAction(log, 'forgot password', () =>
+          deps.loginGate.run(
+            request.raw.socket.remoteAddress ?? 'unknown',
+            () => mail.requestReset(body['email']),
+            emailLimitKey(body),
           ),
         );
         return reply
@@ -149,7 +164,7 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
       });
       app.post('/api/auth/reset-password', { bodyLimit: 8192 }, async (request, reply) => {
         const body = bodyFields(request.body, ['code', 'newPassword']);
-        await accountAction(() =>
+        await accountAction(log, 'reset password', () =>
           deps.loginGate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
             mail.resetPassword(body['code'], body['newPassword']),
           ),
@@ -195,8 +210,8 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
       },
       async (request, reply) => {
         try {
-          // Never trust arbitrary forwarded addresses. Successful users sharing
-          // a proxy consume no failure budget; account limits span direct peers.
+          // Never trust arbitrary forwarded addresses. The email key limits this
+          // account across peers, and users sharing a proxy never share a budget.
           const issued = await deps.loginGate.run(
             request.raw.socket.remoteAddress ?? 'unknown',
             () => deps.flow.authenticate('password', request.body),
@@ -208,6 +223,7 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
           });
           return { accountId: issued.principal.accountId, role: issued.principal.role };
         } catch (error) {
+          logRefusal(log, 'password sign-in', error);
           if (error instanceof AuthFailure) throw unauthorized('Invalid credentials');
           if (error instanceof LoginLimited) throw new HttpError(429, 'Too many login attempts');
           throw error;
@@ -216,7 +232,7 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
     );
 
     app.post('/api/auth/signup', { bodyLimit: 8192 }, async (request, reply) => {
-      const issued = await accountAction(() =>
+      const issued = await accountAction(log, 'signup', () =>
         deps.loginGate.run(
           request.raw.socket.remoteAddress ?? 'unknown',
           async () => {
@@ -237,7 +253,7 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
 
     app.patch('/api/me', { bodyLimit: 8192 }, async (request) => {
       const principal = requireUser(request);
-      const account = await accountAction(() =>
+      const account = await accountAction(log, 'profile update', () =>
         deps.loginGate.run(
           request.raw.socket.remoteAddress ?? 'unknown',
           () => deps.management.update(principal.accountId, request.body),
@@ -249,7 +265,7 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
 
     app.post('/api/me/password', { bodyLimit: 8192 }, async (request, reply) => {
       const principal = requireUser(request);
-      await accountAction(() =>
+      await accountAction(log, 'password change', () =>
         deps.loginGate.run(
           request.raw.socket.remoteAddress ?? 'unknown',
           () =>
@@ -261,6 +277,28 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
           principal.accountId,
         ),
       );
+      return reply.code(204).send();
+    });
+
+    // Only the signed-in user deletes, and only their own account: the id comes
+    // from the principal, never the body. Staff have no deletion route; they
+    // suspend through billing's admin page.
+    app.delete('/api/me', { bodyLimit: 8192 }, async (request, reply) => {
+      const principal = requireUser(request);
+      await accountAction(log, 'account deletion', () =>
+        deps.loginGate.run(
+          request.raw.socket.remoteAddress ?? 'unknown',
+          () =>
+            deps.management.deleteAccount(
+              principal.accountId,
+              request.body,
+              request.cookies[AUTH_COOKIE],
+            ),
+          principal.accountId,
+        ),
+      );
+      // Every session row is already gone; the cookie goes with it.
+      void reply.clearCookie(AUTH_COOKIE, cookieOptions);
       return reply.code(204).send();
     });
 

@@ -329,6 +329,49 @@ describe.skipIf(!TEST_DATABASE_URL)('end to end: sign up, ask, watch, pay', () =
     }
   });
 
+  it('turns mail on only when configured, and queues reset mail for its worker', async () => {
+    expect((await call('GET', '/api/auth/mail')).body).toEqual({ enabled: false });
+    expect(app.mailWorker).toBeUndefined();
+
+    const sent: string[] = [];
+    const withMail = await composeApp({
+      db,
+      identity: {
+        origin: ORIGIN,
+        sessionLifetimeMs: 3_600_000,
+        secureCookies: false,
+        mail: {
+          key: 'e2e-mail-queue-key-0123456789abcdef',
+          sender: {
+            send: (message) => {
+              sent.push(message.to);
+              return Promise.resolve();
+            },
+          },
+        },
+      },
+      logLevel: 'silent',
+    });
+    try {
+      expect((await withMail.server.inject({ url: '/api/auth/mail' })).json()).toEqual({
+        enabled: true,
+      });
+      const forgot = await withMail.server.inject({
+        method: 'POST',
+        url: '/api/auth/forgot-password',
+        headers: JSON_HEADERS,
+        payload: { email: 'alice@example.com' },
+      });
+      expect(forgot.statusCode).toBe(202);
+      // The response does not wait for delivery; the worker sends it.
+      expect(sent).toEqual([]);
+      await withMail.mailWorker!.tick();
+      expect(sent).toEqual(['alice@example.com']);
+    } finally {
+      await withMail.server.close();
+    }
+  });
+
   it('offers only the sign-in providers the composition root was given', async () => {
     expect((await call('GET', '/api/auth/providers')).body).toEqual({
       github: false,

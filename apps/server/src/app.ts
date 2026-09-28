@@ -10,11 +10,18 @@ import type { FastifyInstance } from 'fastify';
 import type { Db } from './core/db/db.js';
 import { headerStub } from './core/http/authGuard.js';
 import { buildServer } from './core/http/server.js';
+import { createLog, type Log } from './core/log/log.js';
 import { Broker } from './core/protocol/broker.js';
 import type { Worker } from './core/domain/worker.js';
 import type { ModelProvider } from './core/model/index.js';
 import { createBillingSlice } from './modules/billing/index.js';
-import { createIdentitySlice, LoginGate, type OAuthProvider } from './modules/identity/index.js';
+import {
+  createIdentitySlice,
+  LoginGate,
+  type MailConfiguration,
+  type MailWorker,
+  type OAuthProvider,
+} from './modules/identity/index.js';
 import { createProjectsSlice, type ProjectsSlice } from './modules/projects/index.js';
 import { createSessionSlice, type SessionSlice } from './modules/session/index.js';
 import { createSteeringSlice } from './modules/steering/index.js';
@@ -25,6 +32,8 @@ export interface IdentityConfig {
   readonly sessionLifetimeMs: number;
   /** Constructed from explicit server configuration by main.ts, never from request data. */
   readonly oauthProviders?: readonly OAuthProvider[];
+  /** Built by main.ts from explicit configuration. Left out, mail routes are off. */
+  readonly mail?: MailConfiguration;
   /** False only for plain HTTP on a loopback or a staging container. */
   readonly secureCookies?: boolean;
 }
@@ -39,6 +48,8 @@ export interface AppOptions {
    */
   readonly identity: IdentityConfig | null;
   readonly webRoot?: string;
+  /** The process's logger. Built here from logLevel when not given. */
+  readonly log?: Log;
   readonly logLevel?: string;
   /** The agent loop. Left out, the session slice runs its demo worker (or steering's, see useSteeringWorker). */
   readonly worker?: Worker;
@@ -67,11 +78,14 @@ export interface App {
   /** How many tasks the last process left open, now stopped. */
   readonly orphans: number;
   readonly resolver: 'identity cookie' | 'development header stub';
+  /** Present when mail is configured. main.ts starts it after listen and stops it on shutdown. */
+  readonly mailWorker?: MailWorker;
 }
 
 export async function composeApp(options: AppOptions): Promise<App> {
   const { db } = options;
   if (options.identity && !db) throw new Error('identity needs a database');
+  const log = options.log ?? createLog({ level: options.logLevel ?? 'info' });
   const identity =
     options.identity && db
       ? createIdentitySlice({
@@ -79,8 +93,12 @@ export async function composeApp(options: AppOptions): Promise<App> {
           origin: options.identity.origin,
           sessionLifetimeMs: options.identity.sessionLifetimeMs,
           loginGate: new LoginGate(),
+          log,
           ...(options.identity.oauthProviders
             ? { oauthProviders: options.identity.oauthProviders }
+            : {}),
+          ...(options.identity.mail
+            ? { mailSender: options.identity.mail.sender, mailKey: options.identity.mail.key }
             : {}),
           ...(options.identity.secureCookies === undefined
             ? {}
@@ -89,7 +107,11 @@ export async function composeApp(options: AppOptions): Promise<App> {
       : null;
 
   const broker = new Broker();
-  const billing = createBillingSlice({ db });
+  // Without identity there are no real accounts, and billing keeps denying.
+  const billing = createBillingSlice({
+    db,
+    ...(identity ? { canSpend: identity.canSpend } : {}),
+  });
   // Steering needs session's SessionDirectory to check a task.steer's
   // ownership and to find a task's project; session may run steering's own
   // worker. Each is given closures over the other, declared first — same
@@ -117,6 +139,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
     requireProject: (principal, id) => projects.requireProject(principal, id),
     recordFinding: (sessionId, taskId, text) => projects.recordFinding(sessionId, taskId, text),
     ...(db ? { recordSpend: billing.record } : {}),
+    log,
     // Not yet: `budget: billing.budgetGuard`. The chain fails closed, and a new
     // account's cap is 0, so wiring it today would refuse every session. It goes
     // in when billing gives a new account a default cap (see the review on #21).
@@ -132,7 +155,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
     // The session slice knows who opened a session, so it answers who may watch it.
     access: session.access,
     ...(options.webRoot ? { webRoot: options.webRoot } : {}),
-    ...(options.logLevel ? { logLevel: options.logLevel } : {}),
+    log,
   });
 
   server.get('/api/health', () => ({
@@ -155,5 +178,6 @@ export async function composeApp(options: AppOptions): Promise<App> {
     session,
     orphans,
     resolver: identity ? 'identity cookie' : 'development header stub',
+    ...(identity?.mailWorker ? { mailWorker: identity.mailWorker } : {}),
   };
 }

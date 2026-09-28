@@ -7,7 +7,7 @@ import {
   type BudgetHandler,
 } from './budgetChain.js';
 import { createBillingSlice } from './index.js';
-import type { BudgetGuard, Charge, Decision } from './ports.js';
+import type { BudgetGuard, Charge, Decision } from '../../core/domain/budget.js';
 
 const charge: Charge = {
   accountId: 'alice',

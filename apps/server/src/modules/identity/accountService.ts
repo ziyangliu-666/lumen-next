@@ -4,6 +4,7 @@ import {
   AccountFailure,
   type AccountStore,
   type AccountView,
+  type DeletionProof,
   type ProfilePatch,
 } from './accounts.js';
 import {
@@ -56,10 +57,22 @@ export function newPasswordOf(value: unknown): string {
   return value;
 }
 
+/**
+ * How recent a sign-in must be to delete an account that has no password.
+ * Short enough that an unattended browser left signed in cannot be used to
+ * delete the account; long enough to sign in again and confirm.
+ */
+export const RECENT_SIGN_IN_MS = 10 * 60 * 1000;
+
+function sessionTokenHash(token: string | undefined): string | undefined {
+  return token === undefined ? undefined : createHash('sha256').update(token).digest('hex');
+}
+
 export class AccountService {
   constructor(
     private readonly store: AccountStore,
     private readonly passwords: PasswordCodec = { hash: hashPassword, verify: verifyPassword },
+    private readonly now: () => number = Date.now,
   ) {}
 
   async signup(input: unknown): Promise<AccountView> {
@@ -101,14 +114,40 @@ export class AccountService {
     const next = newPasswordOf(body['newPassword']);
     const expectedHash = await this.currentHash(accountId, body['currentPassword']);
     const newHash = await this.passwords.hash(next);
-    const keepTokenHash =
-      currentToken === undefined
-        ? undefined
-        : createHash('sha256').update(currentToken).digest('hex');
+    const keepTokenHash = sessionTokenHash(currentToken);
     if (!(await this.store.replacePassword(accountId, expectedHash, newHash, keepTokenHash))) {
       throw new AccountFailure('account_changed', 'Account changed; sign in and try again');
     }
     // The store changes the credential and revokes other sessions atomically.
+  }
+
+  /**
+   * Immediate and irreversible. Reauthentication is the confirmation: the
+   * current password for a password account, otherwise a sign-in within
+   * RECENT_SIGN_IN_MS on the very session making the request.
+   */
+  async deleteAccount(accountId: string, input: unknown, currentToken?: string): Promise<void> {
+    const body = bodyOf(input ?? {}, ['currentPassword']);
+    const credential = await this.store.getPasswordAccount(accountId);
+    if (!credential || credential.suspended) throw new AuthFailure('invalid_credentials');
+    let proof: DeletionProof;
+    if (credential.passwordHash) {
+      proof = {
+        kind: 'password',
+        expectedHash: await this.currentHash(accountId, body['currentPassword']),
+      };
+    } else {
+      const tokenHash = sessionTokenHash(currentToken);
+      // A password offered for an account that has none proves nothing.
+      if (tokenHash === undefined || Object.hasOwn(body, 'currentPassword')) {
+        throw new AuthFailure('invalid_credentials');
+      }
+      proof = { kind: 'recent-session', tokenHash, issuedAfter: this.now() - RECENT_SIGN_IN_MS };
+    }
+    if (!(await this.store.deleteAccount(accountId, proof))) {
+      if (proof.kind === 'recent-session') throw new AuthFailure('invalid_credentials');
+      throw new AccountFailure('account_changed', 'Account changed; sign in and try again');
+    }
   }
 
   private async currentHash(accountId: string, input: unknown): Promise<string> {

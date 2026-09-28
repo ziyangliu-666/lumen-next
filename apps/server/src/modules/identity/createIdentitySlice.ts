@@ -1,6 +1,9 @@
+import { nullLog, type Log } from '../../core/log/log.js';
 import type { IdentityAuthentication } from './identityAuthentication.js';
+import { logMailEvent } from './identityLog.js';
 import { AccountService } from './accountService.js';
 import { MailActions } from './mailActions.js';
+import { MailQueue, MailWorker, type MailEvent } from './mailQueue.js';
 import type { MailSender } from './mail.js';
 import type { AdminAccounts } from './adminAccounts.js';
 import { AuthSessions } from './authSessions.js';
@@ -21,10 +24,24 @@ export interface IdentitySliceOptions {
   readonly secureCookies?: boolean;
   readonly oauthProviders?: readonly OAuthProvider[];
   readonly mailSender?: MailSender;
-  readonly mailDeliveryFailed?: () => void;
+  /** Server-only HMAC key (32+ characters) for the mail queue's per-address index. */
+  readonly mailKey?: string;
+  /** Value-free delivery telemetry, called beside the log line for each event. */
+  readonly mailEvent?: (event: MailEvent) => void;
+  /** Core's logger; the slice writes through log.child({ slice: 'identity' }). */
+  readonly log?: Log;
 }
 
-export type IdentitySlice = IdentityAuthentication & AdminAccounts;
+export type IdentitySlice = IdentityAuthentication &
+  AdminAccounts & {
+    /**
+     * Account eligibility for billing's AccountHandler: true only for an account
+     * that exists, is not suspended and is not deleted. Storage errors reject.
+     */
+    readonly canSpend: (accountId: string) => Promise<boolean>;
+    /** Present with a mailSender; the composition root starts it and stops it on shutdown. */
+    readonly mailWorker?: MailWorker;
+  };
 
 /**
  * main.ts supplies core's database after migrations. No private pool, migration
@@ -44,6 +61,22 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
     throw new Error('Invalid OAuth provider configuration');
   }
   const oauthAccounts = new OAuthAccounts(options.database);
+  const log = (options.log ?? nullLog).child({ slice: 'identity' });
+  const mailEvent = {
+    event: (event: MailEvent): void => {
+      logMailEvent(log, event);
+      options.mailEvent?.(event);
+    },
+  };
+  const mail = options.mailSender
+    ? {
+        actions: new MailActions(
+          options.database,
+          new MailQueue(options.database, { key: options.mailKey ?? '', ...mailEvent }),
+        ),
+        worker: new MailWorker(options.database, options.mailSender, options.origin, mailEvent),
+      }
+    : null;
   const flow = new SessionAuthFlow(
     [
       new PasswordStrategy(accounts),
@@ -57,23 +90,17 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
     getAccount: (id) => accounts.getAdminAccount(id),
     setRole: (id, role) => accounts.setRole(id, role),
     suspend: (accountId, on) => accounts.suspend(accountId, on),
+    canSpend: (accountId) => accounts.canSpend(accountId),
+    ...(mail ? { mailWorker: mail.worker } : {}),
     registerRoutes: identityRoutes({
       flow,
       sessions,
       accounts,
       management: new AccountService(accounts),
-      ...(options.mailSender
-        ? {
-            mail: new MailActions(
-              options.database,
-              options.mailSender,
-              options.origin,
-              options.mailDeliveryFailed,
-            ),
-          }
-        : {}),
+      ...(mail ? { mail: mail.actions } : {}),
       origin: options.origin,
       loginGate: options.loginGate,
+      log,
       ...(providers.length
         ? { oauth: { providers, attempts: new OAuthAttempts(options.database) } }
         : {}),

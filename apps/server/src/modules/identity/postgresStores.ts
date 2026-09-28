@@ -2,6 +2,7 @@ import {
   AccountFailure,
   type AccountStore,
   type AccountView,
+  type DeletionProof,
   type ProfilePatch,
 } from './accounts.js';
 import type { AuthSessionStore, NewAuthSession, StoredAuthSession } from './authSessions.js';
@@ -43,6 +44,9 @@ function passwordAccount(row: PasswordRow | undefined): PasswordAccount | null {
     suspended: row.suspended,
   };
 }
+
+// accounts.id is a uuid; anything else would make PostgreSQL reject the query.
+const ACCOUNT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function normalizedEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -121,7 +125,8 @@ export class PostgresAccountStore implements AccountStore, PasswordAccountStore 
 
   async listAccounts(): Promise<AccountSummary[]> {
     const rows = await this.db.query<AccountSummary>(
-      `select ${publicColumns}, suspended from accounts order by created_at, id`,
+      `select ${publicColumns}, suspended from accounts where deleted_at is null
+       order by created_at, id`,
       [],
     );
     return rows.map(adminSummary);
@@ -129,7 +134,7 @@ export class PostgresAccountStore implements AccountStore, PasswordAccountStore 
 
   async getAdminAccount(id: string): Promise<AccountSummary | null> {
     const rows = await this.db.query<AccountSummary>(
-      `select ${publicColumns}, suspended from accounts where id = $1`,
+      `select ${publicColumns}, suspended from accounts where id = $1 and deleted_at is null`,
       [id],
     );
     return rows[0] ? adminSummary(rows[0]) : null;
@@ -139,7 +144,7 @@ export class PostgresAccountStore implements AccountStore, PasswordAccountStore 
     if (role !== 'user' && role !== 'staff') throw new AdminAccountFailure('invalid_role');
     // One atomic UPDATE acquires the account row lock and never changes suspension.
     const rows = await this.db.query<{ id: string }>(
-      'update accounts set role = $2 where id = $1 returning id',
+      'update accounts set role = $2 where id = $1 and deleted_at is null returning id',
       [id, role],
     );
     if (rows.length !== 1) throw new AdminAccountFailure('account_not_found');
@@ -151,12 +156,35 @@ export class PostgresAccountStore implements AccountStore, PasswordAccountStore 
     return this.db.withTransaction(async (sql) => {
       // UPDATE takes the same account lock as session issuance, even on retries.
       const rows = await sql.query<{ id: string }>(
-        'update accounts set suspended = $2 where id = $1 returning id',
+        // A deleted account is not found: staff can neither see nor revive it.
+        'update accounts set suspended = $2 where id = $1 and deleted_at is null returning id',
         [accountId, on],
       );
       if (rows.length !== 1) throw new AdminAccountFailure('account_not_found');
-      if (on) await sql.query('delete from auth_sessions where account_id = $1', [accountId]);
+      if (on) {
+        await sql.query('delete from auth_sessions where account_id = $1', [accountId]);
+        // Recovery proofs must not survive into a later unsuspension.
+        await sql.query('delete from identity_mail_tokens where account_id = $1', [accountId]);
+        await sql.query(
+          `delete from identity_mail_requests where state = 'pending' and (account_id = $1
+           or email = (select lower(btrim(email)) from accounts where id = $1))`,
+          [accountId],
+        );
+      }
     });
+  }
+
+  /**
+   * Billing's account eligibility: true only for an account that exists, is not
+   * suspended and is not deleted. A malformed id is unknown, not a storage error.
+   */
+  async canSpend(accountId: string): Promise<boolean> {
+    if (!ACCOUNT_ID.test(accountId)) return false;
+    const rows = await this.db.query<{ id: string }>(
+      'select id from accounts where id = $1 and not suspended and deleted_at is null',
+      [accountId],
+    );
+    return rows.length === 1;
   }
 
   async getAccount(id: string): Promise<AccountView | null> {
@@ -211,6 +239,58 @@ export class PostgresAccountStore implements AccountStore, PasswordAccountStore 
         return rows[0] ?? null;
       }),
     );
+  }
+
+  deleteAccount(accountId: string, proof: DeletionProof): Promise<boolean> {
+    return this.db.withTransaction(async (sql) => {
+      // Account lock first, as every credential writer does, so deletion
+      // serializes against sign-in, password change, reset and suspension.
+      const locked = await sql.query<{ email: string }>(
+        `select lower(btrim(email)) as email from accounts
+         where id = $1 and not suspended for update`,
+        [accountId],
+      );
+      const email = locked[0]?.email;
+      if (email === undefined) return false;
+      if (proof.kind === 'password') {
+        if (!(await matchesProof(sql, accountId, proof.expectedHash))) return false;
+      } else {
+        // The request's own session must still exist and be recent, and the
+        // account must not have gained a password meanwhile: a password
+        // account always has to prove the password.
+        const fresh = await sql.query<{ ok: boolean }>(
+          `select true as ok from auth_sessions
+           where account_id = $1 and token_hash = $2
+             and created_at >= to_timestamp($3::double precision / 1000)
+             and expires_at > now()
+             and not exists (select 1 from credentials
+               where account_id = $1 and kind = 'password')`,
+          [accountId, proof.tokenHash, proof.issuedAfter],
+        );
+        if (fresh.length !== 1) return false;
+      }
+      // The placeholder can never be registered again: signup and profile
+      // validation require a dot in the domain, and `invalid` has none.
+      await sql.query(
+        `update accounts set email = 'deleted+' || id || '@invalid',
+           display_name = 'Deleted account', role = 'user', suspended = true,
+           deleted_at = now()
+         where id = $1`,
+        [accountId],
+      );
+      // Password and OAuth links: the provider identity may sign up afresh.
+      await sql.query('delete from credentials where account_id = $1', [accountId]);
+      await sql.query('delete from auth_sessions where account_id = $1', [accountId]);
+      await sql.query('delete from identity_mail_tokens where account_id = $1', [accountId]);
+      await sql.query('delete from identity_email_verifications where account_id = $1', [
+        accountId,
+      ]);
+      await sql.query('delete from identity_mail_requests where account_id = $1 or email = $2', [
+        accountId,
+        email,
+      ]);
+      return true;
+    });
   }
 
   replacePassword(

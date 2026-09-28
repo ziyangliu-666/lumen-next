@@ -1,8 +1,8 @@
 # Identity API
 
 Owner: LU YI. Sprint 2 delivers password authentication. OAuth, email verification
-and recovery are implemented but not wired by `main.ts`; account deletion is
-excluded. See [local setup](LOCAL_AUTH.md), [OAuth](OAUTH_SETUP.md) and
+and recovery are implemented but not wired by `main.ts`. Account deletion is
+`DELETE /api/me` (below). See [local setup](LOCAL_AUTH.md), [OAuth](OAUTH_SETUP.md) and
 [mail](MAIL_SETUP.md).
 
 ## HTTP
@@ -21,11 +21,47 @@ explicit loopback origin. Tokens never appear in JSON or browser storage.
 | GET /api/me | authenticated | 200, `{ id, email, displayName, role, createdAt }` |
 | PATCH /api/me | displayName and/or email; currentPassword for email | 200, account |
 | POST /api/me/password | currentPassword, newPassword | 204, retain current session, revoke all others |
+| DELETE /api/me | authenticated; `{ currentPassword }`, or `{}` without a password | 204, account tombstoned, every session revoked, cookie cleared |
 | GET /api/auth/providers | none | `{ github: false, google: false }` until configured |
 | GET /api/auth/mail | none | `{ enabled: false }` until configured |
 
-`DELETE /api/me` is not registered. The shared schema lacks the retention foreign
-keys needed for safe deletion. The account panel contains no deletion control.
+## Account deletion
+
+`DELETE /api/me` deletes the signed-in account, immediately and irreversibly.
+Only the user deletes, and only their own account: the id comes from the
+session, and a body field other than `currentPassword` is 400. Staff have no
+deletion route or in-process method; they suspend through billing's admin page.
+
+Reauthentication is the confirmation:
+
+- An account with a password sends `{ "currentPassword": "..." }`. Wrong or
+  missing is 401; a password changed concurrently is 409.
+- An account without a password (GitHub or Google only) sends `{}`. The
+  session making the request must have been issued within the last 10 minutes,
+  so the person signs in with the provider again first. Otherwise 401. Sending
+  a password for such an account is also 401.
+- Failures count against the account's LoginGate budget, as for a
+  password change. Missing sign-in is 401; wrong Origin is 403.
+
+The `accounts` row stays as a tombstone, because other slices' rows keep its
+id: projects, sessions, tasks, steps, ledger entries and wallets are untouched.
+In one transaction, under the account lock and after rechecking the proof:
+
+- `email` becomes `deleted+<id>@invalid`, `display_name` becomes
+  `Deleted account`, `role` becomes `user`, `suspended` is set and
+  `deleted_at` records the time. Signup and profile validation require a dot in
+  the domain, so the placeholder can never be registered.
+- `credentials` (password and every OAuth link), `auth_sessions`,
+  `identity_mail_tokens`, `identity_email_verifications`, and
+  `identity_mail_requests` for the account or its old address are deleted.
+
+After deletion every old cookie is 401, password sign-in fails, and the old
+email is free to register as a new account. The provider identity no longer
+reaches the tombstone: signing in with it again creates a new account. Staff
+administration (`listAccounts`, `getAccount`, `setRole`, `suspend`) treats a
+tombstone as not found, and a check constraint keeps it suspended. Open
+WebSockets keep their handshake principal until core revalidates them, the same
+known limit as suspension.
 
 Emails are trimmed and lowercased. Names contain 1–80 characters. New passwords
 contain at least 8 Unicode code points and at most 1024 UTF-8 bytes; existing
@@ -40,10 +76,13 @@ proof, 429 admission limit, 500 infrastructure failure. Do not branch on an
 English message. Signup currently exposes email availability through 409; public
 release needs an explicit enumeration policy.
 
-`LoginGate` bounds concurrent work and tracked keys. It counts rejected actions,
-not successful sign-ins or profile updates, with direct-peer and account limits.
-Email keys are normalized and hashed. It does not trust `X-Forwarded-For` and is
-not a distributed limiter. A proxy's failed requests still share a peer budget.
+`LoginGate` counts rejected actions, not successful sign-ins or profile updates.
+A request that names an account (email or signed-in account) is limited by that
+account alone, 5 failures a minute across peers, so clients behind one proxy
+never share a budget. Only requests with no account key (reset codes, OAuth)
+fall back to the direct peer, at 100 failures a minute. Work beyond 4 concurrent
+actions waits in a queue of 64. Email keys are normalized and hashed. It does not
+trust `X-Forwarded-For` and is not a distributed limiter.
 
 ## Public index and persistence
 
@@ -70,7 +109,9 @@ must inject the returned providers into createIdentitySlice; production startup
 has not yet been changed to do so. See [OAuth setup](OAUTH_SETUP.md).
 
 Core owns the pool and migration runner. Only `core/db/migrations/002_identity_auth`,
-`003_identity_oauth`, and `004_identity_mail` are applied. Migration 002 adds
+`003_identity_oauth`, `004_identity_mail`, `009_identity_mail_queue` and
+`010_identity_account_deletion` are applied. Migration 010 adds the nullable
+`accounts.deleted_at` and a check that a tombstone stays suspended. Migration 002 adds
 `accounts.suspended` and uniqueness on normalized email. Existing duplicate
 normalized emails make migration fail; review and resolve them before rollout.
 
@@ -79,6 +120,7 @@ of random 32-byte tokens. Account writes and issuance lock account before
 credential. Password changes compare the verified old hash and revoke other
 sessions in the same transaction. A failed revocation rolls back the new hash.
 Suspension also revokes sessions atomically; unsuspension does not restore them.
+Deletion revokes every session in its own transaction; see Account deletion.
 An already-open WebSocket retains its handshake principal: immediate revocation
 needs shared core work and is not claimed here.
 

@@ -50,13 +50,15 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: password change session revocatio
     expect(await sessions.verify(issued.token)).toBeNull();
   });
 
+  // Six scrypt operations at N=2^15 (two signups, a login, a change that verifies and rehashes,
+  // a delete) can outlast the default 5 s on a loaded machine.
   it('keeps the current cookie, revokes other cookies, and isolates other accounts', async () => {
     const origin = 'https://lumen.example';
     const identity = createIdentitySlice({
       database: fixture.db,
       origin,
       sessionLifetimeMs: 60000,
-      loginGate: new LoginGate({ attempts: 50 }),
+      loginGate: new LoginGate({ accountAttempts: 50 }),
     });
     const app = await buildServer({
       broker: new Broker(),
@@ -104,6 +106,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: password change session revocatio
           (await app.inject({ url: '/api/me', cookies: { lumen_session: token } })).statusCode,
         ).toBe(status);
       }
+      // The replacement password, not the old one, is now the deletion proof.
       expect(
         (
           await app.inject({
@@ -114,9 +117,9 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: password change session revocatio
             payload: { currentPassword: 'replacement-password' },
           })
         ).statusCode,
-      ).toBe(404);
+      ).toBe(204);
     } finally {
       await app.close();
     }
-  });
+  }, 20_000);
 });

@@ -1,12 +1,11 @@
 name: Deploy
 
 # Continuous delivery: build the container, bring it up as staging with a real
-# database, run DAST against it, then wait at a manual gate before production.
+# database, run DAST against it, deploy to staging; production only by hand.
 #
-# Staging runs on the workflow runner: the image that was just built and a
-# Postgres beside it. That is a real deployment of the real artefact, and it
-# needs no hosting account. When the team has one, the `staging` job deploys
-# there instead and `dast` takes its URL; nothing else changes.
+# DAST runs against a stack on the runner: the image that was just built and a
+# Postgres beside it. After the scan, the same image deploys to Fly.io
+# (fly.toml, https://lumen-next-staging.fly.dev).
 on:
   push:
     branches: [main]
@@ -100,10 +99,27 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.staging.yml down -v
 
-  production:
+  staging-fly:
+    name: Deploy to the hosted staging
     needs: staging-and-dast
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: production # protection rule = manual approval gate
+    concurrency: fly-staging
     steps:
-      - run: echo "Promote ${{ github.sha }} to production after approval."
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - run: curl -fsS --retry 5 --retry-delay 5 https://lumen-next-staging.fly.dev/api/health
+
+  production:
+    needs: staging-and-dast
+    # The gate is the manual run: production only goes out from a
+    # workflow_dispatch, never from a push. (A required-reviewer rule on the
+    # environment needs a paid plan on a private repository.)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: echo "Promote ${{ github.sha }} to production."

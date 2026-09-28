@@ -23,6 +23,7 @@ async function setup(): Promise<FastifyInstance> {
   const accounts = new Map<string, AccountView>();
   const passwords = new Map<string, string>();
   const tokens = new Map<string, NewAuthSession>();
+  const deleted = new Set<string>();
   function unique(email: string, except?: string): void {
     if ([...accounts.values()].some((a) => a.email === email && a.id !== except)) {
       throw new AccountFailure('email_taken', 'Email is already registered');
@@ -50,7 +51,7 @@ async function setup(): Promise<FastifyInstance> {
           ? {
               principal: { accountId: id, role: account.role },
               passwordHash: passwords.get(id) ?? null,
-              suspended: false,
+              suspended: deleted.has(id),
             }
           : null,
       );
@@ -70,6 +71,21 @@ async function setup(): Promise<FastifyInstance> {
     replacePassword: (id, expected, hash) => {
       if (passwords.get(id) !== expected) return Promise.resolve(false);
       passwords.set(id, hash);
+      return Promise.resolve(true);
+    },
+    deleteAccount: (id, proof) => {
+      const account = accounts.get(id);
+      if (
+        !account ||
+        deleted.has(id) ||
+        proof.kind !== 'password' ||
+        passwords.get(id) !== proof.expectedHash
+      )
+        return Promise.resolve(false);
+      deleted.add(id);
+      accounts.set(id, { ...account, email: `deleted+${id}@invalid`, displayName: 'Deleted' });
+      passwords.delete(id);
+      for (const [key, row] of tokens) if (row.accountId === id) tokens.delete(key);
       return Promise.resolve(true);
     },
   };
@@ -130,7 +146,7 @@ async function setup(): Promise<FastifyInstance> {
       management: new AccountService(store, codec),
       sessions,
       flow: new SessionAuthFlow([strategy], sessions),
-      loginGate: new LoginGate({ attempts: 100 }),
+      loginGate: new LoginGate({ accountAttempts: 100 }),
     }),
   );
   return app;
@@ -256,6 +272,7 @@ describe('identity: signup and account HTTP workflow', () => {
       ['POST', '/api/auth/signup'],
       ['PATCH', '/api/me'],
       ['POST', '/api/me/password'],
+      ['DELETE', '/api/me'],
     ] as const) {
       const denied = await app.inject({
         method,
@@ -288,5 +305,92 @@ describe('identity: signup and account HTTP workflow', () => {
       expect(response.statusCode).toBe(400);
     }
     await signup(app);
+  });
+
+  it('refuses deletion without the current password and changes nothing', async () => {
+    const app = await setup();
+    const token = await signup(app);
+    for (const payload of [{}, { currentPassword: 'wrong password' }]) {
+      const refused = await app.inject({
+        method: 'DELETE',
+        url: '/api/me',
+        headers: { origin },
+        cookies: { [AUTH_COOKIE]: token },
+        payload,
+      });
+      expect(refused.statusCode).toBe(401);
+      expect(refused.headers['set-cookie']).toBeUndefined();
+    }
+    const me = await app.inject({ url: '/api/me', cookies: { [AUTH_COOKIE]: token } });
+    expect(me.json<{ email: string }>().email).toBe('a@example.edu');
+  });
+
+  it('deletes the account, clears the cookie, revokes every session and frees the email', async () => {
+    const app = await setup();
+    const token = await signup(app);
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/auth/password',
+      headers: { origin },
+      payload: { email: 'a@example.edu', password },
+    });
+    const otherToken = second.cookies[0]!.value;
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/api/me',
+      headers: { origin },
+      cookies: { [AUTH_COOKIE]: token },
+      payload: { currentPassword: password },
+    });
+    expect(response.statusCode).toBe(204);
+    const cleared = response.cookies.find((cookie) => cookie.name === AUTH_COOKIE);
+    expect(cleared?.value).toBe('');
+    expect(cleared?.expires?.getTime()).toBeLessThanOrEqual(Date.now());
+    for (const old of [token, otherToken]) {
+      expect(
+        (await app.inject({ url: '/api/me', cookies: { [AUTH_COOKIE]: old } })).statusCode,
+      ).toBe(401);
+    }
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/password',
+      headers: { origin },
+      payload: { email: 'a@example.edu', password },
+    });
+    expect(login.statusCode).toBe(401);
+    await signup(app);
+  });
+
+  it('deletes only the caller: no body field or route lets anyone delete another account', async () => {
+    const app = await setup();
+    const token = await signup(app);
+    const other = await signup(app, 'other@example.edu');
+    const forged = await app.inject({
+      method: 'DELETE',
+      url: '/api/me',
+      headers: { origin },
+      cookies: { [AUTH_COOKIE]: token },
+      payload: { currentPassword: password, accountId: 'account-2' },
+    });
+    expect(forged.statusCode).toBe(400);
+    for (const url of [
+      '/api/accounts/account-2',
+      '/api/admin/accounts/account-2',
+      '/api/me/account-2',
+    ]) {
+      const response = await app.inject({
+        method: 'DELETE',
+        url,
+        headers: { origin },
+        cookies: { [AUTH_COOKIE]: token },
+        payload: { currentPassword: password },
+      });
+      expect(response.statusCode).toBe(404);
+    }
+    for (const cookie of [token, other]) {
+      expect(
+        (await app.inject({ url: '/api/me', cookies: { [AUTH_COOKIE]: cookie } })).statusCode,
+      ).toBe(200);
+    }
   });
 });

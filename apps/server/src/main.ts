@@ -5,15 +5,24 @@
 // This file is the process: it reads the environment, opens the database,
 // builds the application (app.ts), listens, and shuts down cleanly. What the
 // application is made of is in app.ts.
+import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { composeApp, type IdentityConfig } from './app.js';
 import { openDatabase, type Db } from './core/db/db.js';
 import { defaultWebRoot } from './core/http/server.js';
+import { createLog } from './core/log/log.js';
 import { modelFromEnv } from './core/model/index.js';
-import { oauthProvidersFromEnvironment } from './modules/identity/index.js';
+import { mailFromEnvironment, oauthProvidersFromEnvironment } from './modules/identity/index.js';
 import { demoWorker, paceFromEnv } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
+
+// JSON lines on stdout, where a host collects them; readable lines on a
+// terminal (docs/LOGGING.md).
+const log = createLog({
+  level: process.env['LUMEN_LOG_LEVEL'] ?? 'info',
+  pretty: process.stdout.isTTY === true && process.env['NODE_ENV'] !== 'production',
+});
 
 /** A misspelt port should say so, not arrive at listen() as NaN. */
 function port(): number {
@@ -41,7 +50,7 @@ async function database(): Promise<Db | null> {
     }
     return null;
   }
-  return openDatabase(url);
+  return openDatabase(url, { log });
 }
 
 /** LUMEN_COMPUTE_PROVIDER: which Compute steering's worker runs a reader's command against. */
@@ -80,9 +89,15 @@ function identityConfig(): IdentityConfig {
   if (insecure !== undefined && insecure !== 'true' && insecure !== 'false') {
     throw new Error('IDENTITY_INSECURE_COOKIES must be true or false');
   }
+  const mail = mailFromEnvironment(process.env, {
+    outboxDirectory: join(process.cwd(), '.data', 'identity-mail-outbox'),
+    production: process.env['NODE_ENV'] === 'production',
+    origin,
+  });
   return {
     origin,
     sessionLifetimeMs: lifetime,
+    ...(mail ? { mail } : {}),
     oauthProviders: oauthProvidersFromEnvironment(process.env, origin, {
       allowLoopbackHttp: process.env['NODE_ENV'] !== 'production' && insecure === 'true',
     }),
@@ -102,8 +117,9 @@ async function bootstrap(): Promise<void> {
   // LUMEN_MODEL_PROVIDER: who either worker thinks and replies with. Without
   // it the model is the one that does nothing, and nothing is spent.
   const model = modelFromEnv(process.env);
-  const { server, orphans, resolver } = await composeApp({
+  const { server, orphans, resolver, mailWorker } = await composeApp({
     db,
+    log,
     // Real sign-in whenever there is a database; the stub only without one.
     identity: db ? identityConfig() : null,
     ...(useSteeringWorker
@@ -123,12 +139,14 @@ async function bootstrap(): Promise<void> {
   });
 
   await server.listen({ port: port(), host: '0.0.0.0' });
+  mailWorker?.start();
   server.log.info(`active principal resolver: ${resolver}`);
   if (webRoot) server.log.info(`serving the built web app from ${webRoot}`);
   if (orphans > 0) server.log.info(`stopped ${orphans} task(s) left open by the last process`);
   server.log.info(
     db ? 'database connected, migrations applied' : 'no DATABASE_URL: in-memory mode',
   );
+  if (mailWorker) server.log.info('identity mail worker started');
 
   // Drain in-flight work before exiting, so a rolling deploy does not cut a
   // browser off mid-event. Fastify's close() also runs the websocket plugin's
@@ -138,6 +156,7 @@ async function bootstrap(): Promise<void> {
       server.log.info(`${signal} received, closing`);
       server
         .close()
+        .then(() => mailWorker?.stop())
         .then(() => db?.close())
         .then(
           () => process.exit(0),
@@ -148,6 +167,6 @@ async function bootstrap(): Promise<void> {
 }
 
 bootstrap().catch((error: unknown) => {
-  console.error('lumen failed to start', error);
+  log.fatal({ err: error }, 'lumen failed to start');
   process.exit(1);
 });

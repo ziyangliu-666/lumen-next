@@ -4,6 +4,7 @@ import { openTestDb, TEST_DATABASE_URL } from '../../core/db/testDb.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AuthSessions } from './authSessions.js';
 import { MailActions } from './mailActions.js';
+import { MailQueue, MailWorker } from './mailQueue.js';
 import { OAuthAccounts, OAuthAttempts } from './oauth.js';
 import { verifyPassword } from './passwordHash.js';
 import type { IdentityDatabase } from './identityDatabase.js';
@@ -293,7 +294,9 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: real PostgreSQL acceptance', () =
     const account = await signup();
     let code = '';
     // Synthetic test mail only; this never sends externally or reads a user code.
-    const mail = new MailActions(
+    const mail = queuedMail(db);
+    await mail.requestReset(account.email);
+    await new MailWorker(
       db,
       {
         send(message): Promise<void> {
@@ -302,14 +305,15 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: real PostgreSQL acceptance', () =
         },
       },
       'https://lumen.example',
-    );
-    await mail.requestReset(account.email);
+    ).tick();
     expect(code).toHaveLength(43);
     return { accountId: account.id, code, mail };
   }
 
   const nextPassword = 'a new sufficiently long test password';
-  const noMail = { send: (): Promise<void> => Promise.resolve() };
+  function queuedMail(database: IdentityDatabase): MailActions {
+    return new MailActions(database, new MailQueue(database, { key: 'q'.repeat(32) }));
+  }
 
   it('accepts one concurrent reset and revokes every previous login session', async () => {
     const { accountId, code, mail } = await resetFixture();
@@ -317,11 +321,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: real PostgreSQL acceptance', () =
     const old = await service.issue({ accountId, role: 'user' });
     const results = await race(
       'select email from accounts',
-      (database) =>
-        new MailActions(database, noMail, 'https://lumen.example').resetPassword(
-          code,
-          nextPassword,
-        ),
+      (database) => queuedMail(database).resetPassword(code, nextPassword),
       () => mail.resetPassword(code, nextPassword),
     );
     expect(results).toMatchObject([
@@ -342,11 +342,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: real PostgreSQL acceptance', () =
     const { accountId, code } = await resetFixture();
     const results = await race(
       'select email from accounts',
-      (database) =>
-        new MailActions(database, noMail, 'https://lumen.example').resetPassword(
-          code,
-          nextPassword,
-        ),
+      (database) => queuedMail(database).resetPassword(code, nextPassword),
       () =>
         sessions.insert({
           accountId,

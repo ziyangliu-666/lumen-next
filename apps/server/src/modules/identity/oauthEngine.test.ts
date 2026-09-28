@@ -32,7 +32,8 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: OAuth and mail SQL/HTTP workflows
       return Promise.resolve();
     }),
   };
-  const deliveryFailed = vi.fn();
+  const mailEvent = vi.fn();
+  let identity: ReturnType<typeof createIdentitySlice>;
   const profile = vi.fn((kind: OAuthKind) =>
     Promise.resolve({
       subject: `${kind}-subject`,
@@ -45,18 +46,22 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: OAuth and mail SQL/HTTP workflows
     db = fixture.db;
   }, 60_000);
   beforeEach(async () => {
-    await db.query('truncate accounts cascade; truncate identity_oauth_attempts', []);
+    await db.query(
+      'truncate accounts cascade; truncate identity_oauth_attempts; truncate identity_mail_requests',
+      [],
+    );
     profile.mockClear();
     sent.length = 0;
     mailSender.send.mockClear();
-    deliveryFailed.mockClear();
-    const identity = createIdentitySlice({
+    mailEvent.mockReset();
+    identity = createIdentitySlice({
       database: db,
       origin,
       sessionLifetimeMs: 60_000,
-      loginGate: new LoginGate({ attempts: 50 }),
+      loginGate: new LoginGate({ accountAttempts: 50 }),
       mailSender,
-      mailDeliveryFailed: deliveryFailed,
+      mailKey: 'test-mail-queue-key-0123456789abcdef',
+      mailEvent,
       oauthProviders: (['github', 'google'] as const).map((kind) => ({
         kind,
         authorizationURL(state: string, verifier: string): URL {
@@ -148,6 +153,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: OAuth and mail SQL/HTTP workflows
     });
     expect(response.statusCode).toBe(202);
     expect(response.body).not.toMatch(/token|code=/);
+    await identity.mailWorker!.tick();
   }
 
   it('verifies only the signed-in account email with a purpose-bound single-use code', async () => {
@@ -166,6 +172,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: OAuth and mail SQL/HTTP workflows
         })
       ).statusCode,
     ).toBe(202);
+    await identity.mailWorker!.tick();
     const code = deliveredCode();
     expect(sent[0]?.to).toBe('mail@example.test');
     expect(
@@ -346,7 +353,8 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: OAuth and mail SQL/HTTP workflows
     await passwordUser();
     mailSender.send.mockRejectedValueOnce(new Error('private provider failure'));
     await forgot('mail@example.test');
-    expect(deliveryFailed).toHaveBeenCalledOnce();
+    expect(mailEvent).toHaveBeenCalledWith('retry');
+    expect(JSON.stringify(mailEvent.mock.calls)).not.toContain('private');
     expect(
       (
         await app.inject({
@@ -362,12 +370,11 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: OAuth and mail SQL/HTTP workflows
   it('keeps forgot responses generic even when delivery failure telemetry throws', async () => {
     await passwordUser();
     mailSender.send.mockRejectedValueOnce(new Error('private provider failure'));
-    deliveryFailed.mockImplementationOnce(() => {
+    mailEvent.mockImplementation(() => {
       throw new Error('private telemetry failure');
     });
     await forgot('mail@example.test');
-    expect(deliveryFailed).toHaveBeenCalledOnce();
-    expect(deliveryFailed).toHaveBeenCalledWith();
+    expect(mailEvent).toHaveBeenCalledWith('retry');
     // A failed transport must not prevent a later replacement request.
     await forgot('mail@example.test');
     expect(sent).toHaveLength(1);
@@ -383,6 +390,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: OAuth and mail SQL/HTTP workflows
         cookies: user.cookies,
       });
       expect(response.statusCode).toBe(202);
+      await identity.mailWorker!.tick();
       return deliveredCode();
     };
     const confirm = async (code: string): Promise<number> =>

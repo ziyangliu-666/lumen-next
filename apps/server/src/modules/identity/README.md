@@ -7,9 +7,18 @@ reviewed authentication core is retained rather than rewritten.
 ## Public index
 
 `createIdentitySlice(options)` takes core's database, canonical origin, explicit
-session lifetime and LoginGate, plus optional secureCookies, oauthProviders and
-mailSender. It returns `principalResolver`, `registerRoutes`, and the trusted
-account interface `listAccounts`, `getAccount`, `setRole`, `suspend`.
+session lifetime and LoginGate, plus optional secureCookies, oauthProviders,
+mailSender, mailKey, mailEvent and core's `log`. It returns `principalResolver`,
+`registerRoutes`, the trusted account interface `listAccounts`, `getAccount`,
+`setRole`, `suspend`, the account eligibility check `canSpend(accountId)`
+(true only for an account that exists, is not suspended and is not deleted;
+false for an unknown or malformed id; a storage error rejects), which the
+composition root hands billing's AccountHandler, and, when a mailSender is given, `mailWorker`
+(`MailWorker`: `start()`, `stop()`, `tick()`), which the composition root must
+start and stop on shutdown. A mailSender requires a server-only mailKey of at
+least 32 characters. `MailEvent` names the value-free delivery counters.
+`mailFromEnvironment(environment, { outboxDirectory, production })` builds the
+optional mail configuration from explicitly supplied variables.
 `oauthProvidersFromEnvironment(environment, origin)` constructs optional GitHub
 and Google adapters from explicitly supplied server configuration, without
 reading process.env or making network calls. Empty credential pairs disable a
@@ -36,32 +45,54 @@ reads current role and suspension on every request, never renewing a session.
 | GET /api/me | authenticated public account |
 | PATCH /api/me | displayName/email; password proof for email |
 | POST /api/me/password | current/new password; revoke other sessions atomically |
+| DELETE /api/me | reauthenticate, tombstone the account, revoke all sessions; 204, cookie cleared |
 | GET /api/auth/providers | configured providers; false by default |
 | GET /api/auth/mail | enabled flag; false by default |
 
-Account deletion is excluded pending shared retention constraints. main.ts wires
+Account deletion (`DELETE /api/me`, AccountService.deleteAccount) is immediate
+and irreversible, and only the user can do it. Reauthentication is the current
+password; an account without one must have signed in within the last 10 minutes
+(RECENT_SIGN_IN_MS) on the requesting session. The accounts row stays as a
+tombstone (`deleted+<id>@invalid`, "Deleted account", role user, suspended,
+deleted_at set) so other slices' rows keep a valid id; identity deletes the
+credentials (password and OAuth), sessions, mail codes, verified addresses and
+queued mail in the same transaction. Admin methods treat a tombstone as not
+found, and migration 010 keeps it suspended. See
+[API](../../../../../docs/identity/API.md#account-deletion). main.ts wires
 OAuth through oauthProvidersFromEnvironment; a provider is enabled only when its
-credential pair is set. Mail verification and reset are written/tested but not
-wired (Sprint 3). Do not enable
-public reset delivery before its timing-enumeration blocker is addressed.
+credential pair is set. main.ts enables mail verification and reset only when
+`mailFromEnvironment` returns a configuration (IDENTITY_MAIL_MODE outbox or
+resend, plus IDENTITY_MAIL_KEY); it is off by default. Mail requests are queued: a public request is one insert, and
+MailWorker decides eligibility and delivers later, so response time no longer
+depends on the address (see docs/identity/MAIL_QUEUE_DESIGN.md).
 
 ## Security and storage
 
 Passwords use salted scrypt; only hashed random session tokens are stored.
 Cookies are HttpOnly/SameSite=Lax/Secure by default. Insecure cookies require an
 explicit loopback HTTP origin. Every identity mutation requires exact Origin.
-LoginGate counts failed actions per direct peer and optional account key, bounds
-tracked keys and concurrent work, and does not trust forwarded headers. It is
-local, not distributed. New passwords have an 8-code-point minimum and a 1024-byte
+LoginGate counts failed actions per account key (5 a minute) when a request names
+one, and per direct peer (100 a minute) only when it does not, so one failing
+client behind a shared proxy locks out no other user. It bounds tracked keys,
+queues work beyond 4 concurrent actions (refusing only past 64 waiting), and does
+not trust forwarded headers. It is local, not distributed. New passwords have an 8-code-point minimum and a 1024-byte
 ceiling. Signup's duplicate-email response still reveals availability.
+
+The slice logs through `log.child({ slice: 'identity' })` (docs/LOGGING.md): a
+warn line with a fixed `action` and `reason` when a sign-in or an account action
+is refused or rate-limited, and one line per mail event (info for admitted and
+sent, warn for dropped, retry and ineligible, error for failed and error). A line
+never carries an address, a password, a code, a token or provider text.
 
 PostgresAccountStore and PostgresAuthSessionStore use core's injected database.
 Password changes compare the verified hash under account-first locking and
 revoke all other sessions in the same transaction. Suspension similarly revokes
-sessions; unsuspension never restores old cookies. Existing WebSocket connections
+sessions and purges pending mail requests and codes; unsuspension restores neither. Existing WebSocket connections
 retain their handshake principal until core provides revalidation.
 
-Only core's migration runner applies 002/003/004. Migration 002 adds suspended
+Only core's migration runner applies 002/003/004/009/010. Migration 010 adds
+`accounts.deleted_at` and a tombstone-stays-suspended check to the shared
+accounts table. Migration 002 adds suspended
 and normalized-email uniqueness to accounts; duplicate historical emails block
 migration. No second migration tree or temporary runtime dependency exists.
 GitHub and Google use the in-slice clients in `oauthClients.ts` (native fetch, no

@@ -261,6 +261,23 @@ describe('identity: PostgreSQL account query contract', () => {
     expect(db.calls).toHaveLength(2);
   });
 
+  it('answers canSpend false for a malformed id without querying', async () => {
+    const db = new RecordingDatabase();
+    const store = new PostgresAccountStore(db);
+    for (const id of ['', ' ', 'account-id', "x' or '1'='1"]) {
+      expect(await store.canSpend(id)).toBe(false);
+    }
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('propagates a storage failure from canSpend instead of reading it as a refusal', async () => {
+    const db = new RecordingDatabase();
+    db.results.push(new Error('connection lost'));
+    await expect(
+      new PostgresAccountStore(db).canSpend('00000000-0000-4000-8000-000000000000'),
+    ).rejects.toThrow('connection lost');
+  });
+
   it('replaces the password with compare-and-set after locking in account-first order', async () => {
     const db = new RecordingDatabase();
     db.results.push([account], [{ passwordHash: 'old' }], [{ id: 'credential-id' }], []);
@@ -331,7 +348,9 @@ describe('identity: admin account query contract', () => {
       const db = new RecordingDatabase();
       db.results.push([{ id: account.id }]);
       await new PostgresAccountStore(db).setRole(account.id, role);
-      expect(db.calls[0]?.sql).toBe('update accounts set role = $2 where id = $1 returning id');
+      expect(db.calls[0]?.sql).toBe(
+        'update accounts set role = $2 where id = $1 and deleted_at is null returning id',
+      );
       expect(db.calls[0]?.values).toEqual([account.id, role]);
     },
   );
@@ -372,13 +391,16 @@ describe('identity: atomic suspension', () => {
     expect(db.calls).toHaveLength(0);
     expect(db.transactions).toHaveLength(0);
   });
-  it('suspends and revokes all sessions on the same transaction connection', async () => {
+  it('suspends, revokes all sessions and purges recovery mail on one transaction connection', async () => {
     const db = new RecordingDatabase();
-    db.results.push([account], []);
+    db.results.push([account], [], [], []);
     await new PostgresAccountStore(db).suspend(account.id, true);
     expect(db.calls[0]?.values).toEqual([account.id, true]);
     expect(db.calls[1]?.sql).toBe('delete from auth_sessions where account_id = $1');
     expect(db.calls[1]?.values).toEqual([account.id]);
+    expect(db.calls[2]?.sql).toBe('delete from identity_mail_tokens where account_id = $1');
+    expect(db.calls[3]?.sql).toMatch(/^delete from identity_mail_requests where state = 'pending'/);
+    expect(db.calls.slice(2).every((call) => call.values[0] === account.id)).toBe(true);
     expect(db.calls.every((call) => call.transaction)).toBe(true);
     expect(db.transactions).toEqual(['begin', 'commit']);
   });

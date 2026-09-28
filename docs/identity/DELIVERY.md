@@ -13,8 +13,8 @@
   passes configured OAuth providers to the slice.
 - Shell and Settings composition in `core/shell.tsx`, `main.tsx` and
   `Settings.tsx`: the header account slot, nested Settings routes and the
-  Account tab as a content slot. `Settings.tsx` awaits its owner's answer on
-  the pull request.
+  Account tab as a content slot. Merged in PR #34; the Settings owner may
+  reshape the slot in a follow-up.
 
 ## Shared files touched
 
@@ -47,7 +47,7 @@ submitted revision. Historical local checks do not substitute for those gates.
 | Account composition | Settings owner answer on the pull request, then merge. |
 | OAuth | Review/apply startup wiring; deployment-owned HTTPS configuration; remaining live negative/logout/staff cases; Arctic maintenance review. |
 | Mail verification/recovery | Reviewed durable delivery design addressing the timing-enumeration blocker, retry/abuse controls and real mailbox acceptance. Public recovery remains disabled. |
-| Account deletion | Team retention policy, reauthentication/revocation design, transaction tests and implementation. No destructive endpoint is enabled. |
+| Account deletion | Implemented as `DELETE /api/me` with a tombstone, per the PR #39 decisions. Deleting the last staff account is allowed on purpose; if no staff remain, one is promoted in the database. Remaining: owner review and the projects owner's retention answer (default keeps rows). |
 | Final DOD | Reviewed PR, green CI/security/deployment gates and staging acceptance. |
 
 Existing WebSockets retain their handshake principal after authentication state

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { nullLog } from '../../core/log/log.js';
 import type { StepDetail, StepKind } from '@lumen/contracts';
 import { makeTask } from '../../core/domain/task.js';
 import type { WorkerReport } from '../../core/domain/worker.js';
@@ -13,6 +14,7 @@ function recording(): { report: WorkerReport; steps: Written[] } {
   return {
     steps,
     report: {
+      log: nullLog,
       appendStep: (_taskId, kind, text, detail) => {
         steps.push([kind, text, detail]);
         return Promise.resolve();

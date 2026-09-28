@@ -1,5 +1,5 @@
 import type { Money } from '@lumen/contracts';
-import type { BudgetGuard, Charge, Decision } from './ports.js';
+import type { BudgetGuard, Charge, Decision } from '../../core/domain/budget.js';
 import { money } from './validation.js';
 
 /** null delegates to the next policy; a decision ends the chain. */
@@ -34,6 +34,8 @@ export class AccountHandler implements BudgetHandler {
   }
 }
 
+// Historical class name retained for callers. The cap is now flat (#52).
+// This checks, but does not reserve: simultaneous work can exceed the cap.
 export class MonthlyCapHandler implements BudgetHandler {
   constructor(private readonly fits: (accountId: string, estimate: Money) => Promise<boolean>) {}
 

@@ -1,6 +1,7 @@
 import { openTestDb, TEST_DATABASE_URL } from '../../core/db/testDb.js';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import { requireStaff } from '../../core/http/authGuard.js';
 import { buildServer } from '../../core/http/server.js';
 import { Broker } from '../../core/protocol/broker.js';
 import { AuthSessions } from './authSessions.js';
@@ -9,13 +10,22 @@ import { createSessionSlice } from '../session/index.js';
 import type { SessionSnapshot } from '@lumen/contracts';
 import type { IdentityDatabase } from './identityDatabase.js';
 import { LoginGate } from './loginGate.js';
-import { localRoleProbe } from './localRoleProbe.js';
 import { PostgresAccountStore, PostgresAuthSessionStore } from './postgresStores.js';
 import { AUTH_COOKIE } from './sessionStrategy.js';
 
 // Synthetic eight-character password exercises the accepted minimum over HTTP.
 const password = 'testpass';
 const origin = 'https://lumen.example';
+
+// A staff-only route that exists only in this test, so the role checks below
+// exercise the real resolver and requireStaff() without a production endpoint.
+const staffProbe: FastifyPluginAsync = (app): Promise<void> => {
+  app.get('/api/local/staff-check', (request) => {
+    const principal = requireStaff(request);
+    return { accountId: principal.accountId, role: principal.role };
+  });
+  return Promise.resolve();
+};
 
 describe.skipIf(!TEST_DATABASE_URL)('identity: PostgreSQL HTTP and store acceptance', () => {
   let fixture: Awaited<ReturnType<typeof openTestDb>>;
@@ -58,7 +68,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: PostgreSQL HTTP and store accepta
       database: db,
       origin,
       sessionLifetimeMs: 60_000,
-      loginGate: new LoginGate({ attempts: 50 }),
+      loginGate: new LoginGate({ accountAttempts: 50 }),
     });
     const app = await buildServer({
       broker: new Broker(),
@@ -68,7 +78,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: PostgreSQL HTTP and store accepta
     });
     servers.push(app);
     await app.register(identity.registerRoutes);
-    await app.register(localRoleProbe);
+    await app.register(staffProbe);
     return app;
   }
 
@@ -218,7 +228,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: PostgreSQL HTTP and store accepta
       database: db,
       origin,
       sessionLifetimeMs: 60_000,
-      loginGate: new LoginGate({ attempts: 50 }),
+      loginGate: new LoginGate({ accountAttempts: 50 }),
     });
     const broker = new Broker();
     const session = createSessionSlice({ broker });

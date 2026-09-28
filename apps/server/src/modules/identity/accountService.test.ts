@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi, type Mock } from 'vitest';
-import { AccountService, newPasswordOf } from './accountService.js';
+import { AccountService, newPasswordOf, RECENT_SIGN_IN_MS } from './accountService.js';
 import { AccountFailure, type AccountStore, type AccountView } from './accounts.js';
 import type { PasswordAccount } from './passwordStrategy.js';
 
@@ -31,6 +32,7 @@ function setup(): {
     getPasswordAccount: vi.fn<AccountStore['getPasswordAccount']>().mockResolvedValue(credential),
     updateAccount: vi.fn<AccountStore['updateAccount']>().mockResolvedValue(account),
     replacePassword: vi.fn<AccountStore['replacePassword']>().mockResolvedValue(true),
+    deleteAccount: vi.fn<AccountStore['deleteAccount']>().mockResolvedValue(true),
   };
   const hash = vi.fn<(text: string) => Promise<string>>().mockResolvedValue('new-hash');
   const verify = vi.fn<(text: string, hash: string) => Promise<boolean>>().mockResolvedValue(true);
@@ -227,5 +229,84 @@ describe('identity: account self-service', () => {
       }),
     ).rejects.toMatchObject({ code: 'invalid_body' });
     expect(store.getPasswordAccount).not.toHaveBeenCalled();
+  });
+});
+
+describe('identity: account deletion reauthentication', () => {
+  const token = 'A'.repeat(43);
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+
+  it('requires the current password of a password account and hands the verified hash on', async () => {
+    const { service, store, verify } = setup();
+    await service.deleteAccount('a', { currentPassword: password }, token);
+    expect(verify).toHaveBeenCalledWith(password, 'old-hash');
+    expect(store.deleteAccount).toHaveBeenCalledWith('a', {
+      kind: 'password',
+      expectedHash: 'old-hash',
+    });
+  });
+
+  it.each([
+    ['a wrong password', { currentPassword: 'wrong' }],
+    ['no password', {}],
+    ['no body', undefined],
+  ])('refuses %s without writing anything', async (_label, body) => {
+    const { service, store, verify } = setup();
+    verify.mockResolvedValue(false);
+    await expect(service.deleteAccount('a', body, token)).rejects.toMatchObject({
+      code: 'invalid_credentials',
+    });
+    expect(store.deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('refuses a body naming another account before reading anything', async () => {
+    const { service, store } = setup();
+    await expect(
+      service.deleteAccount('a', { currentPassword: password, accountId: 'b' }, token),
+    ).rejects.toMatchObject({ code: 'invalid_body' });
+    expect(store.getPasswordAccount).not.toHaveBeenCalled();
+    expect(store.deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('asks an account without a password for a sign-in within the last ten minutes', async () => {
+    const { store } = setup();
+    store.getPasswordAccount.mockResolvedValue({ ...credential, passwordHash: null });
+    const service = new AccountService(store, undefined, () => 1_000_000_000);
+    await service.deleteAccount('a', {}, token);
+    expect(store.deleteAccount).toHaveBeenCalledWith('a', {
+      kind: 'recent-session',
+      tokenHash,
+      issuedAfter: 1_000_000_000 - RECENT_SIGN_IN_MS,
+    });
+    expect(RECENT_SIGN_IN_MS).toBe(600_000);
+  });
+
+  it('refuses a stale sign-in, a missing cookie, or a password offered in place of one', async () => {
+    const { store } = setup();
+    store.getPasswordAccount.mockResolvedValue({ ...credential, passwordHash: null });
+    const service = new AccountService(store);
+    await expect(service.deleteAccount('a', {}, undefined)).rejects.toMatchObject({
+      code: 'invalid_credentials',
+    });
+    await expect(
+      service.deleteAccount('a', { currentPassword: password }, token),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    expect(store.deleteAccount).not.toHaveBeenCalled();
+    store.deleteAccount.mockResolvedValue(false);
+    await expect(service.deleteAccount('a', {}, token)).rejects.toMatchObject({
+      code: 'invalid_credentials',
+    });
+  });
+
+  it('reports a password changed under it as a conflict, and a suspended account as unauthenticated', async () => {
+    const { service, store } = setup();
+    store.deleteAccount.mockResolvedValue(false);
+    await expect(
+      service.deleteAccount('a', { currentPassword: password }, token),
+    ).rejects.toMatchObject({ code: 'account_changed' });
+    store.getPasswordAccount.mockResolvedValue({ ...credential, suspended: true });
+    await expect(
+      service.deleteAccount('a', { currentPassword: password }, token),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
   });
 });

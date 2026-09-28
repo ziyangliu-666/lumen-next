@@ -136,9 +136,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
     recordFinding: (sessionId, taskId, text) => projects.recordFinding(sessionId, taskId, text),
     ...(db ? { recordSpend: billing.record } : {}),
     log,
-    // Not yet: `budget: billing.budgetGuard`. The chain fails closed, and a new
-    // account's cap is 0, so wiring it today would refuse every session. It goes
-    // in when billing gives a new account a default cap (see the review on #21).
+    budget: billing.budgetGuard,
   });
   const projects: ProjectsSlice = createProjectsSlice({ sessions: session.projects, db });
 

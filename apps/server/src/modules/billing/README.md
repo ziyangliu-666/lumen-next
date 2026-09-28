@@ -24,7 +24,9 @@ Billing never queries or changes session's tables.
 
 Without `DATABASE_URL`, authenticated wallet requests return 503. They do not
 invent zero balances or accept non-durable writes. Session's existing memory
-mode remains available for development without billing persistence.
+mode remains available for development without billing persistence. The guard
+integration deliberately denies worker execution without real identity; the
+development stub cannot establish spending eligibility.
 
 ## API
 
@@ -117,6 +119,18 @@ same balance. The PM deferred reservations beyond this sprint in #52. Wiring the
 execution checkpoints and persisting approvals remain separate integration PRs.
 The current main composition injects `canSpend` but does not call `budgetGuard`.
 Saving a cap therefore does not yet stop a running worker.
+
+The next integration passes `billing.budgetGuard` to session in `app.ts`, following
+PM/core approval in #52 and the merged prerequisites #50 and #55. Once that PR is
+on main, the existing turn, fan-out and task-open checkpoints consult the chain.
+A denial prevents the checked work. Turn refusal records its reason in the trace;
+fan-out refusal rejects `WorkerReport.delegate` with the reason. If the worker
+lets that rejection propagate, the parent fails without opening any children. Unknown-cost work
+needs remaining room; it is not a guarantee against overshoot within a running
+step or concurrent tasks. Durable approvals remain a separate story.
+`app.test.ts` exercises the composition with real sign-in and Postgres: a new
+account runs below its default cap, saved over-cap and zero-cap accounts cannot
+start work, and an exhausted parent cannot open delegated work.
 
 Verification includes handler order, short-circuit, all three checkpoint labels,
 account rejection, exact decimal equality at the cap, over-cap refusal, a fourth

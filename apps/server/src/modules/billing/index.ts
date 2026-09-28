@@ -3,11 +3,13 @@ import type { FastifyInstance } from 'fastify';
 import type { Db, Queryable } from '../../core/db/db.js';
 import { HttpError } from '../../core/http/httpError.js';
 import { Ledger } from './ledger.js';
-import type { BudgetGuard, Spend, WalletSummary } from './ports.js';
+import type { BudgetGuard } from '../../core/domain/budget.js';
+import type { Spend, WalletSummary } from './ports.js';
 import { walletRoutes } from './routes.js';
 import { AccountHandler, ApprovalHandler, BudgetChain, MonthlyCapHandler } from './budgetChain.js';
 
-export type { BudgetGuard, Charge, Decision, Spend, WalletSummary } from './ports.js';
+export type { BudgetGuard, Charge, CheckPoint, Decision } from '../../core/domain/budget.js';
+export type { Spend, WalletSummary } from './ports.js';
 export type { LedgerEntry, LedgerPage } from './ledger.js';
 export { BudgetChain, AccountHandler, MonthlyCapHandler, ApprovalHandler } from './budgetChain.js';
 export type { BudgetHandler } from './budgetChain.js';

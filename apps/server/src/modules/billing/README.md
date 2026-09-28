@@ -102,8 +102,9 @@ The terminal handler denies with `over the cap`; it creates no fake approval.
 These classes and `BudgetHandler` are exported by the public index so a fourth
 policy can be inserted without changing callers. The test uses a synthetic
 escalation policy to prove extension; it is not a persisted approval feature.
-The local `Charge`, `Decision` and `BudgetGuard` types match the agreed interface
-and will move to core when that owner publishes `core/domain/budget.ts`.
+`Charge`, `Decision`, `BudgetGuard` and `CheckPoint` come from
+`core/domain/budget.ts` and are re-exported by the billing public index. Billing
+keeps only its own `Spend` and `WalletSummary` shapes in `ports.ts`.
 
 This is a policy decision, not a reservation. Concurrent checks may observe the
 same balance. Wiring the three execution checkpoints, reserving concurrent spend

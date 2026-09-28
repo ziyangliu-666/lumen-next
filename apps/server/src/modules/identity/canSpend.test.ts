@@ -107,11 +107,11 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: account eligibility for billing',
       at: 'task-open' as const,
       reason: 'test',
     };
-    // A live account gets past the account check; a new account's cap is 0.
-    expect(await billing.budgetGuard.check(charge)).toEqual({
-      kind: 'deny',
-      reason: 'over the cap',
-    });
+    // A live account reaches billing's approved USD 1 default cap (#52).
+    expect(await billing.budgetGuard.check(charge)).toEqual({ kind: 'allow' });
+    expect(await billing.budgetGuard.check({ ...charge, estimate: { dollars: 1.000001 } })).toEqual(
+      { kind: 'deny', reason: 'over the cap' },
+    );
     await identity.suspend(accountId, true);
     expect(await billing.budgetGuard.check(charge)).toEqual({
       kind: 'deny',

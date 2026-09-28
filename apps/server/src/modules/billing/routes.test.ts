@@ -52,7 +52,7 @@ describe.skipIf(!TEST_DATABASE_URL)('billing: wallet API', () => {
       url: '/api/wallet',
       headers: { authorization: 'stub bob:user' },
     });
-    expect(other.json()).toEqual({ spent: { dollars: 0 }, cap: { dollars: 0 } });
+    expect(other.json()).toEqual({ spent: { dollars: 0 }, cap: { dollars: 1 } });
   });
   it('validates cap bodies and pagination and requires authentication on every route', async () => {
     const server = await build(db);

@@ -18,6 +18,7 @@ export interface BillingSlice {
   readonly registerRoutes: (app: FastifyInstance) => void;
   /** Optional transaction lets session persist trace cost and ledger together. */
   readonly record: (entry: Spend, tx?: Queryable) => Promise<void>;
+  /** Historical name: all-time account spend and flat cap, with no monthly reset. */
   readonly monthSpend: (accountId: string) => Promise<WalletSummary>;
   readonly budgetGuard: BudgetGuard;
 }

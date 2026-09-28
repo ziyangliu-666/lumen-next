@@ -101,7 +101,7 @@ export function Wallet(): JSX.Element {
     <div className="grid gap-4" aria-busy={loading || saving}>
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">
-          Current UTC month. Amounts are in US dollars.
+          All-time account spend. No monthly reset. Amounts are in US dollars.
         </p>
         <Button variant="outline" disabled={loading || saving} onClick={refresh}>
           Refresh
@@ -130,7 +130,7 @@ export function Wallet(): JSX.Element {
           <div className="grid gap-4 sm:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Spent this month</CardTitle>
+                <CardTitle className="text-base">Total spent</CardTitle>
               </CardHeader>
               <CardContent className="font-mono text-2xl text-ink">
                 {dollars(summary.spent)}
@@ -138,7 +138,7 @@ export function Wallet(): JSX.Element {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Monthly cap</CardTitle>
+                <CardTitle className="text-base">Account cap</CardTitle>
               </CardHeader>
               <CardContent className="font-mono text-2xl text-ink">
                 {dollars(summary.cap)}
@@ -147,7 +147,7 @@ export function Wallet(): JSX.Element {
           </div>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Set monthly cap</CardTitle>
+              <CardTitle className="text-base">Set account cap</CardTitle>
             </CardHeader>
             <CardContent>
               <form
@@ -175,12 +175,12 @@ export function Wallet(): JSX.Element {
                   </Button>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  This saves your limit. Automatic budget checks and approval requests arrive in the
-                  next sprint. Changing the cap does not add credit or change recorded spend.
+                  This saves your limit. Automatic budget checks and approval requests are not yet
+                  enabled. Changing the cap does not add credit or change recorded spend.
                 </p>
                 {saved && (
                   <p role="status" className="text-sm text-keep">
-                    Monthly cap saved.
+                    Account cap saved.
                   </p>
                 )}
               </form>

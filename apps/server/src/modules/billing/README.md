@@ -12,11 +12,11 @@ approvals and administration remain separate stories.
 - `record({ accountId, taskId, amount, reason }, tx?)` — trusted in-process
   expense writer. Each call is one expense, not an idempotent retry. A supplied
   `Queryable` joins the caller's transaction; otherwise the INSERT commits alone.
-- `monthSpend(accountId)` — `{ spent: Money, cap: Money }` for the UTC month.
-- `budgetGuard` — the ordered account, monthly-cap and terminal approval policies.
+- `monthSpend(accountId)` — `{ spent: Money, cap: Money }` for all recorded account spend and the flat cap; the historical port name is retained.
+- `budgetGuard` — the ordered account, cap and terminal approval policies.
 
 The optional transaction is the only extension to the documented spend writer.
-`main.ts` passes `billing.record` as session's `recordSpend` callback when a
+`app.ts` passes `billing.record` as session's `recordSpend` callback when a
 Postgres Db exists. PgTrace determines the account from its own session record,
 updates the task cost and invokes billing in the same transaction. Failure
 rolls back both writes; the kernel publishes cost events only after commit.
@@ -38,12 +38,15 @@ Every route calls `requireUser`. Account selection always comes from the
 principal, including for staff; body/query account IDs never select another
 wallet. Errors use core's current `{ error: string }` envelope: 400 invalid
 input, 401 no principal, 503 database unavailable, and sanitized 500 storage
-failure. A cap is a monthly limit, not a prepaid balance. Saving it does not yet
+failure. A cap is a flat account spending limit, not prepaid balance. Saving it does not yet
 enforce it during worker execution; enforcement and approval arrive in Sprint 3.
 
 Money must be finite and non-negative, below 1000000 and at most six decimal
 places. SQL stores `numeric(12,6)` and sums it. The browser displays four decimals
-and never adds. Zero cap is the default from the agreed Sprint 2 plan.
+and never adds. The store supplies a USD 1.000000 cap when no wallet row exists, as agreed by
+PM/core in [#52](https://github.com/ziyangliu-666/lumen-next/issues/52#issuecomment-5862311033).
+A saved zero remains zero. Both the wallet and guard use the same SQL projection.
+There is no monthly reset: spend sums all ledger entries for the account.
 
 The ledger lists all months, newest `(created_at, id)` first. Cursors encode the
 last row ID; the boundary is resolved inside the account's SQL query, preserving
@@ -59,7 +62,7 @@ runner discovers the file; there is no second pool or migration runner.
 
 Run `docker compose up -d db`, then with the local DATABASE_URL set run
 `npm run verify`. The Postgres suites use `openTestDb()` and isolated schemas.
-They cover concurrent decimal records, month boundaries, account isolation,
+They cover concurrent decimal records, no-reset month boundaries, account isolation,
 microsecond pagination, invalid input, durable reads after recreating the slice,
 and rollback of ledger plus trace when the writer fails. The integration test
 runs the actual session demo worker and compares its delegated tree spend with
@@ -71,9 +74,9 @@ manual refresh, older/newest navigation, and validated cap editing. It uses
 
 ## Ownership and remaining work
 
-The migration and minimal `main.ts`/session transaction hook need LIU ZIYANG's
-review. No shared contract or dependency is changed. Identity's real resolver
-will authenticate these routes through core when its PR lands.
+The ledger migration and session transaction hook are merged. Identity's real
+cookie resolver authenticates these routes when identity is configured. Changes
+to the composition root still require core/session review.
 
 Do not import billing internals from another slice. Import this public index.
 Billing takes ownership of the read-only admin routes and page omitted from
@@ -94,10 +97,12 @@ any handler runs. Caller code depends only on `BudgetGuard.check(charge)`.
 The default chain is `AccountHandler` → `MonthlyCapHandler` → `ApprovalHandler`.
 The account handler accepts an injected asynchronous eligibility check; a false
 result denies and true passes. Without `canSpend`, it denies by default. Identity
-must provide this through its public API when execution checks are connected;
+provides this through its public API and app.ts injects it since #50 merged;
 billing does not inspect identity's tables or trust an account ID as eligibility.
-The monthly handler allows when current UTC-month spend plus estimate is at most
-the stored cap. Addition and comparison happen in one SQL query using numeric.
+`MonthlyCapHandler` retains its historical name. For a positive estimate it
+allows when all-time spend plus estimate is at most the account cap. Zero means
+unknown cost and requires strictly positive remaining room; equality denies.
+Addition and comparison happen in one SQL query using numeric.
 The terminal handler denies with `over the cap`; it creates no fake approval.
 
 These classes and `BudgetHandler` are exported by the public index so a fourth
@@ -108,10 +113,10 @@ escalation policy to prove extension; it is not a persisted approval feature.
 keeps only its own `Spend` and `WalletSummary` shapes in `ports.ts`.
 
 This is a policy decision, not a reservation. Concurrent checks may observe the
-same balance. Wiring the three execution checkpoints, reserving concurrent spend
-and persisting approvals remain Sprint 3 integration work with session/identity.
-The current main composition does not inject `canSpend` or call `budgetGuard`.
-Saving a cap therefore does not claim to stop a running worker in Sprint 2.
+same balance. The PM deferred reservations beyond this sprint in #52. Wiring the three
+execution checkpoints and persisting approvals remain separate integration PRs.
+The current main composition injects `canSpend` but does not call `budgetGuard`.
+Saving a cap therefore does not yet stop a running worker.
 
 Verification includes handler order, short-circuit, all three checkpoint labels,
 account rejection, exact decimal equality at the cap, over-cap refusal, a fourth
@@ -138,9 +143,9 @@ Account deletion from #49 is already on main. A detail lookup returning null
 must return 404 and show that the account is unavailable, including deleted
 accounts. Do not recreate identities or reconnect records by email. Preserve
 the agreed tombstone account association and ledger history. The current
-monthly cap is not prepaid balance. Stripe credit and the treatment of any
-future positive balance on deletion remain separate product decisions in #52;
-no refund or forfeiture policy is implied by this admin decision.
+flat cap is not prepaid balance. In #52 the PM decided future test-mode positive
+credit is forfeited on deletion, with disclosure before confirmation. This is
+policy for the later Stripe/deletion integration, not implemented credit here.
 
 Acceptance for the implementation PR includes anonymous 401 and member 403 on
 both list and detail before calling identity, staff success, invalid ID 400,

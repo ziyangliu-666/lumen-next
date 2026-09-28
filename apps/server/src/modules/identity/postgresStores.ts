@@ -45,6 +45,9 @@ function passwordAccount(row: PasswordRow | undefined): PasswordAccount | null {
   };
 }
 
+// accounts.id is a uuid; anything else would make PostgreSQL reject the query.
+const ACCOUNT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function normalizedEmail(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -169,6 +172,19 @@ export class PostgresAccountStore implements AccountStore, PasswordAccountStore 
         );
       }
     });
+  }
+
+  /**
+   * Billing's account eligibility: true only for an account that exists, is not
+   * suspended and is not deleted. A malformed id is unknown, not a storage error.
+   */
+  async canSpend(accountId: string): Promise<boolean> {
+    if (!ACCOUNT_ID.test(accountId)) return false;
+    const rows = await this.db.query<{ id: string }>(
+      'select id from accounts where id = $1 and not suspended and deleted_at is null',
+      [accountId],
+    );
+    return rows.length === 1;
   }
 
   async getAccount(id: string): Promise<AccountView | null> {

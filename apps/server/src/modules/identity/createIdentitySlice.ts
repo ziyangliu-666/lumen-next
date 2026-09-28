@@ -30,6 +30,11 @@ export interface IdentitySliceOptions {
 
 export type IdentitySlice = IdentityAuthentication &
   AdminAccounts & {
+    /**
+     * Account eligibility for billing's AccountHandler: true only for an account
+     * that exists, is not suspended and is not deleted. Storage errors reject.
+     */
+    readonly canSpend: (accountId: string) => Promise<boolean>;
     /** Present with a mailSender; the composition root starts it and stops it on shutdown. */
     readonly mailWorker?: MailWorker;
   };
@@ -75,6 +80,7 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
     getAccount: (id) => accounts.getAdminAccount(id),
     setRole: (id, role) => accounts.setRole(id, role),
     suspend: (accountId, on) => accounts.suspend(accountId, on),
+    canSpend: (accountId) => accounts.canSpend(accountId),
     ...(mail ? { mailWorker: mail.worker } : {}),
     registerRoutes: identityRoutes({
       flow,

@@ -10,7 +10,10 @@ reviewed authentication core is retained rather than rewritten.
 session lifetime and LoginGate, plus optional secureCookies, oauthProviders,
 mailSender, mailKey and mailEvent. It returns `principalResolver`,
 `registerRoutes`, the trusted account interface `listAccounts`, `getAccount`,
-`setRole`, `suspend`, and, when a mailSender is given, `mailWorker`
+`setRole`, `suspend`, the account eligibility check `canSpend(accountId)`
+(true only for an account that exists, is not suspended and is not deleted;
+false for an unknown or malformed id; a storage error rejects), which the
+composition root hands billing's AccountHandler, and, when a mailSender is given, `mailWorker`
 (`MailWorker`: `start()`, `stop()`, `tick()`), which the composition root must
 start and stop on shutdown. A mailSender requires a server-only mailKey of at
 least 32 characters. `MailEvent` names the value-free delivery counters.

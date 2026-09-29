@@ -175,8 +175,10 @@ export function Wallet(): JSX.Element {
                   </Button>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  This saves your limit. Automatic budget checks and approval requests are not yet
-                  enabled. Changing the cap does not add credit or change recorded spend.
+                  Budget checks run before a turn and when work is delegated. If recorded spend has
+                  reached your cap, new work is blocked. Work already running can still exceed the
+                  cap. Approval requests are not yet available. Changing the cap does not add credit
+                  or change recorded spend.
                 </p>
                 {saved && (
                   <p role="status" className="text-sm text-keep">

@@ -13,8 +13,15 @@ The record of sessions, tasks and steps in Postgres, delegation with its two
 bounds, cost rolled up through the Composite, the three budget check points,
 restore after a restart, and the `session.open` command. A step carries what it
 did (`StepDetail`: tool, time, cost, rows, output, the children it opened), and
-the Session page draws it. No model is wired in: `demoWorker.ts` plays the shape
-of a run until the steering slice supplies the agent loop.
+the Session page draws it. `demoWorker.ts` plays the shape of a run; steering's
+worker (`LUMEN_WORKER=steering`) is the agent loop.
+
+An operation the guard escalates is kept whole with its task (`pending` on the
+task row: attempt id, approval id, check point, input, the fan-out) and the task
+waits. A restart leaves it waiting. Billing calls `approvals.requestResume`
+once the owner granted it; the kernel asks the guard again with the same
+attempt id and runs exactly that operation. A fan-out resumes as the kernel
+opening and running the children; the parent's turn is over by then.
 
 | File | Role |
 |---|---|

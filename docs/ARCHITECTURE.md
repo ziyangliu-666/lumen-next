@@ -404,7 +404,7 @@ classDiagram
     +check(charge) Promise~Decision~
   }
   class Charge {
-    accountId, taskId
+    accountId, taskId, attemptId
     estimate: Money
     at: turn | fan-out | task-open
     reason
@@ -412,17 +412,29 @@ classDiagram
   class Decision {
     allow | escalate(approvalId) | deny(reason)
   }
+  class BudgetApprovalResume {
+    <<interface>>
+    +requestResume(accountId, approvalId) Promise~void~
+  }
   Kernel --> Worker : runs
   Kernel ..|> WorkerReport : implements
   Kernel --> BudgetGuard : asks at three check points
+  Kernel ..|> BudgetApprovalResume : resumes the waiting operation
   steering ..|> Worker
   billing ..|> BudgetGuard
+  billing --> BudgetApprovalResume : after the owner granted
   BudgetGuard --> Charge
   BudgetGuard --> Decision
 ```
 
 The report interface is the only door out of the sandbox. Everything durable passes through
 it, so a dead worker loses nothing.
+
+An `escalate` decision puts the task in `waiting` with the blocked operation kept on its row
+(`pending`: attempt id, approval id, check point, input, the fan-out). A restart leaves it
+waiting. When the owner grants the approval, billing calls `requestResume`; the kernel asks
+the guard again with the same attempt id and runs exactly that operation. One fan-out is one
+operation: the children it opens carry the fan-out's attempt id.
 
 ---
 

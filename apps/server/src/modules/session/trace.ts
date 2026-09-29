@@ -9,7 +9,7 @@ import type {
   StepKind,
   TaskStatus,
 } from '@lumen/contracts';
-import type { TaskRecord } from '../../core/domain/task.js';
+import type { PendingApproval, TaskRecord } from '../../core/domain/task.js';
 
 // The durable record of a session: its tasks and their steps, in the order
 // they happened. Every write goes through here and nowhere else, so the
@@ -42,6 +42,10 @@ export interface Trace {
   rootOf(sessionId: string): Promise<TaskRecord | null>;
   /** Ending statuses (ended, stopped, failed) also stamp endedAt. */
   setStatus(taskId: string, status: TaskStatus): Promise<TaskRecord>;
+  /** What the task waits for; null clears it. */
+  setPending(taskId: string, pending: PendingApproval | null): Promise<TaskRecord>;
+  /** The task whose pending operation carries this approval id. */
+  taskByApproval(approvalId: string): Promise<TaskRecord | null>;
   /** `detail` is kept as given and read back as given; absent stays absent. */
   appendStep(taskId: string, kind: StepKind, text: string, detail?: StepDetail): Promise<Step>;
   /**

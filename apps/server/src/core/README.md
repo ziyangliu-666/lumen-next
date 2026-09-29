@@ -2,7 +2,7 @@
 
 The contract every slice builds against. Frozen at the end of Sprint 1.
 
-- `domain/` — entities and the task model, and the interfaces two slices share without importing each other: `worker.ts` (session and steering), `budget.ts` (session and billing), `money.ts` (the one rule for an amount about to be recorded)
+- `domain/` — entities and the task model, and the interfaces two slices share without importing each other: `worker.ts` (session and steering), `budget.ts` (session and billing: `BudgetGuard` with the attempt id on every `Charge`, and `BudgetApprovalResume`, the way back after an approval), `money.ts` (the one rule for an amount about to be recorded)
 - `model/` — the one door to a language model: `ModelProvider` (`complete(request)` → text, tool calls, tokens, cost), `OpenAICompatible` for every vendor that speaks chat completions (OpenAI, DeepSeek), `nullModel` for CI and a demo without a key, the price table, and `modelFromEnv`. A worker asks it and never sees a key or a wire format; what a call cost goes on the step as `detail.cost`.
 - `log/` — the one logger (pino): `createLog`, `nullLog`, `taskLog`. Fastify and every slice write through it; a worker gets a task-scoped child on its `WorkerReport`. What goes in a line, and what never does, is in `docs/LOGGING.md`.
 - `protocol/` — the broker: turns domain events into `@lumen/contracts` `ServerEvent`s

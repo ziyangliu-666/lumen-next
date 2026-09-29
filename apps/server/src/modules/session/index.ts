@@ -2,7 +2,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Log } from '../../core/log/log.js';
 import type { Db } from '../../core/db/db.js';
-import type { BudgetGuard } from '../../core/domain/budget.js';
+import type { BudgetApprovalResume, BudgetGuard } from '../../core/domain/budget.js';
 import type { Worker } from '../../core/domain/worker.js';
 import type { SessionAccess } from '../../core/http/authGuard.js';
 import type { Broker } from '../../core/protocol/broker.js';
@@ -30,6 +30,8 @@ export interface SessionSlice {
   readonly registerCommands: (broker: Broker) => void;
   /** Hand to createProjectsSlice({ sessions }): what projects needs from sessions. */
   readonly projects: SessionDirectory;
+  /** Hand to the billing slice: the way back after an approval it escalated. */
+  readonly approvals: BudgetApprovalResume;
 }
 
 /**
@@ -64,5 +66,6 @@ export function createSessionSlice(deps: {
     registerRoutes: sessionRoutes(kernel, deps.requireProject),
     registerCommands: sessionCommands(kernel),
     projects: sessionDirectory(kernel, trace),
+    approvals: { requestResume: (input) => kernel.requestResume(input) },
   };
 }

@@ -677,6 +677,114 @@ describe('session: kernel, the three budget check points', () => {
     expect((await kernel.snapshot(session.id, owner)).tasks[0]?.status).toBe('stopped');
   });
 
+  it('resumes a turn after its approval: same attempt id, once, and only for the owner', async () => {
+    const { guard, asked } = scripted(() =>
+      asked.length === 1 ? { kind: 'escalate', approvalId: 'a-1' } : { kind: 'allow' },
+    );
+    const trace = new MemoryTrace();
+    const kernel = new Kernel(trace, new Broker(), oneStep, { budget: guard });
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+    const root = (await kernel.snapshot(session.id, owner)).tasks[0]!;
+    expect(await trace.task(root.id)).toMatchObject({
+      status: 'waiting',
+      pending: { attemptId: asked[0]!.attemptId, approvalId: 'a-1', at: 'turn', input: 'q' },
+    });
+
+    await expect(
+      kernel.requestResume({ accountId: stranger.accountId, approvalId: 'a-1' }),
+    ).rejects.toBeInstanceOf(HttpError);
+    await expect(
+      kernel.requestResume({ accountId: owner.accountId, approvalId: 'a-9' }),
+    ).rejects.toBeInstanceOf(HttpError);
+
+    await kernel.requestResume({ accountId: owner.accountId, approvalId: 'a-1' });
+    await kernel.idle();
+    const { tasks, steps } = await kernel.snapshot(session.id, owner);
+    expect(tasks[0]).toMatchObject({ status: 'ended' });
+    expect(await trace.task(root.id)).not.toHaveProperty('pending');
+    // The page saw why it waited, then the answer.
+    expect(steps.map((step) => step.text)).toEqual([
+      'Not run: it is over the cap and needs your approval.',
+      'got "q"',
+    ]);
+    expect(asked.map((charge) => charge.attemptId)).toEqual([
+      asked[0]!.attemptId,
+      asked[0]!.attemptId,
+    ]);
+
+    // The approval was consumed by the resume: a second call names nothing.
+    await expect(
+      kernel.requestResume({ accountId: owner.accountId, approvalId: 'a-1' }),
+    ).rejects.toBeInstanceOf(HttpError);
+    expect((await kernel.snapshot(session.id, owner)).steps).toHaveLength(2);
+  });
+
+  it('keeps a fan-out the guard escalated whole, and runs it after the approval', async () => {
+    const { guard, asked } = scripted((charge) =>
+      charge.at === 'fan-out' && asked.length === 2
+        ? { kind: 'escalate', approvalId: 'a-2' }
+        : { kind: 'allow' },
+    );
+    const trace = new MemoryTrace();
+    const kernel = new Kernel(trace, new Broker(), demoWorker(), { budget: guard });
+    const { session } = await kernel.start('p1', owner.accountId, 'fusion');
+    await kernel.idle();
+
+    const before = await kernel.snapshot(session.id, owner);
+    expect(before.tasks.map((task) => task.status)).toEqual(['waiting']);
+    const pending = (await trace.task(before.tasks[0]!.id))?.pending;
+    expect(pending?.at).toBe('fan-out');
+    expect(pending?.work).toHaveLength(3);
+    const fanOutAttempt = asked[1]!.attemptId;
+
+    await kernel.requestResume({ accountId: owner.accountId, approvalId: 'a-2' });
+    await kernel.idle();
+    const after = await kernel.snapshot(session.id, owner);
+    expect(after.tasks.map((task) => task.status)).toEqual(['ended', 'ended', 'ended', 'ended']);
+    expect(await trace.task(after.tasks[0]!.id)).not.toHaveProperty('pending');
+    // The fan-out check and every child's task-open check carry the fan-out's attempt id.
+    expect(asked.slice(1).map((charge) => [charge.at, charge.attemptId])).toEqual([
+      ['fan-out', fanOutAttempt],
+      ['fan-out', fanOutAttempt],
+      ['task-open', fanOutAttempt],
+      ['task-open', fanOutAttempt],
+      ['task-open', fanOutAttempt],
+    ]);
+  });
+
+  it("gives the children of a fan-out the fan-out's attempt id, and each turn its own", async () => {
+    const { guard, asked } = scripted(() => ({ kind: 'allow' }));
+    const kernel = withGuard(guard);
+    const { session } = await kernel.start('p1', owner.accountId, 'fusion');
+    await kernel.idle();
+    const [turn, fanOut, ...children] = asked;
+    expect(children.map((charge) => charge.attemptId)).toEqual(
+      children.map(() => fanOut!.attemptId),
+    );
+    expect(turn!.attemptId).not.toBe(fanOut!.attemptId);
+
+    await kernel.say(session.id, owner, 'more');
+    await kernel.idle();
+    const turns = asked.filter((charge) => charge.at === 'turn').map((charge) => charge.attemptId);
+    expect(new Set(turns).size).toBe(2);
+  });
+
+  it('leaves a waiting task waiting across a restart', async () => {
+    const { guard } = scripted(() => ({ kind: 'escalate', approvalId: 'a-3' }));
+    const trace = new MemoryTrace();
+    const before = new Kernel(trace, new Broker(), oneStep, { budget: guard });
+    const { session } = await before.start('p1', owner.accountId, 'q');
+    await before.idle();
+    const after = new Kernel(trace, new Broker(), oneStep, { budget: guard });
+    expect(await after.restore()).toBe(0);
+    const root = (await after.snapshot(session.id, owner)).tasks[0]!;
+    expect(await trace.task(root.id)).toMatchObject({
+      status: 'waiting',
+      pending: { approvalId: 'a-3' },
+    });
+  });
+
   it('refuses a fan-out the guard denies and opens no child; the parent hears it as an error', async () => {
     const { guard } = scripted((charge) =>
       charge.at === 'fan-out' ? { kind: 'deny', reason: 'over the cap' } : { kind: 'allow' },

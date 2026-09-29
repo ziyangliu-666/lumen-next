@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react';
+import { Approvals } from './Approvals';
 import type { Money } from '@lumen/contracts';
 import { request, RequestFailure } from '@/core/api';
 import { Button } from '@/ui/button';
@@ -177,8 +178,8 @@ export function Wallet(): JSX.Element {
                 <p className="text-sm text-muted-foreground">
                   Budget checks run before a turn and when work is delegated. If recorded spend has
                   reached your cap, new work is blocked. Work already running can still exceed the
-                  cap. Approval requests are not yet available. Changing the cap does not add credit
-                  or change recorded spend.
+                  cap. Over-cap work waits for your decision in Budget approvals below. Changing the
+                  cap does not add credit or change recorded spend.
                 </p>
                 {saved && (
                   <p role="status" className="text-sm text-keep">
@@ -190,6 +191,7 @@ export function Wallet(): JSX.Element {
           </Card>
         </>
       )}
+      <Approvals />
       {page && (
         <Card>
           <CardHeader>

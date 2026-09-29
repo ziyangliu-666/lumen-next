@@ -44,9 +44,12 @@ export class MonthlyCapHandler implements BudgetHandler {
   }
 }
 
-/** Sprint 2 terminal policy. Durable approval is a separate Sprint 3 story. */
+/** Durable escalation when a resume port exists; otherwise fail closed. */
 export class ApprovalHandler implements BudgetHandler {
-  handle(): Promise<Decision> {
+  constructor(private readonly request?: (charge: Charge) => Promise<Decision>) {}
+
+  handle(charge: Charge): Promise<Decision> {
+    if (this.request) return this.request(charge);
     return Promise.resolve({ kind: 'deny', reason: 'over the cap' });
   }
 }

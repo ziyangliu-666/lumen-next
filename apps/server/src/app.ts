@@ -48,6 +48,8 @@ export interface AppOptions {
    */
   readonly identity: IdentityConfig | null;
   readonly webRoot?: string;
+  /** Behind HTTPS: send Strict-Transport-Security. main.ts sets it from the origin's scheme. */
+  readonly strictTransport?: boolean;
   /** The process's logger. Built here from logLevel when not given. */
   readonly log?: Log;
   readonly logLevel?: string;
@@ -153,6 +155,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
     // The session slice knows who opened a session, so it answers who may watch it.
     access: session.access,
     ...(options.webRoot ? { webRoot: options.webRoot } : {}),
+    ...(options.strictTransport ? { strictTransport: true } : {}),
     log,
   });
 

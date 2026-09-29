@@ -133,6 +133,7 @@ async function bootstrap(): Promise<void> {
           }),
         }),
     ...(webRoot ? { webRoot } : {}),
+    ...(process.env['LUMEN_ORIGIN']?.startsWith('https://') ? { strictTransport: true } : {}),
     ...(volumeRoot ? { volumeRoot } : {}),
     ...(provider ? { computeProvider: provider } : {}),
     model,

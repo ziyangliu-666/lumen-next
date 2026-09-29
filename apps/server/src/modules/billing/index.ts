@@ -3,6 +3,9 @@ import type { FastifyInstance } from 'fastify';
 import type { Db, Queryable } from '../../core/db/db.js';
 import { HttpError } from '../../core/http/httpError.js';
 import { Ledger } from './ledger.js';
+import { Topups, type TopupProvider } from './topups.js';
+import { topupRoutes } from './topupRoutes.js';
+export type { TopupProvider, TopupOrder, PaidTopup } from './topups.js';
 import { adminRoutes, type AdminAccountReader } from './adminRoutes.js';
 export type { AdminAccountReader } from './adminRoutes.js';
 import { Approvals } from './approvals.js';
@@ -30,6 +33,7 @@ export interface BillingSlice {
 
 export function createBillingSlice(deps: {
   db: Db | null;
+  topups?: TopupProvider;
   approvalResume?: BudgetApprovalResume;
   origin?: string;
   /** Identity-owned public read API; billing authorizes staff before calling it. */
@@ -61,6 +65,12 @@ export function createBillingSlice(deps: {
     ]),
     registerRoutes: (app) => {
       walletRoutes(ledger)(app);
+      topupRoutes(
+        deps.db ? new Topups(deps.db) : null,
+        deps.topups,
+        deps.origin,
+        deps.canSpend ?? (() => Promise.resolve(false)),
+      )(app);
       adminRoutes(deps.adminAccounts)(app);
       approvalRoutes(approvals, deps.origin, deps.canSpend ?? (() => Promise.resolve(false)))(app);
     },

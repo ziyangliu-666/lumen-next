@@ -7,7 +7,7 @@ Stripe and keys remain separate stories.
 
 ## Public surface
 
-`createBillingSlice({ db, canSpend?, adminAccounts?, approvalResume?, origin? })` returns:
+`createBillingSlice({ db, canSpend?, adminAccounts?, approvalResume?, origin?, topups? })` returns:
 
 - `registerRoutes(app)` — register the authenticated wallet and staff-only account APIs once.
 - `AdminAccountReader` — a read-only projection of identity's public `AdminAccounts` port, injected as `adminAccounts`; no role or suspension mutation is exposed.
@@ -245,3 +245,52 @@ prove waiting across restart, one resumed operation, a new approval for a later
 turn, fan-out children without replaying parent spend, rejection despite a cap
 increase, origin validation and account isolation. Missing approval dependencies
 continue to fail closed rather than inventing non-durable approval records.
+
+
+## Stripe top-up foundation (draft)
+
+`topups?: TopupProvider` is a server-only payment port, absent from the production
+composition until the Stripe adapter, configuration and Wallet checkout UI land.
+No payment credentials or new dependencies are included in this increment.
+The current routes therefore report top-ups disabled and checkout/webhook calls
+return 503. This is not the completed Sprint 3 Stripe outcome.
+
+The proposed first offer is a fixed USD 5 test purchase. The server owns the
+amount; a browser sends only `offer: "usd5"` and a UUID `requestId` to
+`POST /api/wallet/topups/checkout`. Identity, exact Origin and `canSpend` are
+required. The principal selects the account. Persisted order IDs allow the
+provider to use a stable Stripe idempotency key across retries. Paid requests
+and retries older than 23 hours return 409 rather than reusing an expired
+provider idempotency key. A fresh request ID deliberately opens a new purchase.
+
+`POST /api/billing/stripe/webhook` passes bounded raw bytes and the signature to
+the provider. That port must verify the signature and accept only paid USD
+Checkout events with both event/session live mode false. Browser returns do not
+write credit. Session/order/amount matching, row locks and a unique payment ID
+prevent duplicate credit, including concurrent deliveries and different event
+IDs for the same payment. Storage failure rolls back the credit and cap writes
+and returns a retryable server error. The raw parser is isolated to the webhook;
+ordinary wallet routes still parse JSON.
+
+Migration 013 records purchases separately from expense `ledger_entries`.
+Following #52's statement that a top-up raises the cap, a successful purchase
+atomically adds USD 5 to the saved cap in PostgreSQL numeric (missing cap: 1 to 6;
+explicit zero: 0 to 5) and marks the purchase paid. Spend is unchanged.
+`GET /api/wallet/topups` returns `{ enabled, receipts }`, scoped to the owner,
+with at most the newest 100 paid receipts. Receipts are historical purchases,
+not an available balance. The exact cap/credit relationship and future credit
+depletion remain explicit review points from #52; this draft introduces no
+second insufficient-credit denial or settlement policy. Suspended/deleted
+accounts still fail identity's spending check; webhook accounting must not
+silently discard a payment just because eligibility changed after checkout.
+
+Pending work before this can be called done: official Stripe adapter and signed
+fixture tests; core-reviewed environment configuration (test keys only, local
+`.env` / Fly secrets as agreed in #52); Wallet checkout and return states; the
+owner's accounting-policy review; and an actual test-mode Checkout/webhook run
+using the core-owned Stripe account. No key belongs in Git or a PR comment.
+
+`topups.test.ts` uses PostgreSQL to prove retry deduplication after recreation,
+concurrent purchases, saved-zero/decimal cap arithmetic, payment uniqueness,
+owner isolation and atomic rollback. `topupRoutes.test.ts` proves identity,
+Origin, eligibility, raw-body isolation and that checkout alone cannot credit.

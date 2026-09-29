@@ -5,6 +5,7 @@
 import type { FormEvent, JSX, ReactNode } from 'react';
 import type { Step, Task } from '@lumen/contracts';
 import { cn } from 'cn';
+import { ReplyText } from './text';
 import { Plus, SendHorizontal, Square } from 'lucide-react';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
@@ -246,7 +247,9 @@ function StepBlock({
       return (
         <li className="border-l-2 border-ink px-4 py-3">
           <Eyebrow className="text-ink">reply</Eyebrow>
-          <p className="mt-1 text-sm break-words text-ink">{step.text}</p>
+          <div className="mt-1 text-sm break-words text-ink">
+            <ReplyText text={step.text} />
+          </div>
         </li>
       );
   }
@@ -340,6 +343,25 @@ export function Findings({
  * say, and one button that sends, or stops the run while there is one. Steering
  * a task that is still running, and the "+", arrive with the steering slice.
  */
+/**
+ * The task shown is waiting for the owner: the guard escalated its next
+ * operation. The decision is taken on the Wallet page (billing's), so this
+ * says so and points there; the task resumes on its own once granted.
+ */
+export function WaitingNotice({ task }: { task: Task }): JSX.Element | null {
+  if (task.status !== 'waiting') return null;
+  return (
+    <p role="status" className="border-t border-rule bg-accent/40 px-4 py-2 text-sm text-ink">
+      <span className="font-mono text-xs tracking-wider text-decide uppercase">waiting</span> This
+      task is over the cap and needs your approval.{' '}
+      <a href="#/settings" className="underline underline-offset-2">
+        Decide in Wallet
+      </a>
+      ; it continues on its own once granted.
+    </p>
+  );
+}
+
 export function Composer({
   disabled,
   running,

@@ -69,6 +69,47 @@ the same email or provider. Retention does not anonymize project questions or
 finding text. Every authenticated project and finding read must preserve its
 account-ID ownership check.
 
+### Acceptance evidence, 29 September 2026
+
+On main base `dfb767f`, #57 and the composed budget wiring in #56 are merged.
+`sprint3Acceptance.test.ts` uses `openTestDb()` and the real composed application
+with identity cookies, plus a deterministic Worker that records spend/findings:
+
+- Passed: an owner creates a project and opens its session through HTTP; the
+  project list reports Finished, one finding and $0.10 spend.
+- Passed: closing and recomposing the application over the same database retains
+  the card and finding. This is application recreation, not a browser or host
+  crash test.
+- Passed: another account receives an empty list and 404 for project/finding
+  reads. After deletion, the old cookie receives 401; registration with the same
+  email does not recover ownership, while project/finding rows remain stored.
+- Passed: a zero cap stops a later turn; raising the cap and starting a new turn
+  updates the card to Finished with two findings and $0.20 spend.
+- Pending: a real cap approval wait and resume. The current composed guard stops
+  work; the test explicitly keeps this criterion as TODO. Raising a cap and
+  starting another turn is not evidence of an approval resume.
+
+`sessionIntegration.test.ts` also passes with the real session and steering
+public slices, a Broker command, memory storage and a scripted model: a queued
+`task.steer` reaches the model, a reader records a finding, and the card reports
+Finished and $0.05 spend. This checks the server integration, not a live model
+or browser composer. Browser Landing/Home acceptance remains pending.
+
+The last-visit story remains unimplemented. The
+[coordination request](https://github.com/ziyangliu-666/lumen-next/pull/24#issuecomment-5884072955)
+asks core to confirm migration 011, the exact historical-spend public port and
+visit API, and how to supply the shared logger. Existing SessionDirectory
+summaries expose cumulative spend only. No migration, private cross-slice SQL,
+State change or production logging change is included in these acceptance tests.
+
+Validation: the targeted PostgreSQL suite passes three cases with one explicit
+approval-resume TODO; the session/steering suite passes two cases. Full
+`npm run verify` with `DATABASE_URL` passes format, lint and typecheck but is not
+green: the latest run has 884 passing tests, 11 skipped and one TODO, with 5-second
+timeouts in billing's `adminIntegration.test.ts` and identity's
+`accountDeletion.test.ts`. A diagnostic coverage run with two workers also
+timed out in those cases. Their source and timeout settings are unchanged.
+
 ## Public index
 
 `createProjectsSlice({ sessions, db? })` creates an isolated slice instance. Supply

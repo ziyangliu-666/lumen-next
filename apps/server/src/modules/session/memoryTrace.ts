@@ -10,7 +10,7 @@ import type {
   TaskStatus,
 } from '@lumen/contracts';
 import { add, zero } from '@lumen/contracts';
-import { makeTask, type TaskRecord } from '../../core/domain/task.js';
+import { makeTask, type PendingApproval, type TaskRecord } from '../../core/domain/task.js';
 import { isEnding, type Charged, type Trace, type TraceSnapshot } from './trace.js';
 
 // The record kept in process memory. A restart forgets it, so it is for a
@@ -72,6 +72,22 @@ export class MemoryTrace implements Trace {
     const next: TaskRecord = { ...task, status, endedAt: isEnding(status) ? Date.now() : null };
     this.tasks.set(taskId, next);
     return Promise.resolve(next);
+  }
+
+  setPending(taskId: string, pending: PendingApproval | null): Promise<TaskRecord> {
+    const task = this.tasks.get(taskId);
+    if (!task) return Promise.reject(new Error(`trace: no task ${taskId}`));
+    const { pending: _dropped, ...rest } = task;
+    const next: TaskRecord = pending ? { ...rest, pending } : rest;
+    this.tasks.set(taskId, next);
+    return Promise.resolve(next);
+  }
+
+  taskByApproval(approvalId: string): Promise<TaskRecord | null> {
+    for (const task of this.tasks.values()) {
+      if (task.pending?.approvalId === approvalId) return Promise.resolve(task);
+    }
+    return Promise.resolve(null);
   }
 
   appendStep(taskId: string, kind: StepKind, text: string, detail?: StepDetail): Promise<Step> {

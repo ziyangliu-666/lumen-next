@@ -10,7 +10,7 @@ import type {
   TaskStatus,
 } from '@lumen/contracts';
 import type { Db, Queryable } from '../../core/db/db.js';
-import type { TaskRecord } from '../../core/domain/task.js';
+import type { PendingApproval, TaskRecord } from '../../core/domain/task.js';
 import type { SpendRecorder } from './spendRecorder.js';
 import { isEnding, type Charged, type Trace, type TraceSnapshot } from './trace.js';
 
@@ -42,6 +42,7 @@ interface TaskRow {
   started_at: Date;
   ended_at: Date | null;
   child_ids: string[];
+  pending: PendingApproval | null;
   [column: string]: unknown;
 }
 
@@ -58,7 +59,7 @@ interface StepRow {
 // the tree, and an array kept beside it would be a second one to keep in step.
 const TASK_COLUMNS = `
   t.id, t.session_id, t.parent_id, t.agent, t.title, t.depth, t.status, t.own_cost,
-  t.started_at, t.ended_at,
+  t.started_at, t.ended_at, t.pending,
   coalesce(
     (select array_agg(c.id order by c.seq) from tasks c where c.parent_id = t.id),
     '{}'
@@ -98,6 +99,7 @@ function toTask(row: TaskRow): TaskRecord {
     startedAt: row.started_at.getTime(),
     endedAt: row.ended_at ? row.ended_at.getTime() : null,
     childIds: row.child_ids,
+    ...(row.pending ? { pending: row.pending } : {}),
   };
 }
 
@@ -176,6 +178,19 @@ export class PgTrace implements Trace {
     );
     if (updated.length === 0) throw new Error(`trace: no task ${taskId}`);
     return (await this.task(taskId))!;
+  }
+
+  async setPending(taskId: string, pending: PendingApproval | null): Promise<TaskRecord> {
+    const updated = await this.db.query(
+      `update tasks set pending = $2 where id = $1 returning id`,
+      [UUID.test(taskId) ? taskId : null, pending ? JSON.stringify(pending) : null],
+    );
+    if (updated.length === 0) throw new Error(`trace: no task ${taskId}`);
+    return (await this.task(taskId))!;
+  }
+
+  async taskByApproval(approvalId: string): Promise<TaskRecord | null> {
+    return this.oneTask(this.db, "where t.pending->>'approvalId' = $1", [approvalId]);
   }
 
   async appendStep(

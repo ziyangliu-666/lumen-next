@@ -128,6 +128,7 @@ describe.skipIf(!TEST_DATABASE_URL)('billing: Postgres ledger', () => {
         await billing.budgetGuard.check({
           accountId,
           taskId,
+          attemptId: 'attempt-1',
           estimate: { dollars },
           at: 'turn',
           reason: 'boundary',
@@ -159,6 +160,7 @@ describe.skipIf(!TEST_DATABASE_URL)('billing: Postgres ledger', () => {
     const charge = {
       accountId: 'wired',
       taskId,
+      attemptId: 'attempt-1',
       estimate: { dollars: 1 },
       at: 'turn' as const,
       reason: 'model',

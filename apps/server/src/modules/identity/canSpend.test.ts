@@ -103,6 +103,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: account eligibility for billing',
     const charge = {
       accountId,
       taskId: randomUUID(),
+      attemptId: randomUUID(),
       estimate: { dollars: 0.01 },
       at: 'task-open' as const,
       reason: 'test',

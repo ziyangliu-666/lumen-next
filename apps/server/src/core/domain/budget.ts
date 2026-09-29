@@ -13,6 +13,13 @@ export interface Charge {
   readonly accountId: string;
   readonly taskId: string;
   /**
+   * The one operation this check is for. The same while that operation is
+   * blocked and asked again after an approval; new for a later operation on
+   * the same task, so an old approval never authorises a different turn. The
+   * children a fan-out opens carry the fan-out's attempt id.
+   */
+  readonly attemptId: string;
+  /**
    * What the work is expected to cost. Zero means "unknown": the question is
    * then only whether this account may spend at all and still has room.
    */
@@ -43,3 +50,16 @@ export interface BudgetGuard {
 export const allowEverything: BudgetGuard = {
   check: () => Promise.resolve({ kind: 'allow' }),
 };
+
+/**
+ * The way back after an escalation. Billing keeps the approval and, once the
+ * owner granted it, calls this; session finds the blocked operation by the
+ * approval id and asks the guard again with the same attempt id. The resume
+ * consumes the approval: a later call with the same id, an id that is not
+ * this account's, or one that names nothing, is not found (404), which the
+ * caller treats as final. A task that is waiting on the approval but was
+ * stopped meanwhile is left as it is.
+ */
+export interface BudgetApprovalResume {
+  requestResume(input: { readonly accountId: string; readonly approvalId: string }): Promise<void>;
+}

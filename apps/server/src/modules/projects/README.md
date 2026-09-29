@@ -24,6 +24,51 @@ The normal application entry point registers projects using session's public
 The core owner approved these two shared changes in PR #16. See
 [the integration note](integration/README.md) for remaining cross-slice work.
 
+## Sprint 3 agreement
+
+Sprint 2 is closed through PRs #24, #30 and #31. The core owner
+[agreed the Sprint 3 scope on 28 September 2026](https://github.com/ziyangliu-666/lumen-next/pull/24#issuecomment-5862310844),
+including the following additional story. These are planned acceptance criteria,
+not claims that the work or acceptance checks have already been completed.
+
+### Landing and Home integration acceptance
+
+- A signed-in user creates and opens an owned project.
+- Home shows authoritative status, spend and findings after steering, after a
+  cap wait and resume, and after a server restart.
+- A deleted or changed account cannot see another account's records.
+- Record the acceptance evidence in this README. Fix only reproducible defects
+  within projects, Home or Landing; coordinate public-contract changes with
+  their owners.
+
+Composer steering, cap enforcement, restart restoration, OAuth and Stripe remain
+with their existing owners. Steering uses `projects.requireProject` through the
+public index; no additional projects wiring is owed for #32, #33 or #41.
+
+### Review what ran while away
+
+- `GET /api/projects` returns each project's last-visit time and
+  `sinceLastVisit: { sessionsEnded, findingsAdded, spend }`.
+- Opening a project records its visit. Home marks cards with changes since the
+  last visit, and the next visit clears the mark.
+- The last-visit time survives a server restart.
+- Test both memory and PostgreSQL stores, and render the mark in a page test.
+- Keep the State pattern unchanged. The owner's proposed storage is a
+  `projects.last_opened_at` column plus one query, without a new table unless
+  a demonstrated need emerges.
+
+This scope record changes documentation only. It introduces no migration or
+runtime behavior; the story's implementation is subsequent work.
+
+### Account deletion policy
+
+The projects owner [accepted the policy on #49](https://github.com/ziyangliu-666/lumen-next/pull/49#issuecomment-5827081283):
+retain projects and findings associated with the tombstoned account ID. Do not
+cascade-delete them, transfer ownership, or attach them to a new account using
+the same email or provider. Retention does not anonymize project questions or
+finding text. Every authenticated project and finding read must preserve its
+account-ID ownership check.
+
 ## Public index
 
 `createProjectsSlice({ sessions, db? })` creates an isolated slice instance. Supply

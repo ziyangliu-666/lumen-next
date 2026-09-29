@@ -110,7 +110,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
   // Without identity there are no real accounts, and billing keeps denying.
   const billing = createBillingSlice({
     db,
-    ...(identity ? { canSpend: identity.canSpend } : {}),
+    ...(identity ? { canSpend: identity.canSpend, adminAccounts: identity } : {}),
   });
   // Steering needs session's SessionDirectory to check a task.steer's
   // ownership and to find a task's project; session may run steering's own

@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import type { Db, Queryable } from '../../core/db/db.js';
 import { HttpError } from '../../core/http/httpError.js';
 import { Ledger } from './ledger.js';
+import { adminRoutes, type AdminAccountReader } from './adminRoutes.js';
+export type { AdminAccountReader } from './adminRoutes.js';
 import type { BudgetGuard } from '../../core/domain/budget.js';
 import type { Spend, WalletSummary } from './ports.js';
 import { walletRoutes } from './routes.js';
@@ -25,6 +27,8 @@ export interface BillingSlice {
 
 export function createBillingSlice(deps: {
   db: Db | null;
+  /** Identity-owned public read API; billing authorizes staff before calling it. */
+  adminAccounts?: AdminAccountReader;
   /** Identity supplies eligibility through its public API when guard wiring lands. */
   canSpend?: (accountId: string) => Promise<boolean>;
 }): BillingSlice {
@@ -41,6 +45,9 @@ export function createBillingSlice(deps: {
       new MonthlyCapHandler((accountId, estimate) => required().fits(accountId, estimate)),
       new ApprovalHandler(),
     ]),
-    registerRoutes: walletRoutes(ledger),
+    registerRoutes: (app) => {
+      walletRoutes(ledger)(app);
+      adminRoutes(deps.adminAccounts)(app);
+    },
   };
 }

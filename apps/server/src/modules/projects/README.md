@@ -93,7 +93,21 @@ with identity cookies, plus a deterministic Worker that records spend/findings:
 public slices, a Broker command, memory storage and a scripted model: a queued
 `task.steer` reaches the model, a reader records a finding, and the card reports
 Finished and $0.05 spend. This checks the server integration, not a live model
-or browser composer. Browser Landing/Home acceptance remains pending.
+or browser composer.
+
+Browser acceptance on 29 September used the production build at
+`http://localhost:4100`, PostgreSQL, real identity cookies and the demo worker
+with no external model. Passed: signed-out Home links to Landing; signing in
+shows the correct account and empty state; Landing creates an Explore project
+and opens its session; Home shows Finished, $0.0300 and three findings; expanding
+findings shows source links, and a source link opens the correct reader task.
+After stopping and restarting the server process, reloading Home preserves the
+card, spend and findings. Signing out and revisiting Home shows the signed-out
+prompt without the old card. This is a completed browser pass for the demo flow,
+not browser evidence of real-model steering, cap approval or account deletion.
+The source Session page's findings rail is still empty after restart although
+Home's persisted findings are present; that Session-page limitation is outside
+this slice and is not counted as a projects fix.
 
 The last-visit story remains unimplemented. The
 [coordination request](https://github.com/ziyangliu-666/lumen-next/pull/24#issuecomment-5884072955)
@@ -109,6 +123,11 @@ green: the latest run has 884 passing tests, 11 skipped and one TODO, with 5-sec
 timeouts in billing's `adminIntegration.test.ts` and identity's
 `accountDeletion.test.ts`. A diagnostic coverage run with two workers also
 timed out in those cases. Their source and timeout settings are unchanged.
+Both files subsequently passed in an isolated run (eight tests). PR #60 at
+`846acdb` passed remote quality, Web build, dependency audit and CodeQL; its
+review-request job was skipped because the PR is a draft. These results suggest
+local timing sensitivity but do not turn the failed full local runs into passes.
+`npm run build` also passed before the browser acceptance.
 
 ## Public index
 

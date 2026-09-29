@@ -139,10 +139,15 @@ describe('core: routes', () => {
     });
     expect(api.headers['content-security-policy']).toContain("frame-ancestors 'none'");
     expect(api.headers['content-security-policy']).toContain("script-src 'self'");
+    expect(api.headers['content-security-policy']).not.toMatch(/https?:|ws:/);
+    expect(api.headers['cross-origin-embedder-policy']).toBe('require-corp');
     // Not behind HTTPS here: no HSTS, which a browser would remember for a year.
     expect(api.headers).not.toHaveProperty('strict-transport-security');
-    const page = await server.inject({ method: 'GET', url: '/api/nope' });
+    const page = await server.inject({ method: 'GET', url: '/nope' });
     expect(page.headers['x-content-type-options']).toBe('nosniff');
+    expect(page.headers['cache-control']).toBe('no-cache');
+    const asset = await server.inject({ method: 'GET', url: '/assets/index-abc.js' });
+    expect(asset.headers['cache-control']).toBe('public, max-age=31536000, immutable');
   });
 
   it('answers an unknown path with JSON, not HTML', async () => {

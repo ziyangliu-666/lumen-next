@@ -38,10 +38,10 @@ function messageOf(error: unknown): string {
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   "img-src 'self' data:",
-  "connect-src 'self' ws: wss:",
+  "connect-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -86,9 +86,10 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   await app.register(websocket);
 
   // The response headers a scanner asks for, set here so that no route can
-  // forget them. The policy allows the app's own files, the two Google Fonts
-  // hosts index.html links, inline style attributes (Radix positions its
-  // popovers with them) and the event stream over the same host.
+  // forget them. The policy allows the app's own files (fonts included, they
+  // are served from here), inline style attributes (Radix positions its
+  // popovers with them) and the event stream on the same host ('self' covers
+  // ws and wss to this host).
   app.addHook('onSend', async (request, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
@@ -96,8 +97,16 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     reply.header('Cross-Origin-Opener-Policy', 'same-origin');
     reply.header('Cross-Origin-Resource-Policy', 'same-origin');
+    reply.header('Cross-Origin-Embedder-Policy', 'require-corp');
     reply.header('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+    // The API is never cached. A built asset carries a content hash in its
+    // name, so it is cached for good; the page that names it is re-checked.
     if (request.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
+    else if (request.url.startsWith('/assets/')) {
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (request.url.startsWith('/fonts/')) {
+      reply.header('Cache-Control', 'public, max-age=604800');
+    } else reply.header('Cache-Control', 'no-cache');
     if (deps.strictTransport) {
       reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }

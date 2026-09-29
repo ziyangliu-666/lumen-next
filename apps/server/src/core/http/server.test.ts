@@ -127,6 +127,24 @@ describe('core: routes', () => {
     expect(response.json()).toEqual({ status: 'ok' });
   });
 
+  it('sends the security headers on every answer, and no-store on the API', async () => {
+    const { app: server } = await build();
+    const api = await server.inject({ method: 'GET', url: '/api/health' });
+    expect(api.headers).toMatchObject({
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'DENY',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+      'cross-origin-opener-policy': 'same-origin',
+      'cache-control': 'no-store',
+    });
+    expect(api.headers['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(api.headers['content-security-policy']).toContain("script-src 'self'");
+    // Not behind HTTPS here: no HSTS, which a browser would remember for a year.
+    expect(api.headers).not.toHaveProperty('strict-transport-security');
+    const page = await server.inject({ method: 'GET', url: '/api/nope' });
+    expect(page.headers['x-content-type-options']).toBe('nosniff');
+  });
+
   it('answers an unknown path with JSON, not HTML', async () => {
     const { app: server } = await build();
     const response = await server.inject({ method: 'GET', url: '/api/nope' });

@@ -2,11 +2,12 @@
 
 UC5 owns the ledger, wallet, budget checks, keys, payments and administration.
 The ledger, Wallet tab, budget guard connection and read-only administration are
-merged. Stripe, keys and persisted approvals remain separate stories.
+merged. This approval increment adds durable decisions and session resumption against #62.
+Stripe and keys remain separate stories.
 
 ## Public surface
 
-`createBillingSlice({ db, canSpend?, adminAccounts? })` returns:
+`createBillingSlice({ db, canSpend?, adminAccounts?, approvalResume?, origin? })` returns:
 
 - `registerRoutes(app)` — register the authenticated wallet and staff-only account APIs once.
 - `AdminAccountReader` — a read-only projection of identity's public `AdminAccounts` port, injected as `adminAccounts`; no role or suspension mutation is exposed.
@@ -45,7 +46,7 @@ input, 401 no principal, 503 database unavailable, and sanitized 500 storage
 failure. A cap is a flat account spending limit, not prepaid balance. Since #56,
 the saved cap is checked before turns, fan-out and task opening in database-backed
 sessions. Work already running is not interrupted or reserved against the cap;
-approval requests are not yet available.
+over-cap work waits for an owner decision when the approval resume port is configured.
 
 Money must be finite and non-negative, below 1000000 and at most six decimal
 places. SQL stores `numeric(12,6)` and sums it. The browser displays four decimals
@@ -109,11 +110,15 @@ billing does not inspect identity's tables or trust an account ID as eligibility
 allows when all-time spend plus estimate is at most the account cap. Zero means
 unknown cost and requires strictly positive remaining room; equality denies.
 Addition and comparison happen in one SQL query using numeric.
-The terminal handler denies with `over the cap`; it creates no fake approval.
+When the resume port is configured, a stored-approval policy runs after identity
+and before the cap policy. Rejected attempts deny, pending attempts escalate and
+consumed attempts allow. The terminal handler persists a request and escalates
+when the cap does not allow the charge. Without the port it still denies with
+`over the cap`. Identity eligibility is checked on every path.
 
 These classes and `BudgetHandler` are exported by the public index so a fourth
 policy can be inserted without changing callers. The test uses a synthetic
-escalation policy to prove extension; it is not a persisted approval feature.
+escalation policy to prove extension; the durable approval integration is exercised separately by `approvalFlow.test.ts`.
 `Charge`, `Decision`, `BudgetGuard` and `CheckPoint` come from
 `core/domain/budget.ts` and are re-exported by the billing public index. Billing
 keeps only its own `Spend` and `WalletSummary` shapes in `ports.ts`.
@@ -127,7 +132,7 @@ A denial prevents the checked work. Turn refusal records its reason in the trace
 fan-out refusal rejects `WorkerReport.delegate` with the reason. If the worker
 lets that rejection propagate, the parent fails without opening any children. Unknown-cost work
 needs remaining room; it is not a guarantee against overshoot within a running
-step or concurrent tasks. Durable approvals remain a separate story.
+step or concurrent tasks. Durable approval authorizes only the stored attempt.
 `app.test.ts` exercises the composition with real sign-in and Postgres: a new
 account runs below its default cap, saved over-cap and zero-cap accounts cannot
 start work, and an exhausted parent cannot open delegated work.
@@ -192,18 +197,51 @@ composition serves real identity summaries to a staff cookie, denies a member
 cookie, and refuses forged stub credentials with real identity enabled.
 
 
-## Durable approval dependency
+## Durable approvals (core #62)
 
-The PM/core decision on #52 requires the core/session PR to merge before the
-billing approval PR opens. Core owns the durable `Charge.attemptId`, the
-`BudgetApprovalResume.requestResume({ accountId, approvalId })` port, waiting
-operation persistence and checkpoint resumption. Billing then owns approval
-storage, authenticated grant/reject routes and atomic single-use consumption.
-These are agreed responsibilities, not implemented features.
+Core/session owns `Charge.attemptId`, `BudgetApprovalResume` and durable waiting
+operations. `app.ts` injects `session.approvals` into billing through a closure.
+Billing reads no session tables. Migration 012 creates `billing_approvals` with
+owner, task, attempt, checkpoint, SQL numeric estimate, reason, decision timestamps
+and durable delivery state. Unknown cost is computed in SQL and displayed as
+"one execution of unknown cost", never as a zero-dollar purchase.
 
-A fan-out grant covers that operation's children with the same attempt ID;
-it must not produce a separate approval prompt for every child. A later
-operation has a new attempt ID. Unknown cost must be described as permission
-for one execution of unknown cost, never as a zero-dollar charge. Billing will
-implement against the merged core contract rather than freezing a second copy
-of it. Until then the terminal approval handler continues to deny over-cap work.
+- `GET /api/wallet/approvals` returns `{ approvals }`, at most 100 rows, pending
+  first and then newest. Each owner sees only their own rows.
+- `POST /api/wallet/approvals/:id/grant` and `/reject` return 202 with the saved
+  decision. Both require the owner's identity, current spending eligibility and
+  the configured exact Origin. Body account IDs never select an owner. Invalid
+  IDs return 400, foreign/missing IDs 404, conflicting decisions 409.
+- Repeating the same decision is idempotent. A row lock and conditional update
+  atomically change pending to consumed (grant) or rejected and queue delivery.
+  Here consumed means authorization committed for the attempt, not that work
+  succeeded or finished. This follows #62's rule: the resume rechecks an attempt
+  whose consumed approval allows it. Session consumes its own pending operation
+  so repeated `requestResume` cannot run it again.
+- The route plugin delivers queued decisions once a second, with a 30-second
+  database lease and `SKIP LOCKED`. Non-404 delivery failures remain retryable;
+  core's duplicate/missing/stopped-operation 404 is final. Closing the server
+  clears the timer and drains delivery. A process restart resumes pending
+  deliveries from SQL. A rejected decision also resumes the check, which denies
+  and stops the task without running the worker even if the cap was later raised.
+
+A consumed fan-out approval permits its child-open checks under the same account
+and attempt ID. Other task/checkpoint combinations deny; a later operation has
+a new attempt ID and cannot reuse it. Root estimate matching uses SQL numeric.
+As in #62, this is not exactly-once external effects: a process failure after
+session consumes its pending operation can leave work stopped. There is no
+reservation and approval does not modify the account cap, credit or ledger.
+
+Wallet includes an approval panel with approve/reject, refresh, loading, empty,
+error and delivery-pending states. Delivery is not a promise of task success;
+the session remains the source of its final outcome. The bounded list and
+explicit refresh are the initial UI; pagination and live notifications are not
+part of this increment.
+
+`approvals.test.ts` covers durable request deduplication, owner/attempt binding,
+concurrent grants/delivery, retries, terminal 404, rejection and exact decimal
+matching. `approvalFlow.test.ts` uses real sign-in, HTTP routes and PostgreSQL to
+prove waiting across restart, one resumed operation, a new approval for a later
+turn, fan-out children without replaying parent spend, rejection despite a cap
+increase, origin validation and account isolation. Missing approval dependencies
+continue to fail closed rather than inventing non-durable approval records.

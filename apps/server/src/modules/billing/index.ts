@@ -5,7 +5,10 @@ import { HttpError } from '../../core/http/httpError.js';
 import { Ledger } from './ledger.js';
 import { adminRoutes, type AdminAccountReader } from './adminRoutes.js';
 export type { AdminAccountReader } from './adminRoutes.js';
-import type { BudgetGuard } from '../../core/domain/budget.js';
+import { Approvals } from './approvals.js';
+import { approvalRoutes } from './approvalRoutes.js';
+export type { Approval } from './approvals.js';
+import type { BudgetApprovalResume, BudgetGuard, Charge } from '../../core/domain/budget.js';
 import type { Spend, WalletSummary } from './ports.js';
 import { walletRoutes } from './routes.js';
 import { AccountHandler, ApprovalHandler, BudgetChain, MonthlyCapHandler } from './budgetChain.js';
@@ -27,11 +30,15 @@ export interface BillingSlice {
 
 export function createBillingSlice(deps: {
   db: Db | null;
+  approvalResume?: BudgetApprovalResume;
+  origin?: string;
   /** Identity-owned public read API; billing authorizes staff before calling it. */
   adminAccounts?: AdminAccountReader;
   /** Identity supplies eligibility through its public API when guard wiring lands. */
   canSpend?: (accountId: string) => Promise<boolean>;
 }): BillingSlice {
+  const approvals =
+    deps.db && deps.approvalResume ? new Approvals(deps.db, deps.approvalResume) : null;
   const ledger = deps.db ? new Ledger(deps.db) : null;
   const required = (): Ledger => {
     if (!ledger) throw new HttpError(503, 'wallet requires a database');
@@ -42,12 +49,20 @@ export function createBillingSlice(deps: {
     record: (entry, tx) => required().record(entry, tx),
     budgetGuard: new BudgetChain([
       new AccountHandler(deps.canSpend ?? (() => Promise.resolve(false))),
+      ...(approvals
+        ? [
+            {
+              handle: (charge: Charge) => approvals.check(charge),
+            },
+          ]
+        : []),
       new MonthlyCapHandler((accountId, estimate) => required().fits(accountId, estimate)),
-      new ApprovalHandler(),
+      new ApprovalHandler(approvals ? (charge) => approvals.request(charge) : undefined),
     ]),
     registerRoutes: (app) => {
       walletRoutes(ledger)(app);
       adminRoutes(deps.adminAccounts)(app);
+      approvalRoutes(approvals, deps.origin, deps.canSpend ?? (() => Promise.resolve(false)))(app);
     },
   };
 }

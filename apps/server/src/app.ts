@@ -113,6 +113,12 @@ export async function composeApp(options: AppOptions): Promise<App> {
   const billing = createBillingSlice({
     db,
     ...(identity ? { canSpend: identity.canSpend, adminAccounts: identity } : {}),
+    ...(db && options.identity
+      ? {
+          origin: options.identity.origin,
+          approvalResume: { requestResume: (input) => session.approvals.requestResume(input) },
+        }
+      : {}),
   });
   // Steering needs session's SessionDirectory to check a task.steer's
   // ownership and to find a task's project; session may run steering's own

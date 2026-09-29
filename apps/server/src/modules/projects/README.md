@@ -109,17 +109,37 @@ The source Session page's findings rail is still empty after restart although
 Home's persisted findings are present; that Session-page limitation is outside
 this slice and is not counted as a projects fix.
 
-The last-visit story remains unimplemented. The
+The last-visit story is not connected to production. Internal preparation is
+available in `lastVisit.ts` and Home's `ProjectActivity.tsx`, with unit and
+server-rendered page-component tests. Neither is exported from the slice's public
+index or mounted on Home yet; existing HTTP responses and stores are unchanged.
+
+The draft counting rule uses `(lastOpenedAt, asOf]`, or `[createdAt, asOf]` for a
+never-opened project. Null session end times do not count. A visit advances
+monotonically; the future store must enforce that atomically, not with a
+read-then-write race. The helper accepts an authoritative spend aggregate for
+that same window; it does not sum session totals or infer historical spend.
+Unknown spend stays null internally and the component says "Spend unavailable".
+The component marks any positive count or spend (including spend below display
+precision) and removes the mark for a confirmed empty summary. It does not clear
+anything optimistically on a click. These are preparation rules to review when
+connecting the agreed API, not a new public contract or durable visit record.
+The counting helper is a memory/reference implementation over complete,
+project-scoped inputs, not a query over a paginated findings list. Production
+database aggregation and the memory/PostgreSQL store parity tests remain pending.
+The existing State pattern is unchanged; no pattern refactor is introduced.
+
+The
 [coordination request](https://github.com/ziyangliu-666/lumen-next/pull/24#issuecomment-5884072955)
 asks core to confirm migration 011, the exact historical-spend public port and
 visit API, and how to supply the shared logger. Existing SessionDirectory
 summaries expose cumulative spend only. No migration, private cross-slice SQL,
-State change or production logging change is included in these acceptance tests.
+State change or production logging change is included in this preparation.
 
 Validation: the targeted PostgreSQL suite passes three cases with one explicit
 approval-resume TODO; the session/steering suite passes two cases. Full
 `npm run verify` with `DATABASE_URL` passes format, lint and typecheck but is not
-green: the latest run has 884 passing tests, 11 skipped and one TODO, with 5-second
+green: the latest run has 895 passing tests, 11 skipped and one TODO, with 5-second
 timeouts in billing's `adminIntegration.test.ts` and identity's
 `accountDeletion.test.ts`. A diagnostic coverage run with two workers also
 timed out in those cases. Their source and timeout settings are unchanged.
@@ -128,6 +148,8 @@ Both files subsequently passed in an isolated run (eight tests). PR #60 at
 review-request job was skipped because the PR is a draft. These results suggest
 local timing sensitivity but do not turn the failed full local runs into passes.
 `npm run build` also passed before the browser acceptance.
+Last-visit preparation adds 11 passing tests (five internal counting/visit tests
+and six page-component rendering cases), included in that latest full run.
 
 ## Public index
 

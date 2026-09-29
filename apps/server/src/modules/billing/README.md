@@ -6,9 +6,10 @@ approvals and administration remain separate stories.
 
 ## Public surface
 
-`createBillingSlice({ db, canSpend? })` returns:
+`createBillingSlice({ db, canSpend?, adminAccounts? })` returns:
 
-- `registerRoutes(app)` — register the authenticated wallet API once.
+- `registerRoutes(app)` — register the authenticated wallet and staff-only account APIs once.
+- `AdminAccountReader` — a read-only projection of identity's public `AdminAccounts` port, injected as `adminAccounts`; no role or suspension mutation is exposed.
 - `record({ accountId, taskId, amount, reason }, tx?)` — trusted in-process
   expense writer. Each call is one expense, not an idempotent retry. A supplied
   `Queryable` joins the caller's transaction; otherwise the INSERT commits alone.
@@ -153,3 +154,28 @@ missing/deleted account 404, sanitized storage errors, no credential fields,
 no-store responses and browser verification of direct member navigation and
 mobile layout. Role and suspension mutations, invites and emergency stop are
 excluded until their authorization and session-revocation rules are agreed.
+
+
+## Read-only administration implementation
+
+The admin increment provides `GET /api/admin/accounts` returning `{ accounts }`
+and `GET /api/admin/accounts/:id` returning `{ account }`. `app.ts` supplies the
+identity instance through its public index. Both endpoints require staff before
+calling identity, set `Cache-Control: no-store`, and explicitly project only
+id, email, displayName, role, suspended and createdAt. Invalid UUIDs return 400;
+missing or deleted accounts return 404. Missing identity returns 503 after
+staff authorization; unexpected failures use core's sanitized 500 response.
+
+The Admin page replaces the sample row with the live directory and account
+details. It uses the existing shell staff guard, request helper and UI controls.
+It has loading, empty, error/retry, refresh and unavailable-detail states; stale
+requests are cancelled when changing selection or leaving the page. Spend,
+role changes, suspension controls and deleted-account recovery are not part of
+this read-only view. The public identity list currently has no pagination port;
+pagination must be agreed with identity before growing that API.
+
+`adminRoutes.test.ts` covers authorization before identity access, summary-only
+responses, no-store on errors, invalid IDs, empty/missing results, sanitized
+failures and unavailable identity. `adminIntegration.test.ts` proves that the
+composition serves real identity summaries to a staff cookie, denies a member
+cookie, and refuses forged stub credentials with real identity enabled.

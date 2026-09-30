@@ -1,3 +1,20 @@
+/* The two typefaces, served from this origin (public/fonts, see the README
+   there). Variable files: one per family covers every weight the pages use. */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/archivo.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono.woff2') format('woff2');
+}
+
 /* The single source of colour, type and radius for the whole web app.
    The values come from the annotated spec at docs/spec/index.html, so the
    product and the screens the team reviewed stay the same product.

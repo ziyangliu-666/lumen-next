@@ -12,6 +12,7 @@ import type {
 import { zero } from '@lumen/contracts';
 import { allowEverything, type BudgetGuard, type CheckPoint } from '../../core/domain/budget.js';
 import { recordable } from '../../core/domain/money.js';
+import type { PendingApproval } from '../../core/domain/task.js';
 import type { Delegated, Worker, WorkerReport } from '../../core/domain/worker.js';
 import type { Principal, SessionAccess } from '../../core/http/authGuard.js';
 import { notFound } from '../../core/http/httpError.js';
@@ -95,7 +96,7 @@ export class Kernel {
     // Read the snapshot before the worker starts, so the caller always gets
     // the root as it was opened and the page draws the rest from the events.
     const snapshot = await this.snapshotOf(session.id);
-    this.track(this.run(root, text));
+    this.track(this.run(root, text, {}));
     return snapshot;
   }
 
@@ -103,7 +104,7 @@ export class Kernel {
   async say(sessionId: string, principal: Principal, text: string): Promise<void> {
     const root = await this.rootFor(sessionId, principal);
     await this.appendStep(root.id, 'you', text);
-    this.track(this.run(root, text));
+    this.track(this.run(root, text, {}));
   }
 
   async stop(sessionId: string, principal: Principal): Promise<void> {
@@ -153,9 +154,31 @@ export class Kernel {
    * the next snapshot a browser reads shows it.
    */
   async restore(): Promise<number> {
-    const orphans = await this.trace.openTasks();
+    // A waiting task waits for a person, not for a process: it keeps waiting,
+    // with the operation it was blocked on in its record.
+    const orphans = (await this.trace.openTasks()).filter((task) => task.status !== 'waiting');
     for (const task of orphans) await this.trace.setStatus(task.id, 'stopped');
     return orphans.length;
+  }
+
+  /**
+   * BudgetApprovalResume: billing calls this once the owner granted the
+   * approval. The blocked operation is asked again with its own attempt id,
+   * and runs if the guard now allows it. Not found for an approval that is not
+   * this account's or that names nothing, which a consumed one does; nothing
+   * for a task that was stopped while it waited.
+   */
+  async requestResume(input: {
+    readonly accountId: string;
+    readonly approvalId: string;
+  }): Promise<void> {
+    const task = await this.trace.taskByApproval(input.approvalId);
+    const session = task ? await this.trace.session(task.sessionId) : null;
+    if (!task || !session || session.accountId !== input.accountId) throw notFound('approval');
+    if (task.status !== 'waiting' || !task.pending) return;
+    const { pending } = task;
+    if (pending.at === 'fan-out') this.track(this.resumeFanOut(task, pending));
+    else this.track(this.run(task, pending.input, { attemptId: pending.attemptId, resume: true }));
   }
 
   /**
@@ -238,15 +261,29 @@ export class Kernel {
     const parent = await this.taskOrThrow(taskId);
     this.delegation.check(parent, work);
     // Check point: fan-out. One question for the whole fan-out, before a single
-    // child exists, so a refusal leaves nothing half-opened on the page.
-    const verdict = await this.ask(parent, 'fan-out', `delegate ${work.length}`);
+    // child exists, so a refusal leaves nothing half-opened on the page. The
+    // children carry the fan-out's attempt id: one approval covers all of them.
+    const attemptId = randomUUID();
+    const verdict = await this.ask(parent, 'fan-out', `delegate ${work.length}`, attemptId, work);
     if (verdict !== null) {
-      this.log.warn({ sessionId: parent.sessionId, taskId: parent.id, verdict }, 'fan-out refused');
-      throw new DelegationRefused(`the budget does not allow it: ${verdict}`);
+      this.log.warn(
+        { sessionId: parent.sessionId, taskId: parent.id, verdict: verdict.sentence },
+        verdict.waiting ? 'fan-out waits for an approval' : 'fan-out refused',
+      );
+      throw new DelegationRefused(`the budget does not allow it: ${verdict.sentence}`);
     }
+    const children = await this.openChildren(parent, work);
+    await this.delegation.runBounded(children, (child) =>
+      this.run(child, child.title, { onlyIfQueued: true, attemptId }),
+    );
+    return this.rested(children);
+  }
 
-    // Open every child before any of them runs, so the page draws the whole
-    // fan-out at once and a stop that arrives now reaches all of them.
+  /**
+   * Open every child before any of them runs, so the page draws the whole
+   * fan-out at once and a stop that arrives now reaches all of them.
+   */
+  private async openChildren(parent: Task, work: readonly Delegated[]): Promise<Task[]> {
     const children: Task[] = [];
     try {
       for (const item of work) {
@@ -274,10 +311,51 @@ export class Kernel {
       }
       throw error;
     }
+    return children;
+  }
 
-    await this.delegation.runBounded(children, (child) => this.run(child, child.title, true));
+  private async rested(children: readonly Task[]): Promise<Task[]> {
     const rested = await Promise.all(children.map((child) => this.trace.task(child.id)));
     return rested.filter((task): task is NonNullable<typeof task> => task !== null);
+  }
+
+  /**
+   * A fan-out the guard escalated, after the approval: the parent's turn is
+   * over, so the kernel does what delegate() would have done, runs the
+   * children, and ends the parent when they have come to rest.
+   */
+  private async resumeFanOut(parent: Task, pending: PendingApproval): Promise<void> {
+    const work = pending.work ?? [];
+    const log = taskLog(this.log, { sessionId: parent.sessionId, taskId: parent.id });
+    try {
+      const verdict = await this.ask(
+        parent,
+        'fan-out',
+        `delegate ${work.length}`,
+        pending.attemptId,
+        work,
+      );
+      if (verdict?.waiting) return;
+      if (verdict) {
+        await this.trace.setPending(parent.id, null);
+        await this.appendStep(parent.id, 'reply', `Not run: ${verdict.sentence}.`);
+        await this.setStatus(parent.id, 'stopped');
+        return;
+      }
+      await this.trace.setPending(parent.id, null);
+      await this.setStatus(parent.id, 'running');
+      log.info({ children: work.length }, 'fan-out resumed');
+      const children = await this.openChildren(parent, work);
+      await this.delegation.runBounded(children, (child) =>
+        this.run(child, child.title, { onlyIfQueued: true, attemptId: pending.attemptId }),
+      );
+      if ((await this.trace.task(parent.id))?.status === 'running') {
+        await this.setStatus(parent.id, 'ended');
+      }
+    } catch (error) {
+      log.error({ err: error }, 'fan-out resume failed');
+      await this.setStatus(parent.id, 'failed').catch(() => undefined);
+    }
   }
 
   async recordFinding(taskId: string, text: string): Promise<Finding> {
@@ -335,20 +413,33 @@ export class Kernel {
    * stay stopped, not be set running again. A root's later turn is the
    * opposite case, an ended task that runs again on purpose.
    */
-  private async run(task: Task, input: string, onlyIfQueued = false): Promise<void> {
+  private async run(
+    task: Task,
+    input: string,
+    options: {
+      /** A delegated child: if a stop reached it while it waited for a lane, it stays stopped. */
+      readonly onlyIfQueued?: boolean;
+      /** The attempt this run is part of; a fresh one when absent. */
+      readonly attemptId?: string;
+      /** The operation was blocked and approved: its pending record is cleared once the guard allows it. */
+      readonly resume?: boolean;
+    },
+  ): Promise<void> {
     const startedAt = Date.now();
     const session = await this.trace.session(task.sessionId).catch(() => null);
     const report = this.reportFor(task, session?.accountId);
     const { log } = report;
     try {
-      if (onlyIfQueued && (await this.trace.task(task.id))?.status !== 'queued') return;
+      if (options.onlyIfQueued && (await this.trace.task(task.id))?.status !== 'queued') return;
       // Check point: a turn of the root, or the opening of a delegated task.
-      const refused = await this.ask(task, onlyIfQueued ? 'task-open' : 'turn', input);
+      const at = options.onlyIfQueued ? 'task-open' : 'turn';
+      const refused = await this.ask(task, at, input, options.attemptId ?? randomUUID());
       if (refused !== null) {
-        log.warn({ agent: task.agent, refused }, 'task refused by the budget');
-        await this.appendStep(task.id, 'reply', `Not run: ${refused}.`);
+        log.warn({ agent: task.agent, refused: refused.sentence }, 'task refused by the budget');
+        await this.appendStep(task.id, 'reply', `Not run: ${refused.sentence}.`);
         return;
       }
+      if (options.resume) await this.trace.setPending(task.id, null);
       await this.setStatus(task.id, 'running');
       log.info({ agent: task.agent, parentId: task.parentId }, 'task started');
       await this.worker.run({ ...task, status: 'running' }, input, report);
@@ -364,6 +455,12 @@ export class Kernel {
         'task ended',
       );
     } catch (error) {
+      // A fan-out the guard escalated ends the worker's turn with an error, and
+      // the task is waiting for the approval: that is not a failure.
+      if ((await this.trace.task(task.id).catch(() => null))?.status === 'waiting') {
+        log.info({ agent: task.agent }, 'task waits for an approval');
+        return;
+      }
       // The record itself may be what failed. A run is never awaited by a
       // caller, so an error that escaped here would be an unhandled rejection.
       log.error(
@@ -383,7 +480,13 @@ export class Kernel {
    * left": a worker cannot say yet what a turn will cost. When it can, the
    * estimate travels in Delegated and lands here.
    */
-  private async ask(task: Task, at: CheckPoint, reason: string): Promise<string | null> {
+  private async ask(
+    task: Task,
+    at: CheckPoint,
+    reason: string,
+    attemptId: string,
+    work?: readonly Delegated[],
+  ): Promise<{ readonly waiting: boolean; readonly sentence: string } | null> {
     const session = await this.trace.session(task.sessionId);
     if (!session) throw new Error(`kernel: task ${task.id} has no session`);
     let decision;
@@ -391,6 +494,7 @@ export class Kernel {
       decision = await this.budget.check({
         accountId: session.accountId,
         taskId: task.id,
+        attemptId,
         estimate: zero,
         at,
         reason,
@@ -400,18 +504,25 @@ export class Kernel {
       decision = { kind: 'deny' as const, reason: 'the budget could not be checked' };
     }
     if (decision.kind === 'allow') return null;
+    if (decision.kind === 'escalate') {
+      // The operation is kept whole with the task, so that a restart does not
+      // lose it and the approval resumes exactly it (requestResume).
+      await this.trace.setPending(task.id, {
+        attemptId,
+        approvalId: decision.approvalId,
+        at,
+        input: reason,
+        ...(work ? { work } : {}),
+      });
+      await this.setStatus(task.id, 'waiting');
+      return { waiting: true, sentence: 'it is over the cap and needs your approval' };
+    }
     if (at === 'fan-out') {
       // The parent keeps running; it is the fan-out that does not happen.
-      return decision.kind === 'deny' ? decision.reason : 'it needs your approval';
-    }
-    if (decision.kind === 'escalate') {
-      // Resuming from an approval is Sprint 3. Until then the task waits, which
-      // is the truth, and a stop still ends it.
-      await this.setStatus(task.id, 'waiting');
-      return 'it is over the cap and needs your approval';
+      return { waiting: false, sentence: decision.reason };
     }
     await this.setStatus(task.id, 'stopped');
-    return decision.reason;
+    return { waiting: false, sentence: decision.reason };
   }
 
   private track(run: Promise<void>): void {

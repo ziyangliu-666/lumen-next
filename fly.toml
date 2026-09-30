@@ -15,6 +15,8 @@ primary_region = "sin"
   IDENTITY_SESSION_LIFETIME_MS = "86400000"
   IDENTITY_INSECURE_COOKIES = "false"
   LUMEN_MODEL_PROVIDER = "openai"
+  LUMEN_WORKER = "steering"
+  LUMEN_COMPUTE_PROVIDER = "none"
   LUMEN_DEMO_PACE_MS = "300"
 
 [http_service]

@@ -92,6 +92,28 @@ export function traceContract(make: () => Trace): void {
     ]);
   });
 
+  it('keeps what a task waits for, finds the task by its approval, and clears it', async () => {
+    const trace = make();
+    const session = await trace.openSession('p1', 'acc-1', 'explore');
+    const task = await trace.openTask(session.id, null, 'lead', 'q');
+    const pending = {
+      attemptId: 'attempt-1',
+      approvalId: 'approval-1',
+      at: 'fan-out' as const,
+      input: 'delegate 2',
+      work: [
+        { agent: 'reader', title: 'a' },
+        { agent: 'reader', title: 'b' },
+      ],
+    };
+    expect((await trace.setPending(task.id, pending)).pending).toEqual(pending);
+    expect((await trace.task(task.id))?.pending).toEqual(pending);
+    expect((await trace.taskByApproval('approval-1'))?.id).toBe(task.id);
+    expect(await trace.taskByApproval('approval-9')).toBeNull();
+    expect((await trace.setPending(task.id, null)).pending).toBeUndefined();
+    expect(await trace.taskByApproval('approval-1')).toBeNull();
+  });
+
   it('lists the tasks that have not ended, across sessions', async () => {
     const trace = make();
     const session = await trace.openSession('p1', 'acc-1', 'explore');

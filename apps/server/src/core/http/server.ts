@@ -35,6 +35,19 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : 'bad request';
 }
 
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
 export interface ServerDeps {
   readonly broker: Broker;
   readonly resolver: PrincipalResolver;
@@ -50,6 +63,8 @@ export interface ServerDeps {
   readonly log?: Log;
   /** Level for the logger built here when none is given. */
   readonly logLevel?: string;
+  /** Send Strict-Transport-Security. Only behind HTTPS: a browser remembers it for a year. */
+  readonly strictTransport?: boolean;
 }
 
 /** What each slice's public index exports, per docs/ARCHITECTURE.md §6. */
@@ -69,6 +84,33 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
 
   await app.register(cookie);
   await app.register(websocket);
+
+  // The response headers a scanner asks for, set here so that no route can
+  // forget them. The policy allows the app's own files (fonts included, they
+  // are served from here), inline style attributes (Radix positions its
+  // popovers with them) and the event stream on the same host ('self' covers
+  // ws and wss to this host).
+  app.addHook('onSend', async (request, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    reply.header('Cross-Origin-Opener-Policy', 'same-origin');
+    reply.header('Cross-Origin-Resource-Policy', 'same-origin');
+    reply.header('Cross-Origin-Embedder-Policy', 'require-corp');
+    reply.header('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+    // The API is never cached. A built asset carries a content hash in its
+    // name, so it is cached for good; the page that names it is re-checked.
+    if (request.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
+    else if (request.url.startsWith('/assets/')) {
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (request.url.startsWith('/fonts/')) {
+      reply.header('Cache-Control', 'public, max-age=604800');
+    } else reply.header('Cache-Control', 'no-cache');
+    if (deps.strictTransport) {
+      reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+  });
 
   app.decorateRequest('principal', null);
   // onRequest, not preHandler: the event stream has to know who is connecting

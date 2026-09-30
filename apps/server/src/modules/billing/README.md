@@ -1,12 +1,13 @@
 # billing — HE RONG
 
 UC5 owns the ledger, wallet, budget checks, keys, payments and administration.
-This Sprint 2 change delivers the ledger, Wallet tab and budget policy chain. Stripe, keys, persisted
-approvals and administration remain separate stories.
+The ledger, Wallet tab, budget guard connection and read-only administration are
+merged. This approval increment adds durable decisions and session resumption against #62.
+Stripe and keys remain separate stories.
 
 ## Public surface
 
-`createBillingSlice({ db, canSpend?, adminAccounts? })` returns:
+`createBillingSlice({ db, canSpend?, adminAccounts?, approvalResume?, origin? })` returns:
 
 - `registerRoutes(app)` — register the authenticated wallet and staff-only account APIs once.
 - `AdminAccountReader` — a read-only projection of identity's public `AdminAccounts` port, injected as `adminAccounts`; no role or suspension mutation is exposed.
@@ -42,8 +43,10 @@ Every route calls `requireUser`. Account selection always comes from the
 principal, including for staff; body/query account IDs never select another
 wallet. Errors use core's current `{ error: string }` envelope: 400 invalid
 input, 401 no principal, 503 database unavailable, and sanitized 500 storage
-failure. A cap is a flat account spending limit, not prepaid balance. Saving it does not yet
-enforce it during worker execution; enforcement and approval arrive in Sprint 3.
+failure. A cap is a flat account spending limit, not prepaid balance. Since #56,
+the saved cap is checked before turns, fan-out and task opening in database-backed
+sessions. Work already running is not interrupted or reserved against the cap;
+over-cap work waits for an owner decision when the approval resume port is configured.
 
 Money must be finite and non-negative, below 1000000 and at most six decimal
 places. SQL stores `numeric(12,6)` and sums it. The browser displays four decimals
@@ -107,30 +110,29 @@ billing does not inspect identity's tables or trust an account ID as eligibility
 allows when all-time spend plus estimate is at most the account cap. Zero means
 unknown cost and requires strictly positive remaining room; equality denies.
 Addition and comparison happen in one SQL query using numeric.
-The terminal handler denies with `over the cap`; it creates no fake approval.
+When the resume port is configured, a stored-approval policy runs after identity
+and before the cap policy. Rejected attempts deny, pending attempts escalate and
+consumed attempts allow. The terminal handler persists a request and escalates
+when the cap does not allow the charge. Without the port it still denies with
+`over the cap`. Identity eligibility is checked on every path.
 
 These classes and `BudgetHandler` are exported by the public index so a fourth
 policy can be inserted without changing callers. The test uses a synthetic
-escalation policy to prove extension; it is not a persisted approval feature.
+escalation policy to prove extension; the durable approval integration is exercised separately by `approvalFlow.test.ts`.
 `Charge`, `Decision`, `BudgetGuard` and `CheckPoint` come from
 `core/domain/budget.ts` and are re-exported by the billing public index. Billing
 keeps only its own `Spend` and `WalletSummary` shapes in `ports.ts`.
 
 This is a policy decision, not a reservation. Concurrent checks may observe the
-same balance. The PM deferred reservations beyond this sprint in #52. Wiring the three
-execution checkpoints and persisting approvals remain separate integration PRs.
-The current main composition injects `canSpend` but does not call `budgetGuard`.
-Saving a cap therefore does not yet stop a running worker.
-
-The next integration passes `billing.budgetGuard` to session in `app.ts` when a Db
-exists, following
-PM/core approval in #52 and the merged prerequisites #50 and #55. Once that PR is
-on main, the existing turn, fan-out and task-open checkpoints consult the chain.
+same balance. The PM deferred reservations beyond this sprint in #52.
+Since the merge of #56, `app.ts` passes `billing.budgetGuard` to session when a Db
+exists, following PM/core approval in #52 and prerequisites #50 and #55. The
+existing turn, fan-out and task-open checkpoints consult the chain.
 A denial prevents the checked work. Turn refusal records its reason in the trace;
 fan-out refusal rejects `WorkerReport.delegate` with the reason. If the worker
 lets that rejection propagate, the parent fails without opening any children. Unknown-cost work
 needs remaining room; it is not a guarantee against overshoot within a running
-step or concurrent tasks. Durable approvals remain a separate story.
+step or concurrent tasks. Durable approval authorizes only the stored attempt.
 `app.test.ts` exercises the composition with real sign-in and Postgres: a new
 account runs below its default cap, saved over-cap and zero-cap accounts cannot
 start work, and an exhausted parent cannot open delegated work.
@@ -141,20 +143,18 @@ policy with unchanged callers, empty-chain denial and propagated store errors.
 
 ## Admin ownership decision 28 September 2026
 
-HE RONG will implement `GET /api/admin/accounts`,
-`GET /api/admin/accounts/:id` and `pages/admin` in a separate billing PR.
-Reuse the read-only approach from closed PR #15, adapted to the existing
-billing factory rather than replacing its wallet, ledger or budget ports.
+HE RONG owns `GET /api/admin/accounts`, `GET /api/admin/accounts/:id` and
+`pages/admin`, delivered in merged PR #58. The implementation uses the existing
+billing factory and preserves its wallet, ledger and budget ports.
 The decision was communicated to LU YI on
 [identity PR #50](https://github.com/ziyangliu-666/lumen-next/pull/50#issuecomment-5862186602).
-This section assigns the work; it does not claim those routes exist on main.
 
 Identity owns account storage and exposes `AdminAccounts` through its public
 index. Billing owns HTTP authorization and presentation: require staff on both
 routes, validate IDs, return only account summaries, and prevent caching.
-The page will use the shared web request helper and the existing shell staff
-guard, with loading, empty, error, list and detail states. No billing query
-will read identity's tables.
+The page uses the shared web request helper and existing shell staff guard,
+with loading, empty, error, list and detail states. No billing query reads
+identity's tables.
 
 Account deletion from #49 is already on main. A detail lookup returning null
 must return 404 and show that the account is unavailable, including deleted
@@ -195,3 +195,53 @@ responses, no-store on errors, invalid IDs, empty/missing results, sanitized
 failures and unavailable identity. `adminIntegration.test.ts` proves that the
 composition serves real identity summaries to a staff cookie, denies a member
 cookie, and refuses forged stub credentials with real identity enabled.
+
+
+## Durable approvals (core #62)
+
+Core/session owns `Charge.attemptId`, `BudgetApprovalResume` and durable waiting
+operations. `app.ts` injects `session.approvals` into billing through a closure.
+Billing reads no session tables. Migration 012 creates `billing_approvals` with
+owner, task, attempt, checkpoint, SQL numeric estimate, reason, decision timestamps
+and durable delivery state. Unknown cost is computed in SQL and displayed as
+"one execution of unknown cost", never as a zero-dollar purchase.
+
+- `GET /api/wallet/approvals` returns `{ approvals }`, at most 100 rows, pending
+  first and then newest. Each owner sees only their own rows.
+- `POST /api/wallet/approvals/:id/grant` and `/reject` return 202 with the saved
+  decision. Both require the owner's identity, current spending eligibility and
+  the configured exact Origin. Body account IDs never select an owner. Invalid
+  IDs return 400, foreign/missing IDs 404, conflicting decisions 409.
+- Repeating the same decision is idempotent. A row lock and conditional update
+  atomically change pending to consumed (grant) or rejected and queue delivery.
+  Here consumed means authorization committed for the attempt, not that work
+  succeeded or finished. This follows #62's rule: the resume rechecks an attempt
+  whose consumed approval allows it. Session consumes its own pending operation
+  so repeated `requestResume` cannot run it again.
+- The route plugin delivers queued decisions once a second, with a 30-second
+  database lease and `SKIP LOCKED`. Non-404 delivery failures remain retryable;
+  core's duplicate/missing/stopped-operation 404 is final. Closing the server
+  clears the timer and drains delivery. A process restart resumes pending
+  deliveries from SQL. A rejected decision also resumes the check, which denies
+  and stops the task without running the worker even if the cap was later raised.
+
+A consumed fan-out approval permits its child-open checks under the same account
+and attempt ID. Other task/checkpoint combinations deny; a later operation has
+a new attempt ID and cannot reuse it. Root estimate matching uses SQL numeric.
+As in #62, this is not exactly-once external effects: a process failure after
+session consumes its pending operation can leave work stopped. There is no
+reservation and approval does not modify the account cap, credit or ledger.
+
+Wallet includes an approval panel with approve/reject, refresh, loading, empty,
+error and delivery-pending states. Delivery is not a promise of task success;
+the session remains the source of its final outcome. The bounded list and
+explicit refresh are the initial UI; pagination and live notifications are not
+part of this increment.
+
+`approvals.test.ts` covers durable request deduplication, owner/attempt binding,
+concurrent grants/delivery, retries, terminal 404, rejection and exact decimal
+matching. `approvalFlow.test.ts` uses real sign-in, HTTP routes and PostgreSQL to
+prove waiting across restart, one resumed operation, a new approval for a later
+turn, fan-out children without replaying parent spend, rejection despite a cap
+increase, origin validation and account isolation. Missing approval dependencies
+continue to fail closed rather than inventing non-durable approval records.

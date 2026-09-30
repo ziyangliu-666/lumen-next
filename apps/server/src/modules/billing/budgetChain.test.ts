@@ -12,6 +12,7 @@ import type { BudgetGuard, Charge, Decision } from '../../core/domain/budget.js'
 const charge: Charge = {
   accountId: 'alice',
   taskId: '00000000-0000-4000-8000-000000000001',
+  attemptId: 'attempt-1',
   estimate: { dollars: 0.2 },
   at: 'turn',
   reason: 'reader turn',

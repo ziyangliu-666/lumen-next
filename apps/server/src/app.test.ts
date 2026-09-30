@@ -94,8 +94,8 @@ describe.skipIf(!TEST_DATABASE_URL)('composed application budget enforcement', (
     await setCap(0.05);
     const refused = await ask();
     expect(run).toHaveBeenCalledTimes(1);
-    expect(refused.tasks.map((task) => task.status)).toEqual(['stopped']);
-    expect(refused.steps.some((step) => step.text.includes('over the cap'))).toBe(true);
+    expect(refused.tasks.map((task) => task.status)).toEqual(['waiting']);
+    expect(refused.steps.some((step) => step.text.includes('approval'))).toBe(true);
     expect(refused.spend).toEqual({ dollars: 0 });
     expect(await wallet()).toEqual({ spent: { dollars: 0.1 }, cap: { dollars: 0.05 } });
   });
@@ -104,8 +104,8 @@ describe.skipIf(!TEST_DATABASE_URL)('composed application budget enforcement', (
     await setCap(0);
     const refused = await ask();
     expect(run).not.toHaveBeenCalled();
-    expect(refused.tasks.map((task) => task.status)).toEqual(['stopped']);
-    expect(refused.steps.some((step) => step.text.includes('over the cap'))).toBe(true);
+    expect(refused.tasks.map((task) => task.status)).toEqual(['waiting']);
+    expect(refused.steps.some((step) => step.text.includes('approval'))).toBe(true);
     expect(await wallet()).toEqual({ spent: { dollars: 0 }, cap: { dollars: 0 } });
   });
 
@@ -122,11 +122,10 @@ describe.skipIf(!TEST_DATABASE_URL)('composed application budget enforcement', (
     });
     const refused = await ask();
     expect(run).toHaveBeenCalledTimes(1);
-    // A refused delegate rejects WorkerReport.delegate; this worker lets it
-    // propagate, so its parent fails without opening or running any child.
-    expect(refused.tasks.map((task) => task.status)).toEqual(['failed']);
+    // Escalation preserves the blocked fan-out without opening any child.
+    expect(refused.tasks.map((task) => task.status)).toEqual(['waiting']);
     expect(refusal).toBeInstanceOf(Error);
-    expect((refusal as Error).message).toContain('over the cap');
+    expect((refusal as Error).message).toContain('approval');
     expect(await wallet()).toEqual({ spent: { dollars: 1 }, cap: { dollars: 1 } });
   });
 });

@@ -2,6 +2,7 @@ import type { StepDetail, Task } from '@lumen/contracts';
 import type { Worker, WorkerReport } from '../../core/domain/worker.js';
 import {
   nullModel,
+  withLog,
   type Message,
   type ModelProvider,
   type Tool,
@@ -265,6 +266,15 @@ export function createWorker(options: WorkerOptions): Worker {
             cwd: '/mnt/workspace',
             timeoutMs,
           });
+          this.report.log.info(
+            {
+              tool: 'run',
+              provider,
+              exitCode: result.exitCode,
+              durationMs: Date.now() - startedAt,
+            },
+            'compute run',
+          );
           const output = [result.stdout, result.stderr]
             .filter((part) => part.length > 0)
             .join('\n')
@@ -344,7 +354,8 @@ export function createWorker(options: WorkerOptions): Worker {
     const tools = turn.isLead ? LEAD_TOOLS : READER_TOOLS;
     for (let round = 0; round < MAX_ROUNDS; round++) {
       await turn.land('next-step');
-      const completion = await model.complete({
+      // Logged with the task's ids: model, tokens, cost, duration, never the text.
+      const completion = await withLog(model, turn.report.log).complete({
         system: turn.isLead ? LEAD_PROMPT : READER_PROMPT,
         messages: turn.messages,
         tools,

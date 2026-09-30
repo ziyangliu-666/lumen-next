@@ -53,6 +53,62 @@ export interface DockerComputeOptions {
  * detached, it only stops streaming its logs. `--rm` then removes it once it
  * has actually stopped, on either path.
  */
+/** The uid:gid this process runs as, for the container to run as the same. Absent on Windows. */
+function processUser(): string | undefined {
+  return typeof process.getuid === 'function' && typeof process.getgid === 'function'
+    ? `${process.getuid()}:${process.getgid()}`
+    : undefined;
+}
+
+/**
+ * The `docker run` line, as a list. What the container may not do is here:
+ * no network, a memory and a CPU limit, a cap on processes so a fork bomb
+ * ends with the container, every capability dropped and none regained, and
+ * the process user rather than root, so a file it writes into the workspace
+ * is the server's own.
+ */
+export function dockerArgs(spec: {
+  readonly name: string;
+  readonly image: string;
+  readonly memory: string;
+  readonly hostMounts: Readonly<Record<Scope, string>>;
+  readonly cwd: string;
+  readonly command: string;
+  readonly user?: string | undefined;
+}): string[] {
+  return [
+    'run',
+    '--rm',
+    '--name',
+    spec.name,
+    '--network',
+    'none',
+    '--memory',
+    spec.memory,
+    '--cpus',
+    '1',
+    '--pids-limit',
+    '256',
+    '--cap-drop',
+    'ALL',
+    '--security-opt',
+    'no-new-privileges',
+    ...(spec.user ? ['--user', spec.user] : []),
+    '--workdir',
+    spec.cwd,
+    '-v',
+    `${spec.hostMounts.upload}:/mnt/upload:ro`,
+    '-v',
+    `${spec.hostMounts.workspace}:/mnt/workspace`,
+    '-v',
+    `${spec.hostMounts.output}:/mnt/output`,
+    spec.image,
+    'sh',
+    '-c',
+    spec.command,
+  ];
+}
+
 export class DockerCompute implements Compute {
   private readonly image: string;
   private readonly memory: string;
@@ -67,28 +123,15 @@ export class DockerCompute implements Compute {
 
   run(command: string, options: { cwd: string; timeoutMs: number }): Promise<ComputeResult> {
     const name = `lumen-${randomUUID()}`;
-    const args = [
-      'run',
-      '--rm',
-      '--name',
+    const args = dockerArgs({
       name,
-      '--network',
-      'none',
-      '--memory',
-      this.memory,
-      '--workdir',
-      options.cwd,
-      '-v',
-      `${this.hostMounts.upload}:/mnt/upload:ro`,
-      '-v',
-      `${this.hostMounts.workspace}:/mnt/workspace`,
-      '-v',
-      `${this.hostMounts.output}:/mnt/output`,
-      this.image,
-      'sh',
-      '-c',
+      image: this.image,
+      memory: this.memory,
+      hostMounts: this.hostMounts,
+      cwd: options.cwd,
       command,
-    ];
+      user: processUser(),
+    });
 
     return new Promise((resolve) => {
       let stdout = '';

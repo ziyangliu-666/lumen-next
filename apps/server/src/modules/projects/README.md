@@ -83,11 +83,8 @@ with identity cookies, plus a deterministic Worker that records spend/findings:
 - Passed: another account receives an empty list and 404 for project/finding
   reads. After deletion, the old cookie receives 401; registration with the same
   email does not recover ownership, while project/finding rows remain stored.
-- Passed: a zero cap stops a later turn; raising the cap and starting a new turn
-  updates the card to Finished with two findings and $0.20 spend.
-- Pending: a real cap approval wait and resume. The current composed guard stops
-  work; the test explicitly keeps this criterion as TODO. Raising a cap and
-  starting another turn is not evidence of an approval resume.
+- Historical result on that base: a zero cap stopped a later turn. The
+  30 September acceptance below supersedes this with actual approval resume.
 
 `sessionIntegration.test.ts` also passes with the real session and steering
 public slices, a Broker command, memory storage and a scripted model: a queued
@@ -129,17 +126,55 @@ project-scoped inputs, not a query over a paginated findings list. Production
 database aggregation and the memory/PostgreSQL store parity tests remain pending.
 The existing State pattern is unchanged; no pattern refactor is introduced.
 
+### Cap approval acceptance, 30 September 2026
+
+Against main `cd1a1e3` (#62, #64 and #67), the PostgreSQL composed test now
+passes actual approval waiting and resume, replacing the old stopped-turn test
+and TODO. After an initial turn, cap zero leaves the next turn Waiting for you
+with one finding and $0.10 spend. Recreating the application over the same
+database preserves that card. Granting through the public Wallet HTTP route
+resumes the same session to Finished with two findings and $0.20. Repeating the
+grant does not duplicate the result; a second restart preserves the finished
+card. All three composed acceptance tests pass, including account isolation.
+
+Browser acceptance uses the production build, PostgreSQL, a local test account
+and the demo worker, with no external model. In Settings, setting cap zero and
+starting an Explore project from Landing leaves the session waiting with a
+Decide in Wallet link. A server process restart before approval preserves the
+wait; Home shows Waiting for you, $0.0000 and zero findings. Approve once in
+Settings resumes the turn, which asks separately for its fan-out approval.
+Granting that operation completes the same session: Home shows Finished,
+$0.0300 and three findings, with finding text and source links when expanded.
+The cap stays zero throughout. This verifies the real approval plumbing with
+demo execution, not a paid model or a claim that one grant authorizes later
+operations. No production defect inside projects was found or changed.
+
+Validation on 30 September: `npm run build` passes. Full `npm run verify` with
+`DATABASE_URL` passes format, lint and strict types; 917 tests pass and 11 skip,
+with one 5-second timeout in billing's `adminIntegration.test.ts`. There is no
+approval TODO left in the projects test, but this full run is not green. No
+other slice's test or timeout configuration was modified.
+The billing test passes in isolation (1.9 seconds); that diagnostic result does
+not change the failed full-run result.
+
+### Remaining shared coordination
+
 The
 [coordination request](https://github.com/ziyangliu-666/lumen-next/pull/24#issuecomment-5884072955)
-asks core to confirm migration 011, the exact historical-spend public port and
+asks core to confirm a migration number, the exact historical-spend public port and
 visit API, and how to supply the shared logger. Existing SessionDirectory
 summaries expose cumulative spend only. No migration, private cross-slice SQL,
 State change or production logging change is included in this preparation.
+Migration 011 is taken by #62, 012 by #64, and draft #66 proposes 013.
+The [30 September follow-up](https://github.com/ziyangliu-666/lumen-next/pull/24#issuecomment-5904941502)
+asks core to assign a number without assuming a reservation. PR #60 stays a
+draft until the migration number, activity port and logger supply are answered;
+no visit route or mounted activity component is included while waiting.
 
-Validation: the targeted PostgreSQL suite passes three cases with one explicit
-approval-resume TODO; the session/steering suite passes two cases. Full
+Historical validation on the earlier base: the targeted PostgreSQL suite passed
+three cases with one approval-resume TODO; the session/steering suite passed two cases. Full
 `npm run verify` with `DATABASE_URL` passes format, lint and typecheck but is not
-green: the latest run has 895 passing tests, 11 skipped and one TODO, with 5-second
+green: that run had 895 passing tests, 11 skipped and one TODO, with 5-second
 timeouts in billing's `adminIntegration.test.ts` and identity's
 `accountDeletion.test.ts`. A diagnostic coverage run with two workers also
 timed out in those cases. Their source and timeout settings are unchanged.

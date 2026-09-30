@@ -3,6 +3,7 @@ import { composeApp, type App } from '../../app.js';
 import { openTestDb, TEST_DATABASE_URL } from '../../core/db/testDb.js';
 import type { Db } from '../../core/db/db.js';
 import type { Worker } from '../../core/domain/worker.js';
+import type { Approval } from '../billing/index.js';
 import type { Page, ProjectCard } from './models.js';
 
 const origin = 'http://localhost:4000';
@@ -138,7 +139,7 @@ describe.skipIf(!TEST_DATABASE_URL)('projects Sprint 3 composed acceptance', () 
     ).toHaveLength(1);
   });
 
-  it('shows budget refusal and a later allowed turn without calling that an approval resume', async () => {
+  it('keeps a cap wait across restart and shows the resumed turn exactly once after a grant', async () => {
     const created = await create();
     const setCap = async (dollars: number): Promise<void> => {
       const response = await app.server.inject({
@@ -160,23 +161,57 @@ describe.skipIf(!TEST_DATABASE_URL)('projects Sprint 3 composed acceptance', () 
     );
     await app.session.kernel.idle();
     expect((await cards())[0]).toMatchObject({
-      label: 'Stopped',
+      label: 'Waiting for you',
       findingsCount: 1,
-      latestSession: { spend: { dollars: 0.1 } },
+      latestSession: { id: created.sessionId, status: 'waiting', spend: { dollars: 0.1 } },
     });
-    await setCap(1);
-    await app.session.kernel.say(
-      created.sessionId,
-      { accountId: principal.id, role: 'user' },
-      'Continue',
-    );
+    const approvals = await app.server.inject({
+      url: '/api/wallet/approvals',
+      headers: { cookie },
+    });
+    expect(approvals.statusCode).toBe(200);
+    const [approval] = approvals.json<{ approvals: Approval[] }>().approvals;
+    expect(approval).toMatchObject({ status: 'pending' });
+    const beforeRestart = await cards();
+    await app.server.close();
+    app = await start();
+    await app.session.kernel.idle();
+    expect(await cards()).toEqual(beforeRestart);
+    const grant = () =>
+      app.server.inject({
+        method: 'POST',
+        url: `/api/wallet/approvals/${approval!.id}/grant`,
+        headers: { cookie, origin },
+        payload: {},
+      });
+    expect((await grant()).statusCode).toBe(202);
+    await expect
+      .poll(async () => (await cards())[0]?.latestSession?.status, { timeout: 5000 })
+      .toBe('ended');
     await app.session.kernel.idle();
     expect((await cards())[0]).toMatchObject({
       label: 'Finished',
       findingsCount: 2,
+      latestSession: { id: created.sessionId, spend: { dollars: 0.2 } },
+    });
+    const findings = await app.server.inject({
+      url: `/api/projects/${created.project.id}/findings`,
+      headers: { cookie },
+    });
+    expect(findings.statusCode).toBe(200);
+    expect(findings.json<{ items: { text: string }[] }>().items.map((item) => item.text)).toEqual([
+      'Acceptance finding',
+      'Acceptance finding',
+    ]);
+    expect((await grant()).statusCode).toBe(202);
+    await app.session.kernel.idle();
+    expect((await cards())[0]).toMatchObject({
+      findingsCount: 2,
       latestSession: { spend: { dollars: 0.2 } },
     });
+    const finished = await cards();
+    await app.server.close();
+    app = await start();
+    expect(await cards()).toEqual(finished);
   });
-
-  it.todo('shows Waiting at the real approval gate and updates after approval resumes the run');
 });

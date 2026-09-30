@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { compute, DockerCompute, NullCompute } from './compute.js';
+import { compute, DockerCompute, dockerArgs, NullCompute } from './compute.js';
 import { SandboxFs } from './sandboxFs.js';
 
 const PROJECT = '11111111-1111-4111-8111-111111111111';
@@ -34,6 +34,29 @@ describe('compute() factory', () => {
 
   it("selects NullCompute for 'none'", () => {
     expect(compute('none', mounts)).toBe(NullCompute);
+  });
+
+  it('runs the container without root, network or capabilities, and with process and CPU caps', () => {
+    const args = dockerArgs({
+      name: 'lumen-1',
+      image: 'alpine:3',
+      memory: '256m',
+      hostMounts: { upload: '/h/u', workspace: '/h/w', output: '/h/o' },
+      cwd: '/mnt/workspace',
+      command: 'df -h',
+      user: '1000:1000',
+    });
+    const flag = (name: string): string | undefined => args[args.indexOf(name) + 1];
+    expect(flag('--network')).toBe('none');
+    expect(flag('--user')).toBe('1000:1000');
+    expect(flag('--pids-limit')).toBe('256');
+    expect(flag('--cpus')).toBe('1');
+    expect(flag('--cap-drop')).toBe('ALL');
+    expect(flag('--security-opt')).toBe('no-new-privileges');
+    expect(args).toContain('/h/u:/mnt/upload:ro');
+    expect(args.slice(-3)).toEqual(['sh', '-c', 'df -h']);
+    // Every flag comes before the image, so the command cannot add one.
+    expect(args.indexOf('alpine:3')).toBeGreaterThan(args.lastIndexOf('--security-opt'));
   });
 
   it("selects a DockerCompute for 'docker'", () => {

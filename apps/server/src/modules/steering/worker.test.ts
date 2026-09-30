@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '@lumen/contracts';
 import type { WorkerReport } from '../../core/domain/worker.js';
+import { nullLog, type Log } from '../../core/log/log.js';
+import { capture } from '../../core/log/testLog.js';
 import {
   ModelError,
   type Completion,
@@ -39,14 +41,16 @@ function taskOf(overrides: Partial<Task> = {}): Task {
 // as eslint's rule is concerned. Cast only where something asks for the real
 // interface (worker.run).
 interface FakeReport {
+  readonly log: Log;
   readonly appendStep: ReturnType<typeof vi.fn>;
   readonly delegate: ReturnType<typeof vi.fn>;
   readonly recordFinding: ReturnType<typeof vi.fn>;
   readonly addSpend: ReturnType<typeof vi.fn>;
 }
 
-function fakeReport(): FakeReport {
+function fakeReport(log: Log = nullLog): FakeReport {
   return {
+    log,
     appendStep: vi.fn().mockResolvedValue(undefined),
     delegate: vi.fn().mockResolvedValue([]),
     recordFinding: vi.fn().mockResolvedValue({
@@ -243,7 +247,8 @@ describe('createWorker: tools', () => {
       { toolCalls: [toolCall('run', { command: 'df -h' })] },
       { text: 'Could not check.' },
     );
-    const report = fakeReport();
+    const { log, lines } = capture();
+    const report = fakeReport(log);
 
     await createWorker({ volumeRoot, context, registry, model }).run(
       taskOf({ id: 'reader-1', agent: 'reader' }),
@@ -264,6 +269,9 @@ describe('createWorker: tools', () => {
     const handedBack = model.requests[1]!.messages.at(-1)!;
     expect(handedBack).toMatchObject({ role: 'tool', toolCallId: 'call-run' });
     expect(handedBack.content).toContain('exit 1');
+    // Every model call and the command run are on the log, through the task's own log (#42).
+    expect(lines().map((line) => line['msg'])).toEqual(['model call', 'compute run', 'model call']);
+    expect(lines()[1]).toMatchObject({ tool: 'run', provider: 'none', exitCode: 1 });
   });
 
   it('writes and reads files through the sandbox, and records findings', async () => {

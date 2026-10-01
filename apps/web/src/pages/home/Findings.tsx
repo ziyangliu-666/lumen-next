@@ -3,6 +3,7 @@ import { Button } from '@/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { sessionLink, type Finding } from './api';
 import { usePages } from './usePages';
+import { OpenProjectButton } from './OpenProjectButton';
 
 export function Findings({
   projectId,
@@ -52,9 +53,12 @@ export function Findings({
               >
                 {new Date(finding.createdAt).toLocaleString()}
               </time>
-              <Button asChild variant="link" size="sm">
-                <a href={sessionLink(finding.sessionId, finding.taskId)}>Open source session</a>
-              </Button>
+              <OpenProjectButton
+                projectId={projectId}
+                target={sessionLink(finding.sessionId, finding.taskId)}
+              >
+                Open source session
+              </OpenProjectButton>
             </div>
           </article>
         ))}

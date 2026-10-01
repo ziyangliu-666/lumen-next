@@ -2,7 +2,7 @@ import type { JSX } from 'react';
 import type { Money } from '@lumen/contracts';
 import { Badge } from '@/ui/badge';
 
-/** Page-local preparation; mount only after the visit response is agreed and wired. */
+/** Confirmed server activity; navigation records the visit before leaving Home. */
 export function ProjectActivity({
   lastOpenedAt,
   activity,

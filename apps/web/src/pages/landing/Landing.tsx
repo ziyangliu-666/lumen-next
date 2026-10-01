@@ -74,11 +74,21 @@ export function Landing(): JSX.Element {
         !result ||
         typeof result !== 'object' ||
         !('sessionId' in result) ||
-        typeof result.sessionId !== 'string'
+        typeof result.sessionId !== 'string' ||
+        !('project' in result) ||
+        !result.project ||
+        typeof result.project !== 'object' ||
+        !('id' in result.project) ||
+        typeof result.project.id !== 'string'
       ) {
         setUncertain(true);
         throw new Error('Creation response was incomplete. Check Projects before trying again.');
       }
+      // Creation has succeeded. A failed visit must not let Retry create a duplicate.
+      setUncertain(true);
+      await request(`/api/projects/${encodeURIComponent(result.project.id)}/visit`, {
+        method: 'POST',
+      });
       try {
         sessionStorage.removeItem(DRAFT);
       } catch {

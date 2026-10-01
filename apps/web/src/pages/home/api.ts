@@ -2,6 +2,8 @@ import type { SessionMode, SessionSummary } from '@lumen/contracts';
 export type { Finding } from '@lumen/contracts';
 // Projects-specific wire shapes stay page-local until adopted by contracts.
 export interface ProjectCard {
+  lastOpenedAt: number | null;
+  sinceLastVisit: { sessionsEnded: number; findingsAdded: number; spend: { dollars: number } };
   project: { id: string; title: string; mode: SessionMode; createdAt: number };
   latestSession: SessionSummary | null;
   findingsCount: number;

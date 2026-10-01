@@ -106,25 +106,59 @@ The source Session page's findings rail is still empty after restart although
 Home's persisted findings are present; that Session-page limitation is outside
 this slice and is not counted as a projects fix.
 
-The last-visit story is not connected to production. Internal preparation is
-available in `lastVisit.ts` and Home's `ProjectActivity.tsx`, with unit and
-server-rendered page-component tests. Neither is exported from the slice's public
-index or mounted on Home yet; existing HTTP responses and stores are unchanged.
+### Last-visit implementation
 
-The draft counting rule uses `(lastOpenedAt, asOf]`, or `[createdAt, asOf]` for a
-never-opened project. Null session end times do not count. A visit advances
-monotonically; the future store must enforce that atomically, not with a
-read-then-write race. The helper accepts an authoritative spend aggregate for
-that same window; it does not sum session totals or infer historical spend.
-Unknown spend stays null internally and the component says "Spend unavailable".
-The component marks any positive count or spend (including spend below display
-precision) and removes the mark for a confirmed empty summary. It does not clear
-anything optimistically on a click. These are preparation rules to review when
-connecting the agreed API, not a new public contract or durable visit record.
-The counting helper is a memory/reference implementation over complete,
-project-scoped inputs, not a query over a paginated findings list. Production
-database aggregation and the memory/PostgreSQL store parity tests remain pending.
-The existing State pattern is unchanged; no pattern refactor is introduced.
+Migration `014_projects_last_visit.sql` adds only `last_opened_at` and
+`spend_at_visit` to projects. Both stores persist the visit time and cumulative
+spend baseline together; older requests cannot move either backwards. The
+baseline combines the SQL-aggregated totals returned by the public
+`SessionDirectory.list`, at six-decimal storage precision. A card subtracts the
+saved baseline from the current cumulative total, including work in a session
+that was already running at the visit. It never reads another slice's tables.
+Ended sessions use `endedAt > lastOpenedAt`; findings use the same strict
+boundary in one aggregate query over this slice's table. Never-opened projects
+count from creation and use a zero spend baseline.
+
+`POST /api/projects/:id/visit` records server time after ownership validation;
+list and detail polling never record visits. The timestamp is sampled before
+requesting session totals, so work arriving during that read may already be
+part of the spend baseline while later timestamped findings/endings remain
+new. This is an observed cumulative baseline, not an atomic snapshot spanning
+slices. A failed session lookup leaves the previous visit unchanged.
+
+Home renders the activity mark and last-visit time. Opening the latest session
+or a finding's source records a visit before navigation; failure keeps the page
+and offers another attempt. Landing also records the visit after creation and
+before navigation. If that write fails, creation is not repeated: the user can
+open the created project from Home. No State class changed, so CARD_STATE.md
+continues to describe the same pattern. The earlier standalone counting helper
+was replaced by the live baseline calculation; no additional design pattern
+was introduced.
+
+The slice receives the shared logger as an optional dependency and uses a
+`slice: projects` child. Creation and visit events contain identifiers only,
+never the question, finding text or an address.
+
+Browser acceptance on 1 October used PostgreSQL, the production build and the
+local demo account from the cap check. Before its first recorded visit, Home
+showed New activity, one ended session, three findings and $0.0300 since
+creation. Open session navigated successfully; returning to Home showed the
+saved visit time, zero changes and no mark while retaining the lifetime finding
+count and latest-session spend. Creating a new project from Landing also
+recorded its visit before opening the waiting session. The composed PostgreSQL
+test additionally proves visit persistence across application recreation and
+new activity after subsequent work. Memory and PostgreSQL store tests exercise
+owner isolation, stale/concurrent visits and findings strictly after the cutoff;
+Home rendering and navigation-order/failure tests cover the mounted component.
+
+Validation on 1 October: production build passes. `npm run verify` passes with
+`DATABASE_URL` and local `VITEST_MIN_FORKS=VITEST_MAX_FORKS=1` plus
+`VITEST_MIN_THREADS=VITEST_MAX_THREADS=1`: 927 passing tests, 11 conditional
+skips, 97.66% line coverage. The default concurrent run passed format, lint and
+types but timed out in the existing billing administration and identity
+deletion tests (925 passed, two timed out). Single-worker execution retains
+the same tests, timeout limits and coverage gate; no repository configuration
+was changed to hide those failures.
 
 ### Cap approval acceptance, 30 September 2026
 
@@ -157,19 +191,13 @@ other slice's test or timeout configuration was modified.
 The billing test passes in isolation (1.9 seconds); that diagnostic result does
 not change the failed full-run result.
 
-### Remaining shared coordination
+### Shared coordination agreed
 
-The
-[coordination request](https://github.com/ziyangliu-666/lumen-next/pull/24#issuecomment-5884072955)
-asks core to confirm a migration number, the exact historical-spend public port and
-visit API, and how to supply the shared logger. Existing SessionDirectory
-summaries expose cumulative spend only. No migration, private cross-slice SQL,
-State change or production logging change is included in this preparation.
-Migration 011 is taken by #62, 012 by #64, and draft #66 proposes 013.
-The [30 September follow-up](https://github.com/ziyangliu-666/lumen-next/pull/24#issuecomment-5904941502)
-asks core to assign a number without assuming a reservation. PR #60 stays a
-draft until the migration number, activity port and logger supply are answered;
-no visit route or mounted activity component is included while waiting.
+The [core owner's 30 September answer](https://github.com/ziyangliu-666/lumen-next/pull/24#issuecomment-5904976587)
+assigns migration 014, accepts the cumulative spend baseline instead of a new
+activity port, approves the owner-only visit API and permits the single logger
+argument in app.ts. These details are implemented in this branch. There is no
+remaining request to reserve 011 or to provide a new historical-spend port.
 
 Historical validation on the earlier base: the targeted PostgreSQL suite passed
 three cases with one approval-resume TODO; the session/steering suite passed two cases. Full
@@ -215,6 +243,7 @@ the current shared `{ error: string }` envelope.
 | `POST /api/projects` | `{ question, mode }` | 201 `{ project, sessionId }` |
 | `GET /api/projects` | `limit?`, `cursor?` | 200 `{ items: ProjectCard[], nextCursor }` |
 | `GET /api/projects/:id` | No query fields | 200 `{ item: ProjectCard }` |
+| `POST /api/projects/:id/visit` | Empty body or `{}` | 200 `{ lastOpenedAt }` |
 | `POST /api/projects/:id/stop` | Empty body or `{}` | 202 `stop_requested`, or 200 `already_terminal` / `no_session` |
 | `GET /api/projects/:id/findings` | `limit?`, `cursor?` | 200 `{ items: Finding[], nextCursor }` |
 

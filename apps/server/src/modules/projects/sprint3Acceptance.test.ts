@@ -92,6 +92,41 @@ describe.skipIf(!TEST_DATABASE_URL)('projects Sprint 3 composed acceptance', () 
       'Acceptance finding',
     ]);
   });
+  it('clears activity with a durable visit and counts later work after restart', async () => {
+    const created = await create();
+    expect((await cards())[0]).toMatchObject({
+      lastOpenedAt: null,
+      sinceLastVisit: { sessionsEnded: 1, findingsAdded: 1, spend: { dollars: 0.1 } },
+    });
+    const response = await app.server.inject({
+      method: 'POST',
+      url: `/api/projects/${created.project.id}/visit`,
+      headers: { cookie, origin },
+    });
+    expect(response.statusCode).toBe(200);
+    const { lastOpenedAt } = response.json<{ lastOpenedAt: number }>();
+    const cleared = {
+      lastOpenedAt,
+      sinceLastVisit: { sessionsEnded: 0, findingsAdded: 0, spend: { dollars: 0 } },
+    };
+    expect((await cards())[0]).toMatchObject(cleared);
+    await app.server.close();
+    app = await start();
+    expect((await cards())[0]).toMatchObject(cleared);
+    const principal = (await app.server.inject({ url: '/api/me', headers: { cookie } })).json<{
+      id: string;
+    }>();
+    await app.session.kernel.say(
+      created.sessionId,
+      { accountId: principal.id, role: 'user' },
+      'More research',
+    );
+    await app.session.kernel.idle();
+    expect((await cards())[0]).toMatchObject({
+      lastOpenedAt,
+      sinceLastVisit: { sessionsEnded: 1, findingsAdded: 1, spend: { dollars: 0.1 } },
+    });
+  });
 
   it('keeps retained records inaccessible to another account and a re-registered email', async () => {
     const created = await create();

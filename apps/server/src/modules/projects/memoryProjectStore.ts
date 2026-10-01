@@ -31,6 +31,18 @@ export class MemoryProjectStore implements ProjectStore {
         .map((p) => ({ ...p })),
     );
   }
+  visit(id: string, accountId: string, at: number, spend: number): Promise<Project | null> {
+    const project = this.projects.get(id);
+    if (!project || project.accountId !== accountId) return Promise.resolve(null);
+    if (project.lastOpenedAt === null || at >= project.lastOpenedAt) {
+      this.projects.set(id, {
+        ...project,
+        lastOpenedAt: Math.max(project.createdAt, at),
+        spendAtVisit: Math.max(project.spendAtVisit, spend),
+      });
+    }
+    return this.get(id);
+  }
   saveFinding(projectId: string, finding: Finding): Promise<void> {
     if (!this.projects.has(projectId) || this.records.has(finding.id))
       return Promise.reject(new Error('Invalid finding.'));
@@ -54,10 +66,14 @@ export class MemoryProjectStore implements ProjectStore {
         .map(({ projectId: _projectId, ...f }) => f),
     );
   }
-  findingStats(projectId: string): Promise<{ count: number; lastAt: number | null }> {
+  findingStats(
+    projectId: string,
+    since = -Infinity,
+  ): Promise<{ count: number; lastAt: number | null; added: number }> {
     const findings = [...this.records.values()].filter((f) => f.projectId === projectId);
     return Promise.resolve({
       count: findings.length,
+      added: findings.filter((finding) => finding.createdAt > since).length,
       lastAt: findings.length ? Math.max(...findings.map((f) => f.createdAt)) : null,
     });
   }

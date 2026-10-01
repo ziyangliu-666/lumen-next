@@ -1,6 +1,7 @@
 // Public index for the projects slice. Owner: PENG XUJIAN.
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../../core/db/db.js';
+import { nullLog, type Log } from '../../core/log/log.js';
 import { MemoryProjectStore } from './memoryProjectStore.js';
 import { PgProjectStore } from './pgProjectStore.js';
 import type { ProjectSessions } from './ports.js';
@@ -20,10 +21,12 @@ export interface ProjectsSlice {
 export function createProjectsSlice(deps: {
   sessions: ProjectSessions;
   db?: Db | null;
+  log?: Log;
 }): ProjectsSlice {
   const service = new ProjectService(
     deps.db ? new PgProjectStore(deps.db) : new MemoryProjectStore(),
     deps.sessions,
+    (deps.log ?? nullLog).child({ slice: 'projects' }),
   );
   return {
     registerRoutes: projectRoutes(service),

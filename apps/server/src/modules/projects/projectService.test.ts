@@ -32,6 +32,37 @@ function run(status: LatestSession['status'] = 'running', startedAt = 10): Lates
   };
 }
 describe('ProjectService', () => {
+  it('records running-session spend as a baseline and leaves polling read-only', async () => {
+    const { service, sessions, store } = setup();
+    const { project } = await service.create(owner, { question: 'Research', mode: 'seed' });
+    const running = run();
+    vi.mocked(sessions.list).mockResolvedValue([running]);
+    expect(await service.get(owner, project.id)).toMatchObject({
+      lastOpenedAt: null,
+      sinceLastVisit: { spend: { dollars: 0.123456 } },
+    });
+    await expect(
+      service.visit({ accountId: 'other', role: 'user' }, project.id),
+    ).rejects.toMatchObject({ status: 404 });
+    const visit = await service.visit(owner, project.id);
+    vi.mocked(sessions.list).mockResolvedValue([
+      {
+        ...running,
+        status: 'ended',
+        endedAt: visit.lastOpenedAt + 1,
+        spend: { dollars: 0.223457 },
+      },
+    ]);
+    expect(await service.get(owner, project.id)).toMatchObject({
+      lastOpenedAt: visit.lastOpenedAt,
+      sinceLastVisit: { sessionsEnded: 1, findingsAdded: 0, spend: { dollars: 0.100001 } },
+    });
+    await service.list(owner, {});
+    expect((await store.get(project.id))?.lastOpenedAt).toBe(visit.lastOpenedAt);
+    vi.mocked(sessions.list).mockRejectedValue(new Error('unavailable'));
+    await expect(service.visit(owner, project.id)).rejects.toMatchObject({ status: 503 });
+    expect((await store.get(project.id))?.lastOpenedAt).toBe(visit.lastOpenedAt);
+  });
   it('persists owner and mode before starting and preserves the full question', async () => {
     const { service, store, sessions } = setup();
     const question = `  ${'😀'.repeat(121)}\nDetails  `;
@@ -189,6 +220,8 @@ describe('ProjectService', () => {
         title: 'Research',
         mode: 'seed',
         createdAt: 1,
+        lastOpenedAt: null,
+        spendAtVisit: 0,
       });
     const first = await service.list(owner, { limit: '2' });
     const second = await service.list(owner, { limit: '2', cursor: first.nextCursor });

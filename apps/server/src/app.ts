@@ -150,7 +150,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
     log,
     ...(db ? { budget: billing.budgetGuard } : {}),
   });
-  const projects: ProjectsSlice = createProjectsSlice({ sessions: session.projects, db });
+  const projects: ProjectsSlice = createProjectsSlice({ sessions: session.projects, db, log });
 
   // Before anything can connect: tasks left open by the last process are over.
   const orphans = await session.kernel.restore();

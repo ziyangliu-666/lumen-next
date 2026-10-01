@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { headerStub } from '../../core/http/authGuard.js';
 import { buildServer } from '../../core/http/server.js';
 import { Broker } from '../../core/protocol/broker.js';
+import { capture } from '../../core/log/testLog.js';
+import type { Log } from '../../core/log/log.js';
 import { createSessionSlice } from '../session/index.js';
 import { createProjectsSlice } from './index.js';
 import type { ProjectSessions } from './ports.js';
@@ -13,7 +15,7 @@ const apps: FastifyInstance[] = [];
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
-async function setup(): Promise<{ app: FastifyInstance; sessions: ProjectSessions }> {
+async function setup(log?: Log): Promise<{ app: FastifyInstance; sessions: ProjectSessions }> {
   const broker = new Broker();
   const session = createSessionSlice({ broker });
   const sessions: ProjectSessions = {
@@ -25,11 +27,59 @@ async function setup(): Promise<{ app: FastifyInstance; sessions: ProjectSession
   };
   const app = await buildServer({ broker, resolver: headerStub, access: session.access });
   apps.push(app);
-  await app.register(createProjectsSlice({ sessions }).registerRoutes);
+  await app.register(createProjectsSlice({ sessions, ...(log ? { log } : {}) }).registerRoutes);
   return { app, sessions };
 }
 const headers = { authorization: 'stub alice:user' };
 describe('projects HTTP boundary', () => {
+  it('uses the supplied slice logger without recording question or finding text', async () => {
+    const { log, lines } = capture();
+    const { app } = await setup(log);
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers,
+      payload: { question: 'private question test@example.com', mode: 'seed' },
+    });
+    const { project } = created.json<{ project: { id: string } }>();
+    await app.inject({ method: 'POST', url: `/api/projects/${project.id}/visit`, headers });
+    expect(lines()).toMatchObject([
+      { slice: 'projects', msg: 'project created', projectId: project.id },
+      { slice: 'projects', msg: 'project visited', projectId: project.id },
+    ]);
+    expect(JSON.stringify(lines())).not.toContain('private question');
+    expect(JSON.stringify(lines())).not.toContain('test@example.com');
+  });
+  it('records owner visits, rejects foreign or anonymous writes and ignores no client timestamps', async () => {
+    const { app } = await setup();
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers,
+      payload: { question: 'Visit test', mode: 'seed' },
+    });
+    const { project } = created.json<{ project: { id: string } }>();
+    const url = `/api/projects/${project.id}/visit`;
+    expect((await app.inject({ method: 'POST', url })).statusCode).toBe(401);
+    expect(
+      (await app.inject({ method: 'POST', url, headers: { authorization: 'stub bob:user' } }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      (await app.inject({ method: 'POST', url, headers, payload: { lastOpenedAt: 0 } })).statusCode,
+    ).toBe(400);
+    const visit = await app.inject({ method: 'POST', url, headers });
+    expect(visit.statusCode).toBe(200);
+    expect(visit.headers['cache-control']).toBe('no-store');
+    const card = await app.inject({ url: `/api/projects/${project.id}`, headers });
+    expect(card.json()).toMatchObject({
+      item: {
+        lastOpenedAt: visit.json<{ lastOpenedAt: number }>().lastOpenedAt,
+        sinceLastVisit: { sessionsEnded: 0, findingsAdded: 0, spend: { dollars: 0 } },
+      },
+    });
+    expect(card.body).not.toContain('spendAtVisit');
+  });
   it('requires a principal, including before malformed resource lookup', async () => {
     const { app } = await setup();
     for (const url of [

@@ -1,64 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { activitySinceVisit, nextVisitAt } from './lastVisit.js';
+import { cumulativeSpend, spendSinceVisit, sessionsEndedSince } from './lastVisit.js';
 
-describe('last-visit activity preparation', () => {
-  it('counts only events after the visit and through the snapshot time', () => {
+describe('last-visit activity', () => {
+  it('counts endings strictly after the visit and ignores running sessions', () => {
+    expect(sessionsEndedSince([{ endedAt: null }, { endedAt: 20 }, { endedAt: 21 }], 20)).toBe(1);
+  });
+  it('combines all session totals at six decimal places, including running work', () => {
     expect(
-      activitySinceVisit({
-        createdAt: 10,
-        lastOpenedAt: 20,
-        asOf: 40,
-        sessions: [
-          { endedAt: null },
-          { endedAt: 20 },
-          { endedAt: 21 },
-          { endedAt: 40 },
-          { endedAt: 41 },
-        ],
-        findings: [{ createdAt: 20 }, { createdAt: 25 }, { createdAt: 41 }],
-        spend: { dollars: 0.123456 },
-      }),
-    ).toEqual({ sessionsEnded: 2, findingsAdded: 1, spend: { dollars: 0.123456 } });
+      cumulativeSpend([
+        { spend: { dollars: 0.1 } },
+        { spend: { dollars: 0.2 } },
+        { spend: { dollars: 0.000001 } },
+      ]),
+    ).toBe(0.300001);
+    expect(spendSinceVisit(0.300001, 0.1)).toBe(0.200001);
   });
-
-  it('includes creation-time events for a project that has never been opened', () => {
-    expect(
-      activitySinceVisit({
-        createdAt: 10,
-        lastOpenedAt: null,
-        asOf: 20,
-        sessions: [{ endedAt: 9 }, { endedAt: 10 }],
-        findings: [{ createdAt: 9 }, { createdAt: 10 }],
-        spend: null,
-      }),
-    ).toEqual({ sessionsEnded: 1, findingsAdded: 1, spend: null });
-  });
-
-  it('clears previously seen events while retaining later work', () => {
-    const input = {
-      createdAt: 10,
-      asOf: 40,
-      sessions: [{ endedAt: 25 }],
-      findings: [{ createdAt: 25 }, { createdAt: 35 }],
-      spend: null,
-    };
-    const lastOpenedAt = nextVisitAt(10, 20, 30);
-    expect(activitySinceVisit({ ...input, lastOpenedAt })).toEqual({
-      sessionsEnded: 0,
-      findingsAdded: 1,
-      spend: null,
-    });
-  });
-
-  it('never moves the visit backwards for a late request or a clock rollback', () => {
-    expect(nextVisitAt(10, null, 5)).toBe(10);
-    expect(nextVisitAt(10, 30, 20)).toBe(30);
-    expect(nextVisitAt(10, 30, 40)).toBe(40);
-  });
-
-  it('distinguishes unknown spend from confirmed zero', () => {
-    const input = { createdAt: 10, lastOpenedAt: 20, asOf: 30, sessions: [], findings: [] };
-    expect(activitySinceVisit({ ...input, spend: null }).spend).toBeNull();
-    expect(activitySinceVisit({ ...input, spend: { dollars: 0 } }).spend).toEqual({ dollars: 0 });
+  it('returns zero for no changes and never reports negative spend', () => {
+    expect(cumulativeSpend([])).toBe(0);
+    expect(spendSinceVisit(0.1, 0.1)).toBe(0);
+    expect(spendSinceVisit(0.1, 0.2)).toBe(0);
   });
 });

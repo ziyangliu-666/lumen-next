@@ -28,6 +28,11 @@ export function projectRoutes(service: ProjectService): (app: FastifyInstance) =
       const result = await service.stop(requireUser(request), request.params.id);
       return reply.status(result.outcome === 'stop_requested' ? 202 : 200).send(result);
     });
+    app.post<{ Params: { id: string } }>('/api/projects/:id/visit', async (request) => {
+      objectOf(request.query, []);
+      if (request.body !== undefined) objectOf(request.body, []);
+      return service.visit(requireUser(request), request.params.id);
+    });
     app.get<{ Params: { id: string } }>('/api/projects/:id/findings', (request) =>
       service.findings(requireUser(request), request.params.id, request.query),
     );

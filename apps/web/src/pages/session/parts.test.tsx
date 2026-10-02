@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Step, Task } from '@lumen/contracts';
-import { CallTree, Composer, Findings, receiptOf, StepStream } from './parts';
+import { CallTree, Composer, Findings, receiptOf, StepStream, WaitingNotice } from './parts';
 
 // Rendered to a string: no browser, no clicks, but every class of "the page
 // stopped drawing it" is caught here, which no other test does.
@@ -149,6 +149,38 @@ describe('session page: the other blocks', () => {
     expect(html).toContain('push it to n = 11');
     expect(html).toMatch(/bg-ground[^>]*>.*thinking/s);
     expect(html).toMatch(/border-ink[^>]*>.*reply/s);
+  });
+});
+
+describe('session page: the text of a reply', () => {
+  it('draws bold, code, a list and a heading, and never the marks themselves', () => {
+    const html = stream([
+      step(
+        0,
+        'reply',
+        '## Known results\n\nEvery **pop-stack** sortable permutation is `West-2` sortable.\n\n- one\n- **two**\n\nSo the answer is **yes**.',
+      ),
+    ]);
+    expect(html).toContain('<strong class="font-semibold">pop-stack</strong>');
+    expect(html).toContain('<code class="font-mono text-[0.9em]">West-2</code>');
+    expect(html).toMatch(/<ul[^>]*><li>one<\/li><li><strong[^>]*>two<\/strong><\/li><\/ul>/);
+    expect(html).toMatch(/<p class="font-semibold">Known results<\/p>/);
+    expect(html).not.toContain('**');
+    expect(html).not.toContain('##');
+  });
+
+  it('keeps a plain reply as one paragraph and escapes what looks like HTML', () => {
+    const html = stream([step(0, 'reply', 'a < b and <script>x</script>')]);
+    expect(html).toContain('a &lt; b and &lt;script&gt;x&lt;/script&gt;');
+  });
+});
+
+describe('session page: a task that waits', () => {
+  it('says the task needs an approval and points to Wallet, and says nothing otherwise', () => {
+    const waiting = renderToStaticMarkup(<WaitingNotice task={{ ...lead, status: 'waiting' }} />);
+    expect(waiting).toContain('needs your approval');
+    expect(waiting).toContain('href="#/settings"');
+    expect(renderToStaticMarkup(<WaitingNotice task={lead} />)).toBe('');
   });
 });
 

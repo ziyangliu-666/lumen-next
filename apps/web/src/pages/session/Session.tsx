@@ -16,7 +16,15 @@ import {
   type SessionState,
   type Stream,
 } from '@/core/api';
-import { CallTree, Composer, Findings, money, StatusWord, StepStream } from './parts';
+import {
+  CallTree,
+  Composer,
+  Findings,
+  money,
+  StatusWord,
+  StepStream,
+  WaitingNotice,
+} from './parts';
 import { atFoot, elapsed } from './tree';
 
 interface ProjectTitle {
@@ -265,6 +273,7 @@ export function Session(): JSX.Element {
               onSelect={open}
             />
           </div>
+          <WaitingNotice task={shown} />
           <Composer
             disabled={state.stream !== 'open' || auth.status !== 'ready'}
             running={running}

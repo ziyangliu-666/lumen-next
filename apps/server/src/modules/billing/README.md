@@ -315,8 +315,8 @@ After merge/deploy, sign in on staging, note the cap, open Wallet and choose
 in Wallet, refresh until the matching receipt appears and verify the cap rose by
 USD 5 while recorded spend stayed unchanged. Redeliver that event from Stripe's
 test dashboard: receipt count and cap must not change. Cancel another checkout:
-no additional receipt or cap change. A real Stripe test-account acceptance run
-is separate from fixture CI and has not been claimed by this PR.
+no additional receipt or cap change. Hosted acceptance and fixture CI are
+separate evidence; the completed run and remaining replay check are recorded below.
 
 Verification: `stripe.test.ts` uses the official SDK to sign raw-body fixtures
 and tests invalid/old/tampered signatures, live mode, unpaid/unrelated events,
@@ -326,3 +326,35 @@ limits before provider calls, concurrency, rollback, eligibility and ownership.
 `topupFlow.test.ts` composes real identity, billing and session: a zero-cap step
 waits, a signed payment persists once across restart and a new step can run.
 Run `docker compose up -d db` and `npm run verify` with `DATABASE_URL` set.
+
+
+### Hosted acceptance — 2 October 2026
+
+HE RONG's billing flow was exercised through the staging browser UI with a
+synthetic acceptance account and Stripe's official test card. The Checkout page
+was visibly labelled sandbox; no real funds or personal payment details were used.
+This was an agent-operated browser run, not a claim of a separate human walkthrough.
+
+- Deployed merge: `df885f84fa9cc9382d02b250e02ca28f076b428e` ([#66](https://github.com/ziyangliu-666/lumen-next/pull/66)).
+- [Deployment run 36962581366](https://github.com/ziyangliu-666/lumen-next/actions/runs/36962581366)
+  passed the container build, smoke test, DAST and hosted Fly deployment.
+- [Observed results and replay request](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-5945439466)
+  identify the synthetic account and successful Checkout session for core to inspect.
+- Successful order/receipt: `f0236f89-def2-4702-b9ed-d516ef2e77af`.
+
+| Browser scenario | Observed result |
+| --- | --- |
+| Before payment | Cap USD 1.0000, spend USD 0.0000, no receipts. |
+| Complete the fixed USD 5 hosted test Checkout | Returned to Wallet; the matching order displayed one confirmed USD 5.0000 receipt, cap USD 6.0000 and spend USD 0.0000. |
+| Open a second Checkout and return using Stripe's cancel link | Cancellation message displayed; cap remained USD 6.0000, spend USD 0.0000 and exactly one confirmed receipt. |
+
+The real hosted Stripe checkout, webhook accounting and cancellation path are
+therefore observed, rather than inferred from fixture tests. The separate
+PostgreSQL suite proves that a new step can use the raised cap and that repeated
+or concurrent deliveries cannot credit twice, including after store recreation.
+
+**Still pending:** actual redelivery of the successful event from the core-owned
+Stripe test dashboard and verification of a 2xx delivery, the same one receipt
+and cap USD 6.0000. The request is linked above. A stable wallet alone is not
+proof that Stripe redelivered an event. Dashboard replay has not been claimed;
+no signing secret is needed in this repository to finish that check.

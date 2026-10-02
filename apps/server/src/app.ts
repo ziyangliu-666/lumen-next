@@ -14,7 +14,11 @@ import { createLog, type Log } from './core/log/log.js';
 import { Broker } from './core/protocol/broker.js';
 import type { Worker } from './core/domain/worker.js';
 import type { ModelProvider } from './core/model/index.js';
-import { createBillingSlice } from './modules/billing/index.js';
+import {
+  createBillingSlice,
+  StripeTopups,
+  type StripeConfiguration,
+} from './modules/billing/index.js';
 import {
   createIdentitySlice,
   LoginGate,
@@ -39,6 +43,7 @@ export interface IdentityConfig {
 }
 
 export interface AppOptions {
+  readonly stripe?: StripeConfiguration;
   /** Null keeps every record in memory: enough to develop a page against, and no more. */
   readonly db: Db | null;
   /**
@@ -86,6 +91,11 @@ export interface App {
 
 export async function composeApp(options: AppOptions): Promise<App> {
   const { db } = options;
+  if (
+    options.stripe &&
+    (!db || !options.identity || options.stripe.origin !== options.identity.origin)
+  )
+    throw new Error('Stripe requires real identity, a database and the identity origin');
   if (options.identity && !db) throw new Error('identity needs a database');
   const log = options.log ?? createLog({ level: options.logLevel ?? 'info' });
   const identity =
@@ -111,6 +121,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
   const broker = new Broker();
   // Without identity there are no real accounts, and billing keeps denying.
   const billing = createBillingSlice({
+    ...(options.stripe ? { topups: new StripeTopups(options.stripe) } : {}),
     db,
     ...(identity ? { canSpend: identity.canSpend, adminAccounts: identity } : {}),
     ...(db && options.identity

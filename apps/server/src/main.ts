@@ -13,6 +13,7 @@ import { defaultWebRoot } from './core/http/server.js';
 import { createLog } from './core/log/log.js';
 import { modelFromEnv } from './core/model/index.js';
 import { mailFromEnvironment, oauthProvidersFromEnvironment } from './modules/identity/index.js';
+import { stripeFromEnvironment } from './modules/billing/index.js';
 import { demoWorker, paceFromEnv } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
@@ -106,6 +107,7 @@ function identityConfig(): IdentityConfig {
 }
 
 async function bootstrap(): Promise<void> {
+  const stripe = stripeFromEnvironment(process.env);
   const db = await database();
   const webRoot = defaultWebRoot();
   const volumeRoot = process.env['LUMEN_VOLUME_ROOT'];
@@ -120,6 +122,7 @@ async function bootstrap(): Promise<void> {
   const { server, orphans, resolver, mailWorker } = await composeApp({
     db,
     log,
+    ...(stripe ? { stripe } : {}),
     // Real sign-in whenever there is a database; the stub only without one.
     identity: db ? identityConfig() : null,
     ...(useSteeringWorker

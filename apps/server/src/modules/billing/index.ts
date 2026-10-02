@@ -76,3 +76,6 @@ export function createBillingSlice(deps: {
     },
   };
 }
+
+export { stripeFromEnvironment, StripeTopups } from './stripe.js';
+export type { StripeConfiguration } from './stripe.js';

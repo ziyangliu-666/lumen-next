@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react';
+import { Topups } from './Topups';
 import { Approvals } from './Approvals';
 import type { Money } from '@lumen/contracts';
 import { request, RequestFailure } from '@/core/api';
@@ -191,6 +192,7 @@ export function Wallet(): JSX.Element {
           </Card>
         </>
       )}
+      <Topups onRefresh={refresh} />
       <Approvals />
       {page && (
         <Card>

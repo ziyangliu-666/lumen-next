@@ -33,6 +33,14 @@ export class Topups {
 
   async order(accountId: string, requestId: string): Promise<TopupOrder> {
     if (!UUID.test(requestId)) throw badRequest('invalid checkout request');
+    // Check the storage ceiling before any call to the payment provider.
+    // Money is compared in PostgreSQL numeric, not JS.
+    const [capacity] = await this.db.query<{ fits: boolean }>(
+      `select coalesce((select cap from billing_wallets where account_id = $1),
+        1.000000::numeric) + 5.000000::numeric <= 999999.999999::numeric as fits`,
+      [accountId],
+    );
+    if (!capacity!.fits) throw new HttpError(409, 'lower the cap before purchasing a top-up');
     const [row] = await this.db.query<{ id: string; usable: boolean }>(
       `insert into billing_topups (account_id, request_id, amount)
        values ($1, $2, 5.000000::numeric)

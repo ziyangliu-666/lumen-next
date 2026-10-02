@@ -3,7 +3,7 @@
 UC5 owns the ledger, wallet, budget checks, keys, payments and administration.
 The ledger, Wallet tab, budget guard connection and read-only administration are
 merged. This approval increment adds durable decisions and session resumption against #62.
-Stripe and keys remain separate stories.
+Stripe test-mode top-ups are implemented below; keys remain a separate story.
 
 ## Public surface
 
@@ -247,50 +247,82 @@ increase, origin validation and account isolation. Missing approval dependencies
 continue to fail closed rather than inventing non-durable approval records.
 
 
-## Stripe top-up foundation (draft)
+## Stripe test-mode top-ups
 
-`topups?: TopupProvider` is a server-only payment port, absent from the production
-composition until the Stripe adapter, configuration and Wallet checkout UI land.
-No payment credentials or new dependencies are included in this increment.
-The current routes therefore report top-ups disabled and checkout/webhook calls
-return 503. This is not the completed Sprint 3 Stripe outcome.
+Core/PM approved the policy and exact server SDK dependency in
+[#66](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-5892402930).
+The offer is USD 5; each confirmed payment raises the cap by 5 in the same SQL
+transaction as its receipt. Missing cap: 1 to 6; saved zero: 0 to 5. There is no
+separate available balance, debit-on-spend or refund path. Expense records remain
+unchanged. Identity still denies spending by suspended/deleted accounts. No
+waiting task is automatically resumed by a payment; approvals remain explicit.
 
-The proposed first offer is a fixed USD 5 test purchase. The server owns the
-amount; a browser sends only `offer: "usd5"` and a UUID `requestId` to
-`POST /api/wallet/topups/checkout`. Identity, exact Origin and `canSpend` are
-required. The principal selects the account. Persisted order IDs allow the
-provider to use a stable Stripe idempotency key across retries. Paid requests
-and retries older than 23 hours return 409 rather than reusing an expired
-provider idempotency key. A fresh request ID deliberately opens a new purchase.
+The public index exports `StripeConfiguration`, `stripeFromEnvironment(env)` and
+`StripeTopups`. `main.ts` reads `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
+`LUMEN_ORIGIN`; both secrets absent disables payments, partial configuration or
+a non-test secret refuses startup. Keys never go to the browser or logs.
+`app.ts` accepts `stripe?: StripeConfiguration`, requires real identity, a Db
+and matching origin, and constructs the adapter for `topups?: TopupProvider`.
+Only the server depends on `stripe` (exactly 23.0.0); the web has no new dependency.
 
-`POST /api/billing/stripe/webhook` passes bounded raw bytes and the signature to
-the provider. That port must verify the signature and accept only paid USD
-Checkout events with both event/session live mode false. Browser returns do not
-write credit. Session/order/amount matching, row locks and a unique payment ID
-prevent duplicate credit, including concurrent deliveries and different event
-IDs for the same payment. Storage failure rolls back the credit and cap writes
-and returns a retryable server error. The raw parser is isolated to the webhook;
-ordinary wallet routes still parse JSON.
+- `POST /api/wallet/topups/checkout`: exact Origin, identity and `canSpend`;
+  body `{ offer: "usd5", requestId: UUID }`. Owner, USD amount and return origin
+  are selected on the server. The adapter opens hosted test Checkout, restricted
+  to cards with adaptive currency conversion off. The browser receives only
+  `{ url }`, and navigates to the verified `https://checkout.stripe.com` origin.
+- `POST /api/billing/stripe/webhook`: bounded raw body, SDK signature verification
+  (including timestamp tolerance), only `checkout.session.completed`. Both event
+  and session must be test-mode. Only a complete, paid USD payment bound to our
+  order is credited. Unrelated and unpaid events are acknowledged without credit;
+  invalid signatures and payment mismatches return 400. The raw parser is scoped
+  to this endpoint; other routes retain their normal JSON parser.
+- `GET /api/wallet/topups`: owner-scoped `{ enabled, receipts }` with at most the
+  newest 100 paid receipts. These are historical purchases, not an available
+  balance. Reads are no-store. With no configuration checkout/webhook return 503.
 
-Migration 013 records purchases separately from expense `ledger_entries`.
-Following #52's statement that a top-up raises the cap, a successful purchase
-atomically adds USD 5 to the saved cap in PostgreSQL numeric (missing cap: 1 to 6;
-explicit zero: 0 to 5) and marks the purchase paid. Spend is unchanged.
-`GET /api/wallet/topups` returns `{ enabled, receipts }`, scoped to the owner,
-with at most the newest 100 paid receipts. Receipts are historical purchases,
-not an available balance. The exact cap/credit relationship and future credit
-depletion remain explicit review points from #52; this draft introduces no
-second insufficient-credit denial or settlement policy. Suspended/deleted
-accounts still fail identity's spending check; webhook accounting must not
-silently discard a payment just because eligibility changed after checkout.
+Migration 013 stores orders and receipts separately from `ledger_entries`.
+Persisting an order before calling Stripe gives each retry a stable idempotency
+key; requests older than 23 hours or already paid return 409. A fresh request ID
+means a new purchase. Row locks, checkout matching and payment-ID uniqueness
+prevent duplicate credit across concurrent webhook deliveries or restarts.
+Amount conversion, matching and cap addition all use PostgreSQL numeric.
 
-Pending work before this can be called done: official Stripe adapter and signed
-fixture tests; core-reviewed environment configuration (test keys only, local
-`.env` / Fly secrets as agreed in #52); Wallet checkout and return states; the
-owner's accounting-policy review; and an actual test-mode Checkout/webhook run
-using the core-owned Stripe account. No key belongs in Git or a PR comment.
+A cap that cannot accommodate USD 5 within numeric(12,6) is rejected before any
+provider call. The payment transaction also cannot partially commit if the cap
+changes or other top-ups use the remaining numeric range during checkout: it
+returns a retryable server error, with no receipt marked paid. For that exceptional
+race, lower the cap to restore headroom and redeliver the same Stripe event.
+No successful payment event is acknowledged while its accounting has failed.
+This storage-ceiling check is not a spending reservation.
 
-`topups.test.ts` uses PostgreSQL to prove retry deduplication after recreation,
-concurrent purchases, saved-zero/decimal cap arithmetic, payment uniqueness,
-owner isolation and atomic rollback. `topupRoutes.test.ts` proves identity,
-Origin, eligibility, raw-body isolation and that checkout alone cannot credit.
+Wallet shows loading, disabled, checkout-in-progress, error/retry, cancellation,
+return-awaiting-confirmation and receipt states. A return URL cannot write credit:
+confirmation requires the server's receipt matching the returned order ID.
+Refresh reloads both receipts and cap. The panel discloses test mode, no refunds
+and forfeiture on account deletion. Existing cap editing and approval decisions
+remain independent.
+
+### Configuration and acceptance
+
+Core reported staging secrets and the test endpoint configured in
+[#66](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-5907003975).
+The endpoint is `/api/billing/stripe/webhook` for `checkout.session.completed`.
+Locally keep test secrets in an untracked `.env`; use the signing secret for the
+actual endpoint or Stripe CLI listener being used. Do not paste keys in GitHub.
+
+After merge/deploy, sign in on staging, note the cap, open Wallet and choose
+"Add USD 5 in test mode". Complete hosted Checkout with a Stripe test card. Back
+in Wallet, refresh until the matching receipt appears and verify the cap rose by
+USD 5 while recorded spend stayed unchanged. Redeliver that event from Stripe's
+test dashboard: receipt count and cap must not change. Cancel another checkout:
+no additional receipt or cap change. A real Stripe test-account acceptance run
+is separate from fixture CI and has not been claimed by this PR.
+
+Verification: `stripe.test.ts` uses the official SDK to sign raw-body fixtures
+and tests invalid/old/tampered signatures, live mode, unpaid/unrelated events,
+fixed USD checkout, safe redirects, idempotency and sanitized provider errors.
+`topups.test.ts` and `topupRoutes.test.ts` exercise PostgreSQL accounting, numeric
+limits before provider calls, concurrency, rollback, eligibility and ownership.
+`topupFlow.test.ts` composes real identity, billing and session: a zero-cap step
+waits, a signed payment persists once across restart and a new step can run.
+Run `docker compose up -d db` and `npm run verify` with `DATABASE_URL` set.

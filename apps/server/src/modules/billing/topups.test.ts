@@ -71,6 +71,17 @@ describe.skipIf(!TEST_DATABASE_URL)('durable top-up accounting', () => {
     });
     await expect(store.credit({ ...first, cents: '5.00' })).rejects.toMatchObject({ status: 400 });
   });
+  it('checks the exact numeric ceiling and rolls back if a later cap edit would overflow', async () => {
+    await ledger.setCap('alice', { dollars: 999994.999999 });
+    const paid = await payment();
+    await ledger.setCap('alice', { dollars: 999995 });
+    await expect(store.order('alice', randomUUID())).rejects.toMatchObject({ status: 409 });
+    await expect(store.credit(paid)).rejects.toThrow();
+    expect(await store.receipts('alice')).toEqual([]);
+    await ledger.setCap('alice', { dollars: 999994.999999 });
+    await store.credit(paid);
+    expect((await ledger.monthSpend('alice')).cap.dollars).toBe(999999.999999);
+  });
   it('binds checkout retries to the owner, rejects stale and paid orders, and persists before delivery', async () => {
     const requestId = randomUUID();
     const order = await store.order('alice', requestId);

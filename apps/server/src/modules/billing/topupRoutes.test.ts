@@ -64,6 +64,17 @@ describe.skipIf(!TEST_DATABASE_URL)('top-up HTTP boundaries', () => {
       cap: { dollars: 1 },
     });
   });
+  it('refuses a cap overflow before contacting Stripe', async () => {
+    await db.query("insert into billing_wallets (account_id, cap) values ('alice', 999995.000000)");
+    const reply = await app.inject({
+      method: 'POST',
+      url: '/api/wallet/topups/checkout',
+      headers: auth,
+      payload: payload(),
+    });
+    expect(reply.statusCode).toBe(409);
+    expect(checkout).not.toHaveBeenCalled();
+  });
   it('preserves signed bytes, credits on the webhook alone and keeps ordinary JSON parsing intact', async () => {
     await app.inject({
       method: 'POST',

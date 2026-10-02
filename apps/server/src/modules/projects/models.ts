@@ -8,9 +8,17 @@ export interface Project {
   readonly title: string;
   readonly mode: ProjectMode;
   readonly createdAt: number;
+  readonly lastOpenedAt: number | null;
+  readonly spendAtVisit: number;
 }
-export type ProjectSummary = Omit<Project, 'accountId'>;
+export type ProjectSummary = Omit<Project, 'accountId' | 'lastOpenedAt' | 'spendAtVisit'>;
 export interface ProjectCard {
+  readonly lastOpenedAt: number | null;
+  readonly sinceLastVisit: {
+    readonly sessionsEnded: number;
+    readonly findingsAdded: number;
+    readonly spend: { readonly dollars: number };
+  };
   readonly project: ProjectSummary;
   readonly latestSession: SessionSummary | null;
   readonly findingsCount: number;

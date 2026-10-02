@@ -38,7 +38,15 @@ for (const database of [false, true]) {
       drop = undefined;
     });
     function project(accountId = 'alice', id = randomUUID()): Project {
-      return { id, accountId, title: 'Research', mode: 'seed', createdAt: 1234567890000 };
+      return {
+        id,
+        accountId,
+        title: 'Research',
+        mode: 'seed',
+        createdAt: 1234567890000,
+        lastOpenedAt: null,
+        spendAtVisit: 0,
+      };
     }
     function finding(text = 'Result', id = randomUUID()): Finding {
       return { id, sessionId, taskId, text, createdAt: 1234567890010 };
@@ -81,8 +89,12 @@ for (const database of [false, true]) {
       expect(await store.sessionFindings(sessionId)).toEqual([a, b]);
       expect(await store.findings(record.id, { limit: 1, after: null })).toEqual([b, a]);
       expect(await store.findings(record.id, { limit: 1, after: b })).toEqual([a]);
-      expect(await store.findingStats(record.id)).toEqual({ count: 2, lastAt: a.createdAt });
-      expect(await store.findingStats(randomUUID())).toEqual({ count: 0, lastAt: null });
+      expect(await store.findingStats(record.id)).toEqual({
+        count: 2,
+        lastAt: a.createdAt,
+        added: 2,
+      });
+      expect(await store.findingStats(randomUUID())).toEqual({ count: 0, lastAt: null, added: 0 });
     });
     it('does not overwrite existing project or finding identities', async () => {
       const record = project();
@@ -98,6 +110,33 @@ for (const database of [false, true]) {
     });
     it('does not attach findings to a nonexistent project', async () => {
       await expect(store.saveFinding(randomUUID(), finding())).rejects.toThrow();
+    });
+    it('persists an owner-scoped visit baseline and refuses older or foreign writes', async () => {
+      const record = project();
+      await store.insert(record);
+      const at = record.createdAt + 20;
+      expect(await store.visit(record.id, 'bob', at, 0.2)).toBeNull();
+      await store.visit(record.id, 'alice', at, 0.2);
+      await store.visit(record.id, 'alice', at - 1, 0.1);
+      expect(await store.get(record.id)).toMatchObject({ lastOpenedAt: at, spendAtVisit: 0.2 });
+      await Promise.all([
+        store.visit(record.id, 'alice', at + 2, 0.4),
+        store.visit(record.id, 'alice', at + 1, 0.3),
+      ]);
+      expect(await store.get(record.id)).toMatchObject({ lastOpenedAt: at + 2, spendAtVisit: 0.4 });
+      if (db)
+        expect(await new PgProjectStore(db).get(record.id)).toEqual(await store.get(record.id));
+      expect(await store.visit(randomUUID(), 'alice', at, 0)).toBeNull();
+    });
+    it('counts findings strictly after the visit without depending on pagination', async () => {
+      const record = project();
+      await store.insert(record);
+      await store.saveFinding(record.id, finding());
+      await store.saveFinding(record.id, { ...finding(), createdAt: record.createdAt + 11 });
+      expect(await store.findingStats(record.id, record.createdAt + 10)).toMatchObject({
+        count: 2,
+        added: 1,
+      });
     });
   });
 }

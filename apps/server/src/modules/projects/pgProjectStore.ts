@@ -4,7 +4,7 @@ import type { ProjectStore } from './ports.js';
 
 // Writes supply millisecond timestamps, matching cursor and wire precision.
 const PROJECT =
-  'id, account_id as "accountId", title, mode, (extract(epoch from created_at) * 1000)::float8 as "createdAt"';
+  'id, account_id as "accountId", title, mode, (extract(epoch from created_at) * 1000)::float8 as "createdAt", (extract(epoch from last_opened_at) * 1000)::float8 as "lastOpenedAt", spend_at_visit as "spendAtVisit"';
 const FINDING =
   'id, session_id as "sessionId", task_id as "taskId", text, (extract(epoch from created_at) * 1000)::float8 as "createdAt"';
 const AFTER = '($2::timestamptz is null or (created_at, id) < ($2::timestamptz, $3::uuid))';
@@ -20,8 +20,16 @@ export class PgProjectStore implements ProjectStore {
   constructor(private readonly db: Db) {}
   async insert(project: Project): Promise<void> {
     await this.db.query(
-      'insert into projects (id, account_id, title, mode, created_at) values ($1, $2, $3, $4, $5)',
-      [project.id, project.accountId, project.title, project.mode, new Date(project.createdAt)],
+      'insert into projects (id, account_id, title, mode, created_at, last_opened_at, spend_at_visit) values ($1, $2, $3, $4, $5, $6, $7)',
+      [
+        project.id,
+        project.accountId,
+        project.title,
+        project.mode,
+        new Date(project.createdAt),
+        project.lastOpenedAt === null ? null : new Date(project.lastOpenedAt),
+        project.spendAtVisit,
+      ],
     );
   }
   async remove(id: string): Promise<void> {
@@ -53,6 +61,16 @@ export class PgProjectStore implements ProjectStore {
       ],
     );
   }
+  async visit(id: string, accountId: string, at: number, spend: number): Promise<Project | null> {
+    const rows = await this.db.query<Project>(
+      `update projects set
+        spend_at_visit = case when last_opened_at is null or last_opened_at <= $3 then greatest(spend_at_visit, $4::numeric) else spend_at_visit end,
+        last_opened_at = greatest(created_at, last_opened_at, $3::timestamptz)
+       where id = $1 and account_id = $2 returning ${PROJECT}`,
+      [id, accountId, new Date(at), spend],
+    );
+    return rows[0] ?? null;
+  }
   findings(projectId: string, page: PageRequest): Promise<Finding[]> {
     return this.db.query<Finding & Record<string, unknown>>(
       `select ${FINDING} from findings where project_id = $1 and ${AFTER} order by created_at desc, id desc limit $4`,
@@ -65,10 +83,13 @@ export class PgProjectStore implements ProjectStore {
       [sessionId],
     );
   }
-  async findingStats(projectId: string): Promise<{ count: number; lastAt: number | null }> {
-    const [row] = await this.db.query<{ count: number; lastAt: number | null }>(
-      'select count(*)::int as count, (extract(epoch from max(created_at)) * 1000)::float8 as "lastAt" from findings where project_id = $1',
-      [projectId],
+  async findingStats(
+    projectId: string,
+    since?: number,
+  ): Promise<{ count: number; lastAt: number | null; added: number }> {
+    const [row] = await this.db.query<{ count: number; lastAt: number | null; added: number }>(
+      'select count(*)::int as count, count(*) filter (where $2::timestamptz is null or created_at > $2)::int as added, (extract(epoch from max(created_at)) * 1000)::float8 as "lastAt" from findings where project_id = $1',
+      [projectId, since === undefined ? null : new Date(since)],
     );
     return row!;
   }

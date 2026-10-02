@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { nullLog, type Log } from '../../core/log/log.js';
 import type { Principal } from '../../core/http/authGuard.js';
 import { badRequest, HttpError, notFound } from '../../core/http/httpError.js';
 import type {
@@ -12,9 +13,15 @@ import type {
 } from './models.js';
 import type { ProjectSessions, ProjectStore } from './ports.js';
 import { ProjectCardContext } from './projectCardContext.js';
+import { cumulativeSpend, sessionsEndedSince, spendSinceVisit } from './lastVisit.js';
 import { creationOf, idOf, pageOf, pageResult, textOf } from './validation.js';
 
-function summary({ accountId: _accountId, ...project }: Project): ProjectSummary {
+function summary({
+  accountId: _accountId,
+  lastOpenedAt: _lastOpenedAt,
+  spendAtVisit: _spendAtVisit,
+  ...project
+}: Project): ProjectSummary {
   return project;
 }
 async function dependency<T>(work: () => Promise<T>): Promise<T> {
@@ -30,6 +37,7 @@ export class ProjectService {
   constructor(
     private readonly store: ProjectStore,
     private readonly sessions: ProjectSessions,
+    private readonly log: Log = nullLog,
   ) {}
 
   async create(
@@ -43,10 +51,16 @@ export class ProjectService {
       title: [...question.replace(/\s+/gu, ' ')].slice(0, 120).join(''),
       mode,
       createdAt: Date.now(),
+      lastOpenedAt: null,
+      spendAtVisit: 0,
     };
     await this.store.insert(project);
     try {
       const session = await this.sessions.start(project.id, principal, question, mode);
+      this.log.info(
+        { projectId: project.id, accountId: principal.accountId, sessionId: session.id },
+        'project created',
+      );
       return { project: summary(project), sessionId: session.id };
     } catch {
       // A rejected start must not leave a project card. Cleanup errors propagate.
@@ -69,6 +83,20 @@ export class ProjectService {
   }
   async get(principal: Principal, id: string): Promise<ProjectCard> {
     return this.card(principal, await this.owned(principal, id));
+  }
+  async visit(principal: Principal, id: string): Promise<{ lastOpenedAt: number }> {
+    const project = await this.owned(principal, id);
+    const at = Math.max(project.createdAt, Date.now());
+    const sessions = await dependency(() => this.sessions.list(project.id, principal));
+    const saved = await this.store.visit(
+      project.id,
+      principal.accountId,
+      at,
+      cumulativeSpend(sessions),
+    );
+    if (!saved) throw notFound('No such project.');
+    this.log.info({ projectId: project.id, accountId: principal.accountId }, 'project visited');
+    return { lastOpenedAt: saved.lastOpenedAt! };
   }
   /** Metadata-only owner check for session creation; never calls back into session. */
   async requireProject(principal: Principal, id: string): Promise<ProjectSummary> {
@@ -133,11 +161,20 @@ export class ProjectService {
       [...sessions].sort(
         (a, b) => b.startedAt - a.startedAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
       )[0] ?? null;
-    const stats = await this.store.findingStats(project.id);
+    const since = project.lastOpenedAt ?? project.createdAt - 1;
+    const stats = await this.store.findingStats(project.id, since);
     const context = latest ? new ProjectCardContext(latest) : null;
     const descriptor = context?.describe();
     const pollAfterMs = context?.pollDelay() ?? null;
     return {
+      lastOpenedAt: project.lastOpenedAt,
+      sinceLastVisit: {
+        sessionsEnded: sessionsEndedSince(sessions, since),
+        findingsAdded: stats.added,
+        spend: {
+          dollars: spendSinceVisit(cumulativeSpend(sessions), project.spendAtVisit),
+        },
+      },
       project: summary(project),
       latestSession: latest,
       findingsCount: stats.count,

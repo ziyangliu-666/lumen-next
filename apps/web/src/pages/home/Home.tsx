@@ -12,6 +12,8 @@ import { useCurrentAccount, type CurrentAccount } from '@/core/auth';
 import { sessionLink, type ProjectCard } from './api';
 import { Findings } from './Findings';
 import { usePages } from './usePages';
+import { ProjectActivity } from './ProjectActivity';
+import { OpenProjectButton } from './OpenProjectButton';
 
 const TONE: Record<ProjectCard['tone'], string> = {
   muted: 'bg-sunken text-muted-foreground',
@@ -230,6 +232,7 @@ function HomeProjects({ account }: { account: CurrentAccount }): JSX.Element {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <ProjectActivity lastOpenedAt={card.lastOpenedAt} activity={card.sinceLastVisit} />
                 <div className="flex justify-between gap-4 text-sm">
                   <span className="text-muted-foreground">Latest session spend</span>
                   <span className="font-mono text-ink">
@@ -265,9 +268,12 @@ function HomeProjects({ account }: { account: CurrentAccount }): JSX.Element {
                 )}
                 <div className="flex flex-wrap gap-2">
                   {card.actions.openSession && card.latestSession && (
-                    <Button asChild size="sm">
-                      <a href={sessionLink(card.latestSession.id)}>Open session</a>
-                    </Button>
+                    <OpenProjectButton
+                      projectId={card.project.id}
+                      target={sessionLink(card.latestSession.id)}
+                    >
+                      Open session
+                    </OpenProjectButton>
                   )}
                   <Button
                     variant="outline"

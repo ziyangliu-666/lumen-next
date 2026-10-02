@@ -32,6 +32,44 @@ beforeEach(() => {
   });
 });
 describe('Home current account', () => {
+  it('mounts the activity mark on a card and clears it for the next confirmed snapshot', () => {
+    const card = {
+      project: { id: 'p', title: 'Research', mode: 'seed', createdAt: 1000 },
+      latestSession: null,
+      findingsCount: 1,
+      lastActivityAt: 2000,
+      label: 'Awaiting session',
+      tone: 'muted',
+      actions: { openSession: false, stopLatestSession: false },
+      refreshPolicy: 'manual',
+      pollAfterMs: null,
+      lastOpenedAt: 1000,
+      sinceLastVisit: { sessionsEnded: 0, findingsAdded: 1, spend: { dollars: 0.1 } },
+    };
+    const state = {
+      items: [card],
+      loading: false,
+      error: null,
+      unauthorized: false,
+      paused: false,
+      hasMore: false,
+      refresh,
+      loadMore: vi.fn(),
+    };
+    vi.mocked(usePages).mockReturnValue(state);
+    expect(render({ status: 'ready', mode: 'identity', account })).toContain('New activity');
+    vi.mocked(usePages).mockReturnValue({
+      ...state,
+      items: [
+        {
+          ...card,
+          lastOpenedAt: 3000,
+          sinceLastVisit: { sessionsEnded: 0, findingsAdded: 0, spend: { dollars: 0 } },
+        },
+      ],
+    });
+    expect(render({ status: 'ready', mode: 'identity', account })).not.toContain('New activity');
+  });
   it('waits for the shared account without mounting project requests', () => {
     expect(render({ status: 'loading' })).toContain('Checking your account');
     expect(usePages).not.toHaveBeenCalled();

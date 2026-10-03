@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import type { LightMyRequestResponse } from 'fastify';
 import { composeApp } from '../../app.js';
 import { openTestDb, TEST_DATABASE_URL } from '../../core/db/testDb.js';
 import { createIdentitySlice, LoginGate } from '../identity/index.js';
@@ -59,7 +60,11 @@ it.skipIf(!TEST_DATABASE_URL)(
       expect(detail.json()).toMatchObject({
         account: { id: member.id, email: 'member@example.test', role: 'user' },
       });
-      for (const url of ['/api/admin/accounts', `/api/admin/accounts/${staff.id}`]) {
+      for (const url of [
+        '/api/admin/accounts',
+        `/api/admin/accounts/${staff.id}`,
+        '/api/admin/ledger',
+      ]) {
         expect(
           (await app.server.inject({ url, headers: { cookie: member.cookie } })).statusCode,
         ).toBe(403);
@@ -68,6 +73,53 @@ it.skipIf(!TEST_DATABASE_URL)(
             .statusCode,
         ).toBe(401);
       }
+      // Billing fixtures write only billing's table; deletion uses identity's HTTP API.
+      await db.query(
+        "insert into ledger_entries (account_id, amount, reason) values ($1, 0.123456, 'expense')",
+        [member.id],
+      );
+      const readLedger = (): Promise<LightMyRequestResponse> =>
+        app.server.inject({ url: '/api/admin/ledger', headers: { cookie } });
+      const before = (await readLedger()).json<{ entries: { id: string; createdAt: string }[] }>();
+      expect(before.entries).toEqual([
+        expect.objectContaining({ accountId: member.id, accountLabel: 'Admin test' }),
+      ]);
+      const deleted = await app.server.inject({
+        method: 'DELETE',
+        url: '/api/me',
+        headers: { origin, cookie: member.cookie },
+        payload: { currentPassword: 'correct horse battery 9' },
+      });
+      expect(deleted.statusCode).toBe(204);
+      const replacement = await signup('member@example.test');
+      expect(replacement.id).not.toBe(member.id);
+      const after = await readLedger();
+      expect(after.statusCode).toBe(200);
+      expect(after.json()).toEqual({
+        entries: [
+          {
+            id: before.entries[0]!.id,
+            accountId: member.id,
+            accountLabel: 'Deleted account',
+            taskId: null,
+            amount: { dollars: 0.123456 },
+            createdAt: before.entries[0]!.createdAt,
+          },
+        ],
+        nextCursor: null,
+      });
+      expect(
+        (await app.server.inject({ url: `/api/admin/accounts/${member.id}`, headers: { cookie } }))
+          .statusCode,
+      ).toBe(404);
+      expect(
+        (
+          await app.server.inject({
+            url: '/api/wallet/ledger',
+            headers: { cookie: replacement.cookie },
+          })
+        ).json(),
+      ).toEqual({ entries: [], nextCursor: null });
     } finally {
       await app.server.close();
       await drop();

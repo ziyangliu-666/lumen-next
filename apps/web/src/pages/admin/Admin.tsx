@@ -1,6 +1,7 @@
 // Owner: HE RONG. Page: Admin.
 import { useEffect, useState, type JSX } from 'react';
 import { request, RequestFailure } from '@/core/api';
+import { AdminLedger } from './AdminLedger';
 import { PageHeader } from '@/core/shell';
 import { Badge } from '@/ui/badge';
 import { Button } from '@/ui/button';
@@ -202,6 +203,7 @@ export function Admin(): JSX.Element {
             </CardContent>
           </Card>
         )}
+        <AdminLedger />
       </div>
     </>
   );

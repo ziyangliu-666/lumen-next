@@ -121,6 +121,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
   const broker = new Broker();
   // Without identity there are no real accounts, and billing keeps denying.
   const billing = createBillingSlice({
+    log,
     ...(options.stripe ? { topups: new StripeTopups(options.stripe) } : {}),
     db,
     ...(identity ? { canSpend: identity.canSpend, adminAccounts: identity } : {}),

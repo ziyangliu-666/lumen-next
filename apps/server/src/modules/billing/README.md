@@ -185,8 +185,8 @@ staff authorization; unexpected failures use core's sanitized 500 response.
 The Admin page replaces the sample row with the live directory and account
 details. It uses the existing shell staff guard, request helper and UI controls.
 It has loading, empty, error/retry, refresh and unavailable-detail states; stale
-requests are cancelled when changing selection or leaving the page. Spend,
-role changes, suspension controls and deleted-account recovery are not part of
+requests are cancelled when changing selection or leaving the page.
+Role changes, suspension controls and deleted-account recovery are not part of
 this read-only view. The public identity list currently has no pagination port;
 pagination must be agreed with identity before growing that API.
 
@@ -195,6 +195,26 @@ responses, no-store on errors, invalid IDs, empty/missing results, sanitized
 failures and unavailable identity. `adminIntegration.test.ts` proves that the
 composition serves real identity summaries to a staff cookie, denies a member
 cookie, and refuses forged stub credentials with real identity enabled.
+
+
+### Retained ledger account labels
+
+`GET /api/admin/ledger` adds a read-only staff ledger, with `limit` (1–100,
+default 20), optional `cursor`, and `{ entries, nextCursor }`. It requires staff
+before storage access, returns 503 without database or identity, and is no-store.
+Rows explicitly contain `id`, `accountId`, `accountLabel`, `taskId`, `amount`
+and ISO `createdAt`; free-text expense reasons and account email are omitted.
+Pagination resolves `(created_at, id)` boundaries in SQL, retaining microsecond
+precision. A missing boundary returns an empty page.
+
+For each distinct owner on the bounded page, billing calls identity's public
+`getAccount(id)`. Null yields **Deleted account**; a lookup failure remains an
+error, not a deletion label. The Admin ledger displays the label and original
+account ID. It never reconnects retained history to a new signup by email,
+changes recorded amounts, or changes the account-detail endpoint's 404.
+`adminLedger.test.ts` covers authorization, bounded pagination and lookup
+failures; the composed admin integration test deletes a real account and signs
+up again with the same email to prove the old ledger keeps its label and owner.
 
 
 ## Durable approvals (core #62)

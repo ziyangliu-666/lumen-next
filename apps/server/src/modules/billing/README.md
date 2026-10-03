@@ -7,7 +7,7 @@ Stripe test-mode top-ups are implemented below; keys remain a separate story.
 
 ## Public surface
 
-`createBillingSlice({ db, canSpend?, adminAccounts?, approvalResume?, origin?, topups? })` returns:
+`createBillingSlice({ db, canSpend?, adminAccounts?, approvalResume?, origin?, topups?, log? })` returns:
 
 - `registerRoutes(app)` — register the authenticated wallet and staff-only account APIs once.
 - `AdminAccountReader` — a read-only projection of identity's public `AdminAccounts` port, injected as `adminAccounts`; no role or suspension mutation is exposed.
@@ -140,6 +140,22 @@ start work, and an exhausted parent cannot open delegated work.
 Verification includes handler order, short-circuit, all three checkpoint labels,
 account rejection, exact decimal equality at the cap, over-cap refusal, a fourth
 policy with unchanged callers, empty-chain denial and propagated store errors.
+
+### Budget refusal logs
+
+`app.ts` supplies the process logger through the optional `log` dependency;
+billing keeps a child with `slice: "billing"`. Every deny or escalation emits
+one `warn` line, `budget check refused`, with `checkpoint`, `accountId`,
+`taskId`, `attemptId`, `decision` and the billing policy's denial `reason`.
+Escalation uses `approval required` and includes `approvalId`. These fields
+correlate a blocked operation without logging the caller's free-text charge
+reason, prompts, addresses, payment data, secrets or request bodies.
+
+The observer returns the original decision and propagates thrown errors
+unchanged; an unavailable store is not mislabeled as a policy denial. Allows
+produce no refusal line. Without an injected logger, the silent core logger is
+used. `budgetLog.test.ts` checks all checkpoints, escalation, privacy, and error
+propagation; `app.test.ts` proves the shared logger reaches the actual guard.
 
 ## Admin ownership decision 28 September 2026
 

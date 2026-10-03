@@ -3,6 +3,7 @@ import type { SessionSnapshot } from '@lumen/contracts';
 import { composeApp, type App } from './app.js';
 import { openTestDb, TEST_DATABASE_URL } from './core/db/testDb.js';
 import type { Worker } from './core/domain/worker.js';
+import { capture } from './core/log/testLog.js';
 
 const ORIGIN = 'http://localhost:4000';
 
@@ -10,11 +11,14 @@ describe.skipIf(!TEST_DATABASE_URL)('composed application budget enforcement', (
   let app: App;
   let drop: () => Promise<void>;
   let cookie: string;
+  let accountId: string;
+  let logs: ReturnType<typeof capture>;
   const run = vi.fn<Worker['run']>();
 
   beforeEach(async () => {
     const fixture = await openTestDb();
     drop = fixture.drop;
+    logs = capture();
     run.mockReset();
     run.mockImplementation(async (task, _input, report) => {
       await report.addSpend(task.id, { dollars: 0.1 }, 'test work');
@@ -23,7 +27,7 @@ describe.skipIf(!TEST_DATABASE_URL)('composed application budget enforcement', (
       db: fixture.db,
       identity: { origin: ORIGIN, sessionLifetimeMs: 3_600_000, secureCookies: false },
       worker: { run },
-      logLevel: 'silent',
+      log: logs.log,
     });
     const signup = await app.server.inject({
       method: 'POST',
@@ -36,6 +40,7 @@ describe.skipIf(!TEST_DATABASE_URL)('composed application budget enforcement', (
       },
     });
     expect(signup.statusCode).toBe(201);
+    accountId = signup.json<{ accountId: string }>().accountId;
     cookie = signup.cookies.map(({ name, value }) => `${name}=${value}`).join('; ');
     expect(cookie).not.toBe('');
   });
@@ -86,6 +91,7 @@ describe.skipIf(!TEST_DATABASE_URL)('composed application budget enforcement', (
     expect(run).toHaveBeenCalledTimes(1);
     expect(snapshot.tasks.map((task) => task.status)).toEqual(['ended']);
     expect(snapshot.spend).toEqual({ dollars: 0.1 });
+    expect(logs.lines().filter((line) => line['slice'] === 'billing')).toEqual([]);
     expect(await wallet()).toEqual({ spent: { dollars: 0.1 }, cap: { dollars: 1 } });
   });
 
@@ -97,6 +103,22 @@ describe.skipIf(!TEST_DATABASE_URL)('composed application budget enforcement', (
     expect(refused.tasks.map((task) => task.status)).toEqual(['waiting']);
     expect(refused.steps.some((step) => step.text.includes('approval'))).toBe(true);
     expect(refused.spend).toEqual({ dollars: 0 });
+    const billingLines = logs.lines().filter((line) => line['slice'] === 'billing');
+    expect(billingLines).toHaveLength(1);
+    expect(billingLines[0]).toMatchObject({
+      level: 40,
+      checkpoint: 'turn',
+      accountId,
+      taskId: refused.tasks[0]!.id,
+      decision: 'escalate',
+      reason: 'approval required',
+      msg: 'budget check refused',
+    });
+    expect(typeof billingLines[0]!['approvalId']).toBe('string');
+    expect(typeof billingLines[0]!['attemptId']).toBe('string');
+    expect(JSON.stringify(billingLines)).not.toMatch(
+      /budget@example|correct horse|Run budgeted work/,
+    );
     expect(await wallet()).toEqual({ spent: { dollars: 0.1 }, cap: { dollars: 0.05 } });
   });
 
@@ -126,6 +148,16 @@ describe.skipIf(!TEST_DATABASE_URL)('composed application budget enforcement', (
     expect(refused.tasks.map((task) => task.status)).toEqual(['waiting']);
     expect(refusal).toBeInstanceOf(Error);
     expect((refusal as Error).message).toContain('approval');
+    expect(logs.lines().filter((line) => line['slice'] === 'billing')).toEqual([
+      expect.objectContaining({
+        level: 40,
+        checkpoint: 'fan-out',
+        accountId,
+        taskId: refused.tasks[0]!.id,
+        decision: 'escalate',
+        reason: 'approval required',
+      }),
+    ]);
     expect(await wallet()).toEqual({ spent: { dollars: 1 }, cap: { dollars: 1 } });
   });
 });

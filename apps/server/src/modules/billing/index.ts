@@ -2,6 +2,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { Db, Queryable } from '../../core/db/db.js';
 import { HttpError } from '../../core/http/httpError.js';
+import { nullLog, type Log } from '../../core/log/log.js';
+import { withBudgetLog } from './budgetLog.js';
 import { Ledger } from './ledger.js';
 import { Topups, type TopupProvider } from './topups.js';
 import { topupRoutes } from './topupRoutes.js';
@@ -33,6 +35,7 @@ export interface BillingSlice {
 
 export function createBillingSlice(deps: {
   db: Db | null;
+  log?: Log;
   topups?: TopupProvider;
   approvalResume?: BudgetApprovalResume;
   origin?: string;
@@ -41,6 +44,7 @@ export function createBillingSlice(deps: {
   /** Identity supplies eligibility through its public API when guard wiring lands. */
   canSpend?: (accountId: string) => Promise<boolean>;
 }): BillingSlice {
+  const log = (deps.log ?? nullLog).child({ slice: 'billing' });
   const approvals =
     deps.db && deps.approvalResume ? new Approvals(deps.db, deps.approvalResume) : null;
   const ledger = deps.db ? new Ledger(deps.db) : null;
@@ -51,18 +55,21 @@ export function createBillingSlice(deps: {
   return {
     monthSpend: (accountId) => required().monthSpend(accountId),
     record: (entry, tx) => required().record(entry, tx),
-    budgetGuard: new BudgetChain([
-      new AccountHandler(deps.canSpend ?? (() => Promise.resolve(false))),
-      ...(approvals
-        ? [
-            {
-              handle: (charge: Charge) => approvals.check(charge),
-            },
-          ]
-        : []),
-      new MonthlyCapHandler((accountId, estimate) => required().fits(accountId, estimate)),
-      new ApprovalHandler(approvals ? (charge) => approvals.request(charge) : undefined),
-    ]),
+    budgetGuard: withBudgetLog(
+      new BudgetChain([
+        new AccountHandler(deps.canSpend ?? (() => Promise.resolve(false))),
+        ...(approvals
+          ? [
+              {
+                handle: (charge: Charge) => approvals.check(charge),
+              },
+            ]
+          : []),
+        new MonthlyCapHandler((accountId, estimate) => required().fits(accountId, estimate)),
+        new ApprovalHandler(approvals ? (charge) => approvals.request(charge) : undefined),
+      ]),
+      log,
+    ),
     registerRoutes: (app) => {
       walletRoutes(ledger)(app);
       topupRoutes(

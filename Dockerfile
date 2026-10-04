@@ -29,6 +29,9 @@ COPY --from=build /app/apps/server/package.json ./apps/server/
 # main.js serves this directory when it exists (defaultWebRoot in core/http/server.ts).
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 EXPOSE 4000
+# Project files live under .data next to the process (LUMEN_VOLUME_ROOT unset).
+# The runtime user must own it, or the first file tool a worker calls fails.
+RUN mkdir -p /app/.data && chown node:node /app/.data
 USER node
 # No curl in the slim image; Node is there anyway.
 HEALTHCHECK --interval=10s --timeout=3s --retries=6 \

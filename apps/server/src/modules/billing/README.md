@@ -213,6 +213,26 @@ composition serves real identity summaries to a staff cookie, denies a member
 cookie, and refuses forged stub credentials with real identity enabled.
 
 
+### Account spending in Admin
+
+`GET /api/admin/accounts/:id/wallet` returns `{ spent: Money, cap: Money }`
+for a staff-selected account. It authorizes staff before identity or wallet
+access, validates the UUID, resolves the account through identity's public
+`getAccount`, then uses the same `Ledger.monthSpend` SQL projection as the
+owner's Wallet. This preserves all-time spend, the flat USD 1 default and
+explicitly saved zero caps; no arithmetic or money comparison moves into JS.
+Missing/deleted accounts return 404 rather than a synthetic default wallet.
+Missing dependencies return 503, reads are no-store, and storage errors are
+sanitized by core.
+
+Account details now show total recorded spend and account cap, with loading,
+retry and unavailable-account states. Changing selection cancels the old request
+and remounts the figures for the selected ID; Refresh reloads the details and
+spend. This is read-only, not prepaid balance or an admin cap-editing API.
+`adminWallet.test.ts` covers authorization and error boundaries;
+`adminIntegration.test.ts` proves parity with the owner's wallet, account
+isolation, default and zero caps, and deletion against real identity/PostgreSQL.
+
 ### Retained ledger account labels
 
 `GET /api/admin/ledger` adds a read-only staff ledger, with `limit` (1–100,

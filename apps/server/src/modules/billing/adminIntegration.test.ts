@@ -64,6 +64,7 @@ it.skipIf(!TEST_DATABASE_URL)(
         '/api/admin/accounts',
         `/api/admin/accounts/${staff.id}`,
         '/api/admin/ledger',
+        `/api/admin/accounts/${member.id}/wallet`,
       ]) {
         expect(
           (await app.server.inject({ url, headers: { cookie: member.cookie } })).statusCode,
@@ -84,6 +85,29 @@ it.skipIf(!TEST_DATABASE_URL)(
       expect(before.entries).toEqual([
         expect.objectContaining({ accountId: member.id, accountLabel: 'Admin test' }),
       ]);
+      const walletUrl = `/api/admin/accounts/${member.id}/wallet`;
+      const readWallet = (): Promise<LightMyRequestResponse> =>
+        app.server.inject({ url: walletUrl, headers: { cookie } });
+      expect((await readWallet()).json()).toEqual({
+        spent: { dollars: 0.123456 },
+        cap: { dollars: 1 },
+      });
+      const saved = await app.server.inject({
+        method: 'PATCH',
+        url: '/api/wallet/cap',
+        headers: { origin, cookie: member.cookie },
+        payload: { cap: { dollars: 0 } },
+      });
+      expect(saved.statusCode).toBe(200);
+      expect((await readWallet()).json()).toEqual(saved.json());
+      expect(
+        (
+          await app.server.inject({
+            url: `/api/admin/accounts/${staff.id}/wallet`,
+            headers: { cookie },
+          })
+        ).json(),
+      ).toEqual({ spent: { dollars: 0 }, cap: { dollars: 1 } });
       const deleted = await app.server.inject({
         method: 'DELETE',
         url: '/api/me',
@@ -91,6 +115,7 @@ it.skipIf(!TEST_DATABASE_URL)(
         payload: { currentPassword: 'correct horse battery 9' },
       });
       expect(deleted.statusCode).toBe(204);
+      expect((await readWallet()).statusCode).toBe(404);
       const replacement = await signup('member@example.test');
       expect(replacement.id).not.toBe(member.id);
       const after = await readLedger();

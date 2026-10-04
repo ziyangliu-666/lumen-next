@@ -10,6 +10,7 @@ import { topupRoutes } from './topupRoutes.js';
 export type { TopupProvider, TopupOrder, PaidTopup } from './topups.js';
 import { adminRoutes, type AdminAccountReader } from './adminRoutes.js';
 import { adminLedgerRoutes } from './adminLedger.js';
+import { adminWalletRoutes } from './adminWallet.js';
 export type { AdminAccountReader } from './adminRoutes.js';
 import { Approvals } from './approvals.js';
 import { approvalRoutes } from './approvalRoutes.js';
@@ -81,6 +82,7 @@ export function createBillingSlice(deps: {
       )(app);
       adminRoutes(deps.adminAccounts)(app);
       adminLedgerRoutes(deps.db, deps.adminAccounts)(app);
+      adminWalletRoutes(ledger, deps.adminAccounts)(app);
       approvalRoutes(approvals, deps.origin, deps.canSpend ?? (() => Promise.resolve(false)))(app);
     },
   };

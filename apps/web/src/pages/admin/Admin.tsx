@@ -2,6 +2,7 @@
 import { useEffect, useState, type JSX } from 'react';
 import { request, RequestFailure } from '@/core/api';
 import { AdminLedger } from './AdminLedger';
+import { AccountWallet } from './AccountWallet';
 import { PageHeader } from '@/core/shell';
 import { Badge } from '@/ui/badge';
 import { Button } from '@/ui/button';
@@ -200,6 +201,7 @@ export function Admin(): JSX.Element {
                   Loading account…
                 </p>
               )}
+              {detail && !detailError && <AccountWallet key={detail.id} accountId={detail.id} />}
             </CardContent>
           </Card>
         )}

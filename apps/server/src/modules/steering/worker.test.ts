@@ -305,6 +305,8 @@ describe('createWorker: tools', () => {
       {
         toolCalls: [
           toolCall('read_file', { path: '/mnt/workspace/../../etc/passwd' }, 'escape'),
+          toolCall('read_file', { path: '/mnt/upload' }, 'a-directory'),
+          toolCall('read_file', { path: '/mnt/upload/missing.txt' }, 'missing'),
           toolCall('run', {}, 'no-command'),
           toolCall('delegate', { tasks: ['x'] }, 'not-a-reader-tool'),
         ],
@@ -322,6 +324,8 @@ describe('createWorker: tools', () => {
     const results = model.requests[1]!.messages.filter((m) => m.role === 'tool');
     expect(results.map((m) => m.content)).toEqual([
       expect.stringMatching(/^error: /),
+      expect.stringMatching(/^error: EISDIR/),
+      expect.stringMatching(/^error: ENOENT/),
       'error: run needs "command" as a non-empty string',
       'error: there is no tool called delegate',
     ]);

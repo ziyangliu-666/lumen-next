@@ -146,6 +146,20 @@ function stringArg(call: ToolCall, name: string): string {
   return value;
 }
 
+/**
+ * A path the model got wrong after the sandbox let it through: a directory
+ * read as a file, a file that is not there, a file used as a directory. The
+ * model can fix these; the server has not failed.
+ */
+const PATH_MISTAKES = new Set(['EISDIR', 'ENOENT', 'ENOTDIR', 'EEXIST', 'ENOTEMPTY']);
+function isPathMistake(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    typeof (error as NodeJS.ErrnoException).code === 'string' &&
+    PATH_MISTAKES.has((error as NodeJS.ErrnoException).code!)
+  );
+}
+
 function clip(text: string, limit = MAX_TOOL_RESULT_CHARS): string {
   return text.length <= limit
     ? text
@@ -247,7 +261,8 @@ export function createWorker(options: WorkerOptions): Worker {
         const refusal =
           error instanceof ToolRefusal ||
           error instanceof SandboxPathError ||
-          error instanceof SandboxQuotaError;
+          error instanceof SandboxQuotaError ||
+          isPathMistake(error);
         if (!refusal) throw error;
         const message = `error: ${error.message}`;
         await this.traced(`${call.name}: refused`, call.name, startedAt, message);

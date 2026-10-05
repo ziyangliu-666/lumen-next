@@ -4,6 +4,9 @@ UC5 owns the ledger, wallet, budget checks, keys, payments and administration.
 The ledger, Wallet tab, budget guard connection and read-only administration are
 merged. This approval increment adds durable decisions and session resumption against #62.
 Stripe test-mode top-ups are implemented below; keys remain a separate story.
+The next Keys increment has an internal tested encryption adapter and a
+[storage/integration proposal](KEYS_DESIGN.md); HTTP storage and the usable Keys
+page are not delivered yet.
 
 ## Public surface
 

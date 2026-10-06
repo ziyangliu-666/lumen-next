@@ -90,3 +90,6 @@ export function createBillingSlice(deps: {
 
 export { stripeFromEnvironment, StripeTopups } from './stripe.js';
 export type { StripeConfiguration } from './stripe.js';
+
+// Startup validation is available before the Keys storage activation gate opens.
+export { secretCipherFromEnvironment } from './secretConfiguration.js';

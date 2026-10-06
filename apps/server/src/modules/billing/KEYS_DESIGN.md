@@ -22,8 +22,9 @@ rotation support, not an automatic re-encryption job. Tests use generated,
 synthetic keys only. No real provider credentials are requested for this PR.
 
 This increment does **not** expose a usable Keys page or secret retrieval port.
-The current Settings placeholder remains a placeholder. The cipher is not wired
-into the process, exported to another slice or advertised as a complete vault.
+The current Settings placeholder remains a placeholder. Startup validates the
+keyring through the public configuration helper, but does not retain the cipher
+for storage or provide a complete vault.
 
 ## Core decisions and persistence increment
 
@@ -46,8 +47,12 @@ indexed `key_id` supports checking which rotation keys remain in use. No account
 or credential table from another slice is queried or modified.
 
 The internal `Secrets` store provides metadata list, replace, remove and trusted
-read. Each operation validates the owner/provider and calls injected eligibility;
-false rejects, service errors propagate. Only a missing row returns null.
+read. Listing, writing and retrieval validate the owner/provider and call injected
+eligibility; false rejects and service errors propagate. Following core review
+in #78, removal validates the owner/provider but does not require spending
+eligibility. The eventual route must authenticate and bind the owner independently;
+the store method is not itself an authentication boundary. Only a missing row
+returns null.
 `eraseAccount(accountId, tx)` is a proposed cleanup primitive using the caller's
 transaction; its authorization and invocation must belong to the agreed deletion
 flow. It is not a wired deletion hook. Concurrent replacements use one SQL upsert.
@@ -55,11 +60,13 @@ flow. It is not a wired deletion hook. Concurrent replacements use one SQL upser
 `secretCipherFromEnvironment(env)` parses explicitly supplied configuration and
 returns a cipher, not raw key buffers. Both values absent/empty returns null;
 partial or malformed configuration throws a value-free error. This helper is
-not called by startup yet: the final wiring must call it before serving requests
-so malformed configuration fails startup when the feature is integrated.
+exported by the billing public index and called by `main.ts` before database
+initialization or listen, as requested in #78. Malformed configuration now stops
+startup with a fixed error. The validated cipher is not wired into storage yet.
 
-**No runtime activation in this increment:** neither module is exported by
-billing's public index or instantiated by `createBillingSlice`/`app.ts`/`main.ts`.
+**No storage activation in this increment:** the internal `Secrets` store is
+not exported by billing's public index or instantiated by
+`createBillingSlice`/`app.ts`/`main.ts`. Only configuration validation is active.
 There are no Keys routes and no worker lookup. The Settings placeholder is
 unchanged; even provisioned environment variables do not enable storage yet.
 The migration alone holds no user secrets. PostgreSQL fixtures instantiate the
@@ -74,8 +81,11 @@ semantics without collecting credentials from users.
   under a concurrent save/delete before composing the store. No identity-table
   access from billing and no assumption that a tombstone triggers FK deletion.
 - `GET /api/keys` returns owned provider/update metadata only. `PUT` and `DELETE`
-  `/api/keys/openai` require the authenticated owner, exact Origin and current
-  eligibility; reads are no-store. No prefix/suffix or saved value is returned,
+  `/api/keys/openai` require the authenticated owner and exact Origin. Writing
+  and use require eligibility; removal must remain available to suspended owners
+  as requested in #78. Identity must agree how to authenticate that removal,
+  since suspension currently revokes sessions. Reads are no-store. No prefix/suffix
+  or saved value is returned,
   including to staff. Bounded input is validated before encryption.
 - Settings Keys gets add/replace/remove controls, clears submitted values, never
   uses localStorage, and accurately describes provider usage. Only OpenAI is in
@@ -100,3 +110,7 @@ and isolated PostgreSQL schemas to prove encryption at rest, metadata projection
 recreation, isolation, replacement/deletion, rotation, concurrent writes,
 ineligibility, tamper rejection and transactional erase rollback. It also checks
 that the composed application still has no Keys routes or public `secret` port.
+
+`main.test.ts` launches the real compiled entry point with an isolated environment
+to prove malformed/partial configuration fails before database setup or listen,
+while missing/valid configuration reaches the normal startup checks.

@@ -4,9 +4,12 @@ UC5 owns the ledger, wallet, budget checks, keys, payments and administration.
 The ledger, Wallet tab, budget guard connection and read-only administration are
 merged. This approval increment adds durable decisions and session resumption against #62.
 Stripe test-mode top-ups are implemented below; keys remain a separate story.
-The next Keys increment has an internal tested encryption adapter and a
-[storage/integration proposal](KEYS_DESIGN.md); HTTP storage and the usable Keys
-page are not delivered yet.
+Keys has an internal tested encryption adapter, configuration parser and
+PostgreSQL store using core-approved migration 015. The
+[storage/integration agreement](KEYS_DESIGN.md) records the approved OpenAI-only
+scope and remaining identity deletion lifecycle. Runtime storage stays off:
+these helpers are not composed or exported, and the Keys page is still a
+placeholder. HTTP storage and worker model selection are not delivered yet.
 
 ## Public surface
 

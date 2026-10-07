@@ -125,8 +125,17 @@ under the same account lock after deletion proof succeeds. It must be awaited;
 any failure rolls back cleanup and identity deletion. No consumer is wired by
 default, and Billing Keys remains disabled. Composition must inject Billing's
 keyring-independent cleanup and require lifecycle wiring before enabling saves.
-See [key lifecycle agreement](../../../../../docs/identity/KEY_LIFECYCLE.md) for
-lock ordering, suspended-owner proof and the remaining owner handoff.
+The optional `removeOwnOpenAiKey(accountId, transaction)` callback enables
+`POST /api/auth/key-removal/openai/password` with fresh bounded password proof,
+and POST-confirmed GitHub/Google removal through purpose-separated OAuth attempts.
+These allow a suspended, non-deleted owner to remove only their own OpenAI key,
+without normal login, account linking or session issuance. The callback must
+only erase that owner's OpenAI ciphertext using the supplied transaction.
+OAuth callbacks consume the attempt before exchange; a failed action requires a
+new attempt. No callback is configured by the existing composition, so these
+routes are not enabled in the running app. See
+[key lifecycle agreement](../../../../../docs/identity/KEY_LIFECYCLE.md) for
+lock ordering, endpoint details, tests and the remaining owner handoff.
 
 ### Acceptance status
 

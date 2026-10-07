@@ -4,10 +4,11 @@ Owner: LU YI. Proposed integration contract for [PR #79](https://github.com/ziya
 
 ## Delivery boundary
 
-This branch implements Identity's `withActiveAccount` port and optional
-`onAccountDeleting` participant. It does not activate Keys, modify Billing,
-wire the participant into composition, or implement suspended-owner HTTP proof.
-Billing and core must review the integration below before activation. The
+This branch implements Identity's `withActiveAccount` port, optional
+`onAccountDeleting` participant and optional fresh-credential key-removal routes.
+It does not activate Keys, modify Billing, wire the callbacks into composition,
+or provide the Keys UI. Billing and core must review and implement their owned
+integration below before activation. The
 existing `canSpend` port remains an unlocked eligibility snapshot, not permission
 to perform a later secret write.
 
@@ -52,26 +53,49 @@ or an unlocked `canSpend` followed by an upsert does not provide this guarantee.
   and cleanup with key usage configuration absent. Identity's fixture tests do
   not substitute for this composed acceptance.
 
-## Suspended-owner removal: proposed restricted authentication
+## Suspended-owner removal: fresh, action-specific authentication
 
-Do not unsuspend the owner, revive revoked cookies, accept staff authority for
-someone else's key, or relax `SessionPrincipalResolver`/`requireUser`. Ordinary
-sign-in, key reads/saves, wallet access and account deletion remain unchanged.
+The optional `removeOwnOpenAiKey(accountId, tx)` factory callback enables the
+following Identity routes. With no callback they are absent. Normal cookie
+resolution and sign-in still reject suspension. No session is issued, account
+created, email linked, role granted or suspension reversed by removal.
 
-The proposed next increment is a separate Identity-owned, removal-only flow:
+| Route | Proof / result |
+| --- | --- |
+| `POST /api/auth/key-removal/openai/password` | Exact Origin and bounded `{ email, password }`; fresh current-password proof; 204 on removal (including already absent). |
+| `POST /api/auth/key-removal/openai/github` (or `google`) | Exact Origin and exactly `{ confirm: 'remove-openai-key' }`; 303 to the configured provider. |
+| Existing `/api/auth/github/callback` (or Google) | `kr_` state dispatches only to removal, using a separate HttpOnly browser cookie and purpose-separated attempt hashes. |
 
-- Purpose `billing-key-remove`, fixed provider `openai`, immutable owner derived
-  from the verified credential, short expiry and atomic single-use redemption.
-- Password: bounded input and LoginGate, current-password verification outside
-  the lock, then credential-version recheck under the account lock.
-- OAuth-only: separate purpose-bound state/PKCE attempt, matching an existing
-  provider subject. No signup, email linking, normal login session or role grant.
-- Exact Origin, no-store, generic refusal and value-free logs. No proof in URLs.
-- Deleted owners fail. Suspended owners gain only authority to remove their own
-  key. Proof consumption and Billing removal share one transaction; wrong purpose,
-  owner/provider, stale credential, expired/replayed proof and old cookies fail.
+Password verification happens before locking; the immutable owner, current email
+and hash version are rechecked under the account lock before erasing. No caller
+can supply an account ID or alternative key provider. Incorrect/unknown/deleted
+proofs get the same generic refusal. LoginGate bounds attempts and expensive work.
+A password is freshly verified per action, not converted into a reusable token.
 
-This proof is **not implemented by this branch or PR #79**. Until reviewed and
-implemented, no end-to-end suspended-owner removal is claimed and Keys stays
-disabled. Allowing internal `remove()` for suspended accounts alone is not an
-HTTP authentication solution. Billing must not invent an alternate login flow.
+OAuth uses the existing reviewed provider exchange and existing callback URL, but
+not ordinary account resolution/session issuance. The start POST explicitly
+confirms deletion. Attempts expire after ten minutes and are consumed before
+exchange, so a repeated callback cannot retry the action. The returned immutable
+provider subject must already be bound to a non-deleted owner and is rechecked
+under its account lock. Email never establishes ownership. `signin` and
+`key-removal` hash namespaces prevent either purpose being redeemed as the other.
+
+There is no additional reusable proof to store or redeem: the fresh OAuth callback
+completes the POST-confirmed action. Attempt consumption precedes the database
+transaction; if exchange/cleanup fails, the user must start a new attempt rather
+than reuse the old callback. The ciphertext removal itself is transactional.
+This intentionally replaces the earlier proposed separate capability/redemption
+API. The normal OAuth code/state travel in the callback URL; request logging is
+silent there, responses are no-store/no-referrer, and passwords never enter URLs.
+
+Success/failure redirects are fixed `/?keyRemoval=complete#/signin` and
+`/?keyRemoval=failed#/signin`; they carry no credential or owner data. Provider
+options are deployment-owned and cannot be chosen by an arbitrary callback URL.
+The optional UI handoff still needs to render these states and explicit controls.
+
+Tests exercise these routes with a real PostgreSQL database, synthetic credentials
+and simulated OAuth providers. They prove auth isolation, purpose/binding/expiry
+and replay refusal, rollback, other-owner isolation and stale-proof rejection;
+they do **not** prove actual Billing ciphertext integration or live provider
+acceptance. Keys stays disabled until owner-reviewed composition and acceptance.
+Billing must not invent a replacement login flow.

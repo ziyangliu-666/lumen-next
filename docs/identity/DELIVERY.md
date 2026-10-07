@@ -35,7 +35,7 @@ case or real password-reset mailbox acceptance.
 | OAuth | Happy path accepted by PM on 3 October. Record any remaining live cancellation/conflict/logout/staff cases separately. Deployment owns HTTPS and private configuration. |
 | Mail verification/recovery | Implemented and configurable. **Real mailbox verification/reset acceptance remains unconfirmed** in the records reviewed. A mock transport, outbox file, HTTP 202 or provider API success is not proof of receipt. |
 | Account deletion | Merged in #49. Other slices' rows remain intact. The last staff account may delete itself; restoring staff access requires an authorized operational procedure, not automatic promotion. |
-| Key lifecycle | Identity transaction gate and deletion participant implemented on this branch, not merged or composed with Billing. See [integration agreement](KEY_LIFECYCLE.md). Storage stays off pending joint integration and restricted suspended-owner authentication. |
+| Key lifecycle | Identity transaction gate, deletion participant and optional password/OAuth removal-only authentication implemented on this branch, not merged or composed with Billing. See [integration agreement](KEY_LIFECYCLE.md). Storage stays off pending owner-reviewed joint integration, UI and real-provider acceptance. |
 | Application acceptance | Record live staff routing and cross-account isolation; tests alone are not browser acceptance. Existing WebSockets retain their handshake principal until shared-core revalidation exists. |
 | Final DOD | Revision-specific green verification, owner review, CI/security/deployment gates, remaining live acceptance, final design/report/presentation evidence. No unsupported completion percentage. |
 

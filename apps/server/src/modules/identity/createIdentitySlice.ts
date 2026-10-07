@@ -2,6 +2,7 @@ import { nullLog, type Log } from '../../core/log/log.js';
 import type { IdentityAuthentication } from './identityAuthentication.js';
 import { logMailEvent } from './identityLog.js';
 import { AccountService } from './accountService.js';
+import { KeyRemoval } from './keyRemoval.js';
 import type { AccountDeletionParticipant, ActiveAccountWork } from './accountLifecycle.js';
 import { MailActions } from './mailActions.js';
 import { MailQueue, MailWorker, type MailEvent } from './mailQueue.js';
@@ -21,6 +22,8 @@ export interface IdentitySliceOptions {
   readonly database: IdentityDatabase;
   /** Awaited under the account lock; rejection rolls back the entire deletion. */
   readonly onAccountDeleting?: AccountDeletionParticipant;
+  /** Fixed OpenAI eraser only; fresh proof authorizes removal, never login or key use. */
+  readonly removeOwnOpenAiKey?: AccountDeletionParticipant;
   readonly origin: string;
   readonly sessionLifetimeMs: number;
   readonly loginGate: LoginGate;
@@ -58,6 +61,9 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
   });
   const sessionStrategy = new SessionStrategy(sessions);
   const providers = options.oauthProviders ?? [];
+  const keyRemoval = options.removeOwnOpenAiKey
+    ? new KeyRemoval(options.database, options.removeOwnOpenAiKey)
+    : undefined;
   if (
     new Set(providers.map((provider) => provider.kind)).size !== providers.length ||
     providers.some((provider) => provider.kind !== 'github' && provider.kind !== 'google')
@@ -102,12 +108,26 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
       sessions,
       accounts,
       management: new AccountService(accounts),
+      ...(keyRemoval ? { keyRemoval } : {}),
       ...(mail ? { mail: mail.actions } : {}),
       origin: options.origin,
       loginGate: options.loginGate,
       log,
       ...(providers.length
-        ? { oauth: { providers, attempts: new OAuthAttempts(options.database) } }
+        ? {
+            oauth: {
+              providers,
+              attempts: new OAuthAttempts(options.database),
+              ...(keyRemoval
+                ? {
+                    removal: {
+                      service: keyRemoval,
+                      attempts: new OAuthAttempts(options.database, 'key-removal'),
+                    },
+                  }
+                : {}),
+            },
+          }
         : {}),
       ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }),
     }),

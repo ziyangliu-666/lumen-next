@@ -109,36 +109,31 @@ Constraints: touch only modules/projects, pages/home, pages/landing, the one mig
       pattern: 'Strategy with Template Method',
       written: 60,
       onMain: 25,
-      state: 'review',
-      stateLabel: 'Changes requested',
+      state: 'progress',
+      stateLabel: 'Merged implementation; acceptance pending',
       summary:
-        'Password sign-in is complete and sound: scrypt, hashed session tokens, an Origin check, parameterised SQL. OAuth, mail and reset are written but not wired. The pull request also edits billing, the admin page and core, would stop the staging container, and now conflicts with main. No commit since 18 Sep.',
+        'Identity-only evidence update, 7 October: #23, #34, #37, #38, #40 and #47–#51 are merged. PM accepted GitHub/Google sign-in on 3 October (#38). Real mailbox reset acceptance is unconfirmed; #79 needs lifecycle integration and restricted removal authentication. The 60%/25% figures are historical September 21 estimates, not current completion. Other slices and global metrics have not been refreshed.',
       todo: [
-        { text: 'New branch with identity only', done: false },
-        { text: 'Staging env vars; smoke test signs in for real', done: false },
-        { text: 'Password change revokes other sessions', done: false },
-        { text: 'Store tests run in CI; drop pglite; pin arctic', done: false },
-        { text: 'Trim docs/luyi to docs/identity', done: false },
+        { text: 'Identity-only password authentication merged (#23)', done: true },
+        {
+          text: 'Account composition, OAuth wiring and native clients merged (#34, #38)',
+          done: true,
+        },
+        { text: 'GitHub/Google OAuth accepted by PM on 3 October (#38)', done: true },
+        { text: 'Mail queue, deletion, eligibility and logging merged (#37, #49–#51)', done: true },
+        { text: 'Integrate key lifecycle with Billing/core; review #79', done: false },
+        { text: 'Record consented real mailbox reset/verification acceptance', done: false },
+        {
+          text: 'Record remaining live isolation/staff cases and final individual DOD',
+          done: false,
+        },
       ],
-      prs: [{ number: 15, label: 'feat(identity): authentication and read-only admin access' }],
-      prompt: `You are working in the lumen-next repo on pull request #15 (branch identity/auth-flow), the identity slice, owned by LU YI. Read CLAUDE.md, docs/CODING_STANDARDS.md and the review on PR #15 (gh pr view 15 --comments) first. Everything you commit is English. The authentication core was reviewed and is sound: do not rewrite it.
-
-Goal: a pull request that contains only identity and merges by Tuesday.
-
-Do, in this order:
-1. Create a new branch identity/password-auth from origin/main. Bring over only: apps/server/src/modules/identity/**, apps/web/src/pages/signin/**, apps/web/src/core/auth.tsx, the StaffGuard change in apps/web/src/main.tsx, the three migrations 002_identity_auth, 003_identity_oauth, 004_identity_mail, the first hunk of core/db/db.ts (T extends object), and the identity wiring in apps/server/src/main.ts.
-2. Leave out: every file under modules/billing and pages/admin (HE RONG's), the second hunk of core/db/db.ts (the transaction change; the core owner takes it), and the change to db.test.ts (main already fixed it).
-3. docker-compose.staging.yml: set LUMEN_ORIGIN=http://localhost:4000, IDENTITY_SESSION_LIFETIME_MS and IDENTITY_INSECURE_COOKIES=true for the app service. List all three in .env.example with one line each.
-4. .github/workflows/deploy.yml smoke test: replace the "authorization: stub" calls with a real signup and login (keep the cookie with curl -c and -b), then the session POST. With the project gate wired, create the project through POST /api/projects first if that route exists on main; otherwise keep the session POST out of the smoke test.
-5. main.ts: log one line at startup naming the active resolver. Refuse to start when NODE_ENV=production and DATABASE_URL is unset.
-6. accountService.changePassword: revoke every other session of the account, keep the current one. Test it.
-7. Tests: move the Postgres tests to openTestDb() and describe.skipIf(!TEST_DATABASE_URL) from core/db/testDb.ts. Remove the IDENTITY_PGLITE_MODULE and IDENTITY_PG_MODULE switches and localPglite.ts. Add arctic to apps/server/package.json with an exact version; remove the dynamic import from tmp/identity-tools.
-8. Delete modules/identity/migrations/ (the second copy). core/db/migrations is the only one.
-9. Leave account deletion (DELETE /api/me) out of this pull request: it depends on a foreign key the base schema does not have.
-10. Docs: keep API.md, OAUTH_SETUP.md, MAIL_SETUP.md, LOCAL_AUTH.md and the seven SVG figures under docs/identity/. Delete every other file that was under docs/luyi/ (working notes, *_PLAN.md, *_HANDOFF.md, archive/, all .docx, .pdf, .png).
-11. PR body: say that OAuth, mail verification and password reset are written but not wired (Sprint 3), and that 002 adds accounts.suspended and a unique index on the normalised email. Tell the team that the stub stops working when DATABASE_URL is set.
-
-Constraints: no file outside the list in step 1 and the files named in steps 3 to 5. Done means npm run verify is green with DATABASE_URL set, the identity store tests run (not skip) in CI, and docker compose -f docker-compose.staging.yml up --build reaches healthy.`,
+      prs: [
+        { number: 38, label: 'Merged: OAuth; PM acceptance recorded' },
+        { number: 37, label: 'Merged: mail queue; mailbox acceptance unconfirmed' },
+        { number: 79, label: 'Open: Billing requests Identity lifecycle agreement' },
+      ],
+      prompt: '',
     },
     {
       id: 'zhuoyang',

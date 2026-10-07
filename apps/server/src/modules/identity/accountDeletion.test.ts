@@ -12,6 +12,7 @@ import { LoginGate } from './loginGate.js';
 import { OAuthAccounts } from './oauth.js';
 import { PostgresAccountStore, PostgresAuthSessionStore } from './postgresStores.js';
 import { AUTH_COOKIE } from './sessionStrategy.js';
+import type { AccountDeletionParticipant } from './accountLifecycle.js';
 
 const origin = 'https://lumen.example';
 const password = 'testpass';
@@ -52,9 +53,10 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: account deletion on PostgreSQL', 
     await fixture?.drop();
   });
 
-  async function server(): Promise<FastifyInstance> {
+  async function server(onAccountDeleting?: AccountDeletionParticipant): Promise<FastifyInstance> {
     identity = createIdentitySlice({
       database: db,
+      ...(onAccountDeleting ? { onAccountDeleting } : {}),
       origin,
       sessionLifetimeMs: 60 * 60_000,
       loginGate: new LoginGate(),
@@ -264,7 +266,11 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: account deletion on PostgreSQL', 
   });
 
   it('lets an account without a password delete only from a sign-in in the last ten minutes', async () => {
-    const app = await server();
+    const cleaned: string[] = [];
+    const app = await server((id) => {
+      cleaned.push(id);
+      return Promise.resolve();
+    });
     const oauth = new OAuthAccounts(db);
     const sessions = new AuthSessions(new PostgresAuthSessionStore(db), {
       lifetimeMs: 60 * 60_000,
@@ -279,11 +285,14 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: account deletion on PostgreSQL', 
     const before = await snapshot(principal.accountId, profile.email);
     expect((await remove(app, stale.token, {})).statusCode).toBe(401);
     expect(await snapshot(principal.accountId, profile.email)).toEqual(before);
+    expect(cleaned).toEqual([]);
 
     const fresh = await sessions.issue(principal);
     // No password exists to prove, so offering one is refused rather than ignored.
     expect((await remove(app, fresh.token, { currentPassword: password })).statusCode).toBe(401);
+    expect(cleaned).toEqual([]);
     expect((await remove(app, fresh.token, {})).statusCode).toBe(204);
+    expect(cleaned).toEqual([principal.accountId]);
     expect(await me(app, stale.token)).toBe(401);
     expect(await count('credentials', principal.accountId)).toBe(0);
 
@@ -337,6 +346,22 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: account deletion on PostgreSQL', 
     ).rejects.toThrow('injected failure');
     expect(await snapshot(accountId, email)).toEqual(before);
     expect(await signin(app, email)).toBe(200);
+  });
+
+  it('wires a failing participant through the factory and rolls back the HTTP deletion', async () => {
+    const cleaned: string[] = [];
+    const app = await server(async (id, tx) => {
+      cleaned.push(id);
+      await tx.query('delete from credentials where account_id = $1', [id]);
+      throw new Error('participant failed');
+    });
+    const email = 'participant@example.test';
+    const { accountId, cookie } = await signup(app, email);
+    const before = await snapshot(accountId, email);
+    expect((await remove(app, cookie, { currentPassword: password })).statusCode).toBe(500);
+    expect(cleaned).toEqual([accountId]);
+    expect(await snapshot(accountId, email)).toEqual(before);
+    expect(await me(app, cookie)).toBe(200);
   });
 
   it('refuses a proof that went stale under the lock', async () => {

@@ -5,6 +5,7 @@ import {
   type DeletionProof,
   type ProfilePatch,
 } from './accounts.js';
+import type { AccountDeletionParticipant, ActiveAccountWork } from './accountLifecycle.js';
 import type { AuthSessionStore, NewAuthSession, StoredAuthSession } from './authSessions.js';
 import { AuthFailure } from './authFlow.js';
 import { AdminAccountFailure, type AccountSummary } from './adminAccounts.js';
@@ -96,8 +97,28 @@ async function matchesProof(
 }
 
 /** PostgreSQL implementation; the injected database owns connections/transactions. */
-export class PostgresAccountStore implements AccountStore, PasswordAccountStore {
-  constructor(private readonly db: IdentityDatabase) {}
+export class PostgresAccountStore implements AccountStore, PasswordAccountStore, ActiveAccountWork {
+  constructor(
+    private readonly db: IdentityDatabase,
+    private readonly onAccountDeleting?: AccountDeletionParticipant,
+  ) {}
+
+  /** Not authentication: callers must establish ownership before entering this port. */
+  async withActiveAccount<T>(
+    accountId: string,
+    work: (transaction: IdentitySql) => Promise<T>,
+  ): Promise<T> {
+    if (!ACCOUNT_ID.test(accountId)) throw new AuthFailure('invalid_credentials');
+    return this.db.withTransaction(async (sql) => {
+      const rows = await sql.query<{ id: string }>(
+        `select id from accounts
+         where id = $1 and not suspended and deleted_at is null for update`,
+        [accountId],
+      );
+      if (rows.length !== 1) throw new AuthFailure('invalid_credentials');
+      return work(sql);
+    });
+  }
 
   createPasswordAccount(input: {
     readonly email: string;
@@ -269,6 +290,9 @@ export class PostgresAccountStore implements AccountStore, PasswordAccountStore 
         );
         if (fresh.length !== 1) return false;
       }
+      // The participant uses this connection while the account lock is held.
+      // Failure must abort the whole deletion, never leave a partial tombstone.
+      await this.onAccountDeleting?.(accountId, sql);
       // The placeholder can never be registered again: signup and profile
       // validation require a dot in the domain, and `invalid` has none.
       await sql.query(

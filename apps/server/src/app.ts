@@ -16,6 +16,8 @@ import type { Worker } from './core/domain/worker.js';
 import type { ModelProvider } from './core/model/index.js';
 import {
   createBillingSlice,
+  eraseAccountSecrets,
+  removeOwnOpenAiKey,
   StripeTopups,
   type StripeConfiguration,
 } from './modules/billing/index.js';
@@ -106,6 +108,10 @@ export async function composeApp(options: AppOptions): Promise<App> {
           sessionLifetimeMs: options.identity.sessionLifetimeMs,
           loginGate: new LoginGate(),
           log,
+          // Billing's ciphertext cleanup is wired whether or not key usage is
+          // configured: ciphertext must never outlive its account or a removal.
+          onAccountDeleting: eraseAccountSecrets,
+          removeOwnOpenAiKey,
           ...(options.identity.oauthProviders
             ? { oauthProviders: options.identity.oauthProviders }
             : {}),

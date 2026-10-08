@@ -236,8 +236,22 @@ describe('session page: the rail', () => {
     expect(composer(true)).toContain('aria-label="Steer"');
     expect(composer(true)).not.toContain('aria-label="Send"');
     expect(composer(true)).toContain('aria-label="Steer the task shown"');
+    expect(composer(true)).toContain('Apply message');
+    expect(composer(true)).toContain('role="combobox"');
+    expect(composer(true)).toContain('Steer this task before its next step…');
     expect(composer(false)).toContain('aria-label="Send"');
     expect(composer(false)).toContain('aria-label="Say something to the lead"');
+    expect(composer(false)).not.toContain('role="combobox"');
+  });
+
+  it.each([
+    { disabled: true, steerable: true },
+    { disabled: false, steerable: false },
+  ])('disables timing when the socket or the task cannot accept a steer: %j', (props) => {
+    const html = renderToStaticMarkup(
+      <Composer {...props} running={true} onSay={noop} onSteer={noop} onStop={noop} />,
+    );
+    expect(html).toMatch(/<button[^>]*role="combobox"[^>]*disabled=""/);
   });
 
   it('disables the field once the task shown is not the one running', () => {

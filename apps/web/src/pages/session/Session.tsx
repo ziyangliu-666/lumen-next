@@ -23,6 +23,7 @@ import {
   money,
   StatusWord,
   StepStream,
+  type SteerWhen,
   WaitingNotice,
 } from './parts';
 import { atFoot, elapsed } from './tree';
@@ -216,10 +217,10 @@ export function Session(): JSX.Element {
   }
 
   // Steers the task the stream shows, not necessarily the root: a person
-  // reading a reader's own stream steers that reader, not the lead. Lands at
-  // the worker's next step, the soonest moment a steer can reach it.
-  function steer(text: string): void {
-    stream.current?.send({ type: 'task.steer', taskId: shown.id, text, when: 'next-step' });
+  // reading a reader's own stream steers that reader, not the lead. The
+  // composer chooses whether it lands at the next step or the end of the turn.
+  function steer(text: string, when: SteerWhen): void {
+    stream.current?.send({ type: 'task.steer', taskId: shown.id, text, when });
   }
 
   return (

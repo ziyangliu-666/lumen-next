@@ -4,7 +4,13 @@ import { openTestDb, TEST_DATABASE_URL } from '../../core/db/testDb.js';
 import type { Db } from '../../core/db/db.js';
 import { SecretCipher } from './secretCipher.js';
 import { Secrets } from './secrets.js';
-import { createBillingSlice } from './index.js';
+import {
+  createBillingSlice,
+  eraseAccountSecrets,
+  removeOwnOpenAiKey,
+  type WithActiveSecretAccount,
+} from './index.js';
+import { forbidden } from '../../core/http/httpError.js';
 import { composeApp } from '../../app.js';
 
 const owner = randomUUID();
@@ -20,11 +26,19 @@ describe.skipIf(!TEST_DATABASE_URL)(
     let db: Db;
     let drop: () => Promise<void>;
     let store: Secrets;
+    const withActiveAccount: WithActiveSecretAccount = (accountId, work) =>
+      db.withTransaction(async (tx) => {
+        // Contract fixture only: real identity lock ordering is integration acceptance in #80.
+        if (!(await canUse(accountId))) throw forbidden('account cannot use keys');
+        return work(tx);
+      });
+    const remove = (id: string): Promise<void> =>
+      db.withTransaction((tx) => removeOwnOpenAiKey(id, tx));
     const canUse = vi.fn<(id: string) => Promise<boolean>>();
     beforeEach(async () => {
       ({ db, drop } = await openTestDb());
       canUse.mockReset().mockResolvedValue(true);
-      store = new Secrets(db, cipher, canUse);
+      store = new Secrets(cipher, withActiveAccount);
     });
     afterEach(async () => {
       await drop?.();
@@ -41,7 +55,7 @@ describe.skipIf(!TEST_DATABASE_URL)(
       expect(Object.keys(metadata[0]!).sort()).toEqual(['provider', 'updatedAt']);
       expect(metadata[0]!.provider).toBe('openai');
       expect(Number.isNaN(Date.parse(metadata[0]!.updatedAt))).toBe(false);
-      expect(await new Secrets(db, cipher, canUse).secret(owner, 'openai')).toBe(first);
+      expect(await new Secrets(cipher, withActiveAccount).secret(owner, 'openai')).toBe(first);
       expect(await store.secret(other, 'openai')).toBeNull();
       expect(await store.list(other)).toEqual([]);
       await store.put(owner, 'openai', replacement);
@@ -49,10 +63,10 @@ describe.skipIf(!TEST_DATABASE_URL)(
       expect(
         await db.query('select 1 from billing_secrets where account_id = $1', [owner]),
       ).toHaveLength(1);
-      await store.remove(other, 'openai');
+      await remove(other);
       expect(await store.secret(owner, 'openai')).toBe(replacement);
-      await store.remove(owner, 'openai');
-      await store.remove(owner, 'openai');
+      await remove(owner);
+      await remove(owner);
       expect(await store.secret(owner, 'openai')).toBeNull();
     });
     it('keeps one decryptable row across concurrent replacements and supports rotation', async () => {
@@ -60,7 +74,6 @@ describe.skipIf(!TEST_DATABASE_URL)(
       expect([first, replacement]).toContain(await store.secret(owner, 'openai'));
       const next = randomBytes(32);
       const rotated = new Secrets(
-        db,
         new SecretCipher(
           'next',
           new Map([
@@ -68,16 +81,16 @@ describe.skipIf(!TEST_DATABASE_URL)(
             ['next', next],
           ]),
         ),
-        canUse,
+        withActiveAccount,
       );
       expect([first, replacement]).toContain(await rotated.secret(owner, 'openai'));
       await rotated.put(owner, 'openai', replacement);
       expect(await db.query('select key_id from billing_secrets')).toEqual([{ key_id: 'next' }]);
       expect(
-        await new Secrets(db, new SecretCipher('next', new Map([['next', next]])), canUse).secret(
-          owner,
-          'openai',
-        ),
+        await new Secrets(
+          new SecretCipher('next', new Map([['next', next]])),
+          withActiveAccount,
+        ).secret(owner, 'openai'),
       ).toBe(replacement);
       await expect(store.secret(owner, 'openai')).rejects.toThrow(
         'stored secret could not be decrypted',
@@ -105,11 +118,10 @@ describe.skipIf(!TEST_DATABASE_URL)(
       canUse.mockResolvedValue(false);
       await expect(store.secret(owner, 'openai')).rejects.toMatchObject({ status: 403 });
       canUse.mockClear();
-      await store.remove(owner, 'openai');
-      await store.remove(owner, 'openai');
+      await remove(owner);
+      await remove(owner);
       expect(canUse).not.toHaveBeenCalled();
-      await expect(store.remove(owner, 'modal')).rejects.toMatchObject({ status: 400 });
-      await expect(store.remove('invalid', 'openai')).rejects.toMatchObject({ status: 400 });
+      await expect(remove('invalid')).rejects.toMatchObject({ status: 400 });
       canUse.mockResolvedValue(true);
       expect(await store.secret(owner, 'openai')).toBeNull();
       expect(await store.secret(other, 'openai')).toBe(replacement);
@@ -137,15 +149,56 @@ describe.skipIf(!TEST_DATABASE_URL)(
       await store.put(other, 'openai', replacement);
       await expect(
         db.withTransaction(async (tx) => {
-          await store.eraseAccount(owner, tx);
+          await eraseAccountSecrets(owner, tx);
           throw new Error('rollback');
         }),
       ).rejects.toThrow('rollback');
       expect(await store.secret(owner, 'openai')).toBe(first);
-      await db.withTransaction((tx) => store.eraseAccount(owner, tx));
+      await db.withTransaction((tx) => eraseAccountSecrets(owner, tx));
       expect(await store.secret(owner, 'openai')).toBeNull();
       expect(await store.secret(other, 'openai')).toBe(replacement);
-      await expect(store.eraseAccount('invalid', db)).rejects.toMatchObject({ status: 400 });
+      await expect(eraseAccountSecrets('invalid', db)).rejects.toMatchObject({ status: 400 });
+    });
+    it('does not commit a save if the enclosing account transaction rolls back', async () => {
+      const rollback: WithActiveSecretAccount = (id, work) =>
+        db.withTransaction(async (tx) => {
+          expect(id).toBe(owner);
+          await work(tx);
+          throw new Error('identity transaction rolled back');
+        });
+      const isolated = new Secrets(cipher, rollback);
+      await expect(isolated.put(owner, 'openai', first)).rejects.toThrow(
+        'identity transaction rolled back',
+      );
+      expect(await store.secret(owner, 'openai')).toBeNull();
+    });
+    it('does not return plaintext if the enclosing account transaction cannot commit', async () => {
+      await store.put(owner, 'openai', first);
+      const failCommit: WithActiveSecretAccount = async (id, work) => {
+        await withActiveAccount(id, work);
+        throw new Error('commit failed');
+      };
+      await expect(new Secrets(cipher, failCommit).secret(owner, 'openai')).rejects.toThrow(
+        'commit failed',
+      );
+    });
+    it('rolls back action-specific removal and needs no keyring to erase corrupt ciphertext', async () => {
+      await store.put(owner, 'openai', first);
+      await expect(
+        db.withTransaction(async (tx) => {
+          await removeOwnOpenAiKey(owner, tx);
+          throw new Error('rollback removal');
+        }),
+      ).rejects.toThrow('rollback removal');
+      expect(await store.secret(owner, 'openai')).toBe(first);
+      await db.query(
+        "update billing_secrets set envelope = jsonb_set(envelope, '{tag}', '\"broken\"') where account_id = $1",
+        [owner],
+      );
+      await db.withTransaction((tx) => eraseAccountSecrets(owner, tx));
+      expect(
+        await db.query('select 1 from billing_secrets where account_id = $1', [owner]),
+      ).toEqual([]);
     });
     it('keeps public runtime storage off until the deletion lifecycle is agreed', async () => {
       expect(createBillingSlice({ db })).not.toHaveProperty('secret');

@@ -93,3 +93,6 @@ export type { StripeConfiguration } from './stripe.js';
 
 // Startup validation is available before the Keys storage activation gate opens.
 export { secretCipherFromEnvironment } from './secretConfiguration.js';
+
+export { eraseAccountSecrets, removeOwnOpenAiKey } from './secretLifecycle.js';
+export type { WithActiveSecretAccount } from './secretLifecycle.js';

@@ -7,7 +7,7 @@ Stripe test-mode top-ups are implemented below; keys remain a separate story.
 Keys has an internal tested encryption adapter, configuration parser and
 PostgreSQL store using core-approved migration 015. The
 [storage/integration agreement](KEYS_DESIGN.md) records the approved OpenAI-only
-scope and remaining identity deletion lifecycle. Runtime storage stays off:
+scope and the pending #80 identity lifecycle integration. Runtime storage stays off:
 the store is not composed or exported, and the Keys page is still a
 placeholder. HTTP storage and worker model selection are not delivered yet.
 `secretCipherFromEnvironment(env)` is exported for startup validation: `main.ts`
@@ -25,6 +25,16 @@ startup with a value-free error; validation alone does not activate Keys.
   `Queryable` joins the caller's transaction; otherwise the INSERT commits alone.
 - `monthSpend(accountId)` — `{ spent: Money, cap: Money }` for all recorded account spend and the flat cap; the historical port name is retained.
 - `budgetGuard` — the ordered account, cap and terminal approval policies.
+
+Additional public lifecycle callbacks are `eraseAccountSecrets(accountId, tx)`
+and `removeOwnOpenAiKey(accountId, tx)`. Both use identity's supplied `IdentitySql`
+transaction and need no cipher or spending eligibility. Identity must authenticate
+the action, derive the owner and hold its account lock before calling them;
+errors propagate to roll back the enclosing deletion/removal. The exported
+`WithActiveSecretAccount` type describes the transaction callback used internally
+for metadata, saves and decryption. This matches LU YI's proposed #80 contract;
+composition and real account lifecycle acceptance remain pending its merge.
+These exports do not enable Keys routes or worker retrieval.
 
 The optional transaction is the only extension to the documented spend writer.
 `app.ts` passes `billing.record` as session's `recordSpend` callback when a

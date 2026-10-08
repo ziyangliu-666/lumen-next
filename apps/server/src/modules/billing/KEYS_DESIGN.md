@@ -23,8 +23,8 @@ synthetic keys only. No real provider credentials are requested for this PR.
 
 The backend is composed when the keyring is configured and real Identity plus
 PostgreSQL are available. Missing configuration leaves Keys HTTP storage off.
-The Settings Keys page remains a placeholder; a browser UI and hosted acceptance
-are separate follow-ups.
+The Settings Keys page provides add/replace/remove controls. Hosted provider
+acceptance remains a separate follow-up.
 
 ## Core decisions and persistence increment
 
@@ -107,7 +107,7 @@ Storage, eligibility and decryption errors stop the call. Plaintext is not cache
 between calls. Injected custom workers remain responsible for their own model
 selection; production uses the built-in workers.
 
-The Settings editor and sign-in removal controls remain to be built. Identity's
+The Settings editor and sign-in removal controls are implemented. Identity's
 OAuth initiation now returns `200 { url }` so a browser can POST JSON and then
 navigate with `location.assign(url)`. The callback remains purpose-separated and
 never signs in or unsuspends the owner. No live provider key or hosted OAuth

@@ -1,7 +1,7 @@
 // Owner: HE RONG. Page: Settings (account, wallet, keys).
 import { Wallet } from './Wallet';
 import type { JSX, ReactNode } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
+import { Keys } from './Keys';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/tabs';
 import { PageHeader } from '@/core/shell';
 
@@ -30,14 +30,7 @@ export function Settings({
           <Wallet />
         </TabsContent>
         <TabsContent value="keys" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">API keys</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              A key belongs to one account and is never shown again after it is saved.
-            </CardContent>
-          </Card>
+          <Keys />
         </TabsContent>
       </Tabs>
     </>

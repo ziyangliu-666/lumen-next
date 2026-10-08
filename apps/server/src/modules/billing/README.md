@@ -8,7 +8,7 @@ Keys has encrypted PostgreSQL storage, owner-only HTTP routes and per-account
 model selection for the built-in workers when the keyring is configured.
 [Keys integration](KEYS_DESIGN.md) documents configuration, lifecycle locks and
 acceptance. Missing configuration keeps storage routes off; deletion and
-fresh-proof removal remain wired. The Settings Keys page is still a placeholder.
+fresh-proof removal remain wired. The Settings Keys page supports metadata, add/replace, confirmed removal and refresh.
 `secretCipherFromEnvironment(env)` validates before database initialization or
 listen; malformed configuration stops startup without exposing its values.
 
@@ -439,3 +439,22 @@ Stripe test dashboard and verification of a 2xx delivery, the same one receipt
 and cap USD 6.0000. The request is linked above. A stable wallet alone is not
 proof that Stripe redelivered an event. Dashboard replay has not been claimed;
 no signing secret is needed in this repository to finish that check.
+
+
+### Keys browser UI
+
+Settings > Keys displays only provider/update metadata, never a saved value. It
+handles loading, unavailable configuration (404), empty/saved state and retry.
+The password input is cleared before submission; no key is stored in browser
+storage or URLs. Removal requires a separate confirmation. Failed changes tell
+the owner to refresh before retrying because a lost response may follow a commit.
+
+The page preserves and explicitly discloses current accounting: OpenAI bills the
+owner, while estimated call costs still appear in Wallet and count toward the
+Lumen cap. No accounting policy is changed here; core's #84 product note requires
+review of that disclosure before shipping the UI.
+
+Local browser acceptance used an isolated PostgreSQL schema and synthetic,
+nonfunctional key strings: save, replace, input clearing, confirmation/removal,
+and fresh-password removal while signed out succeeded. Real hosted provider
+acceptance remains separate; this is not a claim that a live key was charged.

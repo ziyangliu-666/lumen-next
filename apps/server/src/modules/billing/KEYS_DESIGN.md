@@ -143,7 +143,8 @@ not relabelled as access denial or absence.
 of unrelated failures. Its real PostgreSQL test uses Identity's public factory
 and HTTP authentication/deletion, showing suspended owners cannot overwrite or
 read a saved key, reactivation retains the original value, and deleted owners
-cannot retrieve even a retained ciphertext row. This is access-boundary evidence,
+cannot list, replace or retrieve a key. The access test does not assert whether
+cleanup is composed, so it remains valid when core wires transactional erasure. This is access-boundary evidence,
 not a replacement for core's cleanup/composition acceptance.
 
 Before the Keys UI, Identity must fix the OAuth removal start response for browser

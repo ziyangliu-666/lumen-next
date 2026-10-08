@@ -99,10 +99,6 @@ it.skipIf(!TEST_DATABASE_URL)(
       });
       expect(deleted.statusCode).toBe(204);
       await denied(id);
-      // Composition cleanup is core's separate increment. Even a retained row cannot be read.
-      expect(
-        await db.query('select 1 from billing_secrets where account_id = $1', [id]),
-      ).toHaveLength(1);
     } finally {
       await app.server.close();
       await drop();

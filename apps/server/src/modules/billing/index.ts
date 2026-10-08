@@ -1,3 +1,4 @@
+import type { StaffAccountChanges } from '../identity/index.js';
 import { Secrets } from './secrets.js';
 import type { SecretCipher } from './secretCipher.js';
 import type { WithActiveSecretAccount } from './secretLifecycle.js';
@@ -54,6 +55,7 @@ export function createBillingSlice(deps: {
   origin?: string;
   /** Identity-owned public read API; billing authorizes staff before calling it. */
   adminAccounts?: AdminAccountReader;
+  adminChanges?: StaffAccountChanges;
   /** Identity supplies eligibility through its public API when guard wiring lands. */
   canSpend?: (accountId: string) => Promise<boolean>;
 }): BillingSlice {
@@ -100,7 +102,7 @@ export function createBillingSlice(deps: {
         deps.origin,
         deps.canSpend ?? (() => Promise.resolve(false)),
       )(app);
-      adminRoutes(deps.adminAccounts)(app);
+      adminRoutes(deps.adminAccounts, deps.adminChanges, deps.origin)(app);
       adminLedgerRoutes(deps.db, deps.adminAccounts)(app);
       adminWalletRoutes(ledger, deps.adminAccounts)(app);
       approvalRoutes(approvals, deps.origin, deps.canSpend ?? (() => Promise.resolve(false)))(app);

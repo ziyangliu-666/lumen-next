@@ -1,3 +1,4 @@
+import { changeAccount, type StaffAccountChanges } from './adminChanges.js';
 import { nullLog, type Log } from '../../core/log/log.js';
 import type { IdentityAuthentication } from './identityAuthentication.js';
 import { logMailEvent } from './identityLog.js';
@@ -40,7 +41,8 @@ export interface IdentitySliceOptions {
 
 export type IdentitySlice = IdentityAuthentication &
   ActiveAccountWork &
-  AdminAccounts & {
+  AdminAccounts &
+  StaffAccountChanges & {
     /**
      * Account eligibility for billing's AccountHandler: true only for an account
      * that exists, is not suspended and is not deleted. Storage errors reject.
@@ -98,6 +100,8 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
     principalResolver: new SessionPrincipalResolver(sessionStrategy),
     listAccounts: () => accounts.listAccounts(),
     getAccount: (id) => accounts.getAdminAccount(id),
+    changeAccount: (actorId, targetId, change) =>
+      changeAccount(options.database, actorId, targetId, change),
     setRole: (id, role) => accounts.setRole(id, role),
     suspend: (accountId, on) => accounts.suspend(accountId, on),
     canSpend: (accountId) => accounts.canSpend(accountId),

@@ -8,7 +8,12 @@ export interface AccountSummary {
   readonly createdAt: number;
 }
 
-export type AdminAccountFailureCode = 'account_not_found' | 'invalid_role' | 'invalid_suspension';
+export type AdminAccountFailureCode =
+  | 'account_not_found'
+  | 'invalid_role'
+  | 'invalid_suspension'
+  | 'actor_forbidden'
+  | 'self_change';
 
 /** Domain errors for the calling slice to translate into its own HTTP response. */
 export class AdminAccountFailure extends Error {
@@ -18,7 +23,11 @@ export class AdminAccountFailure extends Error {
         ? 'Account not found'
         : code === 'invalid_role'
           ? 'Invalid account role'
-          : 'Invalid suspension value',
+          : code === 'actor_forbidden'
+            ? 'Staff access required'
+            : code === 'self_change'
+              ? 'Self changes are not allowed'
+              : 'Invalid suspension value',
     );
     this.name = 'AdminAccountFailure';
   }

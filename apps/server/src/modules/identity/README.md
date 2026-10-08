@@ -160,3 +160,18 @@ finish decryption before returning; network work happens after the transaction.
 OAuth key-removal start responds with JSON `{ url }`, not a cross-origin redirect.
 The browser POSTs explicit confirmation and then navigates to that URL. Removal
 state uses `kr.` (a dot cannot appear in a normal base64url sign-in state).
+
+
+### Actor-aware staff mutation port
+
+The public factory also returns `StaffAccountChanges.changeAccount(actorId,
+targetId, change)`, with `AdminAccountChange` as a single role or suspension
+change. It locks the actor and target in UUID order, verifies the actor is still
+active staff, refuses self changes/deleted targets, and joins the existing
+role/suspension policy on that transaction. Suspension's session and recovery
+proof cleanup is therefore atomic with the role check and target change.
+The return value is a safe account summary after commit. Concurrent mutual
+staff demotion cannot succeed on both sides. This does not restrict trusted
+maintenance ports or guarantee a staff account survives separate self-deletion.
+Billing owns HTTP authorization/Origin validation and UI confirmation; these
+locks additionally prevent stale request principals authorizing a later change.

@@ -83,3 +83,5 @@ export {
   type AccountReader,
   type AccountView,
 } from './routes.js';
+
+export type { AdminAccountChange, StaffAccountChanges } from './adminChanges.js';

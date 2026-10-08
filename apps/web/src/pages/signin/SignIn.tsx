@@ -7,11 +7,16 @@ import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Separator } from '@/ui/separator';
 import { submitAuthentication } from './authClient.js';
+import { KeyRemoval } from './KeyRemoval';
 import { RecoveryPanel } from './RecoveryPanel.js';
 import { offersProviders, ProviderSignIn, type ProviderStatus } from './ProviderSignIn.js';
 
 export function SignIn(): JSX.Element {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [showKeyRemoval, setShowKeyRemoval] = useState(false);
+  const [keyRemovalResult] = useState(() =>
+    new URLSearchParams(window.location.search).get('keyRemoval'),
+  );
   const [showRecovery, setShowRecovery] = useState(false);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -130,6 +135,13 @@ export function SignIn(): JSX.Element {
     setError(null);
   }
 
+  if (showKeyRemoval)
+    return (
+      <div className="mx-auto w-full max-w-md p-4">
+        <KeyRemoval providers={providers} onBack={() => setShowKeyRemoval(false)} />
+      </div>
+    );
+
   if (showRecovery)
     return (
       <div className="mx-auto grid w-full max-w-md gap-4">
@@ -153,6 +165,15 @@ export function SignIn(): JSX.Element {
         </h1>
         <p className="text-sm text-muted-foreground">Your research starts here.</p>
       </div>
+      {keyRemovalResult === 'complete' ? (
+        <p role="status" className="text-sm text-keep">
+          Key removal completed. You have not been signed in.
+        </p>
+      ) : keyRemovalResult === 'failed' ? (
+        <p role="alert" className="text-sm text-gap">
+          Key removal failed or expired. Start a new removal attempt.
+        </p>
+      ) : null}
       <Card className="gap-0 py-0">
         <CardContent className="grid gap-4 p-6">
           <ProviderSignIn
@@ -280,6 +301,19 @@ export function SignIn(): JSX.Element {
           </form>
         </CardContent>
       </Card>
+      {!signup ? (
+        <Button
+          variant="ghost"
+          disabled={pending}
+          onClick={() => {
+            setPassword('');
+            setConfirmation('');
+            setShowKeyRemoval(true);
+          }}
+        >
+          Remove a saved OpenAI key without signing in
+        </Button>
+      ) : null}
       <p className="text-center text-sm text-muted-foreground">
         {signup ? 'Already have an account?' : 'New to lumen?'}{' '}
         <Button

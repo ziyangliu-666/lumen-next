@@ -40,3 +40,19 @@ The normal monolith now mounts password authentication with DATABASE_URL. See
 [local setup](../../../../../docs/identity/LOCAL_AUTH.md). Database-backed runs
 reject stub credentials. Repository verify lints/typechecks the web page;
 browser acceptance must additionally exercise the real server and cookie flow.
+
+
+### Remove an OpenAI key without signing in
+
+The sign-in page offers an explicit action-specific removal panel. Password
+removal submits fresh email/password proof, clears the password before sending,
+and does not dispatch an authentication-state change or navigate to a signed-in
+page. OAuth removal buttons are offered only for configured providers, POST
+explicit confirmation, validate the returned HTTPS provider origin, then
+navigate. The callback success/failure query renders removal feedback, never
+login authority. No owner ID or return destination is accepted from the user.
+
+This supports suspended owners without restoring their account. The normal
+sign-in and account deletion flows remain separate. Local browser verification
+covered synthetic password removal while remaining signed out; live OAuth
+provider acceptance still requires staging configuration and an owner walkthrough.

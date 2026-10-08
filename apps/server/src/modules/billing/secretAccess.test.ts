@@ -99,10 +99,10 @@ it.skipIf(!TEST_DATABASE_URL)(
       });
       expect(deleted.statusCode).toBe(204);
       await denied(id);
-      // Composition cleanup is core's separate increment. Even a retained row cannot be read.
+      // Core composes the cleanup: deletion erased the ciphertext in the same transaction.
       expect(
         await db.query('select 1 from billing_secrets where account_id = $1', [id]),
-      ).toHaveLength(1);
+      ).toHaveLength(0);
     } finally {
       await app.server.close();
       await drop();

@@ -27,7 +27,14 @@ export function oauthHash(value: string): string {
 
 /** Server-side, one-use OAuth attempts, bound to a separate HttpOnly browser cookie. */
 export class OAuthAttempts {
-  constructor(private readonly db: IdentityDatabase) {}
+  constructor(
+    private readonly db: IdentityDatabase,
+    private readonly purpose: 'signin' | 'key-removal' = 'signin',
+  ) {}
+
+  private hash(value: string): string {
+    return oauthHash(this.purpose === 'signin' ? value : `key-removal:${value}`);
+  }
 
   async begin(kind: OAuthKind): Promise<{ state: string; binding: string; verifier: string }> {
     const state = randomBytes(32).toString('base64url');
@@ -38,7 +45,7 @@ export class OAuthAttempts {
       await sql.query(
         `insert into identity_oauth_attempts (state_hash, binding_hash, provider, verifier, expires_at)
          values ($1, $2, $3, $4, now() + interval '10 minutes')`,
-        [oauthHash(state), oauthHash(binding), kind, verifier],
+        [this.hash(state), this.hash(binding), kind, verifier],
       );
     });
     return { state, binding, verifier };
@@ -56,7 +63,7 @@ export class OAuthAttempts {
     const rows = await this.db.query<{ verifier: string }>(
       `delete from identity_oauth_attempts where state_hash = $1 and binding_hash = $2
        and provider = $3 and expires_at > now() returning verifier`,
-      [oauthHash(state), oauthHash(binding), kind],
+      [this.hash(state), this.hash(binding), kind],
     );
     if (!rows[0]) throw new AuthFailure('invalid_credentials');
     return rows[0].verifier;

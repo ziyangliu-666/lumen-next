@@ -13,6 +13,7 @@ import { AccountFailure, type AccountReader, type AccountView } from './accounts
 import type { AccountService } from './accountService.js';
 import { registerOAuthRoutes, type OAuthRouteOptions } from './oauthRoutes.js';
 import type { MailActions } from './mailActions.js';
+import type { KeyRemoval } from './keyRemoval.js';
 
 export type { AccountReader, AccountView } from './accounts.js';
 
@@ -65,6 +66,7 @@ export interface IdentityRouteDeps {
   readonly loginGate: LoginGate;
   readonly oauth?: OAuthRouteOptions;
   readonly mail?: MailActions;
+  readonly keyRemoval?: KeyRemoval;
   /** The slice's child of core's logger. Left out, nothing is written. */
   readonly log?: Log;
 }
@@ -108,6 +110,23 @@ export function identityRoutes(deps: IdentityRouteDeps): FastifyPluginAsync {
 
     registerOAuthRoutes(app, deps.oauth, deps.flow, deps.loginGate, secure, log);
     app.get('/api/auth/mail', () => ({ enabled: Boolean(deps.mail) }));
+    if (deps.keyRemoval) {
+      const removal = deps.keyRemoval;
+      app.post(
+        '/api/auth/key-removal/openai/password',
+        { bodyLimit: 8192 },
+        async (request, reply) => {
+          await accountAction(log, 'key removal', () =>
+            deps.loginGate.run(
+              request.raw.socket.remoteAddress ?? 'unknown',
+              () => removal.password(request.body),
+              emailLimitKey(request.body),
+            ),
+          );
+          return reply.code(204).send();
+        },
+      );
+    }
     if (deps.mail) {
       const mail = deps.mail;
       const bodyFields = (input: unknown, fields: readonly string[]): Record<string, unknown> => {

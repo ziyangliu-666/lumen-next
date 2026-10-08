@@ -23,6 +23,7 @@ export {
 export { AUTH_COOKIE, SessionStrategy, SessionPrincipalResolver } from './sessionStrategy.js';
 export { SessionAuthFlow } from './sessionAuthFlow.js';
 export { AccountService } from './accountService.js';
+export type { AccountDeletionParticipant, ActiveAccountWork } from './accountLifecycle.js';
 export { resendMailSender, type MailSender, type IdentityMail } from './mail.js';
 export { MailWorker, type MailEvent } from './mailQueue.js';
 export {

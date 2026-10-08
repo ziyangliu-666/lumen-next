@@ -17,7 +17,7 @@ composition root hands billing's AccountHandler, and, when a mailSender is given
 (`MailWorker`: `start()`, `stop()`, `tick()`), which the composition root must
 start and stop on shutdown. A mailSender requires a server-only mailKey of at
 least 32 characters. `MailEvent` names the value-free delivery counters.
-`mailFromEnvironment(environment, { outboxDirectory, production })` builds the
+`mailFromEnvironment(environment, { outboxDirectory, production, origin })` builds the
 optional mail configuration from explicitly supplied variables.
 `oauthProvidersFromEnvironment(environment, origin)` constructs optional GitHub
 and Google adapters from explicitly supplied server configuration, without
@@ -62,9 +62,9 @@ found, and migration 010 keeps it suspended. See
 OAuth through oauthProvidersFromEnvironment; a provider is enabled only when its
 credential pair is set. main.ts enables mail verification and reset only when
 `mailFromEnvironment` returns a configuration (IDENTITY_MAIL_MODE outbox or
-resend, plus IDENTITY_MAIL_KEY); it is off by default. Mail requests are queued: a public request is one insert, and
-MailWorker decides eligibility and delivers later, so response time no longer
-depends on the address (see docs/identity/MAIL_QUEUE_DESIGN.md).
+resend, plus IDENTITY_MAIL_KEY); it is off by default. Mail requests are queued: public reset admission uses the same database operations
+for every well-formed address, without account lookup or transport calls. MailWorker
+checks eligibility and delivers asynchronously (see docs/identity/MAIL_QUEUE_DESIGN.md).
 
 ## Security and storage
 
@@ -111,6 +111,38 @@ supplies DATABASE_URL, so these tests run rather than skip. Tests include
 multi-connection locks, rollback, auth isolation and pool-restart persistence.
 `npm run verify` must pass with a real database, alongside build, staging smoke
 and owner review. Local success is not merged delivery.
+
+### Account lifecycle integration (not activated)
+
+`withActiveAccount(accountId, work)` owns a transaction and locks an active,
+non-deleted account before awaiting `work(transaction)`. It is a trusted
+serialization port, not HTTP authentication. Consumers must use that transaction
+for their queries, never the pool or a nested transaction. Ineligibility and
+storage/commit failures reject; `canSpend` remains an unlocked snapshot.
+
+The optional `onAccountDeleting(accountId, transaction)` factory dependency runs
+under the same account lock after deletion proof succeeds. It must be awaited;
+any failure rolls back cleanup and identity deletion. No consumer is wired by
+default, and Billing Keys remains disabled. Composition must inject Billing's
+keyring-independent cleanup and require lifecycle wiring before enabling saves.
+The optional `removeOwnOpenAiKey(accountId, transaction)` callback enables
+`POST /api/auth/key-removal/openai/password` with fresh bounded password proof,
+and POST-confirmed GitHub/Google removal through purpose-separated OAuth attempts.
+These allow a suspended, non-deleted owner to remove only their own OpenAI key,
+without normal login, account linking or session issuance. The callback must
+only erase that owner's OpenAI ciphertext using the supplied transaction.
+OAuth callbacks consume the attempt before exchange; a failed action requires a
+new attempt. No callback is configured by the existing composition, so these
+routes are not enabled in the running app. See
+[key lifecycle agreement](../../../../../docs/identity/KEY_LIFECYCLE.md) for
+lock ordering, endpoint details, tests and the remaining owner handoff.
+
+### Acceptance status
+
+Identity delivery PRs #23, #34, #37, #38, #40 and #47–#51 are merged. The PM
+confirmed GitHub/Google sign-in through Account on 3 October in PR #38. Real
+password-reset mailbox acceptance remains unconfirmed. A PostgreSQL test with a
+simulated sender, local outbox file or provider response is not inbox acceptance.
 
 Track public acceptance scope and remaining work in
 [delivery status](../../../../../docs/identity/DELIVERY.md).

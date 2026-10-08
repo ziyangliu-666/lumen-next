@@ -46,16 +46,28 @@ provider primary key, encrypted JSON envelope and update timestamp. Generated,
 indexed `key_id` supports checking which rotation keys remain in use. No account
 or credential table from another slice is queried or modified.
 
-The internal `Secrets` store provides metadata list, replace, remove and trusted
-read. Listing, writing and retrieval validate the owner/provider and call injected
-eligibility; false rejects and service errors propagate. Following core review
-in #78, removal validates the owner/provider but does not require spending
-eligibility. The eventual route must authenticate and bind the owner independently;
-the store method is not itself an authentication boundary. Only a missing row
-returns null.
-`eraseAccount(accountId, tx)` is a proposed cleanup primitive using the caller's
-transaction; its authorization and invocation must belong to the agreed deletion
-flow. It is not a wired deletion hook. Concurrent replacements use one SQL upsert.
+The internal `Secrets` store provides metadata list, replace and trusted read.
+Each operation accepts identity's transaction through `WithActiveSecretAccount`,
+a structural port using only the public `IdentitySql` type. It has no pool access
+and performs queries and decryption inside the callback; it returns only when the
+outer lifecycle operation resolves. Only a missing row returns null. Concurrent
+replacements use one SQL upsert.
+
+The public `eraseAccountSecrets(accountId, tx)` and
+`removeOwnOpenAiKey(accountId, tx)` functions delete only billing-owned rows in
+the supplied transaction. They need neither a keyring nor spending eligibility.
+The caller must authenticate the action, derive the owner and hold identity's
+account lock; these callbacks are not authentication boundaries. Cleanup errors
+propagate so identity can roll back the entire account deletion. Composition must
+supply cleanup even when encryption configuration is absent.
+
+LU YI supplied the lifecycle contract in
+[#80](https://github.com/ziyangliu-666/lumen-next/pull/80) and the
+[#79 handoff](https://github.com/ziyangliu-666/lumen-next/pull/79#issuecomment-6042496276).
+Its `withActiveAccount` transaction and `onAccountDeleting` callback match these
+billing ports. Identity also owns fresh password or purpose-separated OAuth
+proof for suspended-owner removal. That implementation is still awaiting merge;
+this adapter increment does not compose it or enable storage.
 
 `secretCipherFromEnvironment(env)` parses explicitly supplied configuration and
 returns a cipher, not raw key buffers. Both values absent/empty returns null;
@@ -75,18 +87,17 @@ semantics without collecting credentials from users.
 
 ## Remaining integration, after deletion agreement
 
-- LU YI must confirm a public, transaction-aware deletion hook or an equivalent
-  lifecycle mechanism. Deletion must deny retrieval and remove ciphertext;
-  suspension blocks use but does not need to erase the saved key. Agree behavior
-  under a concurrent save/delete before composing the store. No identity-table
-  access from billing and no assumption that a tombstone triggers FK deletion.
+- After #80 is reviewed and merged, compose its account-lock lifecycle and both
+  cleanup callbacks through public indexes. Test actual ciphertext with real
+  identity: save-before-delete removes it, delete-before-save rejects it, cleanup
+  failure rolls back deletion, and suspension blocks retrieval. Contract fixtures
+  alone do not prove these concurrent account lifecycle guarantees.
 - `GET /api/keys` returns owned provider/update metadata only. `PUT` and `DELETE`
   `/api/keys/openai` require the authenticated owner and exact Origin. Writing
-  and use require eligibility; removal must remain available to suspended owners
-  as requested in #78. Identity must agree how to authenticate that removal,
-  since suspension currently revokes sessions. Reads are no-store. No prefix/suffix
-  or saved value is returned,
-  including to staff. Bounded input is validated before encryption.
+  and use require the active-account transaction. Suspended owners remove keys
+  through identity's fresh-proof flow from #80, without a new session or restored
+  spending eligibility. Reads are no-store. No prefix/suffix or saved value is
+  returned, including to staff. Bounded input is validated before encryption.
 - Settings Keys gets add/replace/remove controls, clears submitted values, never
   uses localStorage, and accurately describes provider usage. Only OpenAI is in
   scope; no Modal credential pair or other provider is advertised.
@@ -108,7 +119,9 @@ Current tests: `secretConfiguration.test.ts` covers disabled/partial/malformed
 configuration without value leakage. `secrets.test.ts` uses the real migration
 and isolated PostgreSQL schemas to prove encryption at rest, metadata projection,
 recreation, isolation, replacement/deletion, rotation, concurrent writes,
-ineligibility, tamper rejection and transactional erase rollback. It also checks
+ineligibility, tamper rejection, save/removal rollback, outer lifecycle failure
+propagation and keyring-independent cleanup of corrupt ciphertext. These are
+transaction contract fixtures, not the joint identity lock acceptance tests. It also checks
 that the composed application still has no Keys routes or public `secret` port.
 
 `main.test.ts` launches the real compiled entry point with an isolated environment

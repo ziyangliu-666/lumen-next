@@ -7,7 +7,7 @@ Stripe test-mode top-ups are implemented below; keys remain a separate story.
 Keys has an internal tested encryption adapter, configuration parser and
 PostgreSQL store using core-approved migration 015. The
 [storage/integration agreement](KEYS_DESIGN.md) records the approved OpenAI-only
-scope and the pending #80 identity lifecycle integration. Runtime storage stays off:
+scope and the pending runtime integration of the merged identity lifecycle. Runtime storage stays off:
 the store is not composed or exported, and the Keys page is still a
 placeholder. HTTP storage and worker model selection are not delivered yet.
 `secretCipherFromEnvironment(env)` is exported for startup validation: `main.ts`
@@ -32,8 +32,12 @@ transaction and need no cipher or spending eligibility. Identity must authentica
 the action, derive the owner and hold its account lock before calling them;
 errors propagate to roll back the enclosing deletion/removal. The exported
 `WithActiveSecretAccount` type describes the transaction callback used internally
-for metadata, saves and decryption. This matches LU YI's proposed #80 contract;
-composition and real account lifecycle acceptance remain pending its merge.
+for metadata, saves and decryption. This matches LU YI's merged #80 contract;
+core owns the pending composition and joint lifecycle acceptance.
+The internal store maps identity eligibility rejection to the fixed 403
+`account cannot use keys` for metadata, writes and retrieval; operational errors
+still propagate and never permit platform-key fallback. Real PostgreSQL tests
+cover missing, suspended and deleted owners through identity's public API.
 These exports do not enable Keys routes or worker retrieval.
 
 The optional transaction is the only extension to the documented spend writer.

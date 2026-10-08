@@ -1,4 +1,5 @@
-import { badRequest } from '../../core/http/httpError.js';
+import { AuthFailure, type IdentitySql } from '../identity/index.js';
+import { badRequest, forbidden } from '../../core/http/httpError.js';
 import type { SecretCipher } from './secretCipher.js';
 import type { WithActiveSecretAccount } from './secretLifecycle.js';
 import { UUID } from './validation.js';
@@ -19,9 +20,20 @@ export class Secrets {
     private readonly withActiveAccount: WithActiveSecretAccount,
   ) {}
 
+  /** Translate only identity's eligibility rejection; operational failures stay failures. */
+  private async access<T>(accountId: string, work: (tx: IdentitySql) => Promise<T>): Promise<T> {
+    try {
+      return await this.withActiveAccount(accountId, work);
+    } catch (error) {
+      if (error instanceof AuthFailure && error.code === 'invalid_credentials')
+        throw forbidden('account cannot use keys');
+      throw error;
+    }
+  }
+
   async list(accountId: string): Promise<readonly SecretMetadata[]> {
     validateOwner(accountId);
-    return this.withActiveAccount(accountId, async (tx) => {
+    return this.access(accountId, async (tx) => {
       const rows = await tx.query<{ provider: 'openai'; updated_at: Date }>(
         'select provider, updated_at from billing_secrets where account_id = $1 order by provider',
         [accountId],
@@ -35,7 +47,7 @@ export class Secrets {
 
   async put(accountId: string, provider: string, value: string): Promise<void> {
     validateOwner(accountId, provider);
-    await this.withActiveAccount(accountId, async (tx) => {
+    await this.access(accountId, async (tx) => {
       const envelope = this.cipher.seal({ accountId, provider }, value);
       await tx.query(
         `insert into billing_secrets (account_id, provider, envelope) values ($1, $2, $3::jsonb)
@@ -48,7 +60,7 @@ export class Secrets {
   /** Only absence returns null; identity, storage and crypto errors never trigger fallback. */
   async secret(accountId: string, provider: string): Promise<string | null> {
     validateOwner(accountId, provider);
-    return this.withActiveAccount(accountId, async (tx) => {
+    return this.access(accountId, async (tx) => {
       const [row] = await tx.query<{ envelope: unknown }>(
         'select envelope from billing_secrets where account_id = $1 and provider = $2',
         [accountId, provider],

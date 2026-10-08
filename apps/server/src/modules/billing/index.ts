@@ -1,3 +1,7 @@
+import { Secrets } from './secrets.js';
+import type { SecretCipher } from './secretCipher.js';
+import type { WithActiveSecretAccount } from './secretLifecycle.js';
+import { keyRoutes } from './keyRoutes.js';
 // Public index for the billing slice. Owner: HE RONG.
 import type { FastifyInstance } from 'fastify';
 import type { Db, Queryable } from '../../core/db/db.js';
@@ -27,6 +31,7 @@ export { BudgetChain, AccountHandler, MonthlyCapHandler, ApprovalHandler } from 
 export type { BudgetHandler } from './budgetChain.js';
 
 export interface BillingSlice {
+  readonly secret?: (accountId: string, provider: string) => Promise<string | null>;
   readonly registerRoutes: (app: FastifyInstance) => void;
   /** Optional transaction lets session persist trace cost and ledger together. */
   readonly record: (entry: Spend, tx?: Queryable) => Promise<void>;
@@ -37,6 +42,12 @@ export interface BillingSlice {
 
 export function createBillingSlice(deps: {
   db: Db | null;
+  keys?: {
+    cipher: SecretCipher;
+    write: WithActiveSecretAccount;
+    read: WithActiveSecretAccount;
+    remove: (accountId: string) => Promise<void>;
+  };
   log?: Log;
   topups?: TopupProvider;
   approvalResume?: BudgetApprovalResume;
@@ -46,6 +57,9 @@ export function createBillingSlice(deps: {
   /** Identity supplies eligibility through its public API when guard wiring lands. */
   canSpend?: (accountId: string) => Promise<boolean>;
 }): BillingSlice {
+  if (deps.keys && (!deps.db || !deps.origin))
+    throw new Error('Keys require a database, identity lifecycle and origin');
+  const secrets = deps.keys ? new Secrets(deps.keys.cipher, deps.keys.write, deps.keys.read) : null;
   const log = (deps.log ?? nullLog).child({ slice: 'billing' });
   const approvals =
     deps.db && deps.approvalResume ? new Approvals(deps.db, deps.approvalResume) : null;
@@ -55,6 +69,7 @@ export function createBillingSlice(deps: {
     return ledger;
   };
   return {
+    ...(secrets ? { secret: (id: string, provider: string) => secrets.secret(id, provider) } : {}),
     monthSpend: (accountId) => required().monthSpend(accountId),
     record: (entry, tx) => required().record(entry, tx),
     budgetGuard: withBudgetLog(
@@ -73,6 +88,11 @@ export function createBillingSlice(deps: {
       log,
     ),
     registerRoutes: (app) => {
+      if (secrets && deps.keys && deps.origin)
+        void app.register((scope, _options, done) => {
+          keyRoutes(secrets, deps.origin!, deps.keys!.remove)(scope);
+          done();
+        });
       walletRoutes(ledger)(app);
       topupRoutes(
         deps.db ? new Topups(deps.db) : null,
@@ -96,3 +116,5 @@ export { secretCipherFromEnvironment } from './secretConfiguration.js';
 
 export { eraseAccountSecrets, removeOwnOpenAiKey } from './secretLifecycle.js';
 export type { WithActiveSecretAccount } from './secretLifecycle.js';
+
+export type { SecretCipher } from './secretCipher.js';

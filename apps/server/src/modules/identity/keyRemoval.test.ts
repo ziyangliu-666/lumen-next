@@ -102,8 +102,10 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: restricted OpenAI key removal', (
       headers: { origin },
       payload: { confirm: 'remove-openai-key' },
     });
-    expect(response.statusCode).toBe(303);
-    const state = new URL(response.headers.location!).searchParams.get('state')!;
+    expect(response.statusCode).toBe(200);
+    expect(response.headers.location).toBeUndefined();
+    expect(response.headers['cache-control']).toBe('no-store');
+    const state = new URL(response.json<{ url: string }>().url).searchParams.get('state')!;
     return {
       state,
       cookie: `lumen_key_removal_github=${response.cookies.find((c) => c.name === 'lumen_key_removal_github')!.value}`,
@@ -191,6 +193,32 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: restricted OpenAI key removal', (
     expect(providerCalls).toBe(1);
   });
 
+  it('returns a readable JSON navigation URL over HTTP without following a provider redirect', async () => {
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    const response = await fetch(`${address}/api/auth/key-removal/openai/github`, {
+      method: 'POST',
+      redirect: 'error',
+      headers: { origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ confirm: 'remove-openai-key' }),
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { url: string };
+    const target = new URL(body.url);
+    expect(target.origin).toBe('https://github.example');
+    expect(target.searchParams.get('state')).toMatch(/^kr\.[a-zA-Z0-9_-]{43}$/);
+    expect(response.headers.get('set-cookie')).toContain('lumen_key_removal_github=');
+    expect(await keys()).toBe(1);
+    expect(providerCalls).toBe(0);
+  });
+
+  it('does not misroute a base64url sign-in state beginning with the old removal prefix', async () => {
+    const response = await app.inject({
+      url: `/api/auth/github/callback?state=kr_${'x'.repeat(40)}&code=fixture`,
+    });
+    expect(response.headers.location).toBe('/?authError=oauth_failed#/signin');
+    expect(providerCalls).toBe(0);
+  });
+
   it('requires explicit same-Origin OAuth initiation', async () => {
     expect(
       (
@@ -226,7 +254,7 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: restricted OpenAI key removal', (
     expect(
       (
         await callback({
-          state: `kr_${signin.state}`,
+          state: `kr.${signin.state}`,
           cookie: `lumen_key_removal_github=${signin.binding}`,
         })
       ).headers.location,

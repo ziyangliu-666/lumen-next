@@ -14,7 +14,7 @@ import { createLog } from './core/log/log.js';
 import { modelFromEnv } from './core/model/index.js';
 import { mailFromEnvironment, oauthProvidersFromEnvironment } from './modules/identity/index.js';
 import { secretCipherFromEnvironment, stripeFromEnvironment } from './modules/billing/index.js';
-import { demoWorker, paceFromEnv } from './modules/session/index.js';
+import { paceFromEnv } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
 
@@ -107,9 +107,8 @@ function identityConfig(): IdentityConfig {
 }
 
 async function bootstrap(): Promise<void> {
-  // Validate configuration before opening a database or listener. Keys storage
-  // remains off until identity agrees its deletion lifecycle (#77, #78).
-  secretCipherFromEnvironment(process.env);
+  // Validate before opening a database or listener; composition requires the lifecycle.
+  const secretCipher = secretCipherFromEnvironment(process.env);
   const stripe = stripeFromEnvironment(process.env);
   const db = await database();
   const webRoot = defaultWebRoot();
@@ -126,18 +125,11 @@ async function bootstrap(): Promise<void> {
     db,
     log,
     ...(stripe ? { stripe } : {}),
+    ...(secretCipher ? { secretCipher } : {}),
     // Real sign-in whenever there is a database; the stub only without one.
     identity: db ? identityConfig() : null,
-    ...(useSteeringWorker
-      ? { useSteeringWorker: true }
-      : {
-          // Paced, so that a person can see the page is live. Tests build the
-          // application without this and do not wait.
-          worker: demoWorker({
-            paceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']),
-            model,
-          }),
-        }),
+    useSteeringWorker,
+    demoPaceMs: paceFromEnv(process.env['LUMEN_DEMO_PACE_MS']),
     ...(webRoot ? { webRoot } : {}),
     ...(process.env['LUMEN_ORIGIN']?.startsWith('https://') ? { strictTransport: true } : {}),
     ...(volumeRoot ? { volumeRoot } : {}),

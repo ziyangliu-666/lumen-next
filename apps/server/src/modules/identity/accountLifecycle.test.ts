@@ -159,6 +159,37 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: account lifecycle with PostgreSQL
     throw new Error('Competing connection did not wait on the account lock');
   }
 
+  it('allows overlapping shared reads while suspension waits for both to finish', async () => {
+    const locked = signal();
+    const finish = signal();
+    let blocker = 0;
+    const first = store.withActiveAccountRead(id, async (tx) => {
+      const [row] = await tx.query<{ pid: number }>('select pg_backend_pid() as pid', []);
+      blocker = row!.pid;
+      locked.release();
+      await finish.promise;
+    });
+    await locked.promise;
+    try {
+      // A second shared reader completes while the first still holds its lock.
+      expect(await store.withActiveAccountRead(id, () => Promise.resolve('read'))).toBe('read');
+      const suspension = store.suspend(id, true);
+      try {
+        await waitForBlockedConnection(blocker);
+      } finally {
+        finish.release();
+      }
+      await first;
+      await suspension;
+      await expect(
+        store.withActiveAccountRead(id, () => Promise.resolve('denied')),
+      ).rejects.toBeInstanceOf(AuthFailure);
+    } finally {
+      finish.release();
+      await first;
+    }
+  });
+
   it('erases a save that holds the account lock before deletion', async () => {
     const locked = signal();
     const finish = signal();

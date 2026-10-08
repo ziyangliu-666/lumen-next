@@ -93,13 +93,28 @@ describe.skipIf(!TEST_DATABASE_URL)(
         await expect(store.secret(owner, 'openai')).rejects.toThrow();
         await expect(store.put(owner, 'openai', replacement)).rejects.toThrow();
         await expect(store.list(owner)).rejects.toThrow();
-        await expect(store.remove(owner, 'openai')).rejects.toThrow();
       }
       canUse.mockResolvedValue(true);
       await expect(store.put(owner, 'modal', first)).rejects.toMatchObject({ status: 400 });
       await expect(store.secret('not-an-id', 'openai')).rejects.toMatchObject({ status: 400 });
       expect(await store.secret(owner, 'openai')).toBe(first);
     });
+    it('does not make removal depend on spending eligibility or touch another owner', async () => {
+      await store.put(owner, 'openai', first);
+      await store.put(other, 'openai', replacement);
+      canUse.mockResolvedValue(false);
+      await expect(store.secret(owner, 'openai')).rejects.toMatchObject({ status: 403 });
+      canUse.mockClear();
+      await store.remove(owner, 'openai');
+      await store.remove(owner, 'openai');
+      expect(canUse).not.toHaveBeenCalled();
+      await expect(store.remove(owner, 'modal')).rejects.toMatchObject({ status: 400 });
+      await expect(store.remove('invalid', 'openai')).rejects.toMatchObject({ status: 400 });
+      canUse.mockResolvedValue(true);
+      expect(await store.secret(owner, 'openai')).toBeNull();
+      expect(await store.secret(other, 'openai')).toBe(replacement);
+    });
+
     it('does not return absence when stored ciphertext is corrupt or moved between owners', async () => {
       await store.put(owner, 'openai', first);
       await db.query(

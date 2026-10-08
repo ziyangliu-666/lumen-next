@@ -8,8 +8,11 @@ Keys has an internal tested encryption adapter, configuration parser and
 PostgreSQL store using core-approved migration 015. The
 [storage/integration agreement](KEYS_DESIGN.md) records the approved OpenAI-only
 scope and remaining identity deletion lifecycle. Runtime storage stays off:
-these helpers are not composed or exported, and the Keys page is still a
+the store is not composed or exported, and the Keys page is still a
 placeholder. HTTP storage and worker model selection are not delivered yet.
+`secretCipherFromEnvironment(env)` is exported for startup validation: `main.ts`
+calls it before database initialization or listen. Invalid configuration stops
+startup with a value-free error; validation alone does not activate Keys.
 
 ## Public surface
 

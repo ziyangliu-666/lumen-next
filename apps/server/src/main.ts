@@ -13,7 +13,7 @@ import { defaultWebRoot } from './core/http/server.js';
 import { createLog } from './core/log/log.js';
 import { modelFromEnv } from './core/model/index.js';
 import { mailFromEnvironment, oauthProvidersFromEnvironment } from './modules/identity/index.js';
-import { stripeFromEnvironment } from './modules/billing/index.js';
+import { secretCipherFromEnvironment, stripeFromEnvironment } from './modules/billing/index.js';
 import { demoWorker, paceFromEnv } from './modules/session/index.js';
 
 const DEFAULT_PORT = 4000;
@@ -107,6 +107,9 @@ function identityConfig(): IdentityConfig {
 }
 
 async function bootstrap(): Promise<void> {
+  // Validate configuration before opening a database or listener. Keys storage
+  // remains off until identity agrees its deletion lifecycle (#77, #78).
+  secretCipherFromEnvironment(process.env);
   const stripe = stripeFromEnvironment(process.env);
   const db = await database();
   const webRoot = defaultWebRoot();

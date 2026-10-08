@@ -8,6 +8,11 @@ export interface SecretMetadata {
   readonly updatedAt: string;
 }
 
+function validateOwner(accountId: string, provider: string): void {
+  if (!UUID.test(accountId) || provider !== 'openai')
+    throw badRequest('invalid secret owner or provider');
+}
+
 /** Internal store only. Do not compose it until identity's deletion lifecycle is wired. */
 export class Secrets {
   constructor(
@@ -17,8 +22,7 @@ export class Secrets {
   ) {}
 
   private async eligible(accountId: string, provider = 'openai'): Promise<void> {
-    if (!UUID.test(accountId) || provider !== 'openai')
-      throw badRequest('invalid secret owner or provider');
+    validateOwner(accountId, provider);
     if (!(await this.canUse(accountId))) throw forbidden('account cannot use keys');
   }
 
@@ -51,8 +55,9 @@ export class Secrets {
     return row ? this.cipher.open({ accountId, provider }, row.envelope) : null;
   }
 
+  /** The caller must authenticate the owner; suspension must not prevent removal (#78). */
   async remove(accountId: string, provider: string): Promise<void> {
-    await this.eligible(accountId, provider);
+    validateOwner(accountId, provider);
     await this.db.query('delete from billing_secrets where account_id = $1 and provider = $2', [
       accountId,
       provider,

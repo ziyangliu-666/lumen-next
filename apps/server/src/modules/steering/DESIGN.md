@@ -403,10 +403,13 @@ half of "not found or not yours" it means.
 **The composer sends `task.steer`.** `parts.tsx`'s `Composer` gained a
 `steerable` prop (is the task currently shown itself running?) and an
 `onSteer` handler; while the root is busy, the same field that starts a
-fresh turn instead steers whichever task the stream is showing, always at
-`when: 'next-step'` — a `when` picker (`'next-step'` vs `'end-of-turn'`) is
-cut from this pass, not designed away: the underlying command already
-carries either.
+fresh turn instead steers whichever task the stream is showing. The "Apply
+message" selector defaults to "Next step" (`next-step`) and also offers
+"End of turn" (`end-of-turn`). The selected value travels with `task.steer`
+to the existing queue; it stays selected after sending while only the message
+is cleared. The selector is hidden between runs and disabled when the socket
+or the task shown cannot accept a steer. "End of turn" is heard when the model
+would otherwise finish that task's current turn, before its final reply.
 
 **Deliberately out of scope for this piece:**
 

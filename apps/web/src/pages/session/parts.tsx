@@ -2,13 +2,15 @@
 // except Composer, which is LI ZHUOYANG's: it sits where the spec puts it, it
 // says a new turn to the lead, steers the task shown while it runs, and stops
 // a run. Attachments are still his to add.
-import type { FormEvent, JSX, ReactNode } from 'react';
-import type { Step, Task } from '@lumen/contracts';
+import { useId, useState, type FormEvent, type JSX, type ReactNode } from 'react';
+import type { ClientCommand, Step, Task } from '@lumen/contracts';
 import { cn } from 'cn';
 import { ReplyText } from './text';
 import { Plus, SendHorizontal, Square } from 'lucide-react';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
+import { Label } from '@/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
 import type { SessionFinding } from '@/core/api';
 import { childrenByStep, took, toolLabel, treeRows, turnToSend } from './tree';
 
@@ -362,6 +364,8 @@ export function WaitingNotice({ task }: { task: Task }): JSX.Element | null {
   );
 }
 
+export type SteerWhen = Extract<ClientCommand, { type: 'task.steer' }>['when'];
+
 export function Composer({
   disabled,
   running,
@@ -376,28 +380,52 @@ export function Composer({
   /** The task currently shown is itself running: steering it means something right now. */
   steerable: boolean;
   onSay: (text: string) => void;
-  onSteer: (text: string) => void;
+  onSteer: (text: string, when: SteerWhen) => void;
   onStop: () => void;
 }): JSX.Element {
+  const timingId = useId();
+  const [when, setWhen] = useState<SteerWhen>('next-step');
+  const [draft, setDraft] = useState('');
   // Blocked for a reason a run.status can change without a fresh render of
   // this form's own props, so this is computed at submit time, not baked into
   // one boolean passed in.
   const blocked = disabled || (running && !steerable);
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    const form = event.currentTarget;
-    const value = new FormData(form).get('say');
     // A form with one field still submits on Enter. Nothing is sent, and the
     // text is kept, while the socket is down, or the root is busy with a task
     // that is not the one shown (there is nothing here to steer).
-    const text = turnToSend(value, blocked);
+    const text = turnToSend(draft, blocked);
     if (text === null) return;
-    if (running) onSteer(text);
+    if (running) onSteer(text, when);
     else onSay(text);
-    form.reset();
+    // Clear only the message: the timing remains selected for the next steer.
+    setDraft('');
   }
   return (
-    <form onSubmit={submit} className="border-t border-border p-3">
+    <form onSubmit={submit} className="space-y-2 border-t border-border p-3">
+      {running ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor={timingId} className="text-xs text-muted-foreground">
+            Apply message
+          </Label>
+          <Select
+            value={when}
+            disabled={blocked}
+            onValueChange={(value: string) => {
+              if (value === 'next-step' || value === 'end-of-turn') setWhen(value);
+            }}
+          >
+            <SelectTrigger id={timingId} size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="next-step">Next step</SelectItem>
+              <SelectItem value="end-of-turn">End of turn</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       <div className="flex items-center gap-1 rounded-md border border-rule-strong bg-sunken px-1 focus-within:border-primary">
         <Button type="button" variant="ghost" size="icon-sm" disabled aria-label="Attach a file">
           <Plus />
@@ -409,11 +437,15 @@ export function Composer({
           placeholder={
             running
               ? steerable
-                ? 'Steer this task before its next step…'
+                ? when === 'next-step'
+                  ? 'Steer this task before its next step…'
+                  : 'Steer this task at the end of its turn…'
                 : 'This task is not running — nothing to steer'
               : 'Say something to the lead…'
           }
           autoComplete="off"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
           disabled={running && !steerable}
           className="h-10 flex-1 border-0 px-1 font-mono shadow-none focus-visible:ring-0 dark:bg-transparent"
         />

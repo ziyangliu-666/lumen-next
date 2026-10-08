@@ -149,7 +149,9 @@ export async function composeApp(options: AppOptions): Promise<App> {
           },
         }
       : {}),
-    ...(identity ? { canSpend: identity.canSpend, adminAccounts: identity } : {}),
+    ...(identity
+      ? { canSpend: identity.canSpend, adminAccounts: identity, adminChanges: identity }
+      : {}),
     ...(db && options.identity
       ? {
           origin: options.identity.origin,

@@ -14,10 +14,10 @@ listen; malformed configuration stops startup without exposing its values.
 
 ## Public surface
 
-`createBillingSlice({ db, canSpend?, adminAccounts?, approvalResume?, origin?, topups?, log?, keys? })` returns:
+`createBillingSlice({ db, canSpend?, adminAccounts?, adminChanges?, approvalResume?, origin?, topups?, log?, keys? })` returns:
 
 - `registerRoutes(app)` — register the authenticated wallet and staff-only account APIs once.
-- `AdminAccountReader` — a read-only projection of identity's public `AdminAccounts` port, injected as `adminAccounts`; no role or suspension mutation is exposed.
+- `AdminAccountReader` — a read-only projection of identity's public `AdminAccounts` port, injected as `adminAccounts`; mutations use the separate `adminChanges` port below.
 - `record({ accountId, taskId, amount, reason }, tx?)` — trusted in-process
   expense writer. Each call is one expense, not an idempotent retry. A supplied
   `Queryable` joins the caller's transaction; otherwise the INSERT commits alone.
@@ -209,8 +209,7 @@ Acceptance for the implementation PR includes anonymous 401 and member 403 on
 both list and detail before calling identity, staff success, invalid ID 400,
 missing/deleted account 404, sanitized storage errors, no credential fields,
 no-store responses and browser verification of direct member navigation and
-mobile layout. Role and suspension mutations, invites and emergency stop are
-excluded until their authorization and session-revocation rules are agreed.
+mobile layout. Invites and emergency stop remain separate; role/suspension changes are described below.
 
 
 ## Read-only administration implementation
@@ -227,8 +226,8 @@ The Admin page replaces the sample row with the live directory and account
 details. It uses the existing shell staff guard, request helper and UI controls.
 It has loading, empty, error/retry, refresh and unavailable-detail states; stale
 requests are cancelled when changing selection or leaving the page.
-Role changes, suspension controls and deleted-account recovery are not part of
-this read-only view. The public identity list currently has no pagination port;
+Role and suspension controls are now offered in account details; deleted-account
+recovery remains unavailable. The public identity list currently has no pagination port;
 pagination must be agreed with identity before growing that API.
 
 `adminRoutes.test.ts` covers authorization before identity access, summary-only
@@ -458,3 +457,33 @@ Local browser acceptance used an isolated PostgreSQL schema and synthetic,
 nonfunctional key strings: save, replace, input clearing, confirmation/removal,
 and fresh-password removal while signed out succeeded. Real hosted provider
 acceptance remains separate; this is not a claim that a live key was charged.
+
+
+### Staff account changes
+
+`PATCH /api/admin/accounts/:id` accepts exactly one field: `{ role: "user" | "staff" }`
+or `{ suspended: boolean }`. It requires real staff authentication in composition,
+exact Origin, a UUID target and a bounded 1 KiB body. Successful responses project
+only the safe account summary and are no-store; request/validation errors are
+also no-store. Billing injects the separate public `StaffAccountChanges` port as
+`adminChanges`; it never queries Identity tables. Missing mutation wiring returns
+503 after authorization. Identity rechecks the actor under transaction locks,
+refuses self changes and deleted targets, and returns only after commit. Staff
+revocation races return 403; unavailable targets return 404; unexpected errors
+remain sanitized 500. A successful change emits actor/target IDs and the enum or
+boolean change, never email, credentials or the raw request body.
+
+Account details offer explicit target-labelled confirmation for promotion,
+demotion, suspension and restoration. Mutation failures ask for a refresh before
+retrying; success refreshes the directory and selected detail. The actor's own
+account has explanatory text instead of controls. Current sessions see a changed
+role on subsequent authenticated requests. Suspension revokes sessions and
+pending recovery proofs, and prevents future sign-ins and budget-checked work;
+restoration requires a fresh sign-in. Existing WebSockets and running tasks are
+not forcibly terminated. The UI states these limits before confirmation.
+
+`adminChanges.test.ts` uses real cookies and PostgreSQL to cover authorization,
+Origin/body/ID validation, self-change refusal, promotion/demotion, suspension,
+restoration without session resurrection, deleted-account refusal and concurrent
+mutual demotion. The latter leaves one eligible staff actor; this is not a global
+last-administrator guarantee for separate account-deletion or maintenance paths.

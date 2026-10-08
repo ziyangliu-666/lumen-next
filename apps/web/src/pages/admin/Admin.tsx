@@ -2,6 +2,7 @@
 import { useEffect, useState, type JSX } from 'react';
 import { request, RequestFailure } from '@/core/api';
 import { AdminLedger } from './AdminLedger';
+import { AccountActions } from './AccountActions';
 import { AccountWallet } from './AccountWallet';
 import { PageHeader } from '@/core/shell';
 import { Badge } from '@/ui/badge';
@@ -79,7 +80,7 @@ export function Admin(): JSX.Element {
     <>
       <PageHeader
         title="Admin"
-        description="Read-only account directory. Staff access only."
+        description="Account directory and access management. Staff access only."
         actions={
           <Button variant="outline" disabled={loading} onClick={refresh}>
             Refresh
@@ -201,7 +202,16 @@ export function Admin(): JSX.Element {
                   Loading account…
                 </p>
               )}
-              {detail && !detailError && <AccountWallet key={detail.id} accountId={detail.id} />}
+              {detail && !detailError && (
+                <>
+                  <AccountActions
+                    key={`${detail.id}:${detail.role}:${detail.suspended}`}
+                    account={detail}
+                    onChanged={refresh}
+                  />
+                  <AccountWallet key={detail.id} accountId={detail.id} />
+                </>
+              )}
             </CardContent>
           </Card>
         )}

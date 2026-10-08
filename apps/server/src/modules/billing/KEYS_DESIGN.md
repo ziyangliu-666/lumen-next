@@ -66,8 +66,8 @@ LU YI supplied the lifecycle contract in
 [#79 handoff](https://github.com/ziyangliu-666/lumen-next/pull/79#issuecomment-6042496276).
 Its `withActiveAccount` transaction and `onAccountDeleting` callback match these
 billing ports. Identity also owns fresh password or purpose-separated OAuth
-proof for suspended-owner removal. That implementation is still awaiting merge;
-this adapter increment does not compose it or enable storage.
+proof for suspended-owner removal. The lifecycle foundation (#79, #80 and #81) is merged. Core is preparing
+composition separately; the store is still not composed and storage stays off.
 
 `secretCipherFromEnvironment(env)` parses explicitly supplied configuration and
 returns a cipher, not raw key buffers. Both values absent/empty returns null;
@@ -87,8 +87,8 @@ semantics without collecting credentials from users.
 
 ## Remaining integration, after deletion agreement
 
-- After #80 is reviewed and merged, compose its account-lock lifecycle and both
-  cleanup callbacks through public indexes. Test actual ciphertext with real
+- Core will compose the merged account-lock lifecycle and both cleanup callbacks
+  through public indexes. Test actual ciphertext with real
   identity: save-before-delete removes it, delete-before-save rejects it, cleanup
   failure rolls back deletion, and suspension blocks retrieval. Contract fixtures
   alone do not prove these concurrent account lifecycle guarantees.
@@ -127,3 +127,25 @@ that the composed application still has no Keys routes or public `secret` port.
 `main.test.ts` launches the real compiled entry point with an isolated environment
 to prove malformed/partial configuration fails before database setup or listen,
 while missing/valid configuration reaches the normal startup checks.
+
+
+## Eligibility error boundary
+
+Following core review on #80/#81, the store translates Identity's public
+`AuthFailure('invalid_credentials')` into core's fixed 403 `account cannot use keys`
+for metadata, saves and retrieval. This denies missing, suspended and deleted
+owners without exposing their state. Callers must propagate the rejection; only
+an eligible owner with no saved row gets null and may use the platform fallback.
+Other identity errors, SQL failures and decryption failures remain errors and are
+not relabelled as access denial or absence.
+
+`secretAccess.test.ts` proves the mapping for all three operations and preservation
+of unrelated failures. Its real PostgreSQL test uses Identity's public factory
+and HTTP authentication/deletion, showing suspended owners cannot overwrite or
+read a saved key, reactivation retains the original value, and deleted owners
+cannot retrieve even a retained ciphertext row. This is access-boundary evidence,
+not a replacement for core's cleanup/composition acceptance.
+
+Before the Keys UI, Identity must fix the OAuth removal start response for browser
+navigation (#80 review). A future shared-lock read port will replace the exclusive
+lifecycle used by `list` and `secret`; no such port is exported yet.

@@ -1,9 +1,10 @@
 # billing — HE RONG
 
 UC5 owns the ledger, wallet, budget checks, keys, payments and administration.
-The ledger, Wallet tab, budget guard connection and read-only administration are
-merged. This approval increment adds durable decisions and session resumption against #62.
-Stripe test-mode top-ups are implemented below; keys remain a separate story.
+The ledger, Wallet tab, budget guard, durable approvals, Stripe test-mode top-ups,
+Keys and staff account controls are merged.
+[Sprint 3 acceptance](SPRINT3_ACCEPTANCE.md) distinguishes delivered code from
+the remaining core-owned hosted Stripe replay check.
 Keys has encrypted PostgreSQL storage, owner-only HTTP routes and per-account
 model selection for the built-in workers when the keyring is configured.
 [Keys integration](KEYS_DESIGN.md) documents configuration, lifecycle locks and
@@ -40,7 +41,7 @@ With configured `keys`, the returned optional `secret(accountId, provider)` port
 provides trusted server-side retrieval; GET/PUT/DELETE Keys endpoints are registered.
 Without `keys` neither the port nor these routes exists. `SecretCipher` is exported
 as a type for composition; construction uses the environment parser. See the
-linked design for request shapes, limits, worker selection and remaining UI work.
+linked design for request shapes, limits, worker selection and hosted acceptance.
 
 The optional transaction is the only extension to the documented spend writer.
 `app.ts` passes `billing.record` as session's `recordSpend` callback when a
@@ -450,8 +451,9 @@ the owner to refresh before retrying because a lost response may follow a commit
 
 The page preserves and explicitly discloses current accounting: OpenAI bills the
 owner, while estimated call costs still appear in Wallet and count toward the
-Lumen cap. No accounting policy is changed here; core's #84 product note requires
-review of that disclosure before shipping the UI.
+Lumen cap. Core confirmed this accounting policy and the disclosure in the
+[merged #86 review](https://github.com/ziyangliu-666/lumen-next/pull/86).
+A future exemption for own-key calls requires a separate billing change.
 
 Local browser acceptance used an isolated PostgreSQL schema and synthetic,
 nonfunctional key strings: save, replace, input clearing, confirmation/removal,

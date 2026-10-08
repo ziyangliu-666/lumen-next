@@ -13,13 +13,15 @@ import { buildServer } from './core/http/server.js';
 import { createLog, type Log } from './core/log/log.js';
 import { Broker } from './core/protocol/broker.js';
 import type { Worker } from './core/domain/worker.js';
-import type { ModelProvider } from './core/model/index.js';
+import { OpenAICompatible, nullModel, type ModelProvider } from './core/model/index.js';
+import { accountModel } from './accountModel.js';
 import {
   createBillingSlice,
   eraseAccountSecrets,
   removeOwnOpenAiKey,
   StripeTopups,
   type StripeConfiguration,
+  type SecretCipher,
 } from './modules/billing/index.js';
 import {
   createIdentitySlice,
@@ -29,7 +31,7 @@ import {
   type OAuthProvider,
 } from './modules/identity/index.js';
 import { createProjectsSlice, type ProjectsSlice } from './modules/projects/index.js';
-import { createSessionSlice, type SessionSlice } from './modules/session/index.js';
+import { demoWorker, createSessionSlice, type SessionSlice } from './modules/session/index.js';
 import { createSteeringSlice } from './modules/steering/index.js';
 
 export interface IdentityConfig {
@@ -45,6 +47,10 @@ export interface IdentityConfig {
 }
 
 export interface AppOptions {
+  readonly secretCipher?: SecretCipher;
+  /** Trusted adapter factory for deterministic provider tests. Production uses the fixed OpenAI endpoint. */
+  readonly openaiWithKey?: (key: string) => ModelProvider;
+  readonly demoPaceMs?: number;
   readonly stripe?: StripeConfiguration;
   /** Null keeps every record in memory: enough to develop a page against, and no more. */
   readonly db: Db | null;
@@ -93,6 +99,8 @@ export interface App {
 
 export async function composeApp(options: AppOptions): Promise<App> {
   const { db } = options;
+  if (options.secretCipher && (!db || !options.identity))
+    throw new Error('Keys require real identity and a database');
   if (
     options.stripe &&
     (!db || !options.identity || options.stripe.origin !== options.identity.origin)
@@ -130,6 +138,17 @@ export async function composeApp(options: AppOptions): Promise<App> {
     log,
     ...(options.stripe ? { topups: new StripeTopups(options.stripe) } : {}),
     db,
+    ...(options.secretCipher && identity
+      ? {
+          keys: {
+            cipher: options.secretCipher,
+            write: (id, work) => identity.withActiveAccount(id, work),
+            read: (id, work) => identity.withActiveAccountRead(id, work),
+            remove: (id: string) =>
+              identity.withActiveAccount(id, (tx) => removeOwnOpenAiKey(id, tx)),
+          },
+        }
+      : {}),
     ...(identity ? { canSpend: identity.canSpend, adminAccounts: identity } : {}),
     ...(db && options.identity
       ? {
@@ -138,6 +157,21 @@ export async function composeApp(options: AppOptions): Promise<App> {
         }
       : {}),
   });
+  const account = billing.secret
+    ? accountModel(
+        options.model ?? nullModel,
+        billing.secret,
+        options.openaiWithKey ??
+          ((key) =>
+            new OpenAICompatible({
+              name: 'openai',
+              model: 'gpt-4.1-nano',
+              baseUrl: 'https://api.openai.com/v1',
+              apiKey: key,
+            })),
+      )
+    : null;
+  const model = account?.model ?? options.model;
   // Steering needs session's SessionDirectory to check a task.steer's
   // ownership and to find a task's project; session may run steering's own
   // worker. Each is given closures over the other, declared first — same
@@ -149,19 +183,29 @@ export async function composeApp(options: AppOptions): Promise<App> {
     taskSession: (taskId) => session.projects.taskSession(taskId),
     sessionContext: (sessionId) => session.projects.context(sessionId),
     ...(options.computeProvider ? { computeProvider: options.computeProvider } : {}),
-    ...(options.model ? { model: options.model } : {}),
+    ...(model ? { model } : {}),
   });
+  const worker =
+    options.worker ??
+    (options.useSteeringWorker
+      ? steering.worker
+      : demoWorker({
+          ...(model ? { model } : {}),
+          ...(options.demoPaceMs === undefined ? {} : { paceMs: options.demoPaceMs }),
+        }));
   // Session and projects need each other: a session is opened under a project,
   // and a project shows its sessions. Session is given closures and projects is
   // built second; the closures only run on a request, by which time it exists.
   const session = createSessionSlice({
     broker,
     db,
-    ...(options.worker
-      ? { worker: options.worker }
-      : options.useSteeringWorker
-        ? { worker: steering.worker }
-        : {}),
+    worker:
+      account && !options.worker
+        ? account.wrap(
+            worker,
+            async (id) => (await session.projects.context(id))?.accountId ?? null,
+          )
+        : worker,
     requireProject: (principal, id) => projects.requireProject(principal, id),
     recordFinding: (sessionId, taskId, text) => projects.recordFinding(sessionId, taskId, text),
     ...(db ? { recordSpend: billing.record } : {}),

@@ -112,7 +112,7 @@ multi-connection locks, rollback, auth isolation and pool-restart persistence.
 `npm run verify` must pass with a real database, alongside build, staging smoke
 and owner review. Local success is not merged delivery.
 
-### Account lifecycle integration (not activated)
+### Account lifecycle integration
 
 `withActiveAccount(accountId, work)` owns a transaction and locks an active,
 non-deleted account before awaiting `work(transaction)`. It is a trusted
@@ -122,9 +122,9 @@ storage/commit failures reject; `canSpend` remains an unlocked snapshot.
 
 The optional `onAccountDeleting(accountId, transaction)` factory dependency runs
 under the same account lock after deletion proof succeeds. It must be awaited;
-any failure rolls back cleanup and identity deletion. No consumer is wired by
-default, and Billing Keys remains disabled. Composition must inject Billing's
-keyring-independent cleanup and require lifecycle wiring before enabling saves.
+any failure rolls back cleanup and identity deletion. Composition injects
+Billing's keyring-independent cleanup even without key usage configuration.
+Configured Keys storage requires real identity and a database.
 The optional `removeOwnOpenAiKey(accountId, transaction)` callback enables
 `POST /api/auth/key-removal/openai/password` with fresh bounded password proof,
 and POST-confirmed GitHub/Google removal through purpose-separated OAuth attempts.
@@ -132,8 +132,8 @@ These allow a suspended, non-deleted owner to remove only their own OpenAI key,
 without normal login, account linking or session issuance. The callback must
 only erase that owner's OpenAI ciphertext using the supplied transaction.
 OAuth callbacks consume the attempt before exchange; a failed action requires a
-new attempt. No callback is configured by the existing composition, so these
-routes are not enabled in the running app. See
+new attempt. Composition injects the removal callback independently of the
+keyring, enabling these routes whenever real identity is configured. See
 [key lifecycle agreement](../../../../../docs/identity/KEY_LIFECYCLE.md) for
 lock ordering, endpoint details, tests and the remaining owner handoff.
 
@@ -151,3 +151,12 @@ See [API](../../../../../docs/identity/API.md),
 [local setup](../../../../../docs/identity/LOCAL_AUTH.md),
 [OAuth](../../../../../docs/identity/OAUTH_SETUP.md), and
 [mail](../../../../../docs/identity/MAIL_SETUP.md).
+
+
+`withActiveAccountRead(accountId, work)` is the shared-lock read variant of
+`withActiveAccount`: it uses `FOR SHARE`, allowing concurrent reads while still
+serializing against suspension/deletion. Callbacks must perform only reads and
+finish decryption before returning; network work happens after the transaction.
+OAuth key-removal start responds with JSON `{ url }`, not a cross-origin redirect.
+The browser POSTs explicit confirmation and then navigates to that URL. Removal
+state uses `kr.` (a dot cannot appear in a normal base64url sign-in state).

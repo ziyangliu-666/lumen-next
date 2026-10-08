@@ -56,10 +56,10 @@ export function registerOAuthRoutes(
             const attempt = await gate.run(request.raw.socket.remoteAddress ?? 'unknown', () =>
               removal.attempts.begin(provider.kind),
             );
-            const url = provider.authorizationURL(`kr_${attempt.state}`, attempt.verifier);
+            const url = provider.authorizationURL(`kr.${attempt.state}`, attempt.verifier);
             if (url.protocol !== 'https:') throw new Error('OAuth authorization requires HTTPS');
             void reply.setCookie(removalCookie, attempt.binding, { ...cookieOptions, maxAge: 600 });
-            return reply.redirect(url.href, 303);
+            return reply.send({ url: url.href });
           } catch (error) {
             logRefusal(log, 'key removal', error);
             if (error instanceof LoginLimited)
@@ -93,7 +93,7 @@ export function registerOAuthRoutes(
         logLevel: 'silent',
       },
       async (request, reply) => {
-        if (typeof request.query.state === 'string' && request.query.state.startsWith('kr_')) {
+        if (typeof request.query.state === 'string' && request.query.state.startsWith('kr.')) {
           void reply.clearCookie(removalCookie, cookieOptions);
           try {
             await gate.run(request.raw.socket.remoteAddress ?? 'unknown', async () => {

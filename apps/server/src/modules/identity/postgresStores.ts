@@ -108,11 +108,26 @@ export class PostgresAccountStore implements AccountStore, PasswordAccountStore,
     accountId: string,
     work: (transaction: IdentitySql) => Promise<T>,
   ): Promise<T> {
+    return this.activeAccount(accountId, work, 'update');
+  }
+
+  withActiveAccountRead<T>(
+    accountId: string,
+    work: (transaction: IdentitySql) => Promise<T>,
+  ): Promise<T> {
+    return this.activeAccount(accountId, work, 'share');
+  }
+
+  private async activeAccount<T>(
+    accountId: string,
+    work: (transaction: IdentitySql) => Promise<T>,
+    lock: 'update' | 'share',
+  ): Promise<T> {
     if (!ACCOUNT_ID.test(accountId)) throw new AuthFailure('invalid_credentials');
     return this.db.withTransaction(async (sql) => {
       const rows = await sql.query<{ id: string }>(
         `select id from accounts
-         where id = $1 and not suspended and deleted_at is null for update`,
+         where id = $1 and not suspended and deleted_at is null for ${lock}`,
         [accountId],
       );
       if (rows.length !== 1) throw new AuthFailure('invalid_credentials');

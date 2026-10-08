@@ -63,8 +63,8 @@ created, email linked, role granted or suspension reversed by removal.
 | Route | Proof / result |
 | --- | --- |
 | `POST /api/auth/key-removal/openai/password` | Exact Origin and bounded `{ email, password }`; fresh current-password proof; 204 on removal (including already absent). |
-| `POST /api/auth/key-removal/openai/github` (or `google`) | Exact Origin and exactly `{ confirm: 'remove-openai-key' }`; 303 to the configured provider. |
-| Existing `/api/auth/github/callback` (or Google) | `kr_` state dispatches only to removal, using a separate HttpOnly browser cookie and purpose-separated attempt hashes. |
+| `POST /api/auth/key-removal/openai/github` (or `google`) | Exact Origin and exactly `{ confirm: 'remove-openai-key' }`; 200 `{ url }` for browser navigation to the configured provider. |
+| Existing `/api/auth/github/callback` (or Google) | `kr.` state dispatches only to removal, using a separate HttpOnly browser cookie and purpose-separated attempt hashes. |
 
 Password verification happens before locking; the immutable owner, current email
 and hash version are rechecked under the account lock before erasing. No caller
@@ -96,6 +96,17 @@ The optional UI handoff still needs to render these states and explicit controls
 Tests exercise these routes with a real PostgreSQL database, synthetic credentials
 and simulated OAuth providers. They prove auth isolation, purpose/binding/expiry
 and replay refusal, rollback, other-owner isolation and stale-proof rejection;
-they do **not** prove actual Billing ciphertext integration or live provider
-acceptance. Keys stays disabled until owner-reviewed composition and acceptance.
+they do **not** prove live provider acceptance. The separate root
+`keysIntegration.test.ts` and `keysConcurrency.test.ts` exercise actual Billing
+ciphertext, worker selection and transaction ordering. Configured storage is
+composed with mandatory real identity; deployment still needs owner review.
 Billing must not invent a replacement login flow.
+
+
+`withActiveAccountRead(accountId, work)` is the shared-lock read variant of
+`withActiveAccount`: it uses `FOR SHARE`, allowing concurrent reads while still
+serializing against suspension/deletion. Callbacks must perform only reads and
+finish decryption before returning; network work happens after the transaction.
+OAuth key-removal start responds with JSON `{ url }`, not a cross-origin redirect.
+The browser POSTs explicit confirmation and then navigates to that URL. Removal
+state uses `kr.` (a dot cannot appear in a normal base64url sign-in state).

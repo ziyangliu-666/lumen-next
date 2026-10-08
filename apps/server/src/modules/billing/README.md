@@ -4,19 +4,17 @@ UC5 owns the ledger, wallet, budget checks, keys, payments and administration.
 The ledger, Wallet tab, budget guard connection and read-only administration are
 merged. This approval increment adds durable decisions and session resumption against #62.
 Stripe test-mode top-ups are implemented below; keys remain a separate story.
-Keys has an internal tested encryption adapter, configuration parser and
-PostgreSQL store using core-approved migration 015. The
-[storage/integration agreement](KEYS_DESIGN.md) records the approved OpenAI-only
-scope and the pending runtime integration of the merged identity lifecycle. Runtime storage stays off:
-the store is not composed or exported, and the Keys page is still a
-placeholder. HTTP storage and worker model selection are not delivered yet.
-`secretCipherFromEnvironment(env)` is exported for startup validation: `main.ts`
-calls it before database initialization or listen. Invalid configuration stops
-startup with a value-free error; validation alone does not activate Keys.
+Keys has encrypted PostgreSQL storage, owner-only HTTP routes and per-account
+model selection for the built-in workers when the keyring is configured.
+[Keys integration](KEYS_DESIGN.md) documents configuration, lifecycle locks and
+acceptance. Missing configuration keeps storage routes off; deletion and
+fresh-proof removal remain wired. The Settings Keys page is still a placeholder.
+`secretCipherFromEnvironment(env)` validates before database initialization or
+listen; malformed configuration stops startup without exposing its values.
 
 ## Public surface
 
-`createBillingSlice({ db, canSpend?, adminAccounts?, approvalResume?, origin?, topups?, log? })` returns:
+`createBillingSlice({ db, canSpend?, adminAccounts?, approvalResume?, origin?, topups?, log?, keys? })` returns:
 
 - `registerRoutes(app)` — register the authenticated wallet and staff-only account APIs once.
 - `AdminAccountReader` — a read-only projection of identity's public `AdminAccounts` port, injected as `adminAccounts`; no role or suspension mutation is exposed.
@@ -33,12 +31,16 @@ the action, derive the owner and hold its account lock before calling them;
 errors propagate to roll back the enclosing deletion/removal. The exported
 `WithActiveSecretAccount` type describes the transaction callback used internally
 for metadata, saves and decryption. This matches LU YI's merged #80 contract;
-core owns the pending composition and joint lifecycle acceptance.
+composition now wires deletion/removal and the shared read lifecycle.
 The internal store maps identity eligibility rejection to the fixed 403
 `account cannot use keys` for metadata, writes and retrieval; operational errors
 still propagate and never permit platform-key fallback. Real PostgreSQL tests
 cover missing, suspended and deleted owners through identity's public API.
-These exports do not enable Keys routes or worker retrieval.
+With configured `keys`, the returned optional `secret(accountId, provider)` port
+provides trusted server-side retrieval; GET/PUT/DELETE Keys endpoints are registered.
+Without `keys` neither the port nor these routes exists. `SecretCipher` is exported
+as a type for composition; construction uses the environment parser. See the
+linked design for request shapes, limits, worker selection and remaining UI work.
 
 The optional transaction is the only extension to the documented spend writer.
 `app.ts` passes `billing.record` as session's `recordSpend` callback when a

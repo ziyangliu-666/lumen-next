@@ -21,10 +21,10 @@ active key; old keys can remain in the injected ring for decryption. This is
 rotation support, not an automatic re-encryption job. Tests use generated,
 synthetic keys only. No real provider credentials are requested for this PR.
 
-This increment does **not** expose a usable Keys page or secret retrieval port.
-The current Settings placeholder remains a placeholder. Startup validates the
-keyring through the public configuration helper, but does not retain the cipher
-for storage or provide a complete vault.
+The backend is composed when the keyring is configured and real Identity plus
+PostgreSQL are available. Missing configuration leaves Keys HTTP storage off.
+The Settings Keys page remains a placeholder; a browser UI and hosted acceptance
+are separate follow-ups.
 
 ## Core decisions and persistence increment
 
@@ -39,7 +39,7 @@ Core approved the following in the [#77 review](https://github.com/ziyangliu-666
 - The eventual public `secret(accountId, 'openai')` port is read by composition
   when building a worker's model. No saved key permits the existing platform key;
   decryption failure must stop the turn and must never fall back.
-- **Until LU YI agrees the deletion lifecycle, storage stays off.**
+- The deletion lifecycle agreed in #80 is now composed with keyring-independent cleanup.
 
 Migration 015 creates only the billing-owned table: UUID owner and `openai`
 provider primary key, encrypted JSON envelope and update timestamp. Generated,
@@ -66,44 +66,52 @@ LU YI supplied the lifecycle contract in
 [#79 handoff](https://github.com/ziyangliu-666/lumen-next/pull/79#issuecomment-6042496276).
 Its `withActiveAccount` transaction and `onAccountDeleting` callback match these
 billing ports. Identity also owns fresh password or purpose-separated OAuth
-proof for suspended-owner removal. The lifecycle foundation (#79, #80 and #81) is merged. Core is preparing
-composition separately; the store is still not composed and storage stays off.
+proof for suspended-owner removal. The lifecycle foundation (#79, #80 and #81) is merged. Composition wires both cleanup callbacks regardless of keyring configuration.
+Configured storage requires real identity and a database before the server is built.
 
 `secretCipherFromEnvironment(env)` parses explicitly supplied configuration and
 returns a cipher, not raw key buffers. Both values absent/empty returns null;
 partial or malformed configuration throws a value-free error. This helper is
 exported by the billing public index and called by `main.ts` before database
-initialization or listen, as requested in #78. Malformed configuration now stops
-startup with a fixed error. The validated cipher is not wired into storage yet.
+initialization or listen, as requested in #78. `main.ts` now passes the validated
+cipher to `composeApp`; it is never logged or sent to the browser.
 
-**No storage activation in this increment:** the internal `Secrets` store is
-not exported by billing's public index or instantiated by
-`createBillingSlice`/`app.ts`/`main.ts`. Only configuration validation is active.
-There are no Keys routes and no worker lookup. The Settings placeholder is
-unchanged; even provisioned environment variables do not enable storage yet.
-The migration alone holds no user secrets. PostgreSQL fixtures instantiate the
-store directly with generated synthetic keys to prove persistence and failure
-semantics without collecting credentials from users.
+## Runtime API and worker integration
 
-## Remaining integration, after deletion agreement
+`createBillingSlice` accepts optional `keys` dependencies: cipher, locked write
+and shared-read lifecycle ports, and authenticated-owner removal. A database and
+origin are required. Composition always injects Identity's deletion and fresh-proof
+removal callbacks before constructing the store. The public slice's optional
+`secret(accountId, provider)` is available only with configured storage.
 
-- Core will compose the merged account-lock lifecycle and both cleanup callbacks
-  through public indexes. Test actual ciphertext with real
-  identity: save-before-delete removes it, delete-before-save rejects it, cleanup
-  failure rolls back deletion, and suspension blocks retrieval. Contract fixtures
-  alone do not prove these concurrent account lifecycle guarantees.
-- `GET /api/keys` returns owned provider/update metadata only. `PUT` and `DELETE`
-  `/api/keys/openai` require the authenticated owner and exact Origin. Writing
-  and use require the active-account transaction. Suspended owners remove keys
-  through identity's fresh-proof flow from #80, without a new session or restored
-  spending eligibility. Reads are no-store. No prefix/suffix or saved value is
-  returned, including to staff. Bounded input is validated before encryption.
-- Settings Keys gets add/replace/remove controls, clears submitted values, never
-  uses localStorage, and accurately describes provider usage. Only OpenAI is in
-  scope; no Modal credential pair or other provider is advertised.
-- Export the agreed `secret` port and configuration through billing's public
-  index, wire identity cleanup and configuration in composition, and verify
-  worker model selection with core. Saving alone is not runtime provider use.
+- `GET /api/keys`: owner-only `{ keys: [{ provider, updatedAt }] }` metadata.
+- `PUT /api/keys/openai`: exact Origin, authenticated owner, exactly `{ value }`,
+  nonblank round-trippable UTF-8 up to 16 KiB, bounded 20 KiB JSON body; 204.
+- `DELETE /api/keys/openai`: exact Origin, authenticated active owner, no body;
+  idempotent 204. Suspended owners use Identity's fresh-proof removal routes.
+- Keys responses are no-store, including validation errors. No saved value,
+  suffix, prefix, envelope or key ID is exposed. Staff can access only their own
+  key through these endpoints. Without configuration these routes remain absent.
+
+`list` and `secret` use Identity's `withActiveAccountRead` (`FOR SHARE`); saves
+use `withActiveAccount` (`FOR UPDATE`). Decryption completes under the read lock;
+provider network calls start only after commit. Parallel readers can overlap,
+while suspension and deletion still conflict with their account locks.
+
+Composition wraps built-in demo and steering workers with an async account
+context resolved from session's public directory. Every model call rereads that
+account's saved key. A saved OpenAI key uses the existing OpenAI adapter with the
+fixed `https://api.openai.com/v1` endpoint and `gpt-4.1-nano`; custom platform base
+URLs cannot receive user keys. Only absence uses the configured platform model.
+Storage, eligibility and decryption errors stop the call. Plaintext is not cached
+between calls. Injected custom workers remain responsible for their own model
+selection; production uses the built-in workers.
+
+The Settings editor and sign-in removal controls remain to be built. Identity's
+OAuth initiation now returns `200 { url }` so a browser can POST JSON and then
+navigate with `location.assign(url)`. The callback remains purpose-separated and
+never signs in or unsuspends the owner. No live provider key or hosted OAuth
+acceptance is claimed by synthetic integration tests.
 
 ## Acceptance for the complete feature
 
@@ -122,7 +130,7 @@ recreation, isolation, replacement/deletion, rotation, concurrent writes,
 ineligibility, tamper rejection, save/removal rollback, outer lifecycle failure
 propagation and keyring-independent cleanup of corrupt ciphertext. These are
 transaction contract fixtures, not the joint identity lock acceptance tests. It also checks
-that the composed application still has no Keys routes or public `secret` port.
+that configuration-free composition still has no Keys routes or secret port.
 
 `main.test.ts` launches the real compiled entry point with an isolated environment
 to prove malformed/partial configuration fails before database setup or listen,
@@ -143,9 +151,14 @@ not relabelled as access denial or absence.
 of unrelated failures. Its real PostgreSQL test uses Identity's public factory
 and HTTP authentication/deletion, showing suspended owners cannot overwrite or
 read a saved key, reactivation retains the original value, and deleted owners
-cannot retrieve even a retained ciphertext row. This is access-boundary evidence,
-not a replacement for core's cleanup/composition acceptance.
+cannot access keys after deletion. Core composition now erases the ciphertext
+in that same transaction; separate concurrency tests cover lifecycle ordering.
 
-Before the Keys UI, Identity must fix the OAuth removal start response for browser
-navigation (#80 review). A future shared-lock read port will replace the exclusive
-lifecycle used by `list` and `secret`; no such port is exported yet.
+`keysIntegration.test.ts` exercises encrypted HTTP persistence across restart,
+owner isolation, validation, both built-in workers, corrupt-ciphertext failure
+without fallback, and fresh-proof removal with the keyring disabled.
+`keysConcurrency.test.ts` observes real PostgreSQL lock contention for both
+save/delete orders using actual ciphertext and proves cleanup rollback restores
+both account and key. `accountModel.test.ts` checks parallel account contexts and
+fresh lookup per call. Identity tests prove overlapping shared reads, suspension
+blocking, JSON navigation responses over HTTP and purpose-separated callbacks.

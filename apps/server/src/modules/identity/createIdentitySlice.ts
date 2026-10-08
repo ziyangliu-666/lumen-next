@@ -102,6 +102,7 @@ export function createIdentitySlice(options: IdentitySliceOptions): IdentitySlic
     suspend: (accountId, on) => accounts.suspend(accountId, on),
     canSpend: (accountId) => accounts.canSpend(accountId),
     withActiveAccount: (accountId, work) => accounts.withActiveAccount(accountId, work),
+    withActiveAccountRead: (accountId, work) => accounts.withActiveAccountRead(accountId, work),
     ...(mail ? { mailWorker: mail.worker } : {}),
     registerRoutes: identityRoutes({
       flow,

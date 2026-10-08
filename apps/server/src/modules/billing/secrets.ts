@@ -18,12 +18,17 @@ export class Secrets {
   constructor(
     private readonly cipher: SecretCipher,
     private readonly withActiveAccount: WithActiveSecretAccount,
+    private readonly withActiveAccountRead: WithActiveSecretAccount = withActiveAccount,
   ) {}
 
   /** Translate only identity's eligibility rejection; operational failures stay failures. */
-  private async access<T>(accountId: string, work: (tx: IdentitySql) => Promise<T>): Promise<T> {
+  private async access<T>(
+    accountId: string,
+    work: (tx: IdentitySql) => Promise<T>,
+    read = false,
+  ): Promise<T> {
     try {
-      return await this.withActiveAccount(accountId, work);
+      return await (read ? this.withActiveAccountRead : this.withActiveAccount)(accountId, work);
     } catch (error) {
       if (error instanceof AuthFailure && error.code === 'invalid_credentials')
         throw forbidden('account cannot use keys');
@@ -33,16 +38,20 @@ export class Secrets {
 
   async list(accountId: string): Promise<readonly SecretMetadata[]> {
     validateOwner(accountId);
-    return this.access(accountId, async (tx) => {
-      const rows = await tx.query<{ provider: 'openai'; updated_at: Date }>(
-        'select provider, updated_at from billing_secrets where account_id = $1 order by provider',
-        [accountId],
-      );
-      return rows.map((row) => ({
-        provider: row.provider,
-        updatedAt: row.updated_at.toISOString(),
-      }));
-    });
+    return this.access(
+      accountId,
+      async (tx) => {
+        const rows = await tx.query<{ provider: 'openai'; updated_at: Date }>(
+          'select provider, updated_at from billing_secrets where account_id = $1 order by provider',
+          [accountId],
+        );
+        return rows.map((row) => ({
+          provider: row.provider,
+          updatedAt: row.updated_at.toISOString(),
+        }));
+      },
+      true,
+    );
   }
 
   async put(accountId: string, provider: string, value: string): Promise<void> {
@@ -60,13 +69,17 @@ export class Secrets {
   /** Only absence returns null; identity, storage and crypto errors never trigger fallback. */
   async secret(accountId: string, provider: string): Promise<string | null> {
     validateOwner(accountId, provider);
-    return this.access(accountId, async (tx) => {
-      const [row] = await tx.query<{ envelope: unknown }>(
-        'select envelope from billing_secrets where account_id = $1 and provider = $2',
-        [accountId, provider],
-      );
-      // Decrypt before returning from work, while the account is still locked.
-      return row ? this.cipher.open({ accountId, provider }, row.envelope) : null;
-    });
+    return this.access(
+      accountId,
+      async (tx) => {
+        const [row] = await tx.query<{ envelope: unknown }>(
+          'select envelope from billing_secrets where account_id = $1 and provider = $2',
+          [accountId, provider],
+        );
+        // Decrypt before returning from work, while the account is still locked.
+        return row ? this.cipher.open({ accountId, provider }, row.envelope) : null;
+      },
+      true,
+    );
   }
 }

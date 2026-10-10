@@ -54,6 +54,44 @@ Identity owns the deletion disclosure; Billing adds no refund path and does not
 present the spending cap as prepaid credit. Hosted Keys/provider acceptance is
 tracked separately in [KEYS_DESIGN.md](KEYS_DESIGN.md), not claimed by this audit.
 
+## Core replay checklist and result record
+
+Action owner: LIU ZIYANG (`@ziyangliu-666`), confirmed in the
+[#88 review](https://github.com/ziyangliu-666/lumen-next/pull/88).
+Target: Sprint 3 closeout on 10 October 2026. Status: **pending**.
+Keep the replay sign-off PR open until the observed result is recorded; a green
+CI run or approval of these instructions is not a completed dashboard replay.
+
+- [ ] Record the current cap, spend and receipt count for synthetic account
+  `d441d055-daae-4e5f-92b7-0124d1643d1c` before replay.
+- [ ] In the Stripe test dashboard, locate the paid `checkout.session.completed`
+  event for Checkout
+  `cs_test_a1KaUkVDWQuWyh5VkvnfRHGdYFfvBlELuQbU35UxQkVJd9VjVIgVil7BTW`.
+  Redeliver that existing event to
+  `https://lumen-next-staging.fly.dev/api/billing/stripe/webhook`.
+  Do not create another purchase or substitute a newly signed fixture.
+- [ ] Record the redelivery time and observed HTTP status; it must be 2xx.
+- [ ] Refresh Wallet and confirm no extra receipt or cap increase. Order
+  `f0236f89-def2-4702-b9ed-d516ef2e77af` must still have one confirmed receipt.
+  With the original baseline, cap stays USD 6.0000 and spend USD 0.0000.
+  If the account changed, compare and explain the actual before/after values.
+- [ ] Post the result on #66 or the sign-off PR, fill the record below and link
+  the evidence. Only then update the pending acceptance statements here and in
+  the Billing README, and merge the sign-off record after review and green CI.
+
+| Observed evidence | Result |
+| --- | --- |
+| Operator and redelivery time (include timezone) | Pending |
+| Existing Stripe event ID and redelivery HTTP status | Pending |
+| Cap before / after | Pending |
+| Recorded spend before / after | Pending |
+| Total receipt count before / after; matching order count | Pending |
+| GitHub comment linking the observed result | Pending |
+
+Record IDs and results only: no secret keys, signing secrets, cookies, payment
+details or raw webhook body. If delivery fails or credit changes, leave the
+checklist incomplete and report the failure for investigation.
+
 ## Verification
 
 Use the existing local database service and isolated test schemas:
@@ -73,5 +111,6 @@ one skipped; 1,040 tests passed and five skipped. PostgreSQL was configured, so
 these skips do not represent disabling database acceptance. The two existing
 lint warnings remain warnings, with no lint errors. Server and web production
 builds also passed. Documentation corrections made by this closeout do not
-change runtime code or test behavior. The closeout PR itself still needs review
-and its own CI; local verification is not a merge approval.
+change runtime code or test behavior. Closeout PR #88 is now reviewed and merged;
+its checks and the subsequent main CI and staging deployment passed. That merge
+does not complete the separate hosted replay acceptance above.

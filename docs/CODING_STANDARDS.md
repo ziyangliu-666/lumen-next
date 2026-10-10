@@ -10,10 +10,9 @@ Everything git tracks is English. Code, comments, docstrings, test names,
 assertion messages, error strings, Markdown documents, commit messages, pull
 request titles and bodies, and comments in config files.
 
-The team speaks Chinese, and this repository has Chinese documents in it on
-purpose: `docs/ONBOARDING.md` is for the five of us. That is the whole exception.
-The moment text is going to be read by somebody outside this room — a marker, a
-future maintainer, a tool — it is English.
+The team talks in Chinese; the repository does not. Text that somebody outside
+this room may read — a marker, a future maintainer, a tool — is English, and so is
+everything else git tracks.
 
 Two things follow from this, and both are easy to get wrong:
 

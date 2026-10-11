@@ -58,14 +58,13 @@ PostgreSQL.
 
 ```bash
 cp .env.example .env
-docker compose up -d db                          # PostgreSQL 17 on :5432
-npm run build                                    # builds the contracts, server and web app
-node --env-file=.env apps/server/dist/main.js    # API and WebSocket on :4000
-npm run dev --workspace @lumen/web               # web app on :4173, proxies /api and /ws
+docker compose up -d db                  # PostgreSQL 17 on :5432
+npm run dev --workspace @lumen/server    # API and WebSocket on :4000
+npm run dev --workspace @lumen/web       # web app on :4173, proxies /api and /ws
 ```
 
-Open <http://localhost:4173>. The server applies database migrations on startup.
-After changing server code, rebuild it with `npm run build --workspace @lumen/server`.
+Open <http://localhost:4173>. Both processes reload on change: the server recompiles
+and restarts, and applies database migrations on startup.
 
 One command runs every check:
 

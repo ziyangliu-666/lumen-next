@@ -23,7 +23,7 @@ export default defineConfig({
       ],
       exclude: ['**/*.test.ts', '**/index.ts'],
       // The gate rises each sprint (docs/CODING_STANDARDS.md): 60, 65, 70, 70.
-      thresholds: { lines: 65 },
+      thresholds: { lines: 70 },
       reporter: ['text-summary'],
     },
   },

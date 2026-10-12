@@ -14,7 +14,7 @@ Core owns the documentation update in #93; do not duplicate it in this branch.
 ## Design-pattern evidence
 
 - [x] Submit conditional-baseline versus responsibility-chain evidence in #91.
-- [ ] Address owner feedback and merge #91.
+- [x] Address owner feedback and merge #91 (core approved on 12 October).
 - [ ] Incorporate the reviewed diagrams, ordering rationale, test mapping and
   concurrency limitations into the final team report and presentation.
 
@@ -29,16 +29,17 @@ Core owns the documentation update in #93; do not duplicate it in this branch.
   interactions; turn concrete findings into focused fixes and regression tests.
 - [ ] Complete final full-suite verification with PostgreSQL on the integrated
   main after implementation PRs merge; retain coverage of at least 70%.
-- [ ] Ask core to reconcile the shared coverage gate: docs require 70% for Sprint
+- [x] Ask core to reconcile the shared coverage gate (accepted in the #94 review): docs require 70% for Sprint
   3/4 but `vitest.config.ts` currently enforces 65%. This is a shared-config
-  discrepancy, not evidence that measured coverage is below 70%.
+  discrepancy, not evidence that measured coverage is below 70%. Core owns the
+  promised configuration change; its implementation remains to be verified.
 
 ## Hosted acceptance and demonstration
 
 - [ ] Coordinate real hosted Keys/provider and fresh-proof OAuth removal
   acceptance with core/Identity. Synthetic credentials do not prove these flows
   against the live providers. Do not place real keys in evidence or the repo.
-- [ ] Prepare a repeatable demo: recorded spend, over-cap waiting, grant/reject,
+- [x] Prepare a repeatable demo procedure in `DEMO.md` (execution is still pending): recorded spend, over-cap waiting, grant/reject,
   test top-up, key management, staff role/suspension changes and retained history.
 - [ ] Record environment and deployment version, expected/observed outcomes and
   limitations. Use dedicated test accounts; confirm the shared demo environment
@@ -47,8 +48,9 @@ Core owns the documentation update in #93; do not duplicate it in this branch.
 ## Final delivery
 
 - [ ] Confirm the team report template, contribution length and presentation time.
-- [ ] Deliver HE RONG's UC5 section with responsibilities, architecture, pattern
-  rationale, test evidence, reviewed PRs and known limitations.
+- [x] Prepare HE RONG's UC5 contribution in `REPORT.md` with responsibilities,
+  architecture, pattern rationale, test evidence and known limitations.
+- [ ] Obtain editorial review and incorporate it into the final team report.
 - [ ] Rehearse the demo and answers about SQL numeric, idempotency, encryption,
   policy ordering and why a budget check is not a spending reservation.
 - [ ] Resolve PR feedback, obtain owner review and green CI/security/deploy,

@@ -488,3 +488,13 @@ Origin/body/ID validation, self-change refusal, promotion/demotion, suspension,
 restoration without session resurrection, deleted-account refusal and concurrent
 mutual demotion. The latter leaves one eligible staff actor; this is not a global
 last-administrator guarantee for separate account-deletion or maintenance paths.
+
+### Approval lifecycle regression
+
+`approvalLifecycle.test.ts` composes the real Identity API, PostgreSQL and the
+Billing guard. A consumed approval cannot override suspension or deletion.
+Restoring an account does not restore its revoked browser session; after fresh
+sign-in, the original approval is still bound to its original attempt. Reusing
+an email after deletion creates a different owner with no access to the old
+approval. The tests do not claim that suspension cancels work already in flight
+or that restoring eligibility restarts a stopped session.

@@ -121,6 +121,9 @@ A reviewed merge and green CI, Security and Deploy checks are required by
 
 ## Budget policy chain (Sprint 2)
 
+[Sprint 4 pattern evidence](PATTERN_EVIDENCE.md) compares a conditional baseline
+with this implementation, explains policy ordering and maps claims to tests.
+
 `BudgetChain` implements `BudgetGuard`. Its constructor copies an ordered list
 of `BudgetHandler`s, each returning `Decision | null`. A decision short-circuits;
 null passes to the next handler. An empty or exhausted chain denies. Storage

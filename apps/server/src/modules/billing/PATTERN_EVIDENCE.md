@@ -2,8 +2,9 @@
 
 Owner: HE RONG. Sprint 4 report evidence, started 11 October 2026.
 This documents the existing implementation; it does not claim a new runtime
-refactor or completion of Sprint 4. The Stripe replay remains tracked separately
-in [SPRINT3_ACCEPTANCE.md](SPRINT3_ACCEPTANCE.md).
+refactor or completion of Sprint 4. Core closed Billing Sprint 3 acceptance by
+[waiving the dashboard replay on 12 October](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-6116352309);
+no dashboard replay was performed or is claimed.
 
 ## Design problem
 
@@ -126,8 +127,8 @@ owner review and CI. This document introduces no new runtime behavior.
   concrete findings before choosing changes rather than rewriting working code.
 - Incorporate reviewed test results and this comparison into HE RONG's final
   report and presentation, using the team's agreed deliverable format.
-- Keep hosted Stripe replay and live Keys/provider acceptance explicit; synthetic
-  tests must not be presented as those hosted observations.
+- Preserve the explicit Stripe replay waiver and track live Keys/provider
+  acceptance separately; synthetic tests are not hosted observations.
 
 This is an initial evidence contribution, not a claim that the team's report,
 presentation or all integration acceptance is finished.

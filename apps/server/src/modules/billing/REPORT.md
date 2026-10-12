@@ -56,7 +56,7 @@ fourth policy changing the outcome through the unchanged guard interface.
 
 The dedicated design contribution is tracked in
 [PR #91](https://github.com/ziyangliu-666/lumen-next/pull/91), including the flow
-diagram and detailed test mapping. It remains subject to review.
+diagram and detailed test mapping. Core approved and merged it on 12 October.
 
 ## Persistence, numerical accuracy and failure handling
 

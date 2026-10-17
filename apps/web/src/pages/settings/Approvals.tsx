@@ -60,7 +60,7 @@ export function Approvals(): JSX.Element {
   return (
     <Section
       title="Budget approvals"
-      description="Approve one blocked operation beyond your cap. This does not raise your cap or add credit. A fan-out approval includes the children it opens."
+      description="Each approval lets one blocked step run. It does not raise the cap."
     >
       {error && <Alert title="Approvals">{error}</Alert>}
       {!rows && !error && (
@@ -127,20 +127,12 @@ export function Approvals(): JSX.Element {
               ) : (
                 <p role="status" className="text-sm text-ink-2">
                   {row.status === 'rejected' ? 'Rejected.' : 'Approved for this operation.'}{' '}
-                  {row.resumePending
-                    ? 'Applying decision. Refresh to check progress.'
-                    : 'Decision delivered. View the session for its outcome.'}
+                  {row.resumePending ? 'Resuming…' : 'Done.'}
                 </p>
               )}
             </li>
           ))}
         </ul>
-      )}
-      {rows && rows.length > 0 && (
-        <p className="text-xs text-ink-2">
-          Up to 100 requests, pending first. Refresh the wallet to load new requests or delivery
-          updates.
-        </p>
       )}
     </Section>
   );

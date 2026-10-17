@@ -78,9 +78,22 @@ export function SignIn(): JSX.Element {
 
 function AccountSignIn(): JSX.Element {
   // "?mode=signup" is the bar's Sign up: the form opens on account creation.
-  const [mode, setMode] = useState<'signin' | 'signup'>(() =>
-    new URLSearchParams(window.location.search).get('mode') === 'signup' ? 'signup' : 'signin',
-  );
+  const [mode, setMode] = useState<'signin' | 'signup'>(() => {
+    const query = new URLSearchParams(window.location.search);
+    const signup = query.get('mode') === 'signup';
+    // Read once and dropped from the address: it stayed there after sign-up,
+    // and a later Sign in would have opened on account creation.
+    if (query.has('mode')) {
+      query.delete('mode');
+      const rest = query.toString();
+      window.history.replaceState(
+        null,
+        '',
+        `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`,
+      );
+    }
+    return signup ? 'signup' : 'signin';
+  });
   const [showKeyRemoval, setShowKeyRemoval] = useState(false);
   const [keyRemovalResult] = useState(() =>
     new URLSearchParams(window.location.search).get('keyRemoval'),

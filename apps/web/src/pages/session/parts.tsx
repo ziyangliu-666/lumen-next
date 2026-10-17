@@ -1123,7 +1123,8 @@ export function Composer({
         running
           ? steerable
             ? `Steer ${shownAgent ?? 'lumen'}…`
-            : `${shownAgent ?? 'This task'} has finished`
+            : // Not running: finished, stopped, or waiting for an approval.
+              'Nothing to steer right now'
           : 'Reply to lumen…'
       }
       value={draft}

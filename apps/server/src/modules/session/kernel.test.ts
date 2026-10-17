@@ -840,6 +840,20 @@ describe('session: kernel, the three budget check points', () => {
     expect(statuses.filter((status) => status === 'ended')).toHaveLength(3);
   });
 
+  it('tells the guard the latest words of a follow-up turn, short, not the conversation', async () => {
+    const { guard, asked } = scripted(() => ({ kind: 'allow' }));
+    const kernel = withGuard(guard);
+    const { session } = await kernel.start('p1', owner.accountId, `q ${'x'.repeat(5_000)}`);
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'push it to n = 12');
+    await kernel.idle();
+
+    const turns = asked.filter((charge) => charge.at === 'turn');
+    expect(turns.at(-1)?.reason).toBe('push it to n = 12');
+    // Billing refuses a reason over 2,000 characters; a long question is cut.
+    expect([...(turns[0]?.reason ?? '')].length).toBeLessThanOrEqual(300);
+  });
+
   it('treats a guard that throws as a refusal, never as permission', async () => {
     const { guard } = scripted(() => new Error('billing database is down'));
     const kernel = withGuard(guard);

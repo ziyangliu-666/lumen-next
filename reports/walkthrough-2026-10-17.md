@@ -77,6 +77,9 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | P20 | The timing switch in the session field | **fixed** | "lumen reads it: At its next step / At the end of its turn" was not understood. | Removed. A steer lands at the next step; the server still takes both. |
 | P21 | Actions on a turn | **fixed** | An answer had no way to copy it, link to it or ask again; a message could not be edited. | Under an answer: Copy (Markdown), Copy link, and on the latest answer Regenerate. On the latest message: Edit, which puts it back in the field. Both start a new turn, because the trace keeps every turn. |
 | P22 | Quiet zones | **fixed** | data-quiet was set on the bar and the sign-in column, but the scene never read it. | The scene paints the paper back over each quiet element, with a soft edge. |
+| P23 | A tab left open across a deploy | **fixed** | On staging, an open tab still ran the old app (old field, old copy) after #110 was live; only a reload showed the new one. | The bar offers "Reload for the new version" when the served bundle differs, checked on focus and every five minutes. Tested by rebuilding under an open tab. |
+| P24 | Settings copy | **fixed** | Wallet, Approvals, Top-ups and Keys were paragraphs of policy. | One line each. The facts a person must know stay: running work can pass the cap, an approval does not raise it, no refunds, and the Keys disclosures its test requires. |
+| P25 | Sign up from the bar | **fixed** | Sign up opened account creation, but "?mode=signup" stayed in the address after it. | The parameter is read once and removed. |
 
 ## Phone, 390 px, dark and light
 
@@ -87,6 +90,15 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | M3 | A delegated reader in the stream | **fixed** | The lead writes the reader's whole brief into its title, so one row was half a screen. | Three lines; the reader opens in full. |
 | M4 | The bar over the scene | **fixed** | Stars drifted through "spent" and the elapsed time. | The bar is marked quiet, and the scene fades behind quiet elements. The first fix only set the attribute: nothing read it until P22. |
 
+## Accounts and billing (local server with Postgres and accounts)
+
+| # | Scenario | Result | Cause | Fix |
+|---|---|---|---|---|
+| B1 | Cap $0.002, a project with three readers | **ok** | Spent $0.0085 with no approval: the check runs before a turn and at each delegation, spend was under the cap at both, and running work may pass it, as Wallet says. | |
+| B2 | A follow-up turn over the cap | **fixed** | "Not run: the budget could not be checked." The kernel gave billing the whole conversation as the reason, and billing refuses one over 2,000 characters; the guard's error was swallowed without a log. A first question over 2,000 characters failed the same way. | The budget is told the person's latest words, cut to 300 characters; a failed check is logged with its cause. Now the turn waits, Wallet lists the request, and Approve once resumes it to the end. |
+| B3 | The field while a task waits for approval | **fixed** | It said "This task has finished". | "Nothing to steer right now". |
+| B4 | Test-mode top-up | **todo** | This server has no Stripe test key; the off state shows. | Needs a Stripe test key on a test server. |
+
 ## Entry page against ChatGPT, Claude and Mistral
 
 | # | What they have | lumen | Result |
@@ -95,11 +107,11 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | E2 | Recents | Signed in with projects, the last four under the field, with their state, and All projects. | **fixed** |
 | E3 | "+" to attach before the first message | Attach on the landing and on New project. The files go to the new project right after it is created, and the question names them. Tested: a CSV attached on the landing was read and matched to A001006. | **fixed** |
 | E4 | A greeting for the person | "Good evening, Ada." when signed in; the promise stays for a first visit. | **fixed** |
-| E5 | Sign up beside Sign in | On a server with accounts. A development server has none to create. | **fixed** |
+| E5 | Sign up beside Sign in | On a server with accounts; checked on the local account server. A development server has none to create. | **fixed** |
 | E6 | Model picker | Not offered. A server runs one model, set by its operator; the ledger prices each call by that model. | **open** |
 | E7 | Voice input | Not offered. Dictation of formulas and sequences is poor, and it needs a speech service outside the product. | **open** |
 
 ## Still to try
 
 - Approvals and top-ups with a billing database (staging).
-- A second session in a project. The client has `startSession`, but nothing calls it, so a project has one session and every reply continues it.
+- A second session in a project. The client has `startSession`, but nothing calls it, so a project has one session and every reply continues it. Offering it needs a list of a project's sessions, or the earlier ones become unreachable: a product decision, not a fix.

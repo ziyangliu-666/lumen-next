@@ -111,12 +111,9 @@ export function Keys(): JSX.Element {
     >
       <div className="grid gap-4 text-sm">
         <p className="text-ink-2">
-          Your key is encrypted and never shown again. Only your account can use it. Calls use
-          OpenAI’s gpt-4.1-nano model.
-        </p>
-        <p className="text-ink-2">
-          OpenAI bills your own account for these calls. lumen still records their estimated cost in
-          Wallet and applies your lumen spending cap. Your key does not bypass approval.
+          OpenAI bills your own account for these calls, and lumen applies your lumen spending cap.
+          A rejected key stops the call; it does not silently switch to another key. The key is
+          stored encrypted and never shown again.
         </p>
         {state === 'loading' ? (
           <p role="status" className="text-ink-2">
@@ -124,9 +121,9 @@ export function Keys(): JSX.Element {
           </p>
         ) : null}
         {state === 'disabled' ? (
-          <Alert role="status" title="Personal keys are not available on this server">
-            This server has no key store. Calls use the platform model when available.
-          </Alert>
+          <p role="status" className="text-ink-2">
+            Personal keys are off on this server.
+          </p>
         ) : null}
         {error ? <Alert title="Your key status is not known">{error}</Alert> : null}
         {notice ? (
@@ -200,10 +197,6 @@ export function Keys(): JSX.Element {
             ) : null}
           </>
         ) : null}
-        <p className="border-t border-rule-minor pt-4 text-ink-2">
-          A rejected or unreadable saved key stops the call; it does not silently switch to a
-          platform key. Deleting your account removes its saved key.
-        </p>
       </div>
     </Section>
   );

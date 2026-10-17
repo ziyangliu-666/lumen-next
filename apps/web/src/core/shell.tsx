@@ -8,7 +8,9 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useNewVersion } from './version';
 import { cn } from '@/lib/utils';
+import { Button } from '@/ui/button';
 import { LumenMark } from '@/ui/mark';
 import { mountSpace, type ShotName, type Space } from '@/ui/space';
 import { setThemeTransition, useThemeFollower } from './theme';
@@ -187,6 +189,7 @@ export function AppShell({
   accountActions?: ReactNode;
 }): JSX.Element {
   useThemeFollower();
+  const fresh = useNewVersion();
   const [crumb, setCrumb] = useState<HTMLElement | null>(null);
   const [status, setStatus] = useState<HTMLElement | null>(null);
   const [actions, setActions] = useState<HTMLElement | null>(null);
@@ -235,8 +238,15 @@ export function AppShell({
             ref={setActions}
             className="flex shrink-0 items-center gap-4 justify-self-end [grid-area:actions] empty:hidden"
           />
-          {account ? (
-            <div className="flex shrink-0 items-center gap-4 [grid-area:account]">{account}</div>
+          {account || fresh ? (
+            <div className="flex shrink-0 items-center gap-4 [grid-area:account]">
+              {fresh ? (
+                <Button size="sm" variant="link" onClick={() => window.location.reload()}>
+                  Reload for the new version
+                </Button>
+              ) : null}
+              {account}
+            </div>
           ) : null}
         </header>
         <main

@@ -174,11 +174,7 @@ export function Wallet(): JSX.Element {
             </div>
           </dl>
         )}
-        {off ? null : (
-          <p className="text-sm text-ink-2">
-            All-time account spend. No monthly reset. Amounts are in US dollars.
-          </p>
-        )}
+        {off ? null : <p className="text-sm text-ink-2">All-time, in US dollars.</p>}
         {/* The error belongs to the figures it explains, so it is in their
             card, and the card reads the same at every width. */}
         {error && (
@@ -235,10 +231,8 @@ export function Wallet(): JSX.Element {
                 </Button>
               </div>
               <p className="max-w-prose text-sm text-ink-2">
-                Budget checks run before a turn and when work is delegated. If recorded spend has
-                reached your cap, new work is blocked. Work already running can still exceed the
-                cap. Over-cap work waits for your decision in Budget approvals below. Changing the
-                cap does not add credit or change recorded spend.
+                New work past the cap waits for your approval below. Work already running can go
+                past it.
               </p>
               {saved && (
                 <p role="status" className="text-sm text-ink">
@@ -251,7 +245,7 @@ export function Wallet(): JSX.Element {
         <Topups key={`topups-${refreshes}`} />
         <Approvals key={`approvals-${refreshes}`} />
         {page && (
-          <Section title="Ledger" description="All recorded expenses, newest first.">
+          <Section title="Ledger">
             {page.entries.length === 0 ? (
               <p className="text-sm text-ink-2">No expenses on this page.</p>
             ) : (

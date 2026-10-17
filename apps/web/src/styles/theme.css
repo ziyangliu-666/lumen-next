@@ -16,8 +16,8 @@
 }
 
 /* The single source of colour, type, space and radius for the whole web app.
-   The values are the "Raster" direction approved as a static prototype in
-   design/proposals/a-raster (raster.css and the review rounds beside it).
+   The values are the "Raster" direction, approved as a static prototype and
+   reviewed in rounds before it was ported here.
 
    Raster in one paragraph: Swiss. Zero radius. Black ink on white paper in
    light, white on pure black in dark. A grey well is the second surface, for

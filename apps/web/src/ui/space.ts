@@ -4,8 +4,8 @@ import { fitToViewport, readCanvasTheme, watchThemeClass } from '@/ui/canvas-the
    sun fixed in the scene, a camera that circles on its own and that the
    cursor steers. It is the landing scene made persistent, so the app never
    cuts from one background to another: each page is a shot of the same
-   scene, and changing page moves the camera. Ported from
-   design/proposals/a-raster/space.js; the shell mounts it once (core/shell).
+   scene, and changing page moves the camera. The shell mounts it once
+   (core/shell).
 
    Close round the sphere a belt of small bodies circles it; they are near
    the camera, so they stream past fast while the stars barely move, and

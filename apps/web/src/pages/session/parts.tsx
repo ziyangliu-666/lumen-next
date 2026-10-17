@@ -1,5 +1,5 @@
 // The pieces of the Session page, after docs/spec, page 04, in the Raster
-// look (design/proposals/a-raster/session.html). Owner: LIU ZIYANG, except
+// look. Owner: LIU ZIYANG, except
 // Composer and Files, which are LI ZHUOYANG's: the composer says a new turn to
 // the lead, or steers the task shown while it runs; the files panel lists what
 // the project has written. Attachments are still his to add.

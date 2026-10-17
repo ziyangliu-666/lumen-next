@@ -24,8 +24,7 @@ export default tseslint.config(
       // Files the web server sends to the browser byte for byte (theme-init.js
       // runs before the bundle, so it cannot be TypeScript).
       'apps/web/public/**',
-      // Static design prototypes, opened in a browser as they are; the app
-      // ports what it keeps into apps/web/src.
+      // Local design prototypes, not in the repository (see .gitignore).
       'design/**',
       // Review records, kept as the agents returned them; the workflow scripts are not built.
       'reports/**',

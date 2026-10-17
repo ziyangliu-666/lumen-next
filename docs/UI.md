@@ -11,9 +11,9 @@ This page is the agreement that stops that. It is short on purpose.
   modules, no styled-components.
 - **shadcn/ui** (`new-york`, Radix primitives) for controls. The components are
   source files in `apps/web/src/ui/`, not a dependency. They are ours to edit.
-- **The palette is "Raster"**, approved as a static prototype in
-  `design/proposals/a-raster/` (read `reviews/README.md` there for the
-  reasons). It lives in `apps/web/src/styles/theme.css` and nowhere else.
+- **The palette is "Raster"**, approved as a static prototype and reviewed in
+  rounds before the port. It lives in `apps/web/src/styles/theme.css` and
+  nowhere else.
   Swiss: zero radius, a flush-left 12-column grid, black ink on white paper
   (white on black in dark), a grey well for side panels, and one red that
   means "waits on you" and nothing else.

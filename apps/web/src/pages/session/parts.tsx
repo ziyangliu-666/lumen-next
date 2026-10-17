@@ -791,15 +791,25 @@ export function Sessions({
           .sort((a, b) => b.startedAt - a.startedAt)
           .map((item) => (
             <li key={item.id} className="border-t border-rule-minor first:border-t-0">
+              {/* A row like the call tree's: the whole row opens the session,
+                  and the one open is filled and bold. As plain text the list
+                  did not read as a way to move between sessions. */}
               <a
                 href={`?session=${encodeURIComponent(item.id)}#/session`}
                 aria-current={item.id === current ? 'page' : undefined}
+                title={item.title}
                 className={cn(
-                  'flex items-baseline justify-between gap-4 py-2 text-sm hover:underline',
-                  item.id === current ? 'font-medium text-ink' : 'text-ink-2',
+                  'flex min-h-8 items-center justify-between gap-4 px-2 py-1 text-sm text-ink',
+                  WELL_ROW,
+                  // A link marks the open page as "page", not "true".
+                  'aria-[current=page]:border-ink aria-[current=page]:bg-raised',
                 )}
               >
-                <span className="truncate">{item.title}</span>
+                <span
+                  className={cn('truncate', item.id === current ? 'font-semibold' : 'font-normal')}
+                >
+                  {item.title}
+                </span>
                 <span className="shrink-0 text-caption">{SESSION_WORD[item.status]}</span>
               </a>
             </li>

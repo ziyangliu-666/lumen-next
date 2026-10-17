@@ -119,6 +119,7 @@ expected), **open** (found, not fixed here), **todo** (not yet tried),
 | E6 | Model picker | LUMEN_MODELS lists the models a new session may choose, the default first, each with a price row or the server does not start. The field shows a picker when there are two or more; the session keeps its choice (migration 016) and the bar names it. Staging offers gpt-4.1-nano (default) and gpt-4.1-mini. Tested: one session on each model, each call sent to its own. | **fixed** |
 | E7 | Voice input | A microphone in the field where the browser has speech recognition (Chrome, Edge, Safari). The words go into the field; nothing is sent. Checked with a stand-in recogniser. | **fixed** |
 | E8 | Several chats in a project | Sessions in the session page's panel, newest first, and New session, which turns the field into the first question of a new session. Tested: a second session read the first one's kept catalan.csv; the list goes back to the first. | **fixed** |
+| E9 | New session and moving between sessions | **fixed** | New session left this session's conversation on screen above the field, and the Sessions list read as plain text, with the open session barely marked. | New session opens an empty page with "Back to this session"; the list's rows are the call tree's, the open one filled and bold, each opening its session. |
 
 ## Still to try
 

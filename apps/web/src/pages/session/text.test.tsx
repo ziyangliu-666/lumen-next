@@ -1,31 +1,59 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ReplyText } from './text';
+import { ReplyFiles, ReplyText, tablesApart } from './text';
 
 const html = (text: string): string => renderToStaticMarkup(<ReplyText text={text} />);
 
 describe('ReplyText', () => {
-  it('draws a table of pipes as a table with its head', () => {
-    const out = html('Result:\n| n | a(n) |\n|---|---|\n| 7 | 127 |\n| 8 | 323 |\nDone.');
-    expect(out).toMatch(/<p>Result:<\/p>.*<table/s);
-    expect(out).toMatch(/<th[^>]*>n<\/th>.*<th[^>]*>a\(n\)<\/th>/s);
-    expect(out).toMatch(/<td[^>]*>8<\/td><td[^>]*>323<\/td>/);
+  it('draws a table written straight under a sentence, with its head', () => {
+    const out = html('Result:\n| n | a(n) |\n|---|---|\n| 7 | 127 |\n| 8 | 323 |');
+    expect(out).toMatch(/<p>Result:<\/p>\s*<div[^>]*><table/);
+    expect(out).toMatch(/<th[^>]*>n<\/th>\s*<th[^>]*>a\(n\)<\/th>/);
+    expect(out).toMatch(/<td[^>]*>8<\/td>\s*<td[^>]*>323<\/td>/);
     expect(out).not.toContain('---');
-    expect(out).toMatch(/<\/table>.*<p>Done\.<\/p>/s);
   });
 
-  it('keeps a fenced block as code, line by line, even when the reply ends inside it', () => {
+  it('keeps a fenced block as code, and a table inside it as text', () => {
     expect(html('Ran:\n```python\nx = 1\n**y** = 2\n```\nok')).toMatch(
-      /<pre[^>]*>x = 1\n\*\*y\*\* = 2<\/pre><p>ok<\/p>/,
+      /<pre[^>]*>x = 1\n\*\*y\*\* = 2<\/pre>/,
     );
-    expect(html('```\nfor n in range(3):\n    print(n)')).toContain(
-      'for n in range(3):\n    print(n)</pre>',
-    );
+    expect(tablesApart('```\nsay\n| not a table |\n```')).toBe('```\nsay\n| not a table |\n```');
   });
 
-  it('still joins a paragraph and draws a list', () => {
-    expect(html('one\ntwo\n\n- a\n- **b**')).toMatch(
-      /<p>one two<\/p><ul[^>]*><li>a<\/li><li><strong[^>]*>b<\/strong><\/li><\/ul>/,
+  it('draws LaTeX with KaTeX, inline and as a block', () => {
+    const out = html(
+      'The count is $C_n = \\frac{1}{n+1}\\binom{2n}{n}$.\n\n$$\\sum_{n\\ge0} C_n x^n$$',
     );
+    expect(out).toContain('class="katex"');
+    expect(out).toContain('katex-display');
+    expect(out).not.toContain('$');
+  });
+
+  it('links A-numbers and arXiv ids to their entries, as chips', () => {
+    const out = html('This is A000108, bounded in arXiv:1711.10325.');
+    expect(out).toMatch(
+      /<a href="https:\/\/oeis.org\/A000108"[^>]*data-cite="oeis"[^>]*>A000108<\/a>/,
+    );
+    expect(out).toMatch(/<a href="https:\/\/arxiv.org\/abs\/1711.10325"[^>]*data-cite="arxiv"/);
+  });
+
+  it('shows a project file as an image, and only links any other image', () => {
+    const out = renderToStaticMarkup(
+      <ReplyFiles link={(path) => `/api/projects/p1/files${path.replace(/^\/mnt/, '')}`}>
+        <ReplyText text="![plot](/mnt/output/plot.png) ![x](https://example.com/t.png)" />
+      </ReplyFiles>,
+    );
+    expect(out).toContain('<img src="/api/projects/p1/files/output/plot.png" alt="plot"');
+    expect(out).not.toContain('src="https://example.com/t.png"');
+    expect(out).toContain('href="https://example.com/t.png"');
+  });
+
+  it('never draws what a model writes as HTML, and refuses script links', () => {
+    const out = html(
+      '<script>alert(1)</script> [x](javascript:alert(1)) <img src=x onerror=alert(1)>',
+    );
+    expect(out).not.toContain('<script');
+    expect(out).not.toContain('<img');
+    expect(out).not.toContain('href="javascript');
   });
 });

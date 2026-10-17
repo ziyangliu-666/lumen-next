@@ -37,6 +37,8 @@ export interface StepRow {
   readonly text: string;
   readonly result: string;
   readonly empty?: boolean;
+  /** Where the result can be read (an OEIS entry, an arXiv abstract). https only. */
+  readonly url?: string;
 }
 
 // What a step carries beyond its one line of text. All of it is optional, and

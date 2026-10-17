@@ -75,3 +75,20 @@ describe('session: what a step may carry', () => {
     expect(bad({ cost: {} })).toThrow(/cost must be Money/);
   });
 });
+
+describe("step detail: a row's link", () => {
+  it('keeps an https link and drops anything else', () => {
+    const kept = checkedDetail({
+      rows: [
+        { source: 'OEIS', text: 'A000108', result: 'Match', url: 'https://oeis.org/A000108' },
+        { source: 'x', text: 'y', result: 'z', url: 'javascript:alert(1)' },
+        { source: 'x', text: 'y', result: 'z', url: 'http://example.com' },
+      ],
+    });
+    expect(kept?.rows?.map((row) => row.url)).toEqual([
+      'https://oeis.org/A000108',
+      undefined,
+      undefined,
+    ]);
+  });
+});

@@ -37,6 +37,7 @@ import {
   TaskState,
   WaitingNotice,
 } from './parts';
+import { ReplyFiles } from './text';
 import { atFoot, elapsed, speakerNames } from './tree';
 
 interface ProjectTitle {
@@ -600,32 +601,40 @@ export function Session(): JSX.Element {
           // the conversation and the well and never over the text.
           className="flex-1 outline-none split:-mr-gutter split:pr-gutter"
         >
-          {starting ? (
-            // A new session starts on an empty page, as a new chat does: the
-            // conversation of this one stayed on screen above the field.
-            <div className="flex min-h-full flex-col justify-end pb-6">
-              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-ink">New session</h2>
-              <p className="mt-2 text-sm">
-                <button
-                  type="button"
-                  onClick={() => setStarting(false)}
-                  className="text-ink-2 underline decoration-[1.5px] underline-offset-[0.15em] hover:text-ink"
-                >
-                  Back to this session
-                </button>
-              </p>
-            </div>
-          ) : (
-            <StepStream
-              task={shown}
-              steps={snapshot.steps.filter((step) => step.taskId === shown.id)}
-              tasks={snapshot.tasks}
-              onSelect={open}
-              // Regenerate and Edit start a new turn of the lead, so they are
-              // offered on the lead's own stream, when a turn can be sent.
-              {...(lead && !running && ready ? { onRetry: say, onEdit: edit } : {})}
-            />
-          )}
+          <ReplyFiles
+            link={(path) =>
+              projectId
+                ? `${filesRoute(projectId)}/${path.replace(/^\/mnt\//, '')}${path.startsWith('/mnt/workspace/') ? `?session=${encodeURIComponent(snapshot.session.id)}` : ''}`
+                : null
+            }
+          >
+            {starting ? (
+              // A new session starts on an empty page, as a new chat does: the
+              // conversation of this one stayed on screen above the field.
+              <div className="flex min-h-full flex-col justify-end pb-6">
+                <h2 className="text-2xl font-semibold tracking-[-0.02em] text-ink">New session</h2>
+                <p className="mt-2 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setStarting(false)}
+                    className="text-ink-2 underline decoration-[1.5px] underline-offset-[0.15em] hover:text-ink"
+                  >
+                    Back to this session
+                  </button>
+                </p>
+              </div>
+            ) : (
+              <StepStream
+                task={shown}
+                steps={snapshot.steps.filter((step) => step.taskId === shown.id)}
+                tasks={snapshot.tasks}
+                onSelect={open}
+                // Regenerate and Edit start a new turn of the lead, so they are
+                // offered on the lead's own stream, when a turn can be sent.
+                {...(lead && !running && ready ? { onRetry: say, onEdit: edit } : {})}
+              />
+            )}
+          </ReplyFiles>
         </ScrollRegion>
         <div className="flex-none pt-4 pb-6">
           <WaitingNotice task={shown} />

@@ -35,7 +35,7 @@ export function ModelPicker({
 }): JSX.Element | null {
   if (models.length < 2) return null;
   return (
-    <Select value={value ?? models[0]} onValueChange={onChange}>
+    <Select value={value ?? models[0] ?? ''} onValueChange={onChange}>
       <SelectTrigger
         aria-label="Model"
         size="sm"

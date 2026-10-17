@@ -71,6 +71,19 @@ function asHttpError(error: unknown): unknown {
 /** Files the browser shows as plain text rather than downloads. */
 const TEXT_FILE = /\.(txt|csv|tsv|md|py|json|tex|log|sage|gp|m|jl|out)$/i;
 
+/**
+ * Raster images open inline with their own type, so a plot an agent saved
+ * shows in its reply. SVG is not here: it can carry script, and stays a
+ * download.
+ */
+const IMAGE_TYPES: Readonly<Record<string, string>> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
+
 /** The largest file a person may attach. The sandbox's per-file cap still applies. */
 const UPLOAD_LIMIT = 10 * 1024 * 1024;
 
@@ -150,10 +163,11 @@ export function steeringRoutes(
           // agent wrote cannot run as a page on this origin; nosniff keeps
           // the browser from guessing otherwise.
           const text = TEXT_FILE.test(path);
+          const image = IMAGE_TYPES[/\.(\w+)$/.exec(path)?.[1]?.toLowerCase() ?? ''];
           return await reply
-            .type(text ? 'text/plain; charset=utf-8' : 'application/octet-stream')
+            .type(text ? 'text/plain; charset=utf-8' : (image ?? 'application/octet-stream'))
             .header('x-content-type-options', 'nosniff')
-            .header('content-disposition', text ? 'inline' : 'attachment')
+            .header('content-disposition', text || image ? 'inline' : 'attachment')
             .send(data);
         } catch (error) {
           throw asHttpError(error);

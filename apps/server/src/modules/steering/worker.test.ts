@@ -346,7 +346,7 @@ describe('createWorker: tools', () => {
     );
     const report = fakeReport();
 
-    await createWorker({ volumeRoot, context, registry, model }).run(
+    await createWorker({ volumeRoot, context, registry, model, uploadWaitMs: 0 }).run(
       taskOf({ id: 'reader-1', agent: 'reader' }),
       'x',
       asReport(report),
@@ -503,6 +503,23 @@ describe("createWorker: errors in the agent's terms", () => {
       ),
     ).toBe('no such file or folder: /mnt/output/table.txt');
     expect(inSandboxTerms('quota reached', call)).toBe('quota reached');
+  });
+});
+
+describe('a read of an attachment still uploading', () => {
+  it('waits for the file instead of saying it is not there', async () => {
+    const model = scripted(
+      { toolCalls: [toolCall('read_file', { path: '/mnt/upload/late.csv' })] },
+      { text: 'Read it.' },
+    );
+    const worker = createWorker({ volumeRoot, context, registry, model });
+    const run = worker.run(taskOf({ agent: 'reader' }), 'x', asReport(fakeReport()));
+    // The upload lands 1.5 s after the read began.
+    await new Promise((done) => setTimeout(done, 1_500));
+    const { SandboxFs } = await import('./sandboxFs.js');
+    await new SandboxFs(volumeRoot, PROJECT).saveUpload('late.csv', Buffer.from('n,a\n1,1\n'));
+    await run;
+    expect(model.requests[1]!.messages.at(-1)!.content).toContain('n,a');
   });
 });
 

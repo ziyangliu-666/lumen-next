@@ -115,7 +115,10 @@ async function arxiv(query: string, fetchImpl: Fetch, signal: AbortSignal): Prom
     const id = field('id')
       .replace(/^https?:\/\/arxiv\.org\/abs\//, '')
       .replace(/v\d+$/, '');
-    return { id, title: field('title'), summary: field('summary').slice(0, 300) };
+    // The year, so the model can tell the newest result from an old one: it
+    // gave a 2012 bound as the best known when a 2017 one was in reach.
+    const year = field('published').slice(0, 4);
+    return { id, year, title: field('title'), summary: field('summary').slice(0, 300) };
   });
   if (entries.length === 0) {
     return {
@@ -126,12 +129,15 @@ async function arxiv(query: string, fetchImpl: Fetch, signal: AbortSignal): Prom
   return {
     rows: entries.map((entry) => ({
       source: 'arXiv',
-      text: `${entry.id}, ${entry.title}`,
+      text: `${entry.id}${entry.year ? ` (${entry.year})` : ''}, ${entry.title}`,
       result: 'Paper',
     })),
     text: [
       `arXiv: ${entries.length} papers for "${query}".`,
-      ...entries.map((entry) => `${entry.id}: ${entry.title}\n  ${entry.summary}`),
+      ...entries.map(
+        (entry) =>
+          `${entry.id}${entry.year ? ` (${entry.year})` : ''}: ${entry.title}\n  ${entry.summary}`,
+      ),
     ].join('\n'),
   };
 }

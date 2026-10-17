@@ -32,6 +32,13 @@ describe('steering: the literature connectors', () => {
     ]);
   });
 
+  it('gives each paper its year when the feed has one', async () => {
+    const feed = `<feed><entry><id>http://arxiv.org/abs/1711.10325v3</id><published>2017-11-28T00:00:00Z</published><title>New bounds for 1324</title><summary>s</summary></entry></feed>`;
+    const result = await search('arxiv', '1324 bounds', answer(feed));
+    expect(result.rows[0]?.text).toBe('1711.10325 (2017), New bounds for 1324');
+    expect(result.text).toContain('1711.10325 (2017): New bounds for 1324');
+  });
+
   it('turns a source that is down into an error the worker can report', async () => {
     await expect(search('arxiv', 'x', answer('', false))).rejects.toThrow('HTTP 503');
   });

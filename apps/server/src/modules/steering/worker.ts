@@ -57,6 +57,7 @@ const LEAD_PROMPT = [
   'Back the answer with something computed whenever the question allows it: a count, a check, a table. A survey of abstracts is a start, not an answer.',
   'No one here can read a paper beyond its abstract or reach the web: do not delegate that. Say which paper to read and leave it open.',
   'Before computing, find out what is known: search OEIS for the sequences involved and arXiv for the topic. A result that is already published is worth saying, not rediscovering.',
+  'For the best known result on something, search more than once with different words, including words for newer work ("improved", "new bounds"), give each result with its year, and say which is the newest you found. A pattern and its reverse, complement or inverse have the same counts, so a result on one is a result on the others.',
   'Delegate work that needs commands run or many files read to readers. Each reader sees only its task title, so make every title self-contained: what to compute or find, the exact definitions, and what to report back. Put independent tasks in ONE delegate call so they run in parallel; do not split one task into sequential steps across readers.',
   'Report only what tool results show. If a command could not run or a file is not there, say so plainly and do not claim it. Separate what you verified from what you recall.',
   FILES,
@@ -162,6 +163,8 @@ const READER_TOOLS: readonly Tool[] = [
 
 export interface WorkerOptions {
   readonly volumeRoot: string;
+  /** How long a read in /mnt/upload waits for a file still uploading. 15 s if omitted. */
+  readonly uploadWaitMs?: number;
   /** From the session slice's own SessionDirectory: which project a session belongs to. */
   readonly context: (
     sessionId: string,
@@ -201,6 +204,30 @@ function stringArg(call: ToolCall, name: string): string {
     throw new ToolRefusal(`${call.name} needs "${name}" as a non-empty string`);
   }
   return value;
+}
+
+/**
+ * A read in /mnt/upload that finds nothing waits for the upload, up to 15 s.
+ * A file attached before the first message goes up after the project and its
+ * session are created, so the lead can look before it lands: on staging it
+ * read "not found" and asked the user to upload the file again.
+ */
+export const UPLOAD_WAIT_MS = 15_000;
+async function uploaded<T>(
+  path: string,
+  read: () => Promise<T>,
+  waitMs = UPLOAD_WAIT_MS,
+): Promise<T> {
+  const until = Date.now() + waitMs;
+  for (;;) {
+    try {
+      return await read();
+    } catch (error) {
+      const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
+      if (!missing || !path.startsWith('/mnt/upload/') || Date.now() >= until) throw error;
+      await new Promise((done) => setTimeout(done, 1_000));
+    }
+  }
 }
 
 /** What a stopped reader hands its parent, which has also been stopped. */
@@ -423,7 +450,11 @@ export function createWorker(options: WorkerOptions): Worker {
         }
         case 'read_file': {
           const path = stringArg(call, 'path');
-          const data = await (await this.requireFiles()).readFile(path);
+          const data = await uploaded(
+            path,
+            () => this.requireFiles().then((fs) => fs.readFile(path)),
+            options.uploadWaitMs,
+          );
           const text = isBinary(data)
             ? `${path} is a binary file of ${data.byteLength} bytes, not text. Read it with run, using a program that understands its format.`
             : data.toString('utf8');

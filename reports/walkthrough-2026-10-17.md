@@ -120,6 +120,7 @@ expected), **open** (found, not fixed here), **todo** (not yet tried),
 | E7 | Voice input | A microphone in the field where the browser has speech recognition (Chrome, Edge, Safari). The words go into the field; nothing is sent. Checked with a stand-in recogniser. | **fixed** |
 | E8 | Several chats in a project | Sessions in the session page's panel, newest first, and New session, which turns the field into the first question of a new session. Tested: a second session read the first one's kept catalan.csv; the list goes back to the first. | **fixed** |
 | E9 | New session and moving between sessions | **fixed** | New session left this session's conversation on screen above the field, and the Sessions list read as plain text, with the open session barely marked. | New session opens an empty page with "Back to this session"; the list's rows are the call tree's, the open one filled and bold, each opening its session. |
+| E10 | The bar in a project with several sessions | **fixed** | The bar named only the project, so every session of it looked the same. | "Projects / <project> / <this session's question>" when there is more than one session. |
 
 ## Still to try
 

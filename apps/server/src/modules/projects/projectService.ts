@@ -44,7 +44,7 @@ export class ProjectService {
     principal: Principal,
     body: unknown,
   ): Promise<{ project: ProjectSummary; sessionId: string }> {
-    const { question, mode } = creationOf(body);
+    const { question, mode, model } = creationOf(body);
     const project: Project = {
       id: randomUUID(),
       accountId: principal.accountId,
@@ -56,15 +56,18 @@ export class ProjectService {
     };
     await this.store.insert(project);
     try {
-      const session = await this.sessions.start(project.id, principal, question, mode);
+      const session = await this.sessions.start(project.id, principal, question, mode, model);
       this.log.info(
         { projectId: project.id, accountId: principal.accountId, sessionId: session.id },
         'project created',
       );
       return { project: summary(project), sessionId: session.id };
-    } catch {
+    } catch (error) {
       // A rejected start must not leave a project card. Cleanup errors propagate.
       await this.store.remove(project.id);
+      // The caller's own mistake (a model not on the list) is said as it is,
+      // not as a service that is down.
+      if (error instanceof HttpError && error.status < 500) throw error;
       throw new HttpError(503, 'Session service unavailable. Refresh before trying again.');
     }
   }

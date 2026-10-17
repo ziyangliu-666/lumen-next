@@ -2,6 +2,7 @@
 import { useState, type JSX, type ReactNode } from 'react';
 import { useCurrentAccount } from '@/core/auth';
 import { DevelopmentSignIn } from '@/core/devSignIn';
+import { ModelPicker, useModels } from '@/core/models';
 import { PROJECT_PLACEHOLDER, saveProjectDraft, useNewProject } from '@/core/newProject';
 import { Composer } from '@/ui/composer';
 import { Bleed } from '@/ui/surfaces';
@@ -34,6 +35,8 @@ export function Landing(): JSX.Element {
   // created (useNewProject). Chips in the field show them.
   const [files, setFiles] = useState<readonly File[]>([]);
   const [tooLarge, setTooLarge] = useState<string | null>(null);
+  const models = useModels(signedIn);
+  const [model, setModel] = useState<string | undefined>(undefined);
   // The line under the field is for a problem only, printed in ink because it
   // asks the person to act; red stays for work that waits on them in a run.
   let hint: ReactNode;
@@ -113,7 +116,7 @@ export function Landing(): JSX.Element {
             value={draft.question}
             onValueChange={setQuestion}
             onSubmit={() => {
-              void submit(files);
+              void submit(files, model);
             }}
             // Signed out, a file could not wait in the tab through sign-in
             // the way the question does, so Attach comes with an account.
@@ -132,6 +135,7 @@ export function Landing(): JSX.Element {
                     setFiles((list) => list.filter((file) => file.name !== name)),
                 }
               : {})}
+            toolbar={<ModelPicker models={models} value={model} onChange={setModel} />}
             placeholder={PROJECT_PLACEHOLDER}
             hint={hint}
             hintTone={asks ? 'ask' : 'quiet'}

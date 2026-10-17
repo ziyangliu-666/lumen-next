@@ -56,6 +56,18 @@ describe('session: kernel', () => {
     expect(snapshot.spend).toEqual({ dollars: 0 });
   });
 
+  it('opens a session on an allowed model and refuses one not on the list', async () => {
+    const kernel = new Kernel(new MemoryTrace(), new Broker(), oneStep, {
+      models: ['small', 'large'],
+    });
+    const { session } = await kernel.start('p1', owner.accountId, 'q', 'seed', 'large');
+    expect(session.model).toBe('large');
+    await expect(kernel.start('p1', owner.accountId, 'q', 'seed', 'huge')).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(kernel.allowedModels()).toEqual(['small', 'large']);
+  });
+
   it('runs the worker on the root with the question as its input, and ends the task', async () => {
     const { kernel } = harness();
     const { session } = await kernel.start('p1', owner.accountId, 'question');

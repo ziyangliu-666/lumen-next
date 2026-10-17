@@ -36,6 +36,14 @@ function modeOf(body: unknown): SessionMode {
   return mode;
 }
 
+/** Absent means the server's default. The kernel checks it against the allowed list. */
+export function modelOf(body: unknown): string | undefined {
+  const raw = (body as { model?: unknown } | null)?.model;
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string' || !raw.trim()) throw badRequest('model must be a name');
+  return raw;
+}
+
 export function sessionRoutes(
   kernel: Kernel,
   requireProject?: ProjectGate,
@@ -45,10 +53,17 @@ export function sessionRoutes(
       const principal = requireUser(request);
       const text = textOf(request.body);
       const mode = modeOf(request.body);
+      const model = modelOf(request.body);
       // Validate first, authorise second, write last: a refused request must
       // leave no session behind.
       await requireProject?.(principal, request.params.id);
-      const snapshot = await kernel.start(request.params.id, principal.accountId, text, mode);
+      const snapshot = await kernel.start(
+        request.params.id,
+        principal.accountId,
+        text,
+        mode,
+        model,
+      );
       return reply.status(201).send(snapshot);
     });
 
@@ -58,6 +73,13 @@ export function sessionRoutes(
       const principal = requireUser(request);
       await requireProject?.(principal, request.params.id);
       return { items: await kernel.sessionsOf(request.params.id, principal) };
+    });
+
+    // The models a new session may be opened with, the default first. One or
+    // none: the page offers no choice.
+    app.get('/api/models', (request) => {
+      requireUser(request);
+      return { items: kernel.allowedModels() };
     });
 
     app.get<{ Params: { id: string } }>('/api/sessions/:id', (request) =>

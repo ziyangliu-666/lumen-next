@@ -102,7 +102,7 @@ export interface NewProject {
    * Starts the project. Files go to its /mnt/upload right after it is
    * created, and the question names them, so lumen looks there.
    */
-  readonly submit: (files?: readonly File[]) => Promise<void>;
+  readonly submit: (files?: readonly File[], model?: string) => Promise<void>;
 }
 
 /** The draft, the checks, and the create, visit and open steps of a new project. */
@@ -117,7 +117,7 @@ export function useNewProject({ notReady = null, onUnauthorized }: NewProjectOpt
     saveProjectDraft(next);
   }
 
-  async function submit(files: readonly File[] = []): Promise<void> {
+  async function submit(files: readonly File[] = [], model?: string): Promise<void> {
     if (pending || uncertain) return;
     // The person asks; the field does not send an empty question.
     const typed = draft.question.trim();
@@ -138,7 +138,11 @@ export function useNewProject({ notReady = null, onUnauthorized }: NewProjectOpt
     setPending(true);
     setError(null);
     try {
-      const result = created(await request<unknown>('/api/projects', { json: { question, mode } }));
+      const result = created(
+        await request<unknown>('/api/projects', {
+          json: { question, mode, ...(model ? { model } : {}) },
+        }),
+      );
       if (!result) {
         setUncertain(true);
         throw new Error('The server did not confirm the new project. Check Projects first.');

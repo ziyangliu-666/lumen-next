@@ -53,12 +53,15 @@ export function createSessionSlice(deps: {
   recordSpend?: SpendRecorder;
   /** The process's logger; the slice writes through a child of it. */
   log?: Log;
+  /** The models a session may be opened with, the default first. */
+  models?: readonly string[];
 }): SessionSlice {
   const trace = deps.db ? new PgTrace(deps.db, deps.recordSpend) : new MemoryTrace();
   const kernel = new Kernel(trace, deps.broker, deps.worker ?? demoWorker(), {
     ...(deps.recordFinding ? { saveFinding: deps.recordFinding } : {}),
     ...(deps.budget ? { budget: deps.budget } : {}),
     ...(deps.log ? { log: deps.log.child({ slice: 'session' }) } : {}),
+    ...(deps.models ? { models: deps.models } : {}),
   });
   return {
     kernel,

@@ -16,7 +16,7 @@ import { recordable } from '../../core/domain/money.js';
 import type { PendingApproval } from '../../core/domain/task.js';
 import type { Delegated, Worker, WorkerReport } from '../../core/domain/worker.js';
 import type { Principal, SessionAccess } from '../../core/http/authGuard.js';
-import { notFound } from '../../core/http/httpError.js';
+import { badRequest, notFound } from '../../core/http/httpError.js';
 import { nullLog, taskLog, type Log } from '../../core/log/log.js';
 import type { Broker } from '../../core/protocol/broker.js';
 import { Delegation, DelegationRefused } from './delegation.js';
@@ -39,6 +39,12 @@ export type FindingSaver = (sessionId: string, taskId: string, text: string) => 
 
 export interface KernelOptions {
   readonly delegation?: Delegation;
+  /**
+   * The models a session may be opened with, the server's default first. A
+   * session that names one off this list is refused. Left out, a session
+   * cannot choose and runs on the default.
+   */
+  readonly models?: readonly string[];
   /**
    * Where findings are kept. Findings belong to the projects slice, so main.ts
    * passes `projects.recordFinding`. Left out, they are kept in this process's
@@ -77,6 +83,14 @@ export class Kernel {
     this.saveFinding = options.saveFinding ?? findingsInMemory();
     this.budget = options.budget ?? allowEverything;
     this.log = options.log ?? nullLog;
+    this.models = options.models ?? [];
+  }
+
+  private readonly models: readonly string[];
+
+  /** The models a session may choose, the default first. Empty: no choice. */
+  allowedModels(): readonly string[] {
+    return this.models;
   }
 
   private readonly delegation: Delegation;
@@ -90,8 +104,12 @@ export class Kernel {
     accountId: string,
     text: string,
     mode: SessionMode = 'explore',
+    model?: string,
   ): Promise<SessionSnapshot> {
-    const session = await this.trace.openSession(projectId, accountId, mode);
+    if (model !== undefined && !this.models.includes(model)) {
+      throw badRequest(`model must be one of: ${this.models.join(', ') || 'none on this server'}`);
+    }
+    const session = await this.trace.openSession(projectId, accountId, mode, model);
     const root = await this.trace.openTask(session.id, null, 'lead', text);
     this.broker.publish(session.id, { type: 'task.opened', task: root });
     // Read the snapshot before the worker starts, so the caller always gets

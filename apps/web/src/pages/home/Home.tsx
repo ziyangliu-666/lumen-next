@@ -1,5 +1,5 @@
 // Owner: PENG XUJIAN. Page: Home.
-import { useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
@@ -7,7 +7,7 @@ import { ScrollRegion } from '@/ui/scroll-region';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
 import { RegionName, SurfaceMain, Surfaces, SurfaceWell } from '@/ui/surfaces';
 import { request } from '@/core/api';
-import { useCurrentAccount } from '@/core/auth';
+import { takeReturn, useCurrentAccount } from '@/core/auth';
 import { PageCrumb } from '@/core/shell';
 import type { ProjectCard } from './api';
 import { Findings } from './Findings';
@@ -46,6 +46,12 @@ function Notice({ children }: { children: ReactNode }): JSX.Element {
 
 export function Home(): JSX.Element {
   const { state: auth, refresh } = useCurrentAccount();
+  // Signed in after following a session link: go on to that session.
+  useEffect(() => {
+    if (auth.status !== 'ready') return;
+    const back = takeReturn();
+    if (back) window.location.replace(back);
+  }, [auth.status]);
   if (auth.status === 'loading')
     return (
       <p role="status" className="text-ink-2">

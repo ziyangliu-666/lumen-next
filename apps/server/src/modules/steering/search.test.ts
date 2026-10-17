@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { search } from './search.js';
+import { arxivQuery, search } from './search.js';
 
 const answer =
   (body: string, ok = true) =>
@@ -34,5 +34,16 @@ describe('steering: the literature connectors', () => {
 
   it('turns a source that is down into an error the worker can report', async () => {
     await expect(search('arxiv', 'x', answer('', false))).rejects.toThrow('HTTP 503');
+  });
+});
+
+describe('steering: the arXiv query', () => {
+  it('requires every word and stays in mathematics, then falls back to any word', () => {
+    expect(arxivQuery('involutions, consecutive pattern!', true)).toBe(
+      '(all:involutions AND all:consecutive AND all:pattern) AND cat:math.*',
+    );
+    expect(arxivQuery('involutions pattern', false)).toBe(
+      '(all:involutions OR all:pattern) AND cat:math.*',
+    );
   });
 });

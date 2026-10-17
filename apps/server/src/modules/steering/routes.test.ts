@@ -149,3 +149,72 @@ describe('steering: files routes', () => {
     expect(response.statusCode).toBe(404);
   });
 });
+
+describe('steering: attaching a file', () => {
+  it('writes the body to /mnt/upload under a safe name, where the agents can read it', async () => {
+    const server = await build();
+    const response = await server.inject({
+      method: 'PUT',
+      url: `/api/projects/${PROJECT}/upload/${encodeURIComponent('../My Paper (v2).pdf')}`,
+      headers: { ...AUTH, 'content-type': 'application/octet-stream' },
+      payload: Buffer.from('%PDF-1.7'),
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({ path: '/mnt/upload/My-Paper-v2-.pdf' });
+    const saved = await new SandboxFs(volumeRoot, PROJECT).readFile('/mnt/upload/My-Paper-v2-.pdf');
+    expect(saved.toString()).toBe('%PDF-1.7');
+  });
+
+  it('keeps letters of any script in the name', async () => {
+    const server = await build();
+    const response = await server.inject({
+      method: 'PUT',
+      url: `/api/projects/${PROJECT}/upload/${encodeURIComponent('数据 表 v2.csv')}`,
+      headers: { ...AUTH, 'content-type': 'application/octet-stream' },
+      payload: Buffer.from('x,y'),
+    });
+    expect(response.json()).toEqual({ path: '/mnt/upload/数据-表-v2.csv' });
+  });
+
+  it('refuses a stranger and a body that is not raw bytes', async () => {
+    const server = await build();
+    const anonymous = await server.inject({
+      method: 'PUT',
+      url: `/api/projects/${PROJECT}/upload/a.txt`,
+      headers: { 'content-type': 'application/octet-stream' },
+      payload: Buffer.from('x'),
+    });
+    expect(anonymous.statusCode).toBe(401);
+    const json = await server.inject({
+      method: 'PUT',
+      url: `/api/projects/${PROJECT}/upload/a.txt`,
+      headers: AUTH,
+      payload: { x: 1 },
+    });
+    expect(json.statusCode).toBe(400);
+  });
+});
+
+describe('steering: opening a kept file', () => {
+  it('serves a table as plain text in the tab, and anything else as a download', async () => {
+    const fs = new SandboxFs(volumeRoot, PROJECT);
+    await fs.writeFile('/mnt/output/table.csv', Buffer.from('n,a\n1,1\n'));
+    await fs.writeFile('/mnt/output/page.html', Buffer.from('<script>x</script>'));
+    const server = await build();
+    const table = await server.inject({
+      method: 'GET',
+      url: `/api/projects/${PROJECT}/files/output/table.csv`,
+      headers: AUTH,
+    });
+    expect(table.headers['content-type']).toBe('text/plain; charset=utf-8');
+    expect(table.headers['x-content-type-options']).toBe('nosniff');
+    expect(table.body).toBe('n,a\n1,1\n');
+    const page = await server.inject({
+      method: 'GET',
+      url: `/api/projects/${PROJECT}/files/output/page.html`,
+      headers: AUTH,
+    });
+    expect(page.headers['content-type']).toBe('application/octet-stream');
+    expect(page.headers['content-disposition']).toBe('attachment');
+  });
+});

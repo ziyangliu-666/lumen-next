@@ -648,6 +648,9 @@ export function WaitingNotice({ task }: { task: Task }): JSX.Element | null {
   );
 }
 
+/** The largest file Attach sends; steering's upload route refuses more. */
+const ATTACH_LIMIT = 10 * 1024 * 1024;
+
 /** How long an armed Stop waits for the second click before it is quiet again. */
 const ARMED_MS = 4000;
 
@@ -742,6 +745,7 @@ export function Composer({
   onSay,
   onSteer,
   shownAgent = null,
+  onAttach,
 }: {
   /** The socket is down or the account is not ready: nothing can be sent. */
   disabled: boolean;
@@ -757,9 +761,17 @@ export function Composer({
    * there instead of "Reply to lumen", which read as a reply to the reader.
    */
   shownAgent?: string | null;
+  /**
+   * Saves a file to the project's /mnt/upload and resolves with its path.
+   * The next message says where it is, so lumen reads it; without that, an
+   * attachment would sit in a folder nobody was told about.
+   */
+  onAttach?: ((file: File) => Promise<string>) | undefined;
 }): JSX.Element {
   const [when, setWhen] = useState<SteerWhen>('next-step');
   const [draft, setDraft] = useState('');
+  const [attached, setAttached] = useState<readonly string[]>([]);
+  const [attachNote, setAttachNote] = useState<string | null>(null);
   // Blocked for a reason a run.status can change without a fresh render of
   // this form's own props, so this is computed at submit time, not baked into
   // one boolean passed in.
@@ -768,24 +780,51 @@ export function Composer({
     // Enter submits too. Nothing is sent, and the text is kept, while the
     // socket is down, or the root is busy with a task that is not the one
     // shown (there is nothing here to steer).
-    const text = turnToSend(draft, blocked);
-    if (text === null) return;
+    const typed = turnToSend(draft || (attached.length ? 'Read what I attached.' : ''), blocked);
+    if (typed === null) return;
+    const text = attached.length ? `${typed}\n\nAttached: ${attached.join(', ')}` : typed;
     if (running) onSteer(text, when);
     else onSay(text);
     // Clear only the message: the timing remains selected for the next steer.
     setDraft('');
+    setAttached([]);
+    setAttachNote(null);
   }
-  const hint = disabled
-    ? 'Not connected. Your message stays here until lumen is back.'
-    : running
-      ? steerable
-        ? when === 'next-step'
-          ? 'Read at its next step.'
-          : 'Read at the end of its turn.'
-        : 'Only a running task can be steered. Open one in the call tree.'
-      : shownAgent
-        ? `Ended. A reply goes to lumen, not to ${shownAgent}.`
-        : 'Ended. A reply starts a new turn.';
+  function attach(file: File): void {
+    if (!onAttach) return;
+    // The upload route takes up to 10 MB; saying so here beats the server's
+    // "Request body is too large".
+    if (file.size > ATTACH_LIMIT) {
+      setAttachNote(`${file.name} is larger than 10 MB, the most one file can be.`);
+      return;
+    }
+    setAttachNote(`Attaching ${file.name}…`);
+    onAttach(file).then(
+      (path) => {
+        setAttached((list) => [...list, path]);
+        setAttachNote(null);
+      },
+      (error: unknown) =>
+        setAttachNote(
+          `${file.name} was not attached: ${error instanceof Error ? error.message : 'the upload failed'}.`,
+        ),
+    );
+  }
+  const hint = attachNote
+    ? attachNote
+    : attached.length
+      ? `Attached ${attached.map((path) => path.replace(/^\/mnt\/upload\//, '')).join(', ')}. It goes with your next message.`
+      : disabled
+        ? 'Not connected. Your message stays here until lumen is back.'
+        : running
+          ? steerable
+            ? when === 'next-step'
+              ? 'Read at its next step.'
+              : 'Read at the end of its turn.'
+            : 'Only a running task can be steered. Open one in the call tree.'
+          : shownAgent
+            ? `Ended. A reply goes to lumen, not to ${shownAgent}.`
+            : 'Ended. A reply starts a new turn.';
   return (
     <Field
       name="say"
@@ -821,6 +860,7 @@ export function Composer({
       sendDisabled={blocked}
       sendLabel={running ? 'Steer' : 'Send'}
       hint={hint}
+      {...(onAttach ? { onAttach: attach } : {})}
     />
   );
 }

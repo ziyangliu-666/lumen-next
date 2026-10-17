@@ -131,3 +131,28 @@ export function StaffGate({
 
   return <>{children}</>;
 }
+
+// Where to go once signed in. A session link opened signed out sends the
+// person to sign in; every way of signing in (password, Google, GitHub)
+// lands on the projects, so the projects page goes on to the session. Kept
+// in sessionStorage: it belongs to this tab and this one sign-in.
+const RETURN_KEY = 'lumen:after-sign-in';
+
+export function rememberReturn(url: string): void {
+  try {
+    sessionStorage.setItem(RETURN_KEY, url);
+  } catch {
+    // Storage off: the person lands on their projects instead.
+  }
+}
+
+/** The remembered address, once: reading it forgets it. */
+export function takeReturn(): string | null {
+  try {
+    const url = sessionStorage.getItem(RETURN_KEY);
+    sessionStorage.removeItem(RETURN_KEY);
+    return url;
+  } catch {
+    return null;
+  }
+}

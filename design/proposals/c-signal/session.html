@@ -1,0 +1,1276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lumen: Pop-stack fertility, free exploration</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ===== Tokens: direction C, Signal. Shared by landing, home, session. ===== */
+      :root {
+        /* Field and sheets */
+        --c-ground: #e9eaec;
+        --c-sheet: #ffffff;
+        --c-sheet-hover: #f4f5f6;
+        --c-ink: #000000;
+        --c-body: #1f2328;
+        --c-secondary: #62666d;
+        --c-rule: #cdd0d4;
+        /* Header band */
+        --c-band: #000000;
+        --c-on-band: #ffffff;
+        --c-on-band-muted: #a8adb3;
+        /* State fields: background and the text colour that passes AA on it */
+        --c-decide: #f2b705;
+        --c-on-decide: #000000; /* 11.6:1 */
+        --c-gap: #d7263d;
+        --c-on-gap: #ffffff; /* 4.96:1 */
+        --c-keep: #0a7b55;
+        --c-on-keep: #ffffff; /* 5.28:1 */
+        --c-open: #1f4fd8;
+        --c-on-open: #ffffff; /* 6.6:1 */
+        --c-dropped: #9aa0a6;
+        --c-on-dropped: #000000; /* 7.9:1; white fails at 2.6:1 */
+        --c-run: #000000;
+        --c-on-run: #ffffff; /* in progress, no attention needed */
+        /* Terminal */
+        --c-term: #000000;
+        --c-on-term: #ffffff;
+        --c-on-term-muted: #b4b9bf;
+        /* Focus */
+        --c-focus: #000000;
+        --c-focus-on-dark: #f2b705;
+        --focus-w: 3px;
+        --focus-off: 2px;
+        /* Grid overlay, toggled with the G key */
+        --c-overlay: rgba(215, 38, 61, 0.09);
+        --c-overlay-line: rgba(215, 38, 61, 0.35);
+
+        /* Type */
+        --font-sans: 'Host Grotesk', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+        --fs-13: 13px;
+        --lh-13: 16px;
+        --fs-15: 15px;
+        --lh-15: 24px;
+        --fs-18: 18px;
+        --lh-18: 24px;
+        --fs-24: 24px;
+        --lh-24: 32px;
+        --fs-36: 36px;
+        --lh-36: 40px;
+        --fs-56: 56px;
+        --lh-56: 56px;
+        --fs-96: 96px;
+        --lh-96: 96px;
+        --track-head: -0.03em;
+        --track-mid: -0.015em;
+        --w-regular: 400;
+        --w-medium: 500;
+        --w-bold: 700;
+
+        /* Space: everything snaps to an 8px baseline */
+        --s-1: 8px;
+        --s-2: 16px;
+        --s-3: 24px;
+        --s-4: 32px;
+        --s-5: 40px;
+        --s-6: 48px;
+        --s-8: 64px;
+        --s-12: 96px;
+        --s-16: 128px;
+
+        /* Grid */
+        --cols: 12;
+        --gutter: 20px;
+        --margin: 40px;
+        --max: 1440px;
+
+        /* Components */
+        --band-h: 56px;
+        --field-h: 80px;
+        --row-h: 128px;
+        --rule-w: 1px;
+        --line-w: 6px;
+        --radius: 0;
+      }
+
+      @media (max-width: 1023px) {
+        :root {
+          --margin: 24px;
+        }
+      }
+      @media (max-width: 639px) {
+        :root {
+          --margin: 16px;
+          --field-h: 64px;
+          --row-h: 0px;
+        }
+      }
+
+      /* ===== Base ===== */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--c-ground);
+        color: var(--c-body);
+        font-family: var(--font-sans);
+        font-size: var(--fs-15);
+        line-height: var(--lh-15);
+        font-weight: var(--w-regular);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      h1,
+      h2,
+      h3,
+      p,
+      ol,
+      ul,
+      figure,
+      fieldset {
+        margin: 0;
+      }
+      ol,
+      ul {
+        padding: 0;
+        list-style: none;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        min-width: 0;
+      }
+      a {
+        color: inherit;
+      }
+      button,
+      input,
+      textarea {
+        font: inherit;
+        color: inherit;
+        border-radius: var(--radius);
+      }
+      sub {
+        font-size: 0.7em;
+        line-height: 0;
+      }
+      .num {
+        font-variant-numeric: tabular-nums;
+      }
+      .mono {
+        font-family: var(--font-mono);
+      }
+      .vh {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      /* Focus: 3px black outline, offset 2px. Yellow on the black band. */
+      :focus-visible {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: var(--focus-off);
+      }
+      .band :focus-visible {
+        outline-color: var(--c-focus-on-dark);
+      }
+      /* A skip-link target receives programmatic focus only; it is not a control. */
+      [tabindex='-1']:focus {
+        outline: none;
+      }
+
+      .skip {
+        position: absolute;
+        left: var(--s-2);
+        top: calc(-1 * var(--s-8));
+        z-index: 20;
+        padding: var(--s-1) var(--s-2);
+        background: var(--c-decide);
+        color: var(--c-on-decide);
+        font-weight: var(--w-bold);
+        text-decoration: none;
+      }
+      .skip:focus-visible {
+        top: var(--s-1);
+      }
+
+      /* ===== Grid ===== */
+      .wrap {
+        max-width: var(--max);
+        margin-inline: auto;
+        padding-inline: var(--margin);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+        column-gap: var(--gutter);
+      }
+      .grid-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        pointer-events: none;
+        display: none;
+      }
+      .grid-overlay .grid {
+        height: 100%;
+      }
+      .grid-overlay span {
+        background: var(--c-overlay);
+        border-inline: 1px solid var(--c-overlay-line);
+      }
+      .show-grid .grid-overlay {
+        display: block;
+      }
+
+      /* ===== Header band ===== */
+      .band {
+        background: var(--c-band);
+        color: var(--c-on-band);
+      }
+      .band-in {
+        display: flex;
+        align-items: stretch;
+        min-height: var(--band-h);
+        column-gap: var(--s-3);
+      }
+      .wordmark {
+        display: flex;
+        align-items: center;
+        font-size: var(--fs-24);
+        line-height: var(--lh-24);
+        font-weight: var(--w-bold);
+        letter-spacing: var(--track-head);
+        text-decoration: none;
+      }
+      .band-spacer {
+        flex: 1 1 auto;
+      }
+      .band-link {
+        display: flex;
+        align-items: center;
+        font-weight: var(--w-medium);
+        text-decoration: none;
+      }
+      .band-link:hover {
+        text-decoration: underline;
+        text-underline-offset: 4px;
+        text-decoration-thickness: 2px;
+      }
+      .band-btn {
+        display: flex;
+        align-items: center;
+        padding-inline: var(--s-3);
+        background: var(--c-sheet);
+        color: var(--c-ink);
+        font-weight: var(--w-bold);
+        text-decoration: none;
+      }
+      .band-btn:hover {
+        background: var(--c-ground);
+      }
+      .band-muted {
+        color: var(--c-on-band-muted);
+      }
+      .avatar {
+        align-self: center;
+        display: grid;
+        place-items: center;
+        width: var(--s-5);
+        height: var(--s-5);
+        background: var(--c-sheet);
+        color: var(--c-ink);
+        font-size: var(--fs-13);
+        line-height: var(--lh-13);
+        font-weight: var(--w-bold);
+        text-decoration: none;
+      }
+
+      /* ===== State fields: colour carries state ===== */
+      .f-decide {
+        background: var(--c-decide);
+        color: var(--c-on-decide);
+      }
+      .f-gap {
+        background: var(--c-gap);
+        color: var(--c-on-gap);
+      }
+      .f-keep {
+        background: var(--c-keep);
+        color: var(--c-on-keep);
+      }
+      .f-open {
+        background: var(--c-open);
+        color: var(--c-on-open);
+      }
+      .f-dropped {
+        background: var(--c-dropped);
+        color: var(--c-on-dropped);
+      }
+      .f-run {
+        background: var(--c-run);
+        color: var(--c-on-run);
+      }
+
+      /* ===== Mode switch ===== */
+      .modes {
+        display: flex;
+        flex-wrap: wrap;
+        margin-bottom: var(--s-2);
+      }
+      .mode {
+        position: relative;
+        display: block;
+      }
+      .mode input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+      .mode-face {
+        display: block;
+        padding: var(--s-1) var(--s-2);
+        border: var(--rule-w) solid var(--c-ink);
+        background: var(--c-sheet);
+        color: var(--c-ink);
+        font-weight: var(--w-medium);
+        line-height: var(--lh-15);
+      }
+      .mode + .mode .mode-face {
+        border-left-width: 0;
+      }
+      .mode input:hover + .mode-face {
+        background: var(--c-sheet-hover);
+      }
+      .mode input:checked + .mode-face {
+        background: var(--c-ink);
+        color: var(--c-sheet);
+      }
+      .mode input:focus-visible + .mode-face {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: var(--focus-off);
+      }
+
+      /* ===== The field: white sheet bar, black send square ===== */
+      .field {
+        display: flex;
+        align-items: stretch;
+        min-height: var(--field-h);
+        background: var(--c-sheet);
+      }
+      .field:has(.field-input:focus-visible) {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: var(--focus-off);
+      }
+      .field-input:focus-visible {
+        outline: none;
+      }
+      .field-attach,
+      .field-send {
+        flex: none;
+        width: var(--field-h);
+        border: 0;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      .field-attach {
+        background: transparent;
+        color: var(--c-ink);
+        border-right: var(--rule-w) solid var(--c-rule);
+      }
+      .field-attach:hover {
+        background: var(--c-ground);
+      }
+      .field-send {
+        background: var(--c-ink);
+        color: var(--c-sheet);
+      }
+      .field-send:hover {
+        background: var(--c-body);
+      }
+      .field-attach svg,
+      .field-send svg {
+        width: var(--s-3);
+        height: var(--s-3);
+      }
+      .field-input {
+        flex: 1 1 auto;
+        min-width: 0;
+        border: 0;
+        resize: none;
+        background: transparent;
+        padding: calc((var(--field-h) - var(--lh-18)) / 2) var(--s-3);
+        font-size: var(--fs-18);
+        line-height: var(--lh-18);
+        color: var(--c-ink);
+      }
+      .field-input::placeholder {
+        color: var(--c-secondary);
+        opacity: 1;
+      }
+      @media (max-width: 639px) {
+        .field-input {
+          padding-inline: var(--s-2);
+        }
+      }
+
+      /* ===== Motion ===== */
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      /* ===== Session ===== */
+      .crumb {
+        display: flex;
+        align-items: center;
+        column-gap: var(--s-1);
+        min-width: 0;
+      }
+      .crumb-project {
+        font-weight: var(--w-bold);
+        color: var(--c-on-band);
+        text-decoration: none;
+      }
+      .crumb-sep,
+      .crumb-mode {
+        color: var(--c-on-band-muted);
+      }
+      .cost {
+        display: flex;
+        align-items: center;
+        color: var(--c-on-band);
+      }
+      .band-state {
+        display: flex;
+        align-items: center;
+        padding-inline: var(--s-2);
+        font-weight: var(--w-bold);
+      }
+
+      .session {
+        padding-block: var(--s-3) 0;
+        row-gap: var(--s-1);
+        align-items: start;
+      }
+      .transcript {
+        grid-column: 1 / span 8;
+        min-width: 0;
+      }
+      .rail {
+        grid-column: 9 / span 4;
+        display: grid;
+        row-gap: var(--s-1);
+        min-width: 0;
+        padding-bottom: var(--s-8);
+      }
+
+      /* Transcript */
+      .turns {
+        background: var(--c-sheet);
+      }
+      .turn {
+        display: grid;
+        grid-template-columns: var(--s-16) minmax(0, 1fr);
+        column-gap: var(--s-3);
+        padding: var(--s-3);
+      }
+      .turn + .turn {
+        border-top: var(--rule-w) solid var(--c-rule);
+      }
+      .turn-label {
+        font-weight: var(--w-bold);
+        color: var(--c-ink);
+      }
+      .turn-meta {
+        display: block;
+        color: var(--c-secondary);
+        font-size: var(--fs-13);
+        line-height: var(--lh-13);
+        font-weight: var(--w-regular);
+        margin-top: var(--s-1);
+      }
+      .turn-body {
+        min-width: 0;
+      }
+      .turn-you .turn-label > .who {
+        display: inline-block;
+        padding-inline: var(--s-1);
+        background: var(--c-ink);
+        color: var(--c-sheet);
+      }
+      .turn-you .turn-body {
+        font-size: var(--fs-18);
+        line-height: var(--lh-18);
+        font-weight: var(--w-medium);
+        color: var(--c-ink);
+      }
+      .turn-think .turn-label {
+        color: var(--c-secondary);
+        font-weight: var(--w-medium);
+      }
+      .turn-think .turn-body {
+        color: var(--c-secondary);
+      }
+      .turn-reply .turn-body {
+        font-size: var(--fs-18);
+        line-height: var(--lh-18);
+        color: var(--c-ink);
+      }
+      .turn-reply .turn-body p + p {
+        margin-top: var(--s-2);
+      }
+
+      /* Rows: search results, delegated workers, tool calls */
+      .rows {
+        border-bottom: var(--rule-w) solid var(--c-rule);
+      }
+      .row {
+        display: grid;
+        grid-template-columns: var(--s-12) minmax(0, 1fr) auto;
+        column-gap: var(--s-2);
+        align-items: stretch;
+        min-height: var(--s-5);
+        border-top: var(--rule-w) solid var(--c-rule);
+      }
+      .row > * {
+        display: flex;
+        align-items: center;
+        padding-block: var(--s-1);
+        min-width: 0;
+      }
+      .row-src {
+        font-family: var(--font-mono);
+        font-size: var(--fs-13);
+        color: var(--c-secondary);
+      }
+      .row-hit {
+        font-weight: var(--w-bold);
+        color: var(--c-ink);
+      }
+      .row-res {
+        justify-content: flex-start;
+      }
+      .row-field {
+        min-width: 112px;
+        margin-block: 4px;
+        padding: 4px var(--s-2);
+        font-weight: var(--w-bold);
+      }
+      .rows-agents .row {
+        grid-template-columns: var(--s-16) minmax(0, 1fr) auto;
+      }
+      .row-name {
+        font-weight: var(--w-medium);
+        color: var(--c-ink);
+      }
+      .row-add {
+        font-family: var(--font-mono);
+        font-size: var(--fs-13);
+        color: var(--c-keep);
+        font-weight: var(--w-medium);
+      }
+      .path {
+        font-family: var(--font-mono);
+        font-size: var(--fs-13);
+        color: var(--c-ink);
+      }
+
+      /* Terminal */
+      .term {
+        margin: 0;
+        padding: var(--s-2) var(--s-3);
+        overflow-x: auto;
+        background: var(--c-term);
+        color: var(--c-on-term-muted);
+        font-family: var(--font-mono);
+        font-size: var(--fs-13);
+        line-height: var(--lh-15);
+        white-space: pre;
+      }
+      .term-cmd {
+        color: var(--c-on-term);
+        font-weight: var(--w-medium);
+      }
+
+      /* Composer */
+      .composer {
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        padding-block: var(--s-1) var(--s-3);
+        background: var(--c-ground);
+      }
+
+      /* Rail */
+      .rail-sec {
+        background: var(--c-sheet);
+        padding: var(--s-3);
+      }
+      .rail-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        column-gap: var(--s-2);
+        margin-bottom: var(--s-2);
+      }
+      .rail-title {
+        font-size: var(--fs-18);
+        line-height: var(--lh-18);
+        font-weight: var(--w-bold);
+        color: var(--c-ink);
+      }
+      .rail-count {
+        color: var(--c-secondary);
+      }
+
+      /* Call tree, drawn as a transit line: one black trunk, stations, branch spurs */
+      .line {
+        position: relative;
+      }
+      .stop {
+        display: grid;
+        grid-template-columns: var(--s-8) minmax(0, 1fr) auto;
+        align-items: center;
+        min-height: var(--s-6);
+      }
+      .track {
+        position: relative;
+        align-self: stretch;
+      }
+      .track::before,
+      .track::after {
+        content: '';
+        position: absolute;
+        background: var(--c-ink);
+      }
+      /* trunk: centre line at x = 12px */
+      .track::before {
+        left: calc(12px - var(--line-w) / 2);
+        width: var(--line-w);
+        top: 0;
+        bottom: 0;
+      }
+      .stop-root .track::before {
+        top: 50%;
+      }
+      .stop-last .track::before {
+        bottom: 50%;
+      }
+      /* spur from the trunk to a branch station */
+      .track::after {
+        display: none;
+      }
+      .stop-branch .track::after {
+        display: block;
+        left: 12px;
+        width: 32px;
+        top: calc(50% - var(--line-w) / 2);
+        height: var(--line-w);
+      }
+      .station {
+        position: absolute;
+        top: 50%;
+        left: 12px;
+        z-index: 1;
+        width: 20px;
+        height: 20px;
+        transform: translate(-50%, -50%);
+        border: 5px solid var(--c-ink);
+        border-radius: 50%;
+        background: var(--c-sheet);
+      }
+      .stop-root .station {
+        width: 24px;
+        height: 24px;
+        border-width: 6px;
+      }
+      .stop-branch .station {
+        left: 44px;
+      }
+      .stop-name {
+        font-weight: var(--w-medium);
+        color: var(--c-ink);
+      }
+      .stop-root .stop-name {
+        font-weight: var(--w-bold);
+      }
+      .stop-state {
+        align-self: stretch;
+        display: flex;
+        align-items: center;
+        margin-block: 4px;
+        padding-inline: var(--s-2);
+        font-weight: var(--w-bold);
+      }
+      .stop-note {
+        display: block;
+        color: var(--c-secondary);
+        font-size: var(--fs-13);
+        line-height: var(--lh-13);
+        font-weight: var(--w-regular);
+      }
+
+      /* Findings as colour fields */
+      .findings {
+        display: grid;
+        row-gap: var(--s-1);
+      }
+      .finding summary {
+        display: block;
+        padding: var(--s-2);
+        cursor: pointer;
+        list-style: none;
+        position: relative;
+        padding-right: var(--s-6);
+      }
+      .finding summary::-webkit-details-marker {
+        display: none;
+      }
+      .finding summary::after {
+        content: '+';
+        position: absolute;
+        top: var(--s-2);
+        right: var(--s-2);
+        font-size: var(--fs-18);
+        line-height: var(--lh-15);
+        font-weight: var(--w-bold);
+      }
+      .finding[open] summary::after {
+        content: '\2212';
+      }
+      .finding-state {
+        display: block;
+        font-size: var(--fs-13);
+        line-height: var(--lh-13);
+        font-weight: var(--w-bold);
+      }
+      .finding-claim {
+        display: block;
+        margin-top: var(--s-1);
+        font-size: var(--fs-15);
+        line-height: var(--lh-15);
+        font-weight: var(--w-bold);
+      }
+      .finding-more {
+        padding: 0 var(--s-2) var(--s-2);
+      }
+
+      .rail-link {
+        display: flex;
+        justify-content: space-between;
+        padding-block: var(--s-1);
+        border-top: var(--rule-w) solid var(--c-rule);
+        text-decoration: none;
+        color: var(--c-ink);
+      }
+      .rail-link:hover {
+        background: var(--c-sheet-hover);
+      }
+      .files li {
+        padding-block: 4px;
+        border-top: var(--rule-w) solid var(--c-rule);
+        overflow-wrap: anywhere;
+      }
+
+      @media (max-width: 1279px) {
+        .transcript {
+          grid-column: 1 / span 7;
+        }
+        .rail {
+          grid-column: 8 / span 5;
+        }
+      }
+      @media (max-width: 1023px) {
+        .transcript,
+        .rail {
+          grid-column: 1 / -1;
+        }
+        .rail {
+          grid-row: 2;
+        }
+        .composer {
+          padding-bottom: var(--s-2);
+        }
+      }
+      @media (max-width: 639px) {
+        .band-in {
+          flex-wrap: wrap;
+          column-gap: var(--s-2);
+        }
+        .crumb,
+        .cost {
+          order: 5;
+        }
+        .crumb {
+          flex: 1 1 auto;
+          padding-bottom: var(--s-1);
+        }
+        .cost {
+          padding-bottom: var(--s-1);
+        }
+        .band-spacer {
+          order: 1;
+        }
+        .band-state {
+          order: 2;
+        }
+        .avatar {
+          order: 3;
+        }
+        .turn {
+          grid-template-columns: minmax(0, 1fr);
+          row-gap: var(--s-1);
+          padding: var(--s-2);
+        }
+        .turn-meta {
+          display: inline;
+          margin: 0 0 0 var(--s-1);
+        }
+        .turn-you .turn-body,
+        .turn-reply .turn-body {
+          font-size: var(--fs-15);
+          line-height: var(--lh-15);
+        }
+        .row {
+          grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .row-src {
+          grid-column: 1 / -1;
+          padding-bottom: 0;
+        }
+        .rows-agents .row {
+          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-areas: 'name state' 'task task';
+        }
+        .rows-agents .row-name {
+          grid-area: name;
+        }
+        .rows-agents .row-task {
+          grid-area: task;
+          padding-top: 0;
+        }
+        .rows-agents .row-field {
+          grid-area: state;
+        }
+        .term {
+          padding-inline: var(--s-2);
+        }
+        .rail-sec {
+          padding: var(--s-2);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#transcript">Skip to transcript</a>
+    <header class="band">
+      <div class="wrap band-in">
+        <a class="wordmark" href="home.html">lumen</a>
+        <nav class="crumb" aria-label="Breadcrumb">
+          <a class="crumb-project" href="home.html">Pop-stack fertility</a>
+          <span class="crumb-sep" aria-hidden="true">/</span>
+          <span class="crumb-mode" aria-current="page">free exploration</span>
+        </nav>
+        <span class="band-spacer"></span>
+        <span class="cost num">$0.94 · 2 h 14 min</span>
+        <span class="band-state f-keep">Finished</span>
+        <a class="avatar" href="#settings" aria-label="Account settings, LZ">LZ</a>
+      </div>
+    </header>
+
+    <main class="wrap session grid" id="main">
+      <section class="transcript" id="transcript" aria-label="Transcript" tabindex="-1">
+        <ol class="turns">
+          <li class="turn turn-you">
+            <div class="turn-label"><span class="who">You</span></div>
+            <div class="turn-body">
+              Act as an independent researcher, not an assistant carrying out a task. Find something
+              genuinely new, simple and deep, that a researcher would stop and look at.
+            </div>
+          </li>
+          <li class="turn turn-think">
+            <div class="turn-label">Thinking</div>
+            <div class="turn-body">
+              Enumerative combinatorics is where computation can settle things. But before I compute
+              anything I should find out what is already known — a result I rediscover is worth
+              nothing.
+            </div>
+          </li>
+          <li class="turn">
+            <div class="turn-label">Search <span class="turn-meta num">6 s · $0.01</span></div>
+            <div class="turn-body">
+              <ul class="rows">
+                <li class="row">
+                  <span class="row-src">arxiv</span
+                  ><span>permutation statistics · last 6 months</span
+                  ><span class="row-res num">41 papers</span>
+                </li>
+                <li class="row">
+                  <span class="row-src">oeis</span><span>A262494 · stack-sorting depth</span
+                  ><span class="row-res">named · no recurrence</span>
+                </li>
+                <li class="row">
+                  <span class="row-src">oeis</span><span>A001405 · pinnacle sets</span
+                  ><span class="row-res">closed form exists</span>
+                </li>
+                <li class="row row-hit">
+                  <span class="row-src">oeis</span><span>pop-stack preimages</span
+                  ><span class="row-res">nothing</span>
+                </li>
+              </ul>
+            </div>
+          </li>
+          <li class="turn turn-think">
+            <div class="turn-label">Thinking</div>
+            <div class="turn-body">
+              Two of the four are closed. Tunnels I am unsure about, and pop-stack preimage counts I
+              cannot find at all. Send readers at both, and compute the distributions myself at the
+              same time — if a sequence is already named I want to know that before I spend an hour
+              on it.
+            </div>
+          </li>
+          <li class="turn">
+            <div class="turn-label">Delegated <span class="turn-meta num">3 in parallel</span></div>
+            <div class="turn-body">
+              <ul class="rows rows-agents">
+                <li class="row">
+                  <span class="row-name">reader</span
+                  ><span class="row-task">what is already known on all four lines</span
+                  ><span class="row-field f-keep">Done</span>
+                </li>
+                <li class="row">
+                  <span class="row-name">compute-perm</span
+                  ><span class="row-task">stack-sorting and pop-stack, n ≤ 9</span
+                  ><span class="row-field f-keep">Done</span>
+                </li>
+                <li class="row">
+                  <span class="row-name">compute-dyck</span
+                  ><span class="row-task">Dyck path statistics, n ≤ 10</span
+                  ><span class="row-field f-keep">Done</span>
+                </li>
+              </ul>
+            </div>
+          </li>
+          <li class="turn turn-think">
+            <div class="turn-label">Thinking</div>
+            <div class="turn-body">
+              The reader says tunnels reduce to the return count — Elizalde, 2002. Dropped. But
+              compute-perm’s 3-stack-sortable counts do not match the sequence everyone cites. That
+              is either my bug or theirs, so I will write a second implementation and see which one
+              it agrees with.
+            </div>
+          </li>
+          <li class="turn">
+            <div class="turn-label">Save <span class="turn-meta">tool call</span></div>
+            <div class="turn-body">
+              <ul class="rows">
+                <li class="row">
+                  <span class="row-src">file</span><span class="path">code/popstack.py</span
+                  ><span class="row-add num">+28</span>
+                </li>
+              </ul>
+            </div>
+          </li>
+          <li class="turn">
+            <div class="turn-label">Run <span class="turn-meta num">8.9 s</span></div>
+            <div class="turn-body">
+              <pre
+                class="term num"
+                tabindex="0"
+                aria-label="Terminal output, run 1"
+              ><span class="term-cmd">$ python popstack.py --n 10 --tally-preimages</span>
+3,628,800 permutations   862,047 distinct images   8.9 s
+max preimage count at the identity            ✓
+oeis A134664  1,2,6,24,114,606,3494,21426,137901  match
+oeis A000260  1,2,6,22,91,408,1938              no match</pre>
+            </div>
+          </li>
+          <li class="turn turn-reply">
+            <div class="turn-label">Reply</div>
+            <div class="turn-body">
+              <p>
+                Three of the four lines are already solved, so I am dropping them. Tunnels on Dyck
+                paths reduce to the return count and the triangle is A009766 – Elizalde, 2002.
+                Pinnacle sets have a closed form. Stack-sorting depth past k = 3 is a hard open
+                problem, not a lead.
+              </p>
+              <p>
+                What is left is the one nobody wrote a paper on: the preimage structure of pop-stack
+                on S<sub>n</sub>. The claim that the identity maximises preimages sits in the
+                literature as an unproven conjecture checked to n = 8. I have it to n = 10.
+              </p>
+            </div>
+          </li>
+          <li class="turn">
+            <div class="turn-label">Record <span class="turn-meta">tool call</span></div>
+            <div class="turn-body">
+              <ul class="rows">
+                <li class="row">
+                  <span class="row-src">finding</span><span>3-stack-sortable is A134664</span
+                  ><span class="row-field f-keep">Confirmed</span>
+                </li>
+                <li class="row">
+                  <span class="row-src">finding</span><span>pop-stack preimages: no paper</span
+                  ><span class="row-field f-open">Open</span>
+                </li>
+              </ul>
+            </div>
+          </li>
+          <li class="turn turn-you">
+            <div class="turn-label"><span class="who">You</span></div>
+            <div class="turn-body">Push it to n = 11 before you trust the conjecture.</div>
+          </li>
+          <li class="turn turn-think">
+            <div class="turn-label">Thinking</div>
+            <div class="turn-body">
+              n = 11 is 40 million permutations, about three minutes. n = 12 is 480 million and
+              would cost enough to need your approval. Doing 11 now.
+            </div>
+          </li>
+          <li class="turn">
+            <div class="turn-label">Run <span class="turn-meta num">2 m 41 s</span></div>
+            <div class="turn-body">
+              <pre
+                class="term num"
+                tabindex="0"
+                aria-label="Terminal output, run 2"
+              ><span class="term-cmd">$ python popstack.py --n 11 --tally-preimages</span>
+39,916,800 permutations   8,152,860 distinct images   2m 41s
+max preimage count at the identity            ✓
+single-descent formula holds                  ✓</pre>
+            </div>
+          </li>
+          <li class="turn turn-reply">
+            <div class="turn-label">Reply</div>
+            <div class="turn-body">
+              <p>
+                It holds at n = 11 — two terms past anything in the literature. Checking further is
+                only going to get more expensive, so I have stopped checking and started proving.
+                The single-descent case falls out directly. If that is right, the general case
+                should follow by induction on the number of descents, and I am writing that up now.
+              </p>
+            </div>
+          </li>
+          <li class="turn">
+            <div class="turn-label">Record <span class="turn-meta">tool call</span></div>
+            <div class="turn-body">
+              <ul class="rows">
+                <li class="row">
+                  <span class="row-src">finding</span><span>holds at n = 11</span
+                  ><span class="row-field f-keep">Confirmed</span>
+                </li>
+                <li class="row">
+                  <span class="row-src">finding</span><span>induction on descents</span
+                  ><span class="row-field f-open">Open</span>
+                </li>
+              </ul>
+            </div>
+          </li>
+        </ol>
+
+        <form class="composer" action="#">
+          <div class="field">
+            <button type="button" class="field-attach" aria-label="Attach a paper or a repo">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="2.5" fill="none" />
+              </svg>
+            </button>
+            <label class="vh" for="say">Message to the lead agent</label>
+            <textarea
+              class="field-input"
+              id="say"
+              name="say"
+              rows="1"
+              placeholder="try the induction, and tell me if it stalls"
+            ></textarea>
+            <button type="submit" class="field-send" aria-label="Send">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M3 12h16M12 4.5 19.5 12 12 19.5"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="square"
+                  fill="none"
+                />
+              </svg>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="rail" aria-label="Session overview">
+        <section class="rail-sec" aria-labelledby="tree-title">
+          <div class="rail-head"><h2 class="rail-title" id="tree-title">Call tree</h2></div>
+          <ol class="line">
+            <li class="stop stop-root">
+              <span class="track" aria-hidden="true"><span class="station"></span></span
+              ><span class="stop-name">lead</span><span class="stop-state f-keep">Done</span>
+            </li>
+            <li class="stop stop-branch">
+              <span class="track" aria-hidden="true"><span class="station"></span></span
+              ><span class="stop-name">reader</span><span class="stop-state f-keep">Done</span>
+            </li>
+            <li class="stop stop-branch">
+              <span class="track" aria-hidden="true"><span class="station"></span></span
+              ><span class="stop-name">compute-perm</span
+              ><span class="stop-state f-keep">Done</span>
+            </li>
+            <li class="stop stop-branch stop-last">
+              <span class="track" aria-hidden="true"><span class="station"></span></span
+              ><span class="stop-name">compute-dyck</span
+              ><span class="stop-state f-keep">Done</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="rail-sec" aria-labelledby="find-title">
+          <div class="rail-head">
+            <h2 class="rail-title" id="find-title">Findings</h2>
+            <span class="rail-count num">5</span>
+          </div>
+          <ol class="findings">
+            <li>
+              <details class="finding f-dropped">
+                <summary>
+                  <span class="finding-state">Dropped</span
+                  ><span class="finding-claim">tunnels — known, dropped</span>
+                </summary>
+                <p class="finding-more">
+                  Elizalde 2002 already characterises them: #tunnels = n − #returns, triangle
+                  A009766. Nothing to add.
+                </p>
+              </details>
+            </li>
+            <li>
+              <details class="finding f-keep">
+                <summary>
+                  <span class="finding-state">Confirmed</span
+                  ><span class="finding-claim">3-stack-sortable is A134664, not A000260</span>
+                </summary>
+                <p class="finding-more">
+                  Two independent implementations agree to n = 9:
+                  <span class="num">1, 2, 6, 24, 114, 606, 3494, 21426, 137901</span>.
+                </p>
+              </details>
+            </li>
+            <li>
+              <details class="finding f-open">
+                <summary>
+                  <span class="finding-state">Open</span
+                  ><span class="finding-claim">pop-stack preimage structure: no paper</span>
+                </summary>
+                <p class="finding-more">
+                  Three surveys that would have cited it do not. The identity-maximises claim sits
+                  in the literature as an unproven conjecture, checked to n = 8.
+                </p>
+              </details>
+            </li>
+            <li>
+              <details class="finding f-keep">
+                <summary>
+                  <span class="finding-state">Confirmed</span
+                  ><span class="finding-claim"
+                    >holds at n = 11 — two terms past the literature</span
+                  >
+                </summary>
+                <p class="finding-more">
+                  <span class="num">39,916,800</span> permutations,
+                  <span class="num">8,152,860</span> distinct images, maximum at the identity.
+                </p>
+              </details>
+            </li>
+            <li>
+              <details class="finding f-open">
+                <summary>
+                  <span class="finding-state">Open</span
+                  ><span class="finding-claim">induction on descents — proof in progress</span>
+                </summary>
+                <p class="finding-more">
+                  The single-descent case falls out directly. The general case is being written up
+                  in <span class="mono">research/proof-sketch.md</span>.
+                </p>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="rail-sec" aria-labelledby="proj-title">
+          <div class="rail-head">
+            <h2 class="rail-title" id="proj-title">This project</h2>
+            <span class="rail-count num">1 session</span>
+          </div>
+          <a class="rail-link" href="session.html"
+            ><span>watch it run</span><span class="rail-count">replay</span></a
+          >
+        </section>
+
+        <section class="rail-sec" aria-labelledby="files-title">
+          <div class="rail-head">
+            <h2 class="rail-title" id="files-title">Files</h2>
+            <span class="rail-count num">7</span>
+          </div>
+          <ul class="files">
+            <li class="path">research/literature.md</li>
+            <li class="path">code/stacksort.py</li>
+            <li class="path">code/popstack.py</li>
+            <li class="path">results/fertility_n10.csv</li>
+            <li class="path">research/popstack-preimages.md</li>
+            <li class="path">results/fertility_n11.csv</li>
+            <li class="path">research/proof-sketch.md</li>
+          </ul>
+        </section>
+      </aside>
+    </main>
+    <div class="grid-overlay" aria-hidden="true">
+      <div class="wrap grid">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span
+        ><span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+    <script>
+      // G toggles the 12-column grid overlay, except while the user types.
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'g' && e.key !== 'G') return;
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        var t = e.target;
+        if (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+        document.documentElement.classList.toggle('show-grid');
+      });
+      // The mode switch describes the current mode in the field placeholder.
+      document.querySelectorAll('[data-modes]').forEach(function (group) {
+        var input = document.getElementById(group.getAttribute('data-for'));
+        group.addEventListener('change', function (e) {
+          if (input && e.target.dataset.ph) input.placeholder = e.target.dataset.ph;
+        });
+      });
+    </script>
+  </body>
+</html>

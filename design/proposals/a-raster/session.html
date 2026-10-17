@@ -1,0 +1,1007 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pop-stack fertility, lumen</title>
+    <script src="theme.js"></script>
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700&amp;display=swap"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;display=swap"
+    />
+    <link rel="stylesheet" href="raster.css" />
+    <style>
+      /* ===== session =====
+   Two surfaces. On paper, columns 1-7: the conversation, with the field at
+   its foot. Seven columns is a reading measure, so the text fills its
+   column instead of leaving a gutter of empty labels. On the well, columns
+   8-12 out to the screen edge: what the project has produced. The bar
+   carries the path to the project over the conversation and its state over
+   the well, so the page has one header. */
+
+      .sess-bar .crumb {
+        grid-column: 1 / 7;
+      }
+      /* The state sits against the avatar, one gap apart, as the budget does on
+   home. */
+      .sess-bar .sess-meta {
+        grid-column: 7 / -1;
+        grid-row: 1;
+        justify-content: flex-end;
+        padding-right: calc(var(--avatar) + var(--s-4));
+      }
+      .sess-bar .bar-end {
+        grid-row: 1;
+      }
+      .sess-bar .bar-end {
+        grid-column: 12 / -1;
+      }
+      .crumb {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-2);
+        min-width: 0;
+      }
+      .crumb .wordmark {
+        margin-right: var(--s-2);
+      }
+      .crumb a {
+        color: var(--ink-2);
+      }
+      .crumb h1 {
+        overflow: hidden;
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        font-weight: var(--w-semi);
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .sess-meta {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-3);
+        min-width: 0;
+        white-space: nowrap;
+      }
+      .rail-open {
+        display: none;
+      }
+      .sess-title {
+        display: none;
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        font-weight: var(--w-semi);
+      }
+      .crumb .wordmark {
+        color: var(--ink);
+      }
+
+      main {
+        flex: 1;
+        min-height: 0;
+        grid-template-rows: minmax(0, 1fr);
+      }
+
+      /* ----- the conversation ----- */
+      .talk {
+        grid-column: 1 / 8;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .log {
+        --surface: var(--paper);
+        flex: 1;
+      }
+      /* The log reaches into the gutter, so its scroll bar sits between the
+   conversation and the well and never over the text. */
+      .log {
+        margin-right: calc(var(--gutter) * -1);
+        padding-right: var(--gutter);
+      }
+      .turn {
+        padding-block: var(--s-4);
+      }
+      .turn + .turn {
+        border-top: var(--rule-w) solid var(--rule-minor);
+      }
+      /* Who speaks, you or lumen, sits over what they said. Your turns sit on
+   the well, so a change of speaker is a change of surface, not only of
+   label. lumen's turns stay on paper. */
+      .who {
+        padding-block: var(--s-1) var(--s-2);
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        font-weight: var(--w-semi);
+      }
+      .turn-you .turn-body {
+        padding: var(--s-3);
+        background: var(--well);
+      }
+      /* A finding on the well opens the step that recorded it. */
+      .finds li[data-src] {
+        cursor: pointer;
+      }
+      .finds li[data-src]:hover .find-claim {
+        text-decoration: underline;
+        text-decoration-thickness: 1.5px;
+        text-underline-offset: 0.15em;
+      }
+      .rows-finds li.is-found,
+      .finds li.is-found {
+        background: var(--well);
+        outline: 2px solid var(--ink);
+        outline-offset: 2px;
+      }
+      .rows-finds li {
+        cursor: pointer;
+      }
+      .rows-finds li:hover .row-q {
+        text-decoration: underline;
+        text-decoration-thickness: 1.5px;
+        text-underline-offset: 0.15em;
+      }
+      /* Stop is a quiet control until it is armed: a square and a word, no box.
+   The first click arms it and shows the box; the second stops. */
+      .stop {
+        gap: var(--s-2);
+        margin-left: var(--s-2);
+        border-color: transparent;
+      }
+      .stop::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        background: currentColor;
+      }
+      .stop:hover {
+        background: transparent;
+        color: var(--ink);
+        border-color: var(--ink);
+      }
+      .stop.is-armed {
+        background: var(--ink);
+        color: var(--paper);
+        border-color: var(--ink);
+      }
+      .rows-two li {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+      .turn-body {
+        min-width: 0;
+      }
+      .say {
+        font-weight: var(--w-medium);
+      }
+      .say-none {
+        color: var(--ink-2);
+        font-weight: var(--w-regular);
+      }
+      .queued {
+        margin-top: var(--s-1);
+        font-size: var(--t-12);
+        line-height: var(--lh-12);
+        color: var(--ink-3);
+      }
+      .reply {
+        max-width: 68ch;
+        margin-top: var(--s-5);
+      }
+
+      /* The work before a reply hangs on one thin rule, so it reads as one
+   block of steps and the reply below it reads as the answer. */
+      .work {
+        padding-left: var(--s-3);
+        border-left: var(--rule-w) solid var(--rule-minor);
+      }
+      .step + .step {
+        margin-top: var(--s-3);
+      }
+      .step-kind {
+        margin-bottom: var(--s-1);
+        font-size: var(--t-12);
+        line-height: var(--lh-12);
+        font-weight: var(--w-semi);
+      }
+      .step-kind span {
+        margin-left: var(--s-2);
+        font-weight: var(--w-regular);
+        color: var(--ink-2);
+      }
+      .thought {
+        max-width: 68ch;
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        color: var(--ink-2);
+      }
+      .rows li {
+        display: grid;
+        grid-template-columns: 7rem minmax(0, 1fr) auto;
+        column-gap: var(--s-3);
+        align-items: baseline;
+        padding-block: var(--s-1);
+        border-top: var(--rule-w) solid var(--rule-minor);
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+      }
+      .rows li:first-child {
+        border-top: 0;
+      }
+      .row-src {
+        color: var(--ink-2);
+        white-space: nowrap;
+      }
+      .row-res {
+        justify-self: end;
+        color: var(--ink-2);
+        text-align: right;
+      }
+      .row-hit .row-q,
+      .row-hit .row-res {
+        color: var(--ink);
+        font-weight: var(--w-semi);
+      }
+      .rows code {
+        font-size: inherit;
+        line-height: inherit;
+      }
+      /* Recorded findings: the claim, then its verdict, the same as on the well. */
+      .rows-finds li {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+      .term {
+        overflow-x: auto;
+        padding: var(--s-3);
+        border: var(--rule-w) solid var(--rule-minor);
+        background: var(--paper);
+        font-size: var(--t-12);
+        line-height: var(--lh-12);
+        white-space: pre;
+      }
+      /* A question lumen cannot answer alone: the one red edge on the page. */
+      .ask {
+        margin-top: var(--s-4);
+        padding: var(--s-3);
+        border-left: 2px solid var(--signal);
+        background: var(--well);
+      }
+      .ask-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--s-2);
+        margin-top: var(--s-3);
+      }
+      .btn {
+        min-height: var(--hit);
+        padding-inline: var(--s-3);
+        border: var(--rule-w) solid var(--ink);
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        font-weight: var(--w-semi);
+      }
+      .btn-solid {
+        background: var(--ink);
+        color: var(--paper);
+      }
+      .btn:not(.btn-solid):hover {
+        background: var(--paper);
+      }
+
+      .composer {
+        flex: none;
+        padding-block: var(--s-3) var(--s-4);
+      }
+
+      /* ----- the well: what the project has produced ----- */
+      .rail {
+        --surface: var(--well);
+        grid-column: 8 / -1;
+        border-left: var(--rule-w) solid var(--rule-minor);
+        margin-right: calc(var(--margin) * -1);
+        padding: 0 var(--margin);
+        background: var(--well);
+      }
+      .rail-head {
+        display: none;
+      }
+      .rail > .rail-sec:first-of-type {
+        margin-top: var(--s-4);
+      }
+      .rail > .rail-sec:last-of-type {
+        margin-bottom: var(--s-4);
+      }
+      .rail-sec + .rail-sec {
+        margin-top: var(--s-4);
+      }
+      .rail-h {
+        font-size: var(--t-18);
+        line-height: var(--lh-18);
+        font-weight: var(--w-semi);
+      }
+      .rail-h .num {
+        margin-left: var(--s-1);
+        font-weight: var(--w-regular);
+        color: var(--ink-2);
+      }
+      .rail-desc {
+        margin-top: var(--s-1);
+        font-size: 13px;
+        line-height: 18px;
+        color: var(--ink-2);
+      }
+      .rail-list {
+        margin-top: var(--s-3);
+      }
+      .finds li {
+        padding-block: var(--s-3);
+        border-top: var(--rule-w) solid var(--rule-minor);
+      }
+      .finds li:first-child {
+        padding-top: 0;
+        border-top: 0;
+      }
+      .finds li[hidden] {
+        display: none;
+      }
+      .find-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: var(--s-3);
+      }
+      .find-claim {
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        font-weight: var(--w-semi);
+      }
+      .find-ev {
+        margin-top: var(--s-1);
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        color: var(--ink-2);
+      }
+      .find-ev code {
+        font-size: inherit;
+        line-height: inherit;
+        color: var(--ink);
+      }
+      .find-dropped .find-claim {
+        color: var(--ink-2);
+        font-weight: var(--w-medium);
+        text-decoration: line-through;
+      }
+      .more {
+        margin-top: var(--s-2);
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        font-weight: var(--w-medium);
+        text-decoration: underline;
+        text-underline-offset: 0.2em;
+      }
+      .tree li {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: var(--s-3);
+        padding-block: var(--s-1);
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+      }
+      .tree li + li {
+        border-top: var(--rule-w) solid var(--rule-minor);
+      }
+      .tree .child {
+        margin-left: var(--s-2);
+        padding-left: var(--s-3);
+        border-left: var(--rule-w) solid var(--rule);
+      }
+      .tree li.child + li.child {
+        border-top: 0;
+      }
+      .tree-name {
+        font-weight: var(--w-medium);
+      }
+      .files li {
+        padding-block: var(--s-1);
+        border-top: var(--rule-w) solid var(--rule-minor);
+      }
+      .files li:first-child {
+        border-top: 0;
+      }
+      .files li {
+        color: var(--ink);
+        font-size: var(--t-12);
+        line-height: var(--lh-12);
+        overflow-wrap: anywhere;
+      }
+      .empty {
+        font-family: var(--font-sans);
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        color: var(--ink-2);
+      }
+
+      @media (max-width: 1080px) {
+        .sess-bar .crumb {
+          grid-column: 1 / 8;
+        }
+        .sess-bar .sess-meta {
+          grid-column: 8 / 11;
+          padding-left: 0;
+        }
+        .sess-bar .bar-end {
+          grid-column: 11 / -1;
+        }
+        .talk {
+          grid-column: 1 / -1;
+        }
+        .log {
+          margin-right: 0;
+        }
+        .log,
+        .composer {
+          padding-right: calc(100% / 12);
+        }
+        .rail-open {
+          display: inline;
+        }
+        /* The well becomes a sheet over the right side. It carries its own name
+     and its own way out, because it can cover the whole width. */
+        .rail {
+          position: fixed;
+          inset: 0 0 0 auto;
+          z-index: 20;
+          width: min(400px, 100%);
+          margin: 0;
+          padding: 0 var(--margin);
+          border-left: var(--rule-w) solid var(--rule);
+          transform: translateX(100%);
+          visibility: hidden;
+        }
+        .show-rail .rail {
+          transform: none;
+          visibility: visible;
+        }
+        .rail-head {
+          position: sticky;
+          top: 0;
+          z-index: 1;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          min-height: var(--bar-h);
+          margin-bottom: var(--s-3);
+          border-bottom: var(--rule-w) solid var(--rule);
+          background: var(--well);
+          font-size: var(--t-18);
+          line-height: var(--lh-18);
+          font-weight: var(--w-semi);
+        }
+        .rail-close {
+          min-width: var(--hit);
+          min-height: var(--hit);
+          text-align: right;
+          font-weight: var(--w-medium);
+        }
+        /* In the sheet the top fade starts under the sheet's own title. */
+        .rail > .edge-top {
+          top: var(--bar-h);
+        }
+        .rail > .rail-sec:first-of-type {
+          margin-top: 0;
+        }
+        .rail-open {
+          padding: var(--s-1) var(--s-2);
+          border: var(--rule-w) solid var(--ink);
+        }
+      }
+      @media (max-width: 1080px) and (prefers-reduced-motion: no-preference) {
+        .rail {
+          transition:
+            transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+            visibility 0s linear 240ms;
+        }
+        .show-rail .rail {
+          transition:
+            transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+            visibility 0s;
+        }
+      }
+      /* Narrow: the bar keeps one row for lumen and the account; the project's
+   name and state take a second line inside the same header. */
+      @media (max-width: 720px) {
+        .sess-bar {
+          padding-block: var(--s-3) var(--s-2);
+          row-gap: var(--s-2);
+        }
+        .sess-bar .crumb {
+          grid-column: 1 / 3;
+          grid-row: 1;
+        }
+        .sess-bar .crumb > :not(.wordmark) {
+          display: none;
+        }
+        .sess-bar .bar-end {
+          grid-column: 3 / -1;
+          grid-row: 1;
+        }
+        .sess-bar .sess-title {
+          display: flex;
+          gap: var(--s-2);
+          grid-column: 1 / -1;
+          grid-row: 2;
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+        .sess-title a {
+          color: var(--ink-2);
+          font-weight: var(--w-regular);
+        }
+        /* Code keeps its columns on a phone and scrolls sideways, with a
+     visible bar so the hidden part is not a surprise. */
+        /* Code keeps its columns on a phone: values stay beside their labels.
+     It scrolls sideways inside its border; a darker band at an edge says
+     that more is hidden there, and it goes once that edge is reached. */
+        .term {
+          font-size: 11px;
+          background:
+            linear-gradient(to right, var(--paper) 40%, transparent) left / 32px 100% no-repeat
+              local,
+            linear-gradient(to left, var(--paper) 40%, transparent) right / 32px 100% no-repeat
+              local,
+            linear-gradient(to right, color-mix(in srgb, var(--ink) 14%, transparent), transparent)
+              left / 12px 100% no-repeat scroll,
+            linear-gradient(to left, color-mix(in srgb, var(--ink) 14%, transparent), transparent)
+              right / 12px 100% no-repeat scroll,
+            var(--paper);
+        }
+        .sess-bar .sess-meta {
+          grid-column: 1 / -1;
+          grid-row: 3;
+          justify-content: flex-start;
+          padding-right: 0;
+        }
+        .sess-meta .stop {
+          margin-left: auto;
+        }
+        .sess-meta [data-age] {
+          display: none;
+        }
+        .turn {
+          padding-block: var(--s-3);
+        }
+        .log,
+        .composer {
+          padding-right: 0;
+        }
+        .field-hint {
+          display: none;
+        }
+        /* Narrow: the source sits on its own small line, then the query and the
+     result side by side. Two-column rows keep their two columns. */
+        .rows li {
+          grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .rows .row-src {
+          grid-column: 1 / -1;
+          font-size: var(--t-12);
+          line-height: var(--lh-12);
+        }
+        .rows-finds li,
+        .rows-two li {
+          grid-template-columns: minmax(0, 1fr) auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="gridlay" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+
+    <header class="band bar sess-bar">
+      <nav class="crumb" aria-label="Breadcrumb">
+        <a class="wordmark" href="home.html"
+          ><svg class="mark" viewBox="0 0 6 6" aria-hidden="true">
+            <circle cx="1.5" cy="0.5" r="0.19" />
+            <circle cx="2.5" cy="0.5" r="0.18" />
+            <circle cx="3.5" cy="0.5" r="0.25" />
+            <circle cx="4.5" cy="0.5" r="0.37" />
+            <circle cx="0.5" cy="1.5" r="0.20" />
+            <circle cx="1.5" cy="1.5" r="0.14" />
+            <circle cx="2.5" cy="1.5" r="0.17" />
+            <circle cx="3.5" cy="1.5" r="0.24" />
+            <circle cx="4.5" cy="1.5" r="0.33" />
+            <circle cx="5.5" cy="1.5" r="0.46" />
+            <circle cx="0.5" cy="2.5" r="0.20" />
+            <circle cx="1.5" cy="2.5" r="0.18" />
+            <circle cx="2.5" cy="2.5" r="0.21" />
+            <circle cx="3.5" cy="2.5" r="0.27" />
+            <circle cx="4.5" cy="2.5" r="0.35" />
+            <circle cx="5.5" cy="2.5" r="0.46" />
+            <circle cx="0.5" cy="3.5" r="0.27" />
+            <circle cx="1.5" cy="3.5" r="0.25" />
+            <circle cx="2.5" cy="3.5" r="0.28" />
+            <circle cx="3.5" cy="3.5" r="0.33" />
+            <circle cx="4.5" cy="3.5" r="0.41" />
+            <circle cx="5.5" cy="3.5" r="0.47" />
+            <circle cx="0.5" cy="4.5" r="0.39" />
+            <circle cx="1.5" cy="4.5" r="0.34" />
+            <circle cx="2.5" cy="4.5" r="0.37" />
+            <circle cx="3.5" cy="4.5" r="0.41" />
+            <circle cx="4.5" cy="4.5" r="0.47" />
+            <circle cx="5.5" cy="4.5" r="0.47" />
+            <circle cx="1.5" cy="5.5" r="0.47" />
+            <circle cx="2.5" cy="5.5" r="0.47" />
+            <circle cx="3.5" cy="5.5" r="0.47" />
+            <circle cx="4.5" cy="5.5" r="0.47" /></svg
+          >lumen</a
+        ><a href="home.html">Projects</a><span class="quiet" aria-hidden="true">/</span>
+        <h1 data-title>Pop-stack fertility</h1>
+      </nav>
+      <p class="sess-title">
+        <a href="home.html">Projects</a><span class="quiet" aria-hidden="true">/</span
+        ><span data-title-narrow>Pop-stack fertility</span>
+      </p>
+      <div class="sess-meta num">
+        <span class="run run-live" data-state>Running</span>
+        <span title="Spent on this project"><b data-spend>$0.94</b> spent</span>
+        <span class="quiet" data-age>2 h 14 min elapsed</span>
+        <button type="button" class="btn-sm stop" data-stop>Stop</button>
+      </div>
+      <div class="bar-end">
+        <button
+          type="button"
+          class="btn-sm rail-open"
+          aria-controls="rail"
+          aria-expanded="false"
+          data-rail-open
+        >
+          Findings
+        </button>
+        <a class="avatar" href="#" aria-label="Account: LZ">LZ</a>
+      </div>
+    </header>
+
+    <main class="band">
+      <div class="talk">
+        <section class="log scroll" aria-label="Conversation" data-log>
+          <article class="turn turn-you">
+            <h2 class="who">You</h2>
+            <div class="turn-body">
+              <p class="say">
+                Act as an independent researcher, not an assistant carrying out a task. Find
+                something genuinely new, simple and deep, that a researcher would stop and look at.
+              </p>
+            </div>
+          </article>
+
+          <article class="turn">
+            <h2 class="who">lumen</h2>
+            <div class="turn-body">
+              <div class="work">
+                <section class="step">
+                  <h3 class="step-kind">Thinking</h3>
+                  <p class="thought">
+                    Enumerative combinatorics is where computation can settle things. Before I
+                    compute anything I should find out what is already known. A result I rediscover
+                    is worth nothing.
+                  </p>
+                </section>
+                <section class="step">
+                  <h3 class="step-kind">Searched <span class="num">6 s, $0.01</span></h3>
+                  <ul class="rows">
+                    <li>
+                      <span class="row-src">arXiv</span
+                      ><span class="row-q">permutation statistics, last 6 months</span
+                      ><span class="row-res num">41 papers</span>
+                    </li>
+                    <li>
+                      <span class="row-src">OEIS</span
+                      ><span class="row-q">A262494, stack-sorting depth</span
+                      ><span class="row-res">Named, no recurrence</span>
+                    </li>
+                    <li>
+                      <span class="row-src">OEIS</span
+                      ><span class="row-q">A001405, pinnacle sets</span
+                      ><span class="row-res">Closed form exists</span>
+                    </li>
+                    <li class="row-hit">
+                      <span class="row-src">OEIS</span><span class="row-q">pop-stack preimages</span
+                      ><span class="row-res">Nothing</span>
+                    </li>
+                  </ul>
+                </section>
+                <section class="step">
+                  <h3 class="step-kind">Thinking</h3>
+                  <p class="thought">
+                    Two of the four are closed. I am unsure about tunnels, and I cannot find
+                    pop-stack preimage counts at all. I will send readers at both and compute the
+                    distributions myself at the same time.
+                  </p>
+                </section>
+                <section class="step">
+                  <h3 class="step-kind">Started 3 agents <span>in parallel</span></h3>
+                  <ul class="rows">
+                    <li>
+                      <span class="row-src">reader</span
+                      ><span class="row-q">what is already known on all four lines</span
+                      ><span class="row-res">Finished</span>
+                    </li>
+                    <li>
+                      <span class="row-src">compute-perm</span
+                      ><span class="row-q">stack-sorting and pop-stack, n&nbsp;≤&nbsp;9</span
+                      ><span class="row-res">Finished</span>
+                    </li>
+                    <li>
+                      <span class="row-src">compute-dyck</span
+                      ><span class="row-q">Dyck path statistics, n&nbsp;≤&nbsp;10</span
+                      ><span class="row-res">Finished</span>
+                    </li>
+                  </ul>
+                </section>
+                <section class="step">
+                  <h3 class="step-kind">Thinking</h3>
+                  <p class="thought">
+                    The reader says tunnels reduce to the return count (Elizalde, 2002), so I drop
+                    that line. But the 3-stack-sortable counts from compute-perm do not match the
+                    sequence that most sources cite. That is my bug or theirs, so I will write a
+                    second implementation.
+                  </p>
+                </section>
+                <section class="step">
+                  <h3 class="step-kind">Saved a file</h3>
+                  <ul class="rows rows-two">
+                    <li>
+                      <code class="row-q">code/popstack.py</code
+                      ><span class="row-res num">28 lines</span>
+                    </li>
+                  </ul>
+                </section>
+                <section class="step">
+                  <h3 class="step-kind">Ran <span class="num">8.9 s</span></h3>
+                  <pre class="term num">
+$ python popstack.py --n 10 --tally-preimages
+3,628,800 permutations   862,047 distinct images   8.9 s
+max preimage count at the identity            yes
+oeis A134664  1,2,6,24,114,606,3494,21426,137901  match
+oeis A000139  1,2,6,22,91,408,1938              no match</pre
+                  >
+                </section>
+                <section class="step">
+                  <h3 class="step-kind">Recorded 3 findings</h3>
+                  <ul class="rows rows-finds">
+                    <li>
+                      <span class="row-q">3-stack-sortable is A134664, not A000139</span
+                      ><span class="verdict v-confirmed">Confirmed</span>
+                    </li>
+                    <li>
+                      <span class="row-q">Pop-stack preimages have no paper</span
+                      ><span class="verdict v-open">Open question</span>
+                    </li>
+                    <li>
+                      <span class="row-q">Tunnels on Dyck paths</span
+                      ><span class="verdict v-dropped">Dropped</span>
+                    </li>
+                  </ul>
+                </section>
+              </div>
+              <p class="reply">
+                Three of the four lines are already solved, so I am dropping them. Tunnels on Dyck
+                paths reduce to the return count, and the triangle is A009766 (Elizalde, 2002).
+                Pinnacle sets have a closed form. Stack-sorting depth past k&nbsp;=&nbsp;3 is a hard
+                open problem, not a lead. What is left is the line nobody wrote a paper on: the
+                preimage structure of pop-stack on S<sub>n</sub>. The claim that the identity
+                maximises preimages is an unproven conjecture, checked to n&nbsp;=&nbsp;8. I have it
+                to n&nbsp;=&nbsp;10.
+              </p>
+            </div>
+          </article>
+
+          <article class="turn turn-you">
+            <h2 class="who">You</h2>
+            <div class="turn-body">
+              <p class="say">Push it to n&nbsp;=&nbsp;11 before you trust the conjecture.</p>
+            </div>
+          </article>
+
+          <article class="turn">
+            <h2 class="who">lumen</h2>
+            <div class="turn-body">
+              <div class="work">
+                <section class="step">
+                  <h3 class="step-kind">Thinking</h3>
+                  <p class="thought">
+                    n&nbsp;=&nbsp;11 is 40 million permutations, about three minutes.
+                    n&nbsp;=&nbsp;12 is 480 million and would cost enough to need your approval. I
+                    will do 11 now.
+                  </p>
+                </section>
+                <section class="step">
+                  <h3 class="step-kind">Ran <span class="num">2 min 41 s</span></h3>
+                  <pre class="term num">
+$ python popstack.py --n 11 --tally-preimages
+39,916,800 permutations   8,152,860 distinct images   2 min 41 s
+max preimage count at the identity            yes
+single-descent formula holds                  yes</pre
+                  >
+                </section>
+                <section class="step">
+                  <h3 class="step-kind">Recorded 2 findings</h3>
+                  <ul class="rows rows-finds">
+                    <li>
+                      <span class="row-q">The identity maximises preimages at n&nbsp;=&nbsp;11</span
+                      ><span class="verdict v-confirmed">Confirmed</span>
+                    </li>
+                    <li>
+                      <span class="row-q">Induction on descents</span
+                      ><span class="verdict v-open">Open question</span>
+                    </li>
+                  </ul>
+                </section>
+              </div>
+              <p class="reply">
+                It holds at n&nbsp;=&nbsp;11, two terms past anything in the literature. Checking
+                further only gets more expensive, so I have stopped checking and started proving.
+                The single-descent case falls out directly. If that is right, the general case
+                should follow by induction on the number of descents. I am writing that up now.
+              </p>
+            </div>
+          </article>
+        </section>
+
+        <form
+          class="composer"
+          action="#"
+          data-composer
+          data-reply
+          data-empty="Write a message first."
+        >
+          <div class="field">
+            <label class="sr-only" for="say">Reply to lumen</label>
+            <textarea
+              class="field-input"
+              id="say"
+              name="say"
+              rows="1"
+              placeholder="Reply to lumen"
+            ></textarea>
+            <button type="button" class="field-attach" aria-label="Attach a file">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                /></svg
+              ><span class="attach-label">Attach</span>
+            </button>
+            <button type="submit" class="field-send" aria-label="Send">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path
+                  d="M3 10h13M10.5 4.5 16 10l-5.5 5.5"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  fill="none"
+                />
+              </svg>
+            </button>
+          </div>
+          <p class="field-hint" aria-live="polite" data-hint>
+            lumen keeps working while you write. It reads your message at its next step.
+          </p>
+        </form>
+      </div>
+
+      <aside class="rail scroll" id="rail" aria-label="What this project has produced">
+        <div class="rail-head">
+          <span>Findings, call tree and files</span
+          ><button type="button" class="rail-close" data-rail-close>Close</button>
+        </div>
+
+        <section class="rail-sec" aria-labelledby="h-finds">
+          <h2 class="rail-h" id="h-finds">Findings<span class="num" data-find-count>5</span></h2>
+          <p class="rail-desc">What lumen has found, newest first.</p>
+          <ul class="rail-list finds" data-finds>
+            <li>
+              <div class="find-head">
+                <p class="find-claim">Induction on descents</p>
+                <span class="verdict v-open">Open question</span>
+              </div>
+              <p class="find-ev">
+                The single-descent case falls out directly. The general case is being written up in
+                <code>research/proof-sketch.md</code>.
+              </p>
+            </li>
+            <li>
+              <div class="find-head">
+                <p class="find-claim">The identity maximises preimages at n&nbsp;=&nbsp;11</p>
+                <span class="verdict v-confirmed">Confirmed</span>
+              </div>
+              <p class="find-ev num">
+                39,916,800 permutations, 8,152,860 distinct images, maximum at the identity.
+              </p>
+            </li>
+            <li>
+              <div class="find-head">
+                <p class="find-claim">Pop-stack preimages have no paper</p>
+                <span class="verdict v-open">Open question</span>
+              </div>
+              <p class="find-ev">
+                Three surveys that would have cited it do not. The claim sits in the literature as
+                an unproven conjecture, checked to n&nbsp;=&nbsp;8.
+              </p>
+            </li>
+            <li>
+              <div class="find-head">
+                <p class="find-claim">3-stack-sortable is A134664, not A000139</p>
+                <span class="verdict v-confirmed">Confirmed</span>
+              </div>
+              <p class="find-ev num">
+                Two independent implementations agree to n&nbsp;=&nbsp;9: 1, 2, 6, 24, 114, 606,
+                3494, 21426, 137901. A000139 counts the 2-stack-sortable permutations.
+              </p>
+            </li>
+            <li class="find-dropped">
+              <div class="find-head">
+                <p class="find-claim">Tunnels on Dyck paths</p>
+                <span class="verdict v-dropped">Dropped</span>
+              </div>
+              <p class="find-ev">
+                Elizalde, 2002, already characterises them: the triangle is A009766. Nothing to add.
+              </p>
+            </li>
+          </ul>
+          <button type="button" class="more" data-more hidden></button>
+        </section>
+
+        <section class="rail-sec" aria-labelledby="h-tree">
+          <h2 class="rail-h" id="h-tree">Call tree</h2>
+          <p class="rail-desc">lumen and the agents it started.</p>
+          <ul class="rail-list tree" data-tree>
+            <li>
+              <span class="tree-name">lumen, the lead</span
+              ><span class="run run-live">Running</span>
+            </li>
+            <li class="child">
+              <span class="tree-name">reader</span><span class="run">Finished</span>
+            </li>
+            <li class="child">
+              <span class="tree-name">compute-perm</span><span class="run">Finished</span>
+            </li>
+            <li class="child">
+              <span class="tree-name">compute-dyck</span><span class="run">Finished</span>
+            </li>
+          </ul>
+        </section>
+
+        <section class="rail-sec" aria-labelledby="h-files">
+          <h2 class="rail-h" id="h-files">Files<span class="num" data-file-count>7</span></h2>
+          <ul class="rail-list files mono" data-files>
+            <li>research/proof-sketch.md</li>
+            <li>results/fertility_n11.csv</li>
+            <li>research/popstack-preimages.md</li>
+            <li>results/fertility_n10.csv</li>
+            <li>code/popstack.py</li>
+            <li>code/stacksort.py</li>
+            <li>research/literature.md</li>
+          </ul>
+        </section>
+      </aside>
+    </main>
+
+    <script src="raster.js"></script>
+    <script src="session.js"></script>
+    <script src="lattice.js"></script>
+  </body>
+</html>

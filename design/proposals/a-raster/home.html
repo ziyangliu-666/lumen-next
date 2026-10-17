@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Projects, lumen</title>
+    <script src="theme.js"></script>
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700&amp;display=swap"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;display=swap"
+    />
+    <link rel="stylesheet" href="raster.css" />
+    <style>
+      /* ===== home =====
+   The same two surfaces as the session. On paper, columns 1-7: the
+   projects you have, the one waiting on you first. On the well, columns
+   8-12 out to the screen edge: start a new project. Each region's name sits
+   over it, so no column is held empty for a label. */
+      main {
+        flex: 1;
+        min-height: 0;
+        grid-template-rows: minmax(0, 1fr);
+      }
+      .region-name {
+        margin-bottom: var(--s-3);
+        font-size: var(--t-18);
+        line-height: var(--lh-18);
+        font-weight: var(--w-semi);
+      }
+      .list-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+      /* On a narrow screen the form sits below the list; this jumps to it. */
+      .new-jump {
+        display: none;
+      }
+      .region-name .num {
+        margin-left: var(--s-1);
+        font-weight: var(--w-regular);
+        color: var(--ink-2);
+      }
+
+      .projects {
+        grid-column: 1 / 8;
+      }
+      .projects > .list-head {
+        margin-top: var(--s-4);
+      }
+      .projects > .plist {
+        margin-bottom: var(--s-5);
+      }
+      /* The list reaches into the gutter, so its scroll bar never sits on text. */
+      .projects {
+        margin-right: calc(var(--gutter) * -1);
+        padding-right: var(--gutter);
+      }
+      .new {
+        --surface: var(--well);
+        grid-column: 8 / -1;
+        border-left: var(--rule-w) solid var(--rule-minor);
+        margin-right: calc(var(--margin) * -1);
+        padding: 0 var(--margin);
+        background: var(--well);
+      }
+      .new .field {
+        background: transparent;
+      }
+      .new > .region-name {
+        margin-top: var(--s-4);
+      }
+      .new > .latest {
+        margin-bottom: var(--s-5);
+      }
+      /* Under the form, the well lists what the projects found lately, so the
+   surface that means "what lumen produced" says the same on both pages. */
+      .latest {
+        margin-top: var(--s-5);
+      }
+      .latest li {
+        padding-block: var(--s-3);
+        border-top: var(--rule-w) solid var(--rule-minor);
+      }
+      .latest li:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+      .find-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: var(--s-3);
+      }
+      .find-claim {
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        font-weight: var(--w-semi);
+      }
+      .find-link {
+        display: block;
+      }
+      .find-link:hover {
+        text-decoration: none;
+      }
+      .find-link:hover .find-claim {
+        text-decoration: underline;
+        text-decoration-thickness: 1.5px;
+        text-underline-offset: 0.15em;
+      }
+      .find-from {
+        margin-top: var(--s-1);
+        font-size: 13px;
+        line-height: 18px;
+        color: var(--ink-2);
+      }
+
+      /* One project is one row: name and run state, a two-line summary, and on
+   the right edge what it cost and when it last moved. */
+      .proj {
+        display: grid;
+        grid-template-columns: 8.5rem minmax(0, 1fr) 10rem;
+        column-gap: var(--gutter);
+        padding-block: var(--s-3);
+        border-top: var(--rule-w) solid var(--rule-minor);
+      }
+      .plist li:first-child .proj {
+        border-top: 0;
+        padding-top: 0;
+      }
+      a.proj:hover {
+        text-decoration: none;
+      }
+      a.proj:hover .proj-title {
+        text-decoration: underline;
+        text-decoration-thickness: 1.5px;
+        text-underline-offset: 0.15em;
+      }
+      /* State is the first column, so it is one straight line to scan down. */
+      .proj-state {
+        line-height: var(--lh-16);
+      }
+      .proj-state .run {
+        line-height: var(--lh-16);
+      }
+      .proj-title {
+        font-size: var(--t-16);
+        line-height: var(--lh-16);
+        font-weight: var(--w-semi);
+      }
+      .proj-sum {
+        max-width: 44em;
+        margin-top: var(--s-1);
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        color: var(--ink-2);
+      }
+
+      .proj-side {
+        text-align: right;
+      }
+      .proj-spend {
+        display: block;
+        font-weight: var(--w-medium);
+      }
+      .proj-age {
+        display: block;
+        font-size: var(--t-14);
+        line-height: var(--lh-14);
+        color: var(--ink-2);
+      }
+      /* Below 1080 px the page is one column: the new-project form on its well
+   at the top, then the projects. The whole column scrolls. */
+      @media (max-width: 1080px) {
+        main.band {
+          display: flex;
+          flex-direction: column;
+          overflow-y: auto;
+        }
+        .new,
+        .projects {
+          overflow: visible;
+        }
+        /* Projects come first on a narrow screen: the one waiting on you is the
+     first thing in view. The form follows on its well. */
+        .new {
+          flex: none;
+          margin-inline: calc(var(--margin) * -1);
+          padding: 0 var(--margin);
+        }
+        .projects {
+          flex: none;
+          margin-right: 0;
+          padding-right: 0;
+        }
+      }
+      @media (max-width: 720px) {
+        /* Narrow: the title takes the full width; state, spend and age share one
+     line under the summary, in the same order on every row. */
+        /* Narrow: the title and summary take the width; state, spend and age
+     share one line under them, in the same order on every row. */
+        .proj {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: baseline;
+          column-gap: var(--s-3);
+        }
+        .proj > div:nth-child(2) {
+          order: 1;
+          flex: 1 0 100%;
+        }
+        .proj-state {
+          order: 2;
+          margin-top: var(--s-2);
+        }
+        .proj-side {
+          order: 3;
+          align-items: baseline;
+        }
+        .new-jump {
+          display: inline-flex;
+        }
+        .proj-side {
+          display: flex;
+          gap: var(--s-3);
+          margin-top: var(--s-2);
+          text-align: left;
+        }
+        .proj-spend,
+        .proj-age {
+          display: inline;
+        }
+        .budget-tail {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="gridlay" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+
+    <header class="band bar">
+      <a class="wordmark" href="home.html"
+        ><svg class="mark" viewBox="0 0 6 6" aria-hidden="true">
+          <circle cx="1.5" cy="0.5" r="0.19" />
+          <circle cx="2.5" cy="0.5" r="0.18" />
+          <circle cx="3.5" cy="0.5" r="0.25" />
+          <circle cx="4.5" cy="0.5" r="0.37" />
+          <circle cx="0.5" cy="1.5" r="0.20" />
+          <circle cx="1.5" cy="1.5" r="0.14" />
+          <circle cx="2.5" cy="1.5" r="0.17" />
+          <circle cx="3.5" cy="1.5" r="0.24" />
+          <circle cx="4.5" cy="1.5" r="0.33" />
+          <circle cx="5.5" cy="1.5" r="0.46" />
+          <circle cx="0.5" cy="2.5" r="0.20" />
+          <circle cx="1.5" cy="2.5" r="0.18" />
+          <circle cx="2.5" cy="2.5" r="0.21" />
+          <circle cx="3.5" cy="2.5" r="0.27" />
+          <circle cx="4.5" cy="2.5" r="0.35" />
+          <circle cx="5.5" cy="2.5" r="0.46" />
+          <circle cx="0.5" cy="3.5" r="0.27" />
+          <circle cx="1.5" cy="3.5" r="0.25" />
+          <circle cx="2.5" cy="3.5" r="0.28" />
+          <circle cx="3.5" cy="3.5" r="0.33" />
+          <circle cx="4.5" cy="3.5" r="0.41" />
+          <circle cx="5.5" cy="3.5" r="0.47" />
+          <circle cx="0.5" cy="4.5" r="0.39" />
+          <circle cx="1.5" cy="4.5" r="0.34" />
+          <circle cx="2.5" cy="4.5" r="0.37" />
+          <circle cx="3.5" cy="4.5" r="0.41" />
+          <circle cx="4.5" cy="4.5" r="0.47" />
+          <circle cx="5.5" cy="4.5" r="0.47" />
+          <circle cx="1.5" cy="5.5" r="0.47" />
+          <circle cx="2.5" cy="5.5" r="0.47" />
+          <circle cx="3.5" cy="5.5" r="0.47" />
+          <circle cx="4.5" cy="5.5" r="0.47" /></svg
+        >lumen</a
+      >
+      <div class="bar-end">
+        <span class="num" title="Spent this month, against your monthly limit"
+          ><b>$2.02</b>
+          <span class="quiet">of $200<span class="budget-tail"> this month</span></span></span
+        >
+        <a class="avatar" href="#" aria-label="Account: LZ">LZ</a>
+      </div>
+    </header>
+
+    <main class="band">
+      <section class="projects scroll" aria-labelledby="projects-name">
+        <div class="list-head">
+          <h2 class="region-name" id="projects-name">Projects <span class="num">7</span></h2>
+          <a class="btn-sm new-jump" href="#q">New project</a>
+        </div>
+        <ol class="plist">
+          <li>
+            <a class="proj" href="session.html?p=inversion">
+              <div class="proj-state"><span class="run run-wait">Waiting on you</span></div>
+              <div>
+                <div class="proj-head">
+                  <h3 class="proj-title">Inversion sequences avoiding two patterns</h3>
+                </div>
+                <p class="proj-sum">
+                  Asks to spend about $2.40 more to extend the count to n&nbsp;=&nbsp;14. Open it to
+                  approve or decline.
+                </p>
+              </div>
+              <div class="proj-side num">
+                <span class="proj-spend" title="Spent on this project">$0.18</span
+                ><span class="proj-age">Updated 2 h ago</span>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a class="proj" href="session.html">
+              <div class="proj-state"><span class="run run-live">Running</span></div>
+              <div>
+                <div class="proj-head">
+                  <h3 class="proj-title">Pop-stack fertility</h3>
+                </div>
+                <p class="proj-sum">
+                  The identity maximises preimages up to n&nbsp;=&nbsp;11, two terms past the
+                  literature. Now writing the induction proof.
+                </p>
+              </div>
+              <div class="proj-side num">
+                <span class="proj-spend" title="Spent on this project">$0.94</span
+                ><span class="proj-age">Updated 4 min ago</span>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a class="proj" href="session.html?p=pinnacle">
+              <div class="proj-state"><span class="run">Finished</span></div>
+              <div>
+                <div class="proj-head">
+                  <h3 class="proj-title">Pinnacle sets of permutations</h3>
+                </div>
+                <p class="proj-sum">
+                  The closed form holds to n&nbsp;=&nbsp;12. One question on the generating function
+                  is still open.
+                </p>
+              </div>
+              <div class="proj-side num">
+                <span class="proj-spend" title="Spent on this project">$0.31</span
+                ><span class="proj-age">Updated yesterday</span>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a class="proj" href="session.html?p=parking">
+              <div class="proj-state"><span class="run run-stopped">Stopped</span></div>
+              <div>
+                <div class="proj-head">
+                  <h3 class="proj-title">Parking functions by lucky cars</h3>
+                </div>
+                <p class="proj-sum">
+                  You stopped it after 40 minutes. The statistic is already in Gessel and Seo, 2006.
+                </p>
+              </div>
+              <div class="proj-side num">
+                <span class="proj-spend" title="Spent on this project">$0.12</span
+                ><span class="proj-age">Updated 3 days ago</span>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a class="proj" href="session.html?p=motzkin">
+              <div class="proj-state"><span class="run">Finished</span></div>
+              <div>
+                <div class="proj-head">
+                  <h3 class="proj-title">Motzkin paths by peak height</h3>
+                </div>
+                <p class="proj-sum">
+                  Reproduced the known distribution by peak height. Nothing new, so it stopped and
+                  said so.
+                </p>
+              </div>
+              <div class="proj-side num">
+                <span class="proj-spend" title="Spent on this project">$0.22</span
+                ><span class="proj-age">Updated 5 days ago</span>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a class="proj" href="session.html?p=ballot">
+              <div class="proj-state"><span class="run">Finished</span></div>
+              <div>
+                <div class="proj-head">
+                  <h3 class="proj-title">Ballot sequences and descents</h3>
+                </div>
+                <p class="proj-sum">
+                  The descent statistic is equidistributed with one already in the OEIS. One
+                  finding, confirmed.
+                </p>
+              </div>
+              <div class="proj-side num">
+                <span class="proj-spend" title="Spent on this project">$0.17</span
+                ><span class="proj-age">Updated last week</span>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a class="proj" href="session.html?p=rgf">
+              <div class="proj-state"><span class="run run-stopped">Stopped</span></div>
+              <div>
+                <div class="proj-head">
+                  <h3 class="proj-title">Restricted growth functions</h3>
+                </div>
+                <p class="proj-sum">
+                  You stopped it after 25 minutes to try a different starting point.
+                </p>
+              </div>
+              <div class="proj-side num">
+                <span class="proj-spend" title="Spent on this project">$0.08</span
+                ><span class="proj-age">Updated 2 weeks ago</span>
+              </div>
+            </a>
+          </li>
+        </ol>
+      </section>
+      <section class="new scroll" aria-labelledby="new-name">
+        <h2 class="region-name" id="new-name">New project</h2>
+        <form action="session.html" method="get" data-composer>
+          <input type="hidden" name="mode" value="free" />
+          <div class="tabs" role="group" aria-label="How to start" data-tabs>
+            <button
+              type="button"
+              class="tab"
+              aria-pressed="true"
+              data-mode="free"
+              data-ph="An area of mathematics, or none"
+              data-hint="lumen picks its own question and reports back."
+            >
+              Free exploration
+            </button>
+            <button
+              type="button"
+              class="tab"
+              aria-pressed="false"
+              data-mode="start"
+              data-ph="Paste a paper, a repo or a question"
+              data-hint="lumen starts from what you give it."
+              data-empty="Paste or type something for lumen to start from."
+            >
+              From a starting point
+            </button>
+          </div>
+          <div class="field">
+            <label class="sr-only" for="q">What should lumen look into?</label>
+            <textarea
+              class="field-input"
+              id="q"
+              name="q"
+              rows="1"
+              placeholder="An area of mathematics, or none"
+            ></textarea>
+            <button type="button" class="field-attach" aria-label="Attach a file">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                /></svg
+              ><span class="attach-label">Attach</span>
+            </button>
+            <button type="submit" class="field-send" aria-label="Start">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path
+                  d="M3 10h13M10.5 4.5 16 10l-5.5 5.5"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  fill="none"
+                />
+              </svg>
+            </button>
+          </div>
+          <p class="field-hint" aria-live="polite">
+            lumen picks its own question and reports back.
+          </p>
+        </form>
+
+        <div class="latest">
+          <h2 class="region-name" id="latest-name">Latest findings</h2>
+          <ul aria-labelledby="latest-name">
+            <li>
+              <a class="find-link" href="session.html?f=Induction%20on%20descents">
+                <div class="find-head">
+                  <p class="find-claim">Induction on descents</p>
+                  <span class="verdict v-open">Open question</span>
+                </div>
+                <p class="find-from">Pop-stack fertility, 4 min ago</p>
+              </a>
+            </li>
+            <li>
+              <a
+                class="find-link"
+                href="session.html?f=The%20identity%20maximises%20preimages%20at%20n%C2%A0%3D%C2%A011"
+              >
+                <div class="find-head">
+                  <p class="find-claim">The identity maximises preimages at n&nbsp;=&nbsp;11</p>
+                  <span class="verdict v-confirmed">Confirmed</span>
+                </div>
+                <p class="find-from">Pop-stack fertility, 30 min ago</p>
+              </a>
+            </li>
+            <li>
+              <a
+                class="find-link"
+                href="session.html?p=inversion&amp;f=Counts%20to%20n%C2%A0%3D%C2%A012%20match%20no%20OEIS%20sequence"
+              >
+                <div class="find-head">
+                  <p class="find-claim">Counts to n&nbsp;=&nbsp;12 match no OEIS sequence</p>
+                  <span class="verdict v-open">Open question</span>
+                </div>
+                <p class="find-from">Inversion sequences avoiding two patterns, 2 h ago</p>
+              </a>
+            </li>
+            <li>
+              <a
+                class="find-link"
+                href="session.html?p=pinnacle&amp;f=The%20closed%20form%20holds%20to%20n%C2%A0%3D%C2%A012"
+              >
+                <div class="find-head">
+                  <p class="find-claim">The closed form holds to n&nbsp;=&nbsp;12</p>
+                  <span class="verdict v-confirmed">Confirmed</span>
+                </div>
+                <p class="find-from">Pinnacle sets of permutations, yesterday</p>
+              </a>
+            </li>
+            <li>
+              <a
+                class="find-link"
+                href="session.html?p=ballot&amp;f=Descents%20are%20equidistributed%20with%20a%20known%20statistic"
+              >
+                <div class="find-head">
+                  <p class="find-claim">Descents are equidistributed with a known statistic</p>
+                  <span class="verdict v-confirmed">Confirmed</span>
+                </div>
+                <p class="find-from">Ballot sequences and descents, last week</p>
+              </a>
+            </li>
+            <li>
+              <a
+                class="find-link"
+                href="session.html?p=motzkin&amp;f=The%20peak-height%20distribution%20is%20already%20known"
+              >
+                <div class="find-head">
+                  <p class="find-claim">The peak-height distribution is already known</p>
+                  <span class="verdict v-dropped">Dropped</span>
+                </div>
+                <p class="find-from">Motzkin paths by peak height, 5 days ago</p>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <script src="raster.js"></script>
+    <script>
+      (function () {
+        // A row follows what you did inside the project: a stop first, then an
+        // answer to a question.
+        function stopped(id) {
+          try {
+            return localStorage.getItem('lumen-stopped-' + id);
+          } catch (e) {
+            return null;
+          }
+        }
+        [
+          ['popstack', 'a[href="session.html"]'],
+          ['inversion', 'a[href$="p=inversion"]'],
+        ].forEach(function (pair) {
+          var r = document.querySelector(pair[1]);
+          if (!stopped(pair[0]) || !r) return;
+          var s = r.querySelector('.run');
+          s.className = 'run run-stopped';
+          s.textContent = 'Stopped';
+          r.querySelector('.proj-sum').textContent =
+            'You stopped it. Everything recorded so far is kept.';
+          r.querySelector('.proj-age').textContent = 'Updated just now';
+          r.dataset.done = '1';
+        });
+        var a = null;
+        try {
+          a = localStorage.getItem('lumen-inversion');
+        } catch (e) {}
+        var row = document.querySelector('a[href$="p=inversion"]');
+        if (a && row && !row.dataset.done) {
+          var st = row.querySelector('.run');
+          st.className = 'run run-live';
+          st.textContent = 'Running';
+          row.querySelector('.proj-sum').innerHTML =
+            a === 'approved'
+              ? 'You approved $2.40. lumen is counting n&nbsp;=&nbsp;13 and 14.'
+              : 'You said not now. lumen is writing up the counts to n&nbsp;=&nbsp;12.';
+          row.querySelector('.proj-age').textContent = 'Updated just now';
+        }
+        // Arriving from the landing page with a question: it waits in the field,
+        // in the mode it was written in.
+        var params = new URLSearchParams(location.search);
+        var q = params.get('q');
+        if (params.get('mode') === 'start') {
+          var t = document.querySelector('.new .tab[data-mode="start"]');
+          if (t) t.click();
+        }
+        if (q) {
+          var f = document.getElementById('q');
+          f.value = q;
+          var hint = document.querySelector('.new .field-hint');
+          hint.textContent = 'You are signed in. Press the arrow to start.';
+          hint.classList.add('is-ask');
+        }
+      })();
+    </script>
+    <script src="lattice.js"></script>
+  </body>
+</html>

@@ -218,3 +218,34 @@ describe('steering: opening a kept file', () => {
     expect(page.headers['content-disposition']).toBe('attachment');
   });
 });
+
+describe("steering: a session's scratch", () => {
+  const SESSION = '22222222-2222-4222-8222-222222222222';
+  it('lists one session workspace, and refuses the workspace without a session', async () => {
+    await new SandboxFs(volumeRoot, PROJECT, SESSION).writeFile(
+      '/mnt/workspace/count.py',
+      Buffer.from('print(1)'),
+    );
+    const server = await build();
+    const none = await server.inject({
+      method: 'GET',
+      url: `/api/projects/${PROJECT}/files?scope=workspace`,
+      headers: AUTH,
+    });
+    expect(none.statusCode).toBe(400);
+    const listed = await server.inject({
+      method: 'GET',
+      url: `/api/projects/${PROJECT}/files?scope=workspace&session=${SESSION}`,
+      headers: AUTH,
+    });
+    expect(listed.json<{ virtualPath: string }[]>().map((entry) => entry.virtualPath)).toEqual([
+      '/mnt/workspace/count.py',
+    ]);
+    const opened = await server.inject({
+      method: 'GET',
+      url: `/api/projects/${PROJECT}/files/workspace/count.py?session=${SESSION}`,
+      headers: AUTH,
+    });
+    expect(opened.body).toBe('print(1)');
+  });
+});

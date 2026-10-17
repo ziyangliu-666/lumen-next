@@ -368,7 +368,9 @@ function StepBlock({
                   className="group grid w-full grid-cols-[7rem_minmax(0,1fr)_auto] items-baseline gap-x-4 py-1 text-left text-sm max-roomy:grid-cols-[minmax(0,1fr)_auto]"
                 >
                   <span className={ROW_SOURCE}>{names.get(child.id) ?? child.agent}</span>
-                  <span className="min-w-0 break-words text-ink decoration-[1.5px] underline-offset-[0.15em] group-hover:underline">
+                  {/* A lead writes a reader's whole brief into its title; three
+                      lines say which task it is, and the reader opens in full. */}
+                  <span className="line-clamp-3 min-w-0 break-words text-ink decoration-[1.5px] underline-offset-[0.15em] group-hover:underline">
                     {child.title}
                   </span>
                   <TaskState status={child.status} />
@@ -576,46 +578,49 @@ export interface ProjectFile {
 
 /** LI ZHUOYANG's. What the project has written to its output, newest first. */
 /**
- * What the project kept: /mnt/output, newest first. The agents are told to
- * save what is worth keeping there; their scratch (/mnt/workspace) belongs to
- * one session and is not listed. A file opens in a new tab from steering's
- * files route, which it never did before; a folder is only named.
+ * What the agents wrote: the project's kept results (/mnt/output) first, then
+ * this session's scratch (/mnt/workspace), each newest first. Readers write
+ * scripts and tables to the scratch by default, and the lead then called a
+ * file saved that the panel did not show. A file opens in a new tab from
+ * steering's files route; a folder is only named.
  */
 export function Files({
   files,
   projectId,
+  sessionId,
 }: {
   files: readonly ProjectFile[] | 'failed';
   projectId?: string | undefined;
+  sessionId?: string | undefined;
 }): JSX.Element {
   if (files === 'failed') {
     return <p className="text-sm text-ink-2">The files could not be read.</p>;
   }
   if (files.length === 0) return <p className="text-sm text-ink-2">None yet.</p>;
-  return (
+  const kept = files.filter((file) => file.virtualPath.startsWith('/mnt/output/'));
+  const scratch = files.filter((file) => file.virtualPath.startsWith('/mnt/workspace/'));
+  const link = (file: ProjectFile): string | null => {
+    if (!projectId || file.kind !== 'file') return null;
+    const path = file.virtualPath.replace(/^\/mnt\//, '');
+    const session =
+      path.startsWith('workspace/') && sessionId ? `?session=${encodeURIComponent(sessionId)}` : '';
+    return `/api/projects/${encodeURIComponent(projectId)}/files/${path}${session}`;
+  };
+  const list = (group: readonly ProjectFile[]): JSX.Element => (
     <ul>
-      {[...files]
+      {[...group]
         .sort((a, b) => b.modifiedAt - a.modifiedAt)
         .map((file) => {
-          const name = file.virtualPath.replace(/^\/mnt\/output\//, '');
-          const label = (
-            <>
-              {name}
-              {file.kind === 'directory' ? '/' : ''}
-            </>
-          );
+          const name = file.virtualPath.replace(/^\/mnt\/(output|workspace)\//, '');
+          const href = link(file);
+          const label = `${name}${file.kind === 'directory' ? '/' : ''}`;
           return (
             <li
               key={file.virtualPath}
               className="border-t border-rule-minor py-1 font-mono text-xs break-all text-ink first:border-t-0"
             >
-              {projectId && file.kind === 'file' ? (
-                <a
-                  href={`/api/projects/${encodeURIComponent(projectId)}/files/${file.virtualPath.replace(/^\/mnt\//, '')}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:underline"
-                >
+              {href ? (
+                <a href={href} target="_blank" rel="noreferrer" className="hover:underline">
                   {label}
                 </a>
               ) : (
@@ -625,6 +630,17 @@ export function Files({
           );
         })}
     </ul>
+  );
+  return (
+    <div className="space-y-3">
+      {kept.length > 0 ? list(kept) : null}
+      {scratch.length > 0 ? (
+        <div>
+          <p className="mb-1 text-xs text-ink-2">Scratch, this session only</p>
+          {list(scratch)}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

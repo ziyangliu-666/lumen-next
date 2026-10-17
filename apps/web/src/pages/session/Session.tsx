@@ -238,10 +238,17 @@ export function Session(): JSX.Element {
   useEffect(() => {
     if (!projectId || !connected) return;
     let active = true;
-    request<ProjectFile[]>(
-      `/api/projects/${encodeURIComponent(projectId)}/files?scope=output`,
-    ).then(
-      (list) => active && setFiles(list),
+    // The kept results, then this session's scratch. Readers save to the
+    // scratch by default; a file they called saved was invisible without it.
+    // The scratch failing does not cost the kept list.
+    const base = `/api/projects/${encodeURIComponent(projectId)}/files`;
+    const scratch = sessionId
+      ? request<ProjectFile[]>(
+          `${base}?scope=workspace&session=${encodeURIComponent(sessionId)}`,
+        ).catch(() => [] as ProjectFile[])
+      : Promise.resolve([] as ProjectFile[]);
+    Promise.all([request<ProjectFile[]>(`${base}?scope=output`), scratch]).then(
+      ([kept, work]) => active && setFiles([...kept, ...work]),
       () => active && setFiles('failed'),
     );
     return () => {
@@ -566,7 +573,11 @@ export function Session(): JSX.Element {
           name="Files"
           count={files === 'failed' ? undefined : files.length}
         >
-          <Files files={files} projectId={projectId ?? undefined} />
+          <Files
+            files={files}
+            projectId={projectId ?? undefined}
+            sessionId={sessionId ?? undefined}
+          />
         </WellSection>
         {/* The space under the last section. The region keeps no block padding
             of its own (ScrollRegion), so its end is a child. */}

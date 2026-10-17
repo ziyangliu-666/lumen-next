@@ -4,7 +4,7 @@
 // the lead, or steers the task shown while it runs, and attaches a file; the
 // files panel lists what the person attached and what the agents wrote.
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
-import type { ClientCommand, Step, Task } from '@lumen/contracts';
+import type { ClientCommand, Step, StepRow, Task } from '@lumen/contracts';
 import { cn } from '@/lib/utils';
 import { ReplyText } from './text';
 import { Button } from '@/ui/button';
@@ -398,6 +398,67 @@ export function ReplyActions({
   );
 }
 
+/** How many sources a search shows before "N more". */
+const SOURCES_SHOWN = 4;
+
+/** A search's results as links: what was searched, then each result to open. */
+export function SearchSources({
+  query,
+  rows,
+  receipt,
+}: {
+  query: string;
+  rows: readonly StepRow[];
+  receipt?: string | undefined;
+}): JSX.Element {
+  const [all, setAll] = useState(false);
+  const found = rows.filter((row) => !row.empty);
+  const source = rows[0]?.source ?? 'search';
+  const shown = all ? found : found.slice(0, SOURCES_SHOWN);
+  return (
+    <section data-step="tool" data-tool="search">
+      <p className="text-sm text-ink-2">
+        Searched {source} for <span className="text-ink">{query}</span>
+        {receipt ? <span className="ml-2 text-caption">{receipt}</span> : null}
+      </p>
+      {found.length === 0 ? (
+        <p className="mt-1 text-sm text-ink">Nothing found.</p>
+      ) : (
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {shown.map((row, index) => {
+            const [id, ...rest] = row.text.split(', ');
+            return (
+              <li key={index} className="max-w-full">
+                <a
+                  href={row.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={row.text}
+                  className="flex max-w-[28rem] items-baseline gap-2 border border-rule-minor bg-well px-2 py-1 text-xs hover:border-ink"
+                >
+                  <span className="shrink-0 font-mono text-ink">{id}</span>
+                  <span className="truncate text-ink-2">{rest.join(', ')}</span>
+                </a>
+              </li>
+            );
+          })}
+          {found.length > SOURCES_SHOWN ? (
+            <li>
+              <button
+                type="button"
+                onClick={() => setAll(!all)}
+                className="border border-rule-minor px-2 py-1 text-xs text-ink-2 hover:border-ink hover:text-ink"
+              >
+                {all ? 'Fewer' : `${found.length - SOURCES_SHOWN} more`}
+              </button>
+            </li>
+          ) : null}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 // One measure for prose in the conversation, thinking and answers alike, so
 // the column has one text width. Only tables and output run the full width.
 const PROSE = 'max-w-[40rem]';
@@ -456,7 +517,9 @@ function StepBlock({
       return (
         <section data-step="thinking">
           <StepLabel>Thinking</StepLabel>
-          <p className={cn(PROSE, 'text-sm break-words text-ink-2')}>{step.text}</p>
+          <div className={cn(PROSE, 'text-sm break-words text-ink-2')}>
+            <ReplyText text={step.text} />
+          </div>
         </section>
       );
     case 'tool': {
@@ -470,6 +533,18 @@ function StepBlock({
         ? step.text.slice(name.length + 1).trim()
         : parsed.body;
       const receipt = receiptOf(step);
+      // A literature search with links is drawn as its sources, the way chat
+      // products show what they read: one line saying what was searched, and
+      // the results as links. As a table, nothing could be opened.
+      if (detail?.rows?.some((row) => row.url)) {
+        return (
+          <SearchSources
+            query={step.text.replace(/^search\s+\w+:\s*/u, '')}
+            rows={detail.rows}
+            receipt={receipt === 'tool call' ? undefined : receipt}
+          />
+        );
+      }
       return (
         <section data-step="tool">
           {/* The tool's own name, as the agent called it: it is data, not copy. */}

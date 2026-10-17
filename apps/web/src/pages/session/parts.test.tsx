@@ -197,7 +197,9 @@ describe('session page: the text of a reply', () => {
     ]);
     expect(html).toContain('<strong class="font-semibold">pop-stack</strong>');
     expect(html).toContain('<code class="font-mono text-[0.9em]">West-2</code>');
-    expect(html).toMatch(/<ul[^>]*><li>one<\/li><li><strong[^>]*>two<\/strong><\/li><\/ul>/);
+    expect(html).toMatch(
+      /<ul[^>]*>\s*<li>one<\/li>\s*<li><strong[^>]*>two<\/strong><\/li>\s*<\/ul>/,
+    );
     expect(html).toMatch(/<p class="font-semibold">Known results<\/p>/);
     expect(html).not.toContain('**');
     expect(html).not.toContain('##');

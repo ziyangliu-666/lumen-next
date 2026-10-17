@@ -43,6 +43,11 @@ function row(value: unknown, index: number): StepRow {
     text: field(raw['text'], `rows[${index}].text`),
     result: field(raw['result'], `rows[${index}].result`),
     ...(raw['empty'] === true ? { empty: true } : {}),
+    ...(typeof raw['url'] === 'string' &&
+    /^https:\/\/[^\s"<>]+$/.test(raw['url']) &&
+    raw['url'].length <= 500
+      ? { url: raw['url'] }
+      : {}),
   };
 }
 

@@ -1,151 +1,271 @@
-import type { JSX, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useState,
+  type JSX,
+  type ReactNode,
+} from 'react';
+import Markdown, { type Components } from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import 'katex/dist/katex.min.css';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/ui/table';
 
-// A model writes a little Markdown into a reply: a bold phrase, a list, a
-// heading, a code span, a table, a fenced block. This draws those and nothing
-// else, as React nodes, so no string from a model ever reaches the page as
-// HTML. A table of terms came out as one line of pipes before tables were
-// drawn, and a fenced script as one paragraph.
+// A model's reply, drawn as the Markdown it is written in: GitHub tables and
+// lists, LaTeX ($…$ and $$…$$, by KaTeX), fenced code, Mermaid diagrams,
+// links, and images of the project's own files. A hand-made renderer drew
+// paragraphs, lists and headings only, so formulas showed as dollar signs and
+// a diagram as its source.
+//
+// What a model writes never reaches the page as HTML: raw HTML in a reply is
+// not parsed (react-markdown without rehype-raw). Links open in a new tab and
+// only over http(s). An image is shown only when it is a file of this project
+// (/mnt/output, /mnt/workspace, /mnt/upload); any other address stays a link,
+// so a reply cannot make the page load from a site of its choosing.
+//
+// OEIS A-numbers and arXiv ids in the text are links to the entry, drawn as
+// small chips beside the sentence that cites them.
 
-const INLINE = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+/** Turns a /mnt path the agents wrote into the files route of this project, or null. */
+export type FileLink = (virtualPath: string) => string | null;
 
-function inline(text: string, key: string): ReactNode[] {
-  return text.split(INLINE).map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
-      return (
-        <strong key={`${key}-${i}`} className="font-semibold">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
-      return (
-        <code key={`${key}-${i}`} className="font-mono text-[0.9em]">
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    return part;
+const FileLinks = createContext<FileLink>(() => null);
+
+export function ReplyFiles({
+  link,
+  children,
+}: {
+  link: FileLink;
+  children: ReactNode;
+}): JSX.Element {
+  return <FileLinks.Provider value={link}>{children}</FileLinks.Provider>;
+}
+
+// The citations, as a remark step: text outside links and code is split where
+// an A-number or an arXiv id stands, and those parts become links.
+const CITATION =
+  /\b(A\d{6})\b|\barXiv:\s?((?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?)/g;
+
+interface MdNode {
+  type: string;
+  value?: string;
+  url?: string;
+  children?: MdNode[];
+  data?: { hProperties?: Record<string, string> };
+}
+
+function split(text: string): MdNode[] {
+  const parts: MdNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(CITATION)) {
+    const at = match.index;
+    const [whole, oeis, arxiv] = match;
+    if (at > last) parts.push({ type: 'text', value: text.slice(last, at) });
+    parts.push({
+      type: 'link',
+      url: oeis ? `https://oeis.org/${oeis}` : `https://arxiv.org/abs/${arxiv ?? ''}`,
+      data: { hProperties: { 'data-cite': oeis ? 'oeis' : 'arxiv' } },
+      children: [{ type: 'text', value: whole }],
+    });
+    last = at + whole.length;
+  }
+  if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
+  return parts;
+}
+
+function walk(node: MdNode): void {
+  if (!node.children || node.type === 'link' || node.type === 'inlineCode') return;
+  node.children = node.children.flatMap((child) => {
+    if (child.type === 'text' && child.value) return split(child.value);
+    walk(child);
+    return [child];
   });
 }
 
-const LIST_ITEM = /^\s*(?:[-*]|\d+[.)])\s+(.*)$/;
-const HEADING = /^#{1,6}\s+(.*)$/;
-const TABLE_ROW = /^\s*\|.*\|\s*$/;
-const TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
-const FENCE = /^\s*```/;
-
-function cells(row: string): string[] {
-  return row
-    .trim()
-    .replace(/^\||\|$/g, '')
-    .split('|')
-    .map((cell) => cell.trim());
+function citations(): (tree: MdNode) => void {
+  return walk;
 }
 
-/** Rows of pipes as a table; the first row is the head when a rule follows it. */
-function ReplyTable({ rows, id }: { rows: readonly string[]; id: string }): JSX.Element {
-  const headed = rows.length > 1 && TABLE_RULE.test(rows[1] ?? '');
-  const head = headed ? cells(rows[0] ?? '') : null;
-  const body = (headed ? rows.slice(2) : rows).map(cells);
+/** An address a reply may link to: http(s), or this site's own path. */
+function safeHref(href: string | undefined): string | undefined {
+  if (!href) return undefined;
+  if (/^https?:\/\//i.test(href)) return href;
+  if (href.startsWith('/') && !href.startsWith('//')) return href;
+  return undefined;
+}
+
+function Mermaid({ code }: { code: string }): JSX.Element {
+  const id = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const [svg, setSvg] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    // Loaded only when a reply has a diagram: it is the largest part of the page.
+    import('mermaid')
+      .then(async ({ default: mermaid }) => {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'strict',
+          theme: document.documentElement.classList.contains('dark') ? 'dark' : 'neutral',
+          fontFamily: 'inherit',
+        });
+        const drawn = await mermaid.render(`mermaid-${id}`, code);
+        if (active) setSvg(drawn.svg);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [code, id]);
+  if (svg) {
+    return (
+      // Mermaid's own output under securityLevel 'strict': labels are text,
+      // and no script or link from the source survives into the SVG.
+      <div
+        role="img"
+        aria-label="Diagram"
+        className="overflow-x-auto border border-rule-minor bg-paper p-4"
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+    );
+  }
   return (
-    <Table flush className="w-auto min-w-48 tabular-nums">
-      {head ? (
-        <TableHeader>
-          <TableRow>
-            {head.map((cell, i) => (
-              <TableHead key={i}>{inline(cell, `${id}-h${i}`)}</TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-      ) : null}
-      <TableBody>
-        {body.map((row, r) => (
-          <TableRow key={r}>
-            {row.map((cell, i) => (
-              <TableCell key={i}>{inline(cell, `${id}-${r}-${i}`)}</TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <pre className="overflow-x-auto border border-rule-minor bg-paper p-4 font-mono text-xs whitespace-pre text-ink">
+      {failed ? `The diagram could not be drawn.\n\n${code}` : code}
+    </pre>
   );
 }
 
-/** The blocks of a reply: paragraphs, lists, headings, tables, fenced code, each with its inline marks. */
-export function ReplyText({ text }: { text: string }): JSX.Element {
-  const blocks: JSX.Element[] = [];
-  let items: string[] = [];
-  let paragraph: string[] = [];
-  let table: string[] = [];
-  let code: string[] | null = null;
-  const flush = (): void => {
-    if (table.length > 0) {
-      blocks.push(<ReplyTable key={`t${blocks.length}`} id={`t${blocks.length}`} rows={table} />);
-      table = [];
-    }
-    if (items.length > 0) {
-      blocks.push(
-        <ul key={`l${blocks.length}`} className="list-disc space-y-1 pl-5">
-          {items.map((item, i) => (
-            <li key={i}>{inline(item, `l${blocks.length}-${i}`)}</li>
-          ))}
-        </ul>,
-      );
-      items = [];
-    }
-    if (paragraph.length > 0) {
-      blocks.push(
-        <p key={`p${blocks.length}`}>{inline(paragraph.join(' '), `p${blocks.length}`)}</p>,
-      );
-      paragraph = [];
-    }
-  };
-  const flushCode = (lines: readonly string[]): void => {
-    blocks.push(
-      <pre
-        key={`c${blocks.length}`}
-        className="overflow-x-auto border border-rule-minor bg-paper p-4 font-mono text-xs whitespace-pre text-ink tabular-nums"
-      >
-        {lines.join('\n')}
-      </pre>,
+function ReplyImage({ src, alt }: { src: string | undefined; alt: string }): JSX.Element {
+  const link = useContext(FileLinks);
+  const local = src && /^\/mnt\/(output|workspace|upload)\//.test(src) ? link(src) : null;
+  if (local) {
+    return (
+      <a href={local} target="_blank" rel="noreferrer" className="block">
+        <img
+          src={local}
+          alt={alt}
+          loading="lazy"
+          className="max-h-[28rem] max-w-full border border-rule-minor"
+        />
+      </a>
     );
-  };
-  for (const line of text.split('\n')) {
-    if (code) {
-      if (FENCE.test(line)) {
-        flushCode(code);
-        code = null;
-      } else code.push(line);
-      continue;
-    }
-    const heading = HEADING.exec(line);
-    const item = LIST_ITEM.exec(line);
-    const row = TABLE_ROW.test(line);
-    // A row starts a table and any other line ends one.
-    if (row !== table.length > 0) flush();
-    if (FENCE.test(line)) {
-      flush();
-      code = [];
-    } else if (row) table.push(line);
-    else if (line.trim() === '') flush();
-    else if (heading) {
-      flush();
-      blocks.push(
-        <p key={`h${blocks.length}`} className="font-semibold">
-          {inline(heading[1] ?? '', `h${blocks.length}`)}
-        </p>,
-      );
-    } else if (item) {
-      if (paragraph.length > 0) flush();
-      items.push(item[1] ?? '');
-    } else {
-      if (items.length > 0) flush();
-      paragraph.push(line.trim());
-    }
   }
-  // A reply cut off inside a fence still shows what it wrote.
-  if (code) flushCode(code);
-  flush();
-  return <div className="space-y-2">{blocks}</div>;
+  // A file path with no project to serve it is only its caption.
+  const href = src?.startsWith('/mnt/') ? undefined : safeHref(src);
+  return href ? (
+    <a href={href} target="_blank" rel="noreferrer" className="underline">
+      {alt || 'Image'}
+    </a>
+  ) : (
+    <span>{alt}</span>
+  );
+}
+
+/** The text of a code element, which react-markdown hands over as strings. */
+function plain(children: ReactNode): string {
+  if (typeof children === 'string') return children;
+  if (Array.isArray(children)) return children.map((child: ReactNode) => plain(child)).join('');
+  return '';
+}
+
+const CODE_BLOCK =
+  'overflow-x-auto border border-rule-minor bg-paper p-4 font-mono text-xs whitespace-pre text-ink tabular-nums';
+
+const COMPONENTS: Components = {
+  h1: ({ children }) => <p className="font-semibold">{children}</p>,
+  h2: ({ children }) => <p className="font-semibold">{children}</p>,
+  h3: ({ children }) => <p className="font-semibold">{children}</p>,
+  h4: ({ children }) => <p className="font-semibold">{children}</p>,
+  ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal space-y-1 pl-5">{children}</ol>,
+  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-rule-major pl-4 text-ink-2">{children}</blockquote>
+  ),
+  hr: () => <hr className="border-rule-minor" />,
+  a: ({ href, children, ...props }) => {
+    const cite = (props as Record<string, unknown>)['data-cite'];
+    const safe = safeHref(href);
+    if (!safe) return <span>{children}</span>;
+    return (
+      <a
+        href={safe}
+        target="_blank"
+        rel="noreferrer"
+        data-cite={typeof cite === 'string' ? cite : undefined}
+        className={
+          cite
+            ? 'mx-0.5 inline-block border border-rule-minor bg-well px-1.5 align-baseline font-mono text-[0.8em] text-ink hover:border-ink'
+            : 'underline decoration-1 underline-offset-[0.15em]'
+        }
+      >
+        {children}
+      </a>
+    );
+  },
+  img: ({ src, alt }) => (
+    <ReplyImage src={typeof src === 'string' ? src : undefined} alt={alt ?? ''} />
+  ),
+  table: ({ children }) => (
+    <Table flush className="w-auto min-w-48 tabular-nums">
+      {children}
+    </Table>
+  ),
+  thead: ({ children }) => <TableHeader>{children}</TableHeader>,
+  tbody: ({ children }) => <TableBody>{children}</TableBody>,
+  tr: ({ children }) => <TableRow>{children}</TableRow>,
+  th: ({ children }) => <TableHead>{children}</TableHead>,
+  td: ({ children }) => <TableCell>{children}</TableCell>,
+  // The block is drawn by `code`, which knows its language.
+  pre: ({ children }) => <>{children}</>,
+  code: ({ className, children }) => {
+    const text = plain(children);
+    const language = /language-(\w+)/.exec(className ?? '')?.[1];
+    // A fenced block has a language or spans lines; anything else is inline.
+    if (!language && !text.includes('\n')) {
+      return <code className="font-mono text-[0.9em]">{children}</code>;
+    }
+    if (language === 'mermaid') return <Mermaid code={text.trimEnd()} />;
+    return <pre className={CODE_BLOCK}>{text.replace(/\n$/, '')}</pre>;
+  },
+};
+
+/**
+ * GitHub's rule is that a table starts after a blank line, and models often
+ * write one straight under a sentence ("Result:\n| n | a(n) |"). The line is
+ * added, outside fenced blocks, so the table is drawn as one.
+ */
+export function tablesApart(text: string): string {
+  const lines = text.split('\n');
+  let fenced = false;
+  return lines
+    .map((line, i) => {
+      if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
+      const previous = lines[i - 1] ?? '';
+      const starts =
+        !fenced && /^\s*\|/.test(line) && previous.trim() !== '' && !/^\s*\|/.test(previous);
+      return starts ? `\n${line}` : line;
+    })
+    .join('\n');
+}
+
+/** A reply, drawn from its Markdown. */
+export function ReplyText({ text }: { text: string }): JSX.Element {
+  return (
+    <div className="space-y-2 [&_.katex-display]:my-2 [&_.katex-display]:overflow-x-auto">
+      <Markdown
+        remarkPlugins={[remarkGfm, remarkMath, citations]}
+        rehypePlugins={[rehypeKatex]}
+        components={COMPONENTS}
+      >
+        {tablesApart(text)}
+      </Markdown>
+    </div>
+  );
 }

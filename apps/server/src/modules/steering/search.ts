@@ -69,6 +69,7 @@ async function oeis(query: string, fetchImpl: Fetch, signal: AbortSignal): Promi
       source: 'OEIS',
       text: `${id(hit.number)}, ${hit.name}`,
       result: 'Match',
+      url: `https://oeis.org/${id(hit.number)}`,
     })),
     text: [
       `OEIS: ${hits.length} of ${list.length} matches for "${query}".`,
@@ -172,6 +173,7 @@ async function arxiv(query: string, fetchImpl: Fetch, signal: AbortSignal): Prom
       source: 'arXiv',
       text: `${entry.id}${entry.year ? ` (${entry.year})` : ''}, ${entry.title}`,
       result: 'Paper',
+      url: `https://arxiv.org/abs/${entry.id}`,
     })),
     text: [
       `arXiv: ${entries.length} papers for "${query}".`,

@@ -217,6 +217,25 @@ describe('steering: opening a kept file', () => {
     expect(page.headers['content-type']).toBe('application/octet-stream');
     expect(page.headers['content-disposition']).toBe('attachment');
   });
+
+  it('serves a plot inline as an image, and an SVG still as a download', async () => {
+    const fs = new SandboxFs(volumeRoot, PROJECT);
+    await fs.writeFile('/mnt/output/plot.png', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    await fs.writeFile('/mnt/output/plot.svg', Buffer.from('<svg onload="x()"/>'));
+    const server = await build();
+    const get = (name: string) =>
+      server.inject({
+        method: 'GET',
+        url: `/api/projects/${PROJECT}/files/output/${name}`,
+        headers: AUTH,
+      });
+    const png = await get('plot.png');
+    expect(png.headers['content-type']).toBe('image/png');
+    expect(png.headers['content-disposition']).toBe('inline');
+    const svg = await get('plot.svg');
+    expect(svg.headers['content-type']).toBe('application/octet-stream');
+    expect(svg.headers['content-disposition']).toBe('attachment');
+  });
 });
 
 describe("steering: a session's scratch", () => {

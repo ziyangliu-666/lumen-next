@@ -11,7 +11,12 @@ describe('steering: the literature connectors', () => {
     const body = JSON.stringify([{ number: 1263, name: 'Narayana triangle', data: '1,1,1,1,3,1' }]);
     const result = await search('oeis', '1,1,1,1,3,1', answer(body));
     expect(result.rows).toEqual([
-      { source: 'OEIS', text: 'A001263, Narayana triangle', result: 'Match' },
+      {
+        source: 'OEIS',
+        text: 'A001263, Narayana triangle',
+        result: 'Match',
+        url: 'https://oeis.org/A001263',
+      },
     ]);
     expect(result.text).toContain('A001263: Narayana triangle');
   });
@@ -28,7 +33,12 @@ describe('steering: the literature connectors', () => {
       paths </title><summary>We study tunnels.</summary></entry></feed>`;
     const result = await search('arxiv', 'Dyck tunnels', answer(feed));
     expect(result.rows).toEqual([
-      { source: 'arXiv', text: 'math/0212221, Tunnels in Dyck paths', result: 'Paper' },
+      {
+        source: 'arXiv',
+        text: 'math/0212221, Tunnels in Dyck paths',
+        result: 'Paper',
+        url: 'https://arxiv.org/abs/math/0212221',
+      },
     ]);
   });
 

@@ -45,7 +45,17 @@ const DEFAULT_IMAGE = 'python:3.12-alpine3.20';
 export interface DockerComputeOptions {
   readonly image?: string;
   readonly memory?: string;
+  /**
+   * A folder of Python packages on this host, mounted read-only on the
+   * sandbox's import path: how the readers get matplotlib, numpy and sympy
+   * without a network to install them (deploy/sandbox). It must be built for
+   * the same Python as the image.
+   */
+  readonly libs?: string;
 }
+
+/** Where a sandbox is run from: the image, and the packages mounted into it. */
+export type SandboxSetup = Pick<DockerComputeOptions, 'image' | 'libs'>;
 
 /**
  * Runs the command in a container, `SandboxFs.hostMounts` bind-mounted at the
@@ -80,6 +90,7 @@ export function dockerArgs(spec: {
   readonly cwd: string;
   readonly command: string;
   readonly user?: string | undefined;
+  readonly libs?: string | undefined;
 }): string[] {
   return [
     'run',
@@ -107,6 +118,20 @@ export function dockerArgs(spec: {
     `${spec.hostMounts.workspace}:/mnt/workspace`,
     '-v',
     `${spec.hostMounts.output}:/mnt/output`,
+    // The packages, read-only, on the import path; plots are drawn to files
+    // (no display), with matplotlib's cache in the container's own /tmp.
+    ...(spec.libs
+      ? [
+          '-v',
+          `${spec.libs}:/opt/lumen-lib:ro`,
+          '-e',
+          'PYTHONPATH=/opt/lumen-lib',
+          '-e',
+          'MPLBACKEND=Agg',
+          '-e',
+          'MPLCONFIGDIR=/tmp',
+        ]
+      : []),
     spec.image,
     'sh',
     '-c',
@@ -117,6 +142,7 @@ export function dockerArgs(spec: {
 export class DockerCompute implements Compute {
   private readonly image: string;
   private readonly memory: string;
+  private readonly libs: string | undefined;
 
   constructor(
     private readonly hostMounts: Readonly<Record<Scope, string>>,
@@ -124,6 +150,7 @@ export class DockerCompute implements Compute {
   ) {
     this.image = options.image ?? DEFAULT_IMAGE;
     this.memory = options.memory ?? DEFAULT_MEMORY;
+    this.libs = options.libs;
   }
 
   run(command: string, options: { cwd: string; timeoutMs: number }): Promise<ComputeResult> {
@@ -136,6 +163,7 @@ export class DockerCompute implements Compute {
       cwd: options.cwd,
       command,
       user: processUser(),
+      libs: this.libs,
     });
 
     return new Promise((resolve) => {
@@ -181,6 +209,7 @@ export class DockerCompute implements Compute {
 export function compute(
   provider: 'docker' | 'none',
   hostMounts: Readonly<Record<Scope, string>>,
+  setup: SandboxSetup = {},
 ): Compute {
-  return provider === 'docker' ? new DockerCompute(hostMounts) : NullCompute;
+  return provider === 'docker' ? new DockerCompute(hostMounts, setup) : NullCompute;
 }

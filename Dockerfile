@@ -15,6 +15,14 @@ RUN npm run build --workspace @lumen/contracts \
 # What production needs to run, and nothing the build needed.
 RUN npm prune --omit=dev
 
+# The readers' Python packages (deploy/sandbox/requirements.txt), built for
+# the sandbox's Python: python:3.12-slim-bookworm, the LUMEN_SANDBOX_IMAGE in
+# fly.toml. They are mounted read-only into each sandbox, which has no
+# network to install them.
+FROM python:3.12-slim-bookworm AS sandbox-lib
+COPY deploy/sandbox/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --target /opt/sandbox-lib -r /tmp/requirements.txt
+
 FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
@@ -38,6 +46,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends docker.io ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && usermod -aG docker node
+COPY --from=sandbox-lib /opt/sandbox-lib /opt/sandbox-lib
 COPY deploy/fly/entrypoint.sh /usr/local/bin/lumen-entrypoint
 # No curl in the slim image; Node is there anyway.
 HEALTHCHECK --interval=10s --timeout=3s --retries=6 \

@@ -7,9 +7,11 @@ import type { ModelProvider } from '../../core/model/index.js';
 import type { Broker } from '../../core/protocol/broker.js';
 import { steeringCommands, type SessionContext, type TaskSession } from './commands.js';
 import { steeringRoutes, type ProjectGate } from './routes.js';
+import type { SandboxSetup } from './compute.js';
 import { SteerRegistry } from './steerRegistry.js';
 import { createWorker } from './worker.js';
 
+export type { SandboxSetup } from './compute.js';
 export type { FileEntry, Scope } from './sandboxFs.js';
 export { SandboxFs, SandboxPathError, SandboxQuotaError } from './sandboxFs.js';
 export type { ProjectGate } from './routes.js';
@@ -46,6 +48,8 @@ export function createSteeringSlice(deps: {
   computeProvider?: 'docker' | 'none';
   /** Who the worker thinks with. Defaults to the model that does nothing. */
   model?: ModelProvider;
+  /** The sandbox's image and the packages mounted into it. */
+  sandbox?: SandboxSetup;
 }): SteeringSlice {
   const registry = new SteerRegistry();
   const sessionContext = deps.sessionContext ?? noSessionContext;
@@ -63,6 +67,7 @@ export function createSteeringSlice(deps: {
       registry,
       ...(deps.computeProvider ? { provider: deps.computeProvider } : {}),
       ...(deps.model ? { model: deps.model } : {}),
+      ...(deps.sandbox ? { sandbox: deps.sandbox } : {}),
     }),
   };
 }

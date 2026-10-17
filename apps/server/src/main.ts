@@ -136,6 +136,12 @@ async function bootstrap(): Promise<void> {
     ...(process.env['LUMEN_ORIGIN']?.startsWith('https://') ? { strictTransport: true } : {}),
     ...(volumeRoot ? { volumeRoot } : {}),
     ...(provider ? { computeProvider: provider } : {}),
+    // The sandbox: an image with the same Python as the packages in
+    // LUMEN_SANDBOX_LIBS (deploy/sandbox), so readers can draw and solve.
+    sandbox: {
+      ...(process.env['LUMEN_SANDBOX_IMAGE'] ? { image: process.env['LUMEN_SANDBOX_IMAGE'] } : {}),
+      ...(process.env['LUMEN_SANDBOX_LIBS'] ? { libs: process.env['LUMEN_SANDBOX_LIBS'] } : {}),
+    },
     model,
     modelChoices,
   });

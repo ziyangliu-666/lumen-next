@@ -61,7 +61,7 @@ const LEAD_PROMPT = [
   'Report only what tool results show. If a command could not run or a file is not there, say so plainly and do not claim it. Separate what you verified from what you recall.',
   FILES,
   'The user may speak while you work; their words arrive as user messages. Follow them.',
-  'When you have the answer, reply in plain text without calling a tool: the result first, then the evidence, then what is still open. Keep it under 400 words; never enumerate cases by hand in a reply, delegate that.',
+  'When you have the answer, reply in plain text without calling a tool: the result first, then the evidence, then what is still open. Keep it under 400 words; never enumerate cases by hand in a reply, delegate that. End with what is still open; do not end by offering more help.',
 ].join('\n');
 
 const READER_PROMPT = [

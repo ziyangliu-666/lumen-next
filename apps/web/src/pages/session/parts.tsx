@@ -934,50 +934,44 @@ export interface ProjectSession {
 export function Sessions({
   sessions,
   current,
-  starting,
-  onNew,
 }: {
   sessions: readonly ProjectSession[];
   current: string;
-  /** The field is set to start a new session. */
-  starting: boolean;
-  onNew: () => void;
 }): JSX.Element {
+  if (sessions.length === 0) return <p className="text-sm text-ink-2">This session only.</p>;
+  // A plain list, unlike the call tree's rows: each session by its question
+  // and when it started, the open one in ink and bold. Drawn as the call
+  // tree's rows, the two lists could not be told apart.
   return (
-    <div className="space-y-3">
-      <ul>
-        {[...sessions]
-          .sort((a, b) => b.startedAt - a.startedAt)
-          .map((item) => (
-            <li key={item.id} className="border-t border-rule-minor first:border-t-0">
-              {/* A row like the call tree's: the whole row opens the session,
-                  and the one open is filled and bold. As plain text the list
-                  did not read as a way to move between sessions. */}
-              <a
-                href={`?session=${encodeURIComponent(item.id)}#/session`}
-                aria-current={item.id === current ? 'page' : undefined}
-                title={item.title}
-                className={cn(
-                  'flex min-h-8 items-center justify-between gap-4 px-2 py-1 text-sm text-ink',
-                  WELL_ROW,
-                  // A link marks the open page as "page", not "true".
-                  'aria-[current=page]:border-ink aria-[current=page]:bg-raised',
-                )}
-              >
-                <span
-                  className={cn('truncate', item.id === current ? 'font-semibold' : 'font-normal')}
-                >
-                  {item.title}
-                </span>
-                <span className="shrink-0 text-caption">{SESSION_WORD[item.status]}</span>
-              </a>
-            </li>
-          ))}
-      </ul>
-      <Button variant="outline" size="sm" aria-pressed={starting} onClick={onNew}>
-        {starting ? 'Cancel new session' : 'New session'}
-      </Button>
-    </div>
+    <ul className="space-y-0.5">
+      {[...sessions]
+        .sort((a, b) => b.startedAt - a.startedAt)
+        .map((item) => (
+          <li key={item.id}>
+            <a
+              href={`?session=${encodeURIComponent(item.id)}#/session`}
+              aria-current={item.id === current ? 'page' : undefined}
+              title={item.title}
+              className={cn(
+                'flex items-baseline justify-between gap-3 px-2 py-1.5 text-sm hover:bg-raised/50',
+                item.id === current
+                  ? 'bg-raised font-semibold text-ink'
+                  : 'text-ink-2 hover:text-ink',
+              )}
+            >
+              <span className="truncate">{item.title}</span>
+              <span className="shrink-0 text-caption font-normal text-ink-2 tabular-nums">
+                {item.status === 'running' || item.status === 'waiting'
+                  ? SESSION_WORD[item.status]
+                  : new Date(item.startedAt).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+              </span>
+            </a>
+          </li>
+        ))}
+    </ul>
   );
 }
 

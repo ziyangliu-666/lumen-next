@@ -4,11 +4,12 @@
 // paper, the conversation, with the composer at its foot. On the well, what
 // the project has produced: findings, the call tree, files. The bar carries
 // where you are and how the run stands, so the page has one header.
-import { useCallback, useEffect, useId, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type JSX, type ReactNode } from 'react';
 import type { ServerEvent } from '@lumen/contracts';
+import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
 import { ScrollRegion } from '@/ui/scroll-region';
-import { RegionName, SurfaceMain, Surfaces, SurfaceWell } from '@/ui/surfaces';
+import { SurfaceMain, Surfaces, SurfaceWell } from '@/ui/surfaces';
 import { rememberReturn, useCurrentAccount } from '@/core/auth';
 import { ModelPicker, useModels } from '@/core/models';
 import { go } from '@/core/router';
@@ -44,27 +45,55 @@ interface ProjectTitle {
   readonly title: string;
 }
 
-/** One section of the well: its name, one line on what it holds, and the list. */
+/**
+ * One section of the panel: a header that folds it, with its count and an
+ * action, then what it holds. An empty section is one folded line ("Files
+ * 0") instead of a heading over "None yet.". The four were large headings
+ * over similar rows, and the panel read as one long list.
+ */
 function WellSection({
   id,
   name,
   count,
-  description,
+  action,
   children,
 }: {
   id: string;
   name: string;
   count?: number | undefined;
-  description?: string;
+  action?: ReactNode;
   children: JSX.Element;
 }): JSX.Element {
+  const [shown, setShown] = useState<boolean | null>(null);
+  const open = shown ?? count !== 0;
   return (
-    <section aria-labelledby={id} className="mt-6 max-split:first-of-type:mt-0">
-      <RegionName id={id} {...(count === undefined ? {} : { count })} className="mb-0">
-        {name}
-      </RegionName>
-      {description ? <p className="mt-1 text-caption text-ink-2">{description}</p> : null}
-      <div className="mt-4">{children}</div>
+    <section
+      aria-labelledby={id}
+      className="border-t border-rule-minor py-3 first-of-type:border-t-0"
+    >
+      <div className="flex min-h-8 items-center justify-between gap-2">
+        <h2 id={id} className="text-sm font-semibold text-ink">
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setShown(!open)}
+            className="flex items-center gap-2 hover:text-ink"
+          >
+            <span
+              aria-hidden="true"
+              className={cn('inline-block text-ink-2 transition-transform', open && 'rotate-90')}
+            >
+              ›
+            </span>
+            {name}
+            {count === undefined ? null : (
+              <span className="font-normal text-ink-2 tabular-nums">{count}</span>
+            )}
+          </button>
+        </h2>
+        {action}
+      </div>
+      {open ? <div className="mt-2">{children}</div> : null}
     </section>
   );
 }
@@ -680,25 +709,6 @@ export function Session(): JSX.Element {
             }}
           />
         </WellSection>
-        <WellSection id={`${wellId}-tree`} name="Call tree">
-          <CallTree
-            tasks={snapshot.tasks}
-            totals={snapshot.totals}
-            selected={shown.id}
-            onSelect={open}
-          />
-        </WellSection>
-        <WellSection id={`${wellId}-sessions`} name="Sessions" count={sessions.length || undefined}>
-          <Sessions
-            sessions={sessions}
-            current={snapshot.session.id}
-            starting={starting}
-            onNew={() => {
-              setStarting(!starting);
-              document.querySelector<HTMLTextAreaElement>('textarea[name="say"]')?.focus();
-            }}
-          />
-        </WellSection>
         <WellSection
           id={`${wellId}-files`}
           name="Files"
@@ -717,6 +727,34 @@ export function Session(): JSX.Element {
                 : undefined
             }
           />
+        </WellSection>
+        <WellSection id={`${wellId}-tree`} name="Call tree">
+          <CallTree
+            tasks={snapshot.tasks}
+            totals={snapshot.totals}
+            selected={shown.id}
+            onSelect={open}
+          />
+        </WellSection>
+        <WellSection
+          id={`${wellId}-sessions`}
+          name="Sessions"
+          count={sessions.length || undefined}
+          action={
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-pressed={starting}
+              onClick={() => {
+                setStarting(!starting);
+                document.querySelector<HTMLTextAreaElement>('textarea[name="say"]')?.focus();
+              }}
+            >
+              {starting ? 'Cancel' : '+ New'}
+            </Button>
+          }
+        >
+          <Sessions sessions={sessions} current={snapshot.session.id} />
         </WellSection>
         {/* The space under the last section. The region keeps no block padding
             of its own (ScrollRegion), so its end is a child. */}

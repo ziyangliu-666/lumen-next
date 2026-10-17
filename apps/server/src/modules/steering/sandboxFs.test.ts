@@ -230,6 +230,22 @@ describe('SandboxFs: quota', () => {
     );
   });
 
+  it('does not count the copy a write replaces', async () => {
+    const sandbox = new SandboxFs(volumeRoot, PROJECT, SESSION, {
+      maxFileBytes: 100,
+      maxTotalBytes: 15,
+    });
+    await sandbox.ensureDirectories();
+
+    await sandbox.writeFile('/mnt/output/table.csv', Buffer.alloc(10));
+    await sandbox.writeFile('/mnt/output/table.csv', Buffer.alloc(12));
+    await sandbox.saveUpload('data.csv', Buffer.alloc(10));
+    await sandbox.saveUpload('data.csv', Buffer.alloc(12));
+
+    expect(await sandbox.usageBytes('output')).toBe(12);
+    expect(await sandbox.usageBytes('upload')).toBe(12);
+  });
+
   it('counts real bytes written, across scopes independently', async () => {
     const sandbox = fs();
     await sandbox.ensureDirectories();

@@ -73,6 +73,23 @@ async function upload(projectId: string, file: File): Promise<string> {
   return saved.path;
 }
 
+/** Steering's files route for one project. */
+function filesRoute(projectId: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/files`;
+}
+
+/**
+ * The query that lists one folder: '/mnt/output/results' is scope=output and
+ * path=/results. A folder in the scratch also names the session.
+ */
+function scopeQuery(virtualPath: string, sessionId: string | undefined): string {
+  const [, scope = '', ...rest] = virtualPath.replace(/^\/mnt\//, '/').split('/');
+  const query = new URLSearchParams({ scope });
+  if (rest.length > 0) query.set('path', `/${rest.join('/')}`);
+  if (scope === 'workspace' && sessionId) query.set('session', sessionId);
+  return query.toString();
+}
+
 export function Session(): JSX.Element {
   const { state: auth } = useCurrentAccount();
   const [state, setState] = useState<SessionState | null>(null);
@@ -232,23 +249,25 @@ export function Session(): JSX.Element {
     };
   }, [running]);
 
-  // What the project has written (steering's files route, the output scope).
-  // Read when the stream opens and again when a run ends, which is when a
-  // run's files are complete. A failure costs this list, never the page.
+  // The project's files (steering's files route). Read when the stream opens
+  // and again when a run starts or ends: a run starts with what was just
+  // attached and ends with its files complete. A failure costs this list, never the page.
   useEffect(() => {
     if (!projectId || !connected) return;
     let active = true;
-    // The kept results, then this session's scratch. Readers save to the
-    // scratch by default; a file they called saved was invisible without it.
-    // The scratch failing does not cost the kept list.
-    const base = `/api/projects/${encodeURIComponent(projectId)}/files`;
-    const scratch = sessionId
-      ? request<ProjectFile[]>(
-          `${base}?scope=workspace&session=${encodeURIComponent(sessionId)}`,
-        ).catch(() => [] as ProjectFile[])
-      : Promise.resolve([] as ProjectFile[]);
-    Promise.all([request<ProjectFile[]>(`${base}?scope=output`), scratch]).then(
-      ([kept, work]) => active && setFiles([...kept, ...work]),
+    // The attachments, the kept results, then this session's scratch. Readers
+    // save to the scratch by default; a file they called saved was invisible
+    // without it. Only the kept list failing costs the panel.
+    const optional = (path: string): Promise<ProjectFile[]> =>
+      request<ProjectFile[]>(path).catch(() => [] as ProjectFile[]);
+    Promise.all([
+      optional(`${filesRoute(projectId)}?scope=upload`),
+      request<ProjectFile[]>(`${filesRoute(projectId)}?scope=output`),
+      sessionId
+        ? optional(`${filesRoute(projectId)}?${scopeQuery('/mnt/workspace', sessionId)}`)
+        : Promise.resolve([] as ProjectFile[]),
+    ]).then(
+      (groups) => active && setFiles(groups.flat()),
       () => active && setFiles('failed'),
     );
     return () => {
@@ -577,6 +596,14 @@ export function Session(): JSX.Element {
             files={files}
             projectId={projectId ?? undefined}
             sessionId={sessionId ?? undefined}
+            openFolder={
+              projectId
+                ? (path) =>
+                    request<ProjectFile[]>(
+                      `${filesRoute(projectId)}?${scopeQuery(path, sessionId ?? undefined)}`,
+                    )
+                : undefined
+            }
           />
         </WellSection>
         {/* The space under the last section. The region keeps no block padding

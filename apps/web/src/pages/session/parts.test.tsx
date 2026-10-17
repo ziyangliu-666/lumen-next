@@ -343,4 +343,20 @@ describe('session page: the bar and the well', () => {
     expect(renderToStaticMarkup(<Files files={[]} />)).toContain('None yet.');
     expect(renderToStaticMarkup(<Files files="failed" />)).toContain('could not be read');
   });
+
+  it('lists attachments in their own group and makes a folder a control when it can open', () => {
+    const html = renderToStaticMarkup(
+      <Files
+        projectId="p1"
+        files={[
+          { name: 'seq.csv', virtualPath: '/mnt/upload/seq.csv', kind: 'file', modifiedAt: 1 },
+          { name: 'results', virtualPath: '/mnt/output/results', kind: 'directory', modifiedAt: 2 },
+        ]}
+        openFolder={() => Promise.resolve([])}
+      />,
+    );
+    expect(html).toMatch(/Attached.*seq\.csv.*Kept.*results\//s);
+    expect(html).toContain('href="/api/projects/p1/files/upload/seq.csv"');
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>results\/<\/button>/);
+  });
 });

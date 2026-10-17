@@ -12,7 +12,7 @@ import { Bleed } from '@/ui/surfaces';
 // start before they have an account. The draft waits in this tab while they
 // sign in.
 
-const SIGN_IN_FIRST = 'Sign in before starting. Your question is saved in this tab.';
+const SIGN_IN_FIRST = 'Sign in to start.';
 
 export function Landing(): JSX.Element {
   // Who is signed in is the shell's answer, not this page's: real sign-in and
@@ -33,7 +33,17 @@ export function Landing(): JSX.Element {
     asks = true;
     hint = (
       <>
-        {error}
+        {error === SIGN_IN_FIRST && signedOut ? (
+          // The question waits in this tab while they sign in.
+          <>
+            <a href="#/signin" onClick={() => saveProjectDraft(draft)} className="underline">
+              Sign in
+            </a>{' '}
+            to start.
+          </>
+        ) : (
+          error
+        )}
         {error && uncertain ? ' ' : null}
         {uncertain ? (
           <>
@@ -42,14 +52,6 @@ export function Landing(): JSX.Element {
               Projects
             </a>{' '}
             before you send again.
-          </>
-        ) : null}
-        {error === SIGN_IN_FIRST && signedOut ? (
-          <>
-            {' '}
-            <a href="#/signin" onClick={() => saveProjectDraft(draft)} className="underline">
-              Sign in
-            </a>
           </>
         ) : null}
       </>
@@ -94,29 +96,20 @@ export function Landing(): JSX.Element {
             placeholder={PROJECT_PLACEHOLDER}
             hint={hint}
             hintTone={asks ? 'ask' : 'quiet'}
-            allowEmpty
             sendLabel="Start"
             sendDisabled={pending || uncertain}
             disabled={pending}
           />
-          <p className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-            <button
-              type="button"
-              disabled={pending || uncertain}
-              onClick={() => void submit(true)}
-              className="font-medium text-ink underline decoration-[1.5px] underline-offset-[0.15em] disabled:opacity-50"
-            >
-              Surprise me
-            </button>
-            {auth.status === 'ready' ? (
+          {auth.status === 'ready' ? (
+            <p className="mt-4 text-sm">
               <a
                 href="#/home"
                 className="font-medium text-ink-2 underline decoration-[1.5px] underline-offset-[0.15em] hover:text-ink"
               >
                 Your projects
               </a>
-            ) : null}
-          </p>
+            </p>
+          ) : null}
           {signedOut && auth.mode === 'stub' ? (
             // Development only: the stub account stands in for sign-in. It
             // is folded under the field, small and grey, because the field

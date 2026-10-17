@@ -37,20 +37,9 @@ export function NewProject({ onUnauthorized }: { onUnauthorized: () => void }): 
         }}
         placeholder={PROJECT_PLACEHOLDER}
         hint={pending ? 'Starting…' : ''}
-        allowEmpty
         sendLabel="Start the project"
         sendDisabled={pending || uncertain}
       />
-      <p className="mt-3 text-sm">
-        <button
-          type="button"
-          disabled={pending || uncertain}
-          onClick={() => void submit(true)}
-          className="font-medium text-ink underline decoration-[1.5px] underline-offset-[0.15em] disabled:opacity-50"
-        >
-          Surprise me
-        </button>
-      </p>
       {error && (
         <Alert title="The project was not started" className="mt-3">
           {error}

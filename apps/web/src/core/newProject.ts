@@ -23,8 +23,8 @@ export interface ProjectDraft {
 }
 
 // A question to the person, the way chat products ask. "A question, or
-// leave it empty" was an instruction, and it read as a form field. Free
-// exploration is a control of its own ("Surprise me"), not a clause here.
+// leave it empty" was an instruction, and it read as a form field. The
+// person always asks: free exploration has no control in the page.
 export const PROJECT_PLACEHOLDER = 'What should lumen work on?';
 
 export function isProjectMode(value: string): value is ProjectMode {
@@ -98,8 +98,7 @@ export interface NewProject {
   readonly error: string | null;
   /** Clears a message the person has dealt with, for example after signing in. */
   readonly clearError: () => void;
-  /** Starts the project; `choose` lets lumen pick its own question, whatever was typed. */
-  readonly submit: (choose?: boolean) => Promise<void>;
+  readonly submit: () => Promise<void>;
 }
 
 /** The draft, the checks, and the create, visit and open steps of a new project. */
@@ -114,15 +113,12 @@ export function useNewProject({ notReady = null, onUnauthorized }: NewProjectOpt
     saveProjectDraft(next);
   }
 
-  async function submit(choose = false): Promise<void> {
+  async function submit(): Promise<void> {
     if (pending || uncertain) return;
-    // One field, no mode switch: text is where lumen starts. Free
-    // exploration, where lumen picks its own question, is the "Surprise me"
-    // control. "Let lumen choose a question" did not say what it did.
-    // An empty field still means it.
-    const typed = choose ? '' : draft.question.trim();
-    const mode: ProjectMode = typed ? 'seed' : 'explore';
-    const question = typed || 'Free exploration';
+    // The person asks; the field does not send an empty question.
+    const question = draft.question.trim();
+    if (!question) return;
+    const mode: ProjectMode = 'seed';
     if ([...question].length > LIMIT) {
       setError('Keep it to 10,000 characters or fewer.');
       return;

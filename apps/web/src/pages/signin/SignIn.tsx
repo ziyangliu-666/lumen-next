@@ -77,7 +77,10 @@ export function SignIn(): JSX.Element {
 }
 
 function AccountSignIn(): JSX.Element {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  // "?mode=signup" is the bar's Sign up: the form opens on account creation.
+  const [mode, setMode] = useState<'signin' | 'signup'>(() =>
+    new URLSearchParams(window.location.search).get('mode') === 'signup' ? 'signup' : 'signin',
+  );
   const [showKeyRemoval, setShowKeyRemoval] = useState(false);
   const [keyRemovalResult] = useState(() =>
     new URLSearchParams(window.location.search).get('keyRemoval'),

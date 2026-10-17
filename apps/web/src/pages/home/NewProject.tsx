@@ -1,4 +1,7 @@
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
+
+/** The upload route's limit, said before sending rather than by the server. */
+const ATTACH_LIMIT = 10 * 1024 * 1024;
 import { PROJECT_PLACEHOLDER, useNewProject } from '@/core/newProject';
 import { Alert } from '@/ui/alert';
 import { Composer } from '@/ui/composer';
@@ -19,6 +22,9 @@ export function NewProject({ onUnauthorized }: { onUnauthorized: () => void }): 
   const { draft, setQuestion, pending, uncertain, error, submit } = useNewProject({
     onUnauthorized,
   });
+  // Files picked before the project exists, sent once it is created.
+  const [files, setFiles] = useState<readonly File[]>([]);
+  const [tooLarge, setTooLarge] = useState<string | null>(null);
   return (
     <section aria-labelledby="new-project-name" className="pt-4">
       {/* min-h-8: the height of the projects heading row beside it. */}
@@ -33,10 +39,26 @@ export function NewProject({ onUnauthorized }: { onUnauthorized: () => void }): 
         value={draft.question}
         onValueChange={setQuestion}
         onSubmit={() => {
-          void submit();
+          void submit(files);
         }}
+        onAttach={(file) => {
+          if (file.size > ATTACH_LIMIT) {
+            setTooLarge(file.name);
+            return;
+          }
+          setTooLarge(null);
+          setFiles((list) => [...list.filter((kept) => kept.name !== file.name), file]);
+        }}
+        attachments={files.map((file) => file.name)}
+        onRemoveAttachment={(name) => setFiles((list) => list.filter((file) => file.name !== name))}
         placeholder={PROJECT_PLACEHOLDER}
-        hint={pending ? 'Starting…' : ''}
+        hint={
+          tooLarge
+            ? `${tooLarge} is larger than 10 MB, the most one file can be.`
+            : pending
+              ? 'Starting…'
+              : ''
+        }
         sendLabel="Start the project"
         sendDisabled={pending || uncertain}
       />

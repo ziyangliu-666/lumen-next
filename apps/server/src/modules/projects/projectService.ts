@@ -204,7 +204,10 @@ const TITLE_LIMIT = 120;
  * save the table" became "and save the t", which read as a typo.
  */
 export function titleOf(question: string): string {
-  const flat = [...question.replace(/\s+/gu, ' ').trim()];
+  // The page appends "Attached: <names>" to a question sent with files; the
+  // title is the question alone.
+  const asked = question.replace(/\n\nAttached: [^\n]*$/u, '');
+  const flat = [...asked.replace(/\s+/gu, ' ').trim()];
   if (flat.length <= TITLE_LIMIT) return flat.join('');
   const head = flat.slice(0, TITLE_LIMIT - 1).join('');
   const space = head.lastIndexOf(' ');

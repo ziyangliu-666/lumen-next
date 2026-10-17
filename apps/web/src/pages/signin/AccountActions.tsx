@@ -86,10 +86,19 @@ export function AccountActions(): JSX.Element {
   if (state.status === 'signed-out') {
     // A quiet text link: the bar's one outlined shape is the avatar, and a
     // boxed control here would compete with the page's primary button.
+    // Sign up beside it, filled, as products with accounts show the two. A
+    // development server has no accounts to create, so it shows Sign in only.
     return (
-      <Button asChild size="sm" variant="link">
-        <a href="#/signin">Sign in</a>
-      </Button>
+      <span className="flex items-center gap-4">
+        <Button asChild size="sm" variant="link">
+          <a href="#/signin">Sign in</a>
+        </Button>
+        {state.mode === 'stub' ? null : (
+          <Button asChild size="sm">
+            <a href="?mode=signup#/signin">Sign up</a>
+          </Button>
+        )}
+      </span>
     );
   }
   const name = state.account.displayName;

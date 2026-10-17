@@ -242,6 +242,11 @@ describe('projects: the title a question gives', () => {
   it('keeps a short question whole', () => {
     expect(titleOf('Count Dyck paths.')).toBe('Count Dyck paths.');
   });
+  it('leaves out the line that names attached files', () => {
+    expect(titleOf('Which sequence is this?\n\nAttached: motz.csv, b.txt')).toBe(
+      'Which sequence is this?',
+    );
+  });
   it('cuts a long one at the last whole word, with an ellipsis', () => {
     const question =
       'Count permutations of length n by number of fixed points for n up to 9, check the table against the OEIS, and save the table as a file.';

@@ -7,6 +7,11 @@
 # server does not, so it is started as the node user once the daemon answers.
 set -e
 
+# A mounted volume arrives owned by root; the server writes project files there.
+if [ -n "${LUMEN_VOLUME_ROOT:-}" ]; then
+  mkdir -p "$LUMEN_VOLUME_ROOT" && chown node:node "$LUMEN_VOLUME_ROOT"
+fi
+
 if [ "${LUMEN_COMPUTE_PROVIDER:-none}" = "docker" ]; then
   # No bridge and no iptables: every sandbox runs with --network none anyway,
   # and a VM without the netfilter modules would stop the daemon on them.

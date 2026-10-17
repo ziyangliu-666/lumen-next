@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import type { JSX } from 'react';
 import { PROJECT_PLACEHOLDER, useNewProject } from '@/core/newProject';
 import { Alert } from '@/ui/alert';
 import { Composer } from '@/ui/composer';
@@ -19,8 +19,6 @@ export function NewProject({ onUnauthorized }: { onUnauthorized: () => void }): 
   const { draft, setQuestion, pending, uncertain, error, submit } = useNewProject({
     onUnauthorized,
   });
-  // A draft carried over from the landing is ready to send, so say so.
-  const [carried] = useState(() => draft.question.trim() !== '');
   return (
     <section aria-labelledby="new-project-name" className="pt-4">
       {/* min-h-8: the height of the projects heading row beside it. */}
@@ -38,17 +36,21 @@ export function NewProject({ onUnauthorized }: { onUnauthorized: () => void }): 
           void submit();
         }}
         placeholder={PROJECT_PLACEHOLDER}
-        hint={
-          pending
-            ? 'Starting the project.'
-            : carried && draft.question.trim()
-              ? 'Your question is ready. Press the arrow to start.'
-              : ''
-        }
-        hintTone={carried && draft.question.trim() && !pending ? 'ask' : 'quiet'}
+        hint={pending ? 'Starting…' : ''}
+        allowEmpty
         sendLabel="Start the project"
         sendDisabled={pending || uncertain}
       />
+      <p className="mt-3 text-sm">
+        <button
+          type="button"
+          disabled={pending || uncertain}
+          onClick={() => void submit(true)}
+          className="font-medium text-ink underline decoration-[1.5px] underline-offset-[0.15em] disabled:opacity-50"
+        >
+          Surprise me
+        </button>
+      </p>
       {error && (
         <Alert title="The project was not started" className="mt-3">
           {error}
@@ -56,8 +58,7 @@ export function NewProject({ onUnauthorized }: { onUnauthorized: () => void }): 
       )}
       {uncertain && (
         <p className="mt-2 text-caption text-ink-2">
-          The request may have reached the server. Find the new project in the list before you send
-          again. This form does not start a second run by itself.
+          This may have started. Find it in the list before you send again.
         </p>
       )}
     </section>

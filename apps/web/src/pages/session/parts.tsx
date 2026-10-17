@@ -920,21 +920,10 @@ export function Composer({
         ),
     );
   }
-  const hint = attachNote
-    ? attachNote
-    : attached.length
-      ? `Attached ${attached.map((path) => path.replace(/^\/mnt\/upload\//, '')).join(', ')}. It goes with your next message.`
-      : disabled
-        ? 'Not connected. Your message stays here until lumen is back.'
-        : running
-          ? steerable
-            ? when === 'next-step'
-              ? 'Read at its next step.'
-              : 'Read at the end of its turn.'
-            : 'Only a running task can be steered. Open one in the call tree.'
-          : shownAgent
-            ? `Ended. A reply goes to lumen, not to ${shownAgent}.`
-            : 'Ended. A reply starts a new turn.';
+  // Status only: an upload, a failed upload, a connection that is down.
+  // Lines that explained the field ("Ended. A reply starts a new turn.",
+  // "Read at its next step.") said what the field and its switch already show.
+  const hint = attachNote ?? (disabled ? 'Reconnecting…' : '');
   return (
     <Field
       name="say"
@@ -942,11 +931,9 @@ export function Composer({
       placeholder={
         running
           ? steerable
-            ? when === 'next-step'
-              ? 'Steer this task before its next step…'
-              : 'Steer this task at the end of its turn…'
-            : 'This task is not running, so there is nothing to steer'
-          : 'Reply to lumen'
+            ? `Steer ${shownAgent ?? 'lumen'}…`
+            : `${shownAgent ?? 'This task'} has finished`
+          : 'Reply to lumen…'
       }
       value={draft}
       onValueChange={setDraft}
@@ -971,6 +958,10 @@ export function Composer({
       sendLabel={running ? 'Steer' : 'Send'}
       hint={hint}
       {...(onAttach ? { onAttach: attach } : {})}
+      attachments={attached.map((path) => path.replace(/^\/mnt\/upload\//, ''))}
+      onRemoveAttachment={(name) =>
+        setAttached((list) => list.filter((path) => !path.endsWith(`/${name}`)))
+      }
     />
   );
 }

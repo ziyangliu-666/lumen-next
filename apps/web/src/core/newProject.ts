@@ -22,9 +22,10 @@ export interface ProjectDraft {
   readonly mode: ProjectMode;
 }
 
-// The tab names say what the person does. The values stay the server's names.
-
-export const PROJECT_PLACEHOLDER = 'A question, or leave it empty';
+// A question to the person, the way chat products ask. "A question, or
+// leave it empty" was an instruction, and it read as a form field. Free
+// exploration is a control of its own ("Surprise me"), not a clause here.
+export const PROJECT_PLACEHOLDER = 'What should lumen work on?';
 
 export function isProjectMode(value: string): value is ProjectMode {
   return value === 'explore' || value === 'seed';
@@ -97,7 +98,8 @@ export interface NewProject {
   readonly error: string | null;
   /** Clears a message the person has dealt with, for example after signing in. */
   readonly clearError: () => void;
-  readonly submit: () => Promise<void>;
+  /** Starts the project; `choose` lets lumen pick its own question, whatever was typed. */
+  readonly submit: (choose?: boolean) => Promise<void>;
 }
 
 /** The draft, the checks, and the create, visit and open steps of a new project. */
@@ -112,12 +114,13 @@ export function useNewProject({ notReady = null, onUnauthorized }: NewProjectOpt
     saveProjectDraft(next);
   }
 
-  async function submit(): Promise<void> {
+  async function submit(choose = false): Promise<void> {
     if (pending || uncertain) return;
-    // One field, no mode switch: text is where lumen starts, and an empty
-    // field is free exploration, where lumen picks its own question. Two tabs
-    // for that one difference were a choice the field already makes.
-    const typed = draft.question.trim();
+    // One field, no mode switch: text is where lumen starts. Free
+    // exploration, where lumen picks its own question, is the "Surprise me"
+    // control. "Let lumen choose a question" did not say what it did.
+    // An empty field still means it.
+    const typed = choose ? '' : draft.question.trim();
     const mode: ProjectMode = typed ? 'seed' : 'explore';
     const question = typed || 'Free exploration';
     if ([...question].length > LIMIT) {

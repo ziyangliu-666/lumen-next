@@ -46,11 +46,10 @@ function DevelopmentServer(): JSX.Element {
     <FormColumn>
       <div className="grid gap-1">
         <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Sign in to lumen</h1>
-        <p className="text-sm text-ink-2">Your research starts here.</p>
       </div>
       <Alert role="status" title="Accounts are not available on this server">
-        This is a development server without an account database, so email, Google and GitHub
-        sign-in are off. Use a development account to try lumen.
+        Email, Google and GitHub sign-in are off on this development server. Use a development
+        account.
       </Alert>
       {state.status === 'ready' ? (
         <p className="text-sm text-ink">
@@ -236,7 +235,6 @@ function AccountSignIn(): JSX.Element {
         <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
           {signup ? 'Create your lumen account' : 'Sign in to lumen'}
         </h1>
-        <p className="text-sm text-ink-2">Your research starts here.</p>
       </div>
       {keyRemovalResult === 'complete' ? (
         <p role="status" className="text-sm text-ink">
@@ -367,7 +365,7 @@ function AccountSignIn(): JSX.Element {
             {pending ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}
           </Button>
           <p role="status" className="sr-only">
-            {pending ? 'Submitting your request.' : ''}
+            {pending ? (signup ? 'Creating your account…' : 'Signing in…') : ''}
           </p>
         </form>
       </div>

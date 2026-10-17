@@ -401,7 +401,7 @@ describe('session page: under an answer', () => {
 });
 
 describe('session page: the project sessions', () => {
-  it('lists them newest first, marks this one, and offers New session', () => {
+  it('lists them newest first, marks this one, and says which is running', () => {
     const html = renderToStaticMarkup(
       <Sessions
         sessions={[
@@ -409,12 +409,10 @@ describe('session page: the project sessions', () => {
           { id: 's2', title: 'newer', status: 'running', startedAt: 2 },
         ]}
         current="s1"
-        starting={false}
-        onNew={() => undefined}
       />,
     );
     expect(html).toMatch(/newer.*older/s);
     expect(html).toMatch(/aria-current="page"[^>]*>.*older/s);
-    expect(html).toContain('New session');
+    expect(html).toContain('Running');
   });
 });

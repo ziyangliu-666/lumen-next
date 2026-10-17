@@ -496,7 +496,9 @@ export function mountSpace(
         ctx.beginPath();
         ctx.rect(box.left - pad, box.top - pad, box.width + 2 * pad, box.height + 2 * pad);
         ctx.clip();
-        ctx.globalAlpha = 0.4;
+        // Four layers at 0.6 leave about 3 % of the scene at the centre:
+        // at 0.4, dots still crossed the breadcrumb's words.
+        ctx.globalAlpha = 0.6;
         ctx.drawImage(paper, 0, 0, W, H);
         ctx.restore();
       }

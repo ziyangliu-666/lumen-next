@@ -34,6 +34,12 @@ interface ScrollRegionProps extends React.HTMLAttributes<HTMLElement> {
    * conversation that grows at the foot.
    */
   anchor?: 'top' | 'bottom';
+  /**
+   * Draws the edge fades. Off for a region on a see-through surface: the
+   * fade is solid surface colour, and over the scene it read as a black band
+   * across the conversation.
+   */
+  fades?: boolean;
   /** The element to render: div by default, section or aside for a landmark. */
   as?: 'div' | 'section' | 'aside' | 'nav';
   ref?: React.Ref<HTMLElement>;
@@ -42,6 +48,7 @@ interface ScrollRegionProps extends React.HTMLAttributes<HTMLElement> {
 function ScrollRegion({
   surface = 'paper',
   anchor = 'top',
+  fades = true,
   as: Tag = 'div',
   className,
   children,
@@ -110,7 +117,7 @@ function ScrollRegion({
         className={cn(
           edge,
           'top-0 -mb-6 bg-linear-to-b from-(--scroll-surface) to-transparent',
-          above ? 'opacity-100' : 'opacity-0',
+          above && fades ? 'opacity-100' : 'opacity-0',
         )}
       />
       {children}
@@ -119,7 +126,7 @@ function ScrollRegion({
         className={cn(
           edge,
           'bottom-0 -mt-6 bg-linear-to-t from-(--scroll-surface) to-transparent',
-          below ? 'opacity-100' : 'opacity-0',
+          below && fades ? 'opacity-100' : 'opacity-0',
         )}
       />
     </Element>

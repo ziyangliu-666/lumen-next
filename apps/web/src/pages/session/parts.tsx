@@ -131,39 +131,48 @@ export function StepStream({
   const lastText = asked?.who === 'you' ? asked.text : '';
   const lastAgent = turns.length - 1;
 
+  // The conversation as chat products draw one: the person's words in a
+  // bubble on the right, the agent's work folded into one line above its
+  // answer, no headings and no rules between turns. The lead needs no name;
+  // a reader's own view says whose task it is.
+  const lead = task.parentId === null;
+  const running = task.status === 'running';
   const draw = (turn: Turn, index: number): JSX.Element => (
-    <article
-      key={turn.key}
-      className={cn('py-6 max-roomy:py-4', index > 0 && 'border-t border-rule-minor')}
-    >
-      <h2 className="pt-1 pb-2 text-sm font-semibold text-ink">
-        {turn.who === 'you' ? turn.label : speaker(task, tasks)}
-      </h2>
+    <article key={turn.key} className="py-4">
       {turn.who === 'you' ? (
-        <>
-          <div data-step="you" className="bg-well p-4">
-            <p className="font-medium break-words whitespace-pre-wrap text-ink">{turn.text}</p>
+        <div className="flex flex-col items-end">
+          {lead ? null : <p className="mb-1 text-caption text-ink-2">{turn.label}</p>}
+          <div
+            data-step="you"
+            className="group relative max-w-[85%] bg-well px-4 py-3 pr-11 max-roomy:max-w-full"
+          >
+            <p className="break-words whitespace-pre-wrap text-ink">{turn.text}</p>
             {index === 0 && note ? <p className="mt-1 text-caption text-ink-2">{note}</p> : null}
+            {/* Edit sits in the bubble's corner, not on a row of its own. */}
+            {index === latest && onEdit ? (
+              <TurnActions
+                className="absolute right-0 bottom-0 m-1 opacity-60 group-hover:opacity-100 focus-within:opacity-100"
+                actions={[
+                  { key: 'edit', label: 'Edit', icon: <EditIcon />, run: () => onEdit(turn.text) },
+                ]}
+              />
+            ) : null}
           </div>
-          {index === latest && onEdit ? (
-            <TurnActions
-              className="mx-0 justify-end"
-              actions={[
-                { key: 'edit', label: 'Edit', icon: <EditIcon />, run: () => onEdit(turn.text) },
-              ]}
-            />
-          ) : null}
-        </>
+        </div>
       ) : (
-        <AgentTurn
-          steps={turn.steps}
-          handedDown={handedDown}
-          names={speakerNames(tasks)}
-          onSelect={onSelect}
-          {...(index === lastAgent && onRetry && lastText
-            ? { onRetry: () => onRetry(lastText) }
-            : {})}
-        />
+        <>
+          {lead ? null : <p className="mb-2 text-caption text-ink-2">{speaker(task, tasks)}</p>}
+          <AgentTurn
+            steps={turn.steps}
+            handedDown={handedDown}
+            names={speakerNames(tasks)}
+            onSelect={onSelect}
+            live={running && index === lastAgent}
+            {...(index === lastAgent && onRetry && lastText
+              ? { onRetry: () => onRetry(lastText) }
+              : {})}
+          />
+        </>
       )}
     </article>
   );
@@ -185,6 +194,75 @@ export function StepStream({
 }
 
 /**
+ * A block of work folded into one line, the way chat products show it: how
+ * long it took and what it did ("Worked for 34 s, 2 searches, 2 readers"),
+ * opening to the steps. Every step was drawn open before, so the answer sat
+ * under pages of tables. A turn still running keeps its block open.
+ */
+function WorkFold({
+  steps,
+  handedDown,
+  open,
+  className,
+  children,
+}: {
+  steps: readonly Step[];
+  handedDown: Map<number, readonly Task[]>;
+  open: boolean;
+  className?: string | undefined;
+  children: ReactNode;
+}): JSX.Element {
+  const [shown, setShown] = useState<boolean | null>(null);
+  const expanded = shown ?? open;
+  // The lead's own steps, plus the longest of the readers it waited on: they
+  // run in parallel, and a delegate step records no time of its own.
+  const waited = steps.map((step) =>
+    Math.max(
+      0,
+      ...(handedDown.get(step.index) ?? []).map((child) =>
+        child.endedAt && child.startedAt ? child.endedAt - child.startedAt : 0,
+      ),
+    ),
+  );
+  const ms =
+    steps.reduce((sum, step) => sum + (step.detail?.durationMs ?? 0), 0) +
+    waited.reduce((sum, wait) => sum + wait, 0);
+  const count = (tool: string): number =>
+    steps.filter(
+      (step) => step.kind === 'tool' && (step.detail?.tool ?? toolLabel(step.text).label) === tool,
+    ).length;
+  const readers = steps.reduce((sum, step) => sum + (handedDown.get(step.index)?.length ?? 0), 0);
+  const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+  const what = [
+    count('search') ? plural(count('search'), 'search', 'searches') : null,
+    count('run') ? plural(count('run'), 'command', 'commands') : null,
+    readers ? plural(readers, 'reader', 'readers') : null,
+  ].filter(Boolean);
+  const label = `${open ? 'Working' : 'Worked'}${ms >= 1000 ? ` for ${took(ms)}` : ''}${what.length ? `, ${what.join(', ')}` : ''}`;
+  return (
+    <div className={className}>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setShown(!expanded)}
+        className="flex items-center gap-1 text-sm text-ink-2 hover:text-ink"
+      >
+        {label}
+        <span
+          aria-hidden="true"
+          className={cn('inline-block transition-transform', expanded && 'rotate-90')}
+        >
+          ›
+        </span>
+      </button>
+      {expanded ? (
+        <div className="mt-3 space-y-4 border-l border-rule-minor pl-4">{children}</div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * One turn of an agent. The work before a reply hangs on one thin rule, so it
  * reads as one block of steps and the reply below it reads as the answer. A
  * turn that works again after a reply starts a second block.
@@ -195,6 +273,7 @@ function AgentTurn({
   names,
   onSelect,
   onRetry,
+  live = false,
 }: {
   steps: readonly Step[];
   handedDown: Map<number, readonly Task[]>;
@@ -202,6 +281,8 @@ function AgentTurn({
   onSelect: (taskId: string) => void;
   /** Given on the latest turn: Regenerate under its last answer. */
   onRetry?: () => void;
+  /** The turn is still running: its last block of work stays open to watch. */
+  live?: boolean;
 }): JSX.Element {
   const parts: ({ kind: 'work'; steps: Step[] } | { kind: 'reply'; step: Step })[] = [];
   for (const step of steps) {
@@ -220,7 +301,7 @@ function AgentTurn({
           <section
             key={`r${part.step.index}`}
             data-step="reply"
-            className={cn('break-words text-ink', index > 0 && 'mt-8')}
+            className={cn('break-words text-ink', index > 0 && 'mt-4')}
           >
             <div className={PROSE}>
               <ReplyText text={part.step.text} />
@@ -231,9 +312,12 @@ function AgentTurn({
             />
           </section>
         ) : (
-          <div
+          <WorkFold
             key={`w${part.steps[0]?.index ?? index}`}
-            className={cn('space-y-4 border-l border-rule-minor pl-4', index > 0 && 'mt-10')}
+            steps={part.steps}
+            handedDown={handedDown}
+            open={live && index === parts.length - 1}
+            className={index > 0 ? 'mt-6' : undefined}
           >
             {part.steps.map((step) => (
               <StepBlock
@@ -244,7 +328,7 @@ function AgentTurn({
                 onSelect={onSelect}
               />
             ))}
-          </div>
+          </WorkFold>
         ),
       )}
     </div>

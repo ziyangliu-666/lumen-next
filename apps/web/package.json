@@ -12,7 +12,7 @@
     "@lumen/contracts": "*",
     "class-variance-authority": "0.7.1",
     "cn": "0.2.5",
-    "katex": "0.19.0",
+    "katex": "0.16.47",
     "lucide-react": "1.41.0",
     "mermaid": "12.2.0",
     "radix-ui": "1.6.7",

@@ -5,13 +5,15 @@ import { cn } from '@/lib/utils';
 // project on home, a reply on session. Every page uses this one, so the act
 // of asking lumen something looks and behaves the same everywhere.
 //
-// Parts, top to bottom:
-// - Modes (optional): 14px tabs, one pressed. They change what the text
-//   means, so they sit above the field they qualify.
-// - The field: one ink box. The text grows with its content. Attach and the
-//   send square fill the box's height and meet its edge, so the field reads
-//   as one control, not a box with boxes inside.
-// - The hint: one line that says what happens when you send.
+// It is drawn as a message box, the way chat products draw theirs: the text
+// on top, two lines high, and a row at the foot of the box with Attach and
+// the modes on the left and the send square on the right. A one-line field
+// with a black block beside it read as a form, not as a place to write to
+// lumen. Attached files show as chips inside the box, above the text.
+// Send is dimmed until there is something to send.
+//
+// The hint under the box is for status only: an upload in progress, a
+// connection that is down, an error. It does not explain the field.
 //
 // Enter sends and Shift+Enter breaks the line. Enter never sends while an
 // input method is composing (Chinese, Japanese), because there Enter picks a
@@ -54,6 +56,11 @@ interface ComposerProps {
   modesDisabled?: boolean;
   /** Shows Attach when given; called with the file the person picked. */
   onAttach?: (file: File) => void;
+  /** Files that go with the next message, drawn as chips in the box. */
+  attachments?: readonly string[];
+  onRemoveAttachment?: (name: string) => void;
+  /** Lets an empty field be sent; otherwise send waits for text. */
+  allowEmpty?: boolean;
   accept?: string;
   /** The send square's accessible name. */
   sendLabel?: string;
@@ -86,13 +93,8 @@ function AttachIcon() {
 
 function SendIcon() {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="size-5">
-      <path
-        d="M3 10h13M10.5 4.5 16 10l-5.5 5.5"
-        stroke="currentColor"
-        strokeWidth="2"
-        fill="none"
-      />
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4">
+      <path d="M10 16V4M4.5 9.5 10 4l5.5 5.5" stroke="currentColor" strokeWidth="2" fill="none" />
     </svg>
   );
 }
@@ -112,6 +114,9 @@ function Composer({
   modesLabelVisible = false,
   modesDisabled = false,
   onAttach,
+  attachments = [],
+  onRemoveAttachment,
+  allowEmpty = false,
   accept,
   sendLabel = 'Send',
   sendDisabled = false,
@@ -128,11 +133,13 @@ function Composer({
   const hintId = `${fieldId}-hint`;
   const form = React.useRef<HTMLFormElement | null>(null);
   const picker = React.useRef<HTMLInputElement | null>(null);
+  const empty = !allowEmpty && value.trim() === '' && attachments.length === 0;
+  const cannotSend = disabled || sendDisabled || empty;
 
   function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    if (!sendDisabled && !disabled) form.current?.requestSubmit();
+    if (!cannotSend) form.current?.requestSubmit();
   }
 
   return (
@@ -142,68 +149,50 @@ function Composer({
       className={cn('min-w-0', className)}
       onSubmit={(event) => {
         event.preventDefault();
-        if (sendDisabled || disabled) return;
+        if (cannotSend) return;
         onSubmit(event);
       }}
     >
-      {modes && modes.length > 0 ? (
-        <div
-          role="group"
-          {...(modesLabelVisible
-            ? { 'aria-labelledby': `${fieldId}-modes` }
-            : { 'aria-label': modesLabel })}
-          className={cn(
-            'mb-2 flex flex-wrap items-baseline',
-            modesLabelVisible ? 'items-center gap-x-3 gap-y-1' : 'gap-x-6',
-          )}
-        >
-          {modesLabelVisible ? (
-            <span id={`${fieldId}-modes`} className="text-caption text-ink-2">
-              {modesLabel}
-            </span>
-          ) : null}
-          {/* A choice about the message (when it lands) is a segmented pair
-              of small boxes, so it does not look like the content tabs on
-              the landing and home (what kind of project), which are words
-              with a rule under them. The two looked identical before. */}
-          <span className={modesLabelVisible ? 'flex' : 'flex flex-wrap gap-x-6'}>
-            {modes.map((item, index) => (
-              <button
-                key={item.value}
-                type="button"
-                aria-pressed={item.value === mode}
-                disabled={disabled || modesDisabled}
-                onClick={() => onModeChange?.(item.value)}
-                className={cn(
-                  'text-sm font-medium disabled:opacity-50',
-                  modesLabelVisible
-                    ? cn(
-                        'h-7 border border-ink px-2 text-xs',
-                        index > 0 && '-ml-px',
-                        item.value === mode ? 'bg-ink text-paper' : 'text-ink hover:bg-well',
-                      )
-                    : cn(
-                        'border-b-2 py-1',
-                        item.value === mode
-                          ? 'border-ink text-ink'
-                          : 'border-transparent text-ink-2 hover:text-ink',
-                      ),
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </span>
-        </div>
-      ) : null}
-      <div className="relative flex items-stretch border border-ink bg-paper pl-4 has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:-outline-offset-1 has-[textarea:focus-visible]:outline-ink">
+      <div
+        className="relative border border-ink bg-paper has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:-outline-offset-1 has-[textarea:focus-visible]:outline-ink"
+        // The whole box is the field: a click on its empty part puts the caret in the text.
+        onPointerDown={(event) => {
+          if (event.target === event.currentTarget) {
+            event.preventDefault();
+            document.getElementById(fieldId)?.focus();
+          }
+        }}
+      >
         <label htmlFor={fieldId} className="sr-only">
           {label}
         </label>
+        {attachments.length > 0 ? (
+          <ul aria-label="Attached" className="flex flex-wrap gap-2 px-4 pt-3">
+            {attachments.map((file) => (
+              <li
+                key={file}
+                className="flex items-center gap-1 border border-rule-minor bg-well py-0.5 pr-1 pl-2 font-mono text-xs text-ink"
+              >
+                <AttachIcon />
+                <span className="max-w-[24ch] truncate">{file}</span>
+                {onRemoveAttachment ? (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${file}`}
+                    onClick={() => onRemoveAttachment(file)}
+                    className="grid size-5 place-items-center text-ink-2 hover:text-ink"
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <textarea
           id={fieldId}
           name={name}
-          rows={1}
+          rows={2}
           value={value}
           placeholder={placeholder}
           maxLength={maxLength}
@@ -213,42 +202,77 @@ function Composer({
           aria-describedby={hint ? hintId : undefined}
           onChange={(event) => onValueChange(event.target.value)}
           onKeyDown={onKeyDown}
-          className="block field-sizing-content max-h-[40svh] min-h-12 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent py-3 text-base outline-none placeholder:text-ink-3 placeholder:opacity-100 focus-visible:outline-none disabled:opacity-50"
+          className="block field-sizing-content max-h-[40svh] min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3 pb-1 text-base outline-none placeholder:text-ink-3 placeholder:opacity-100 focus-visible:outline-none disabled:opacity-50"
         />
-        {onAttach ? (
-          <>
-            <button
-              type="button"
-              aria-label="Attach a file"
-              disabled={disabled}
-              onClick={() => picker.current?.click()}
-              className="flex shrink-0 items-center gap-1 px-2 text-sm font-medium text-ink-2 hover:bg-well hover:text-ink roomy:px-4"
+        <div className="flex min-h-11 items-center gap-3 pr-1.5 pb-1.5 pl-2">
+          {onAttach ? (
+            <>
+              <button
+                type="button"
+                aria-label="Attach a file"
+                disabled={disabled}
+                onClick={() => picker.current?.click()}
+                className="flex h-8 shrink-0 items-center gap-1 px-2 text-sm text-ink-2 hover:bg-well hover:text-ink disabled:opacity-50"
+              >
+                <AttachIcon />
+                <span className="sr-only roomy:not-sr-only">Attach</span>
+              </button>
+              <input
+                ref={picker}
+                type="file"
+                hidden
+                accept={accept}
+                tabIndex={-1}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) onAttach(file);
+                  event.target.value = '';
+                }}
+              />
+            </>
+          ) : null}
+          {modes && modes.length > 0 ? (
+            <div
+              role="group"
+              {...(modesLabelVisible
+                ? { 'aria-labelledby': `${fieldId}-modes` }
+                : { 'aria-label': modesLabel })}
+              className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
             >
-              <AttachIcon />
-              <span className="sr-only roomy:not-sr-only">Attach</span>
-            </button>
-            <input
-              ref={picker}
-              type="file"
-              hidden
-              accept={accept}
-              tabIndex={-1}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) onAttach(file);
-                event.target.value = '';
-              }}
-            />
-          </>
-        ) : null}
-        <button
-          type="submit"
-          aria-label={sendLabel}
-          disabled={disabled || sendDisabled}
-          className="grid w-12 shrink-0 place-items-center bg-ink text-paper focus-visible:-outline-offset-4 focus-visible:outline-paper disabled:opacity-50"
-        >
-          <SendIcon />
-        </button>
+              {modesLabelVisible ? (
+                <span id={`${fieldId}-modes`} className="text-xs text-ink-2">
+                  {modesLabel}
+                </span>
+              ) : null}
+              <span className="flex">
+                {modes.map((item, index) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    aria-pressed={item.value === mode}
+                    disabled={disabled || modesDisabled}
+                    onClick={() => onModeChange?.(item.value)}
+                    className={cn(
+                      'h-7 border border-ink px-2 text-xs font-medium disabled:opacity-50',
+                      index > 0 && '-ml-px',
+                      item.value === mode ? 'bg-ink text-paper' : 'text-ink hover:bg-well',
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </span>
+            </div>
+          ) : null}
+          <button
+            type="submit"
+            aria-label={sendLabel}
+            disabled={cannotSend}
+            className="ml-auto grid size-8 shrink-0 place-items-center bg-ink text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-25"
+          >
+            <SendIcon />
+          </button>
+        </div>
       </div>
       {hint ? (
         <p

@@ -271,8 +271,10 @@ describe('session page: the rail', () => {
     // When the steer lands: the composer's modes, one pressed.
     expect(composer(true)).toMatch(/aria-pressed="true"[^>]*>At its next step</);
     expect(composer(true)).toContain('At the end of its turn');
-    expect(composer(true)).toContain('Steer this task before its next step…');
+    expect(composer(true)).toContain('placeholder="Steer lumen…"');
     expect(composer(false)).toContain('aria-label="Send"');
+    // Nothing typed yet: send waits for text.
+    expect(composer(false)).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
     expect(composer(false)).toContain('>Reply to lumen<');
     expect(composer(false)).not.toContain('aria-pressed');
     expect(composer(true)).toContain('lumen reads it');
@@ -309,7 +311,7 @@ describe('session page: the rail', () => {
       <Composer disabled={false} running={true} steerable={false} onSay={noop} onSteer={noop} />,
     );
     expect(html).toMatch(/<textarea[^>]*disabled=""/);
-    expect(html).toContain('nothing to steer');
+    expect(html).toContain('This task has finished');
   });
 
   it('keeps a new turn writable while the socket is down, and only sending is off', () => {

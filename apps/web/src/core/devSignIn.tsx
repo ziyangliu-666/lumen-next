@@ -49,8 +49,7 @@ export function DevelopmentSignIn({
         <Button type="submit">Continue</Button>
       </div>
       <p className="text-caption text-ink-2">
-        Anyone who types the same name opens the same projects. No password is kept, so choose a
-        name nobody else uses.
+        No password: anyone who types this name sees its projects.
       </p>
     </form>
   );

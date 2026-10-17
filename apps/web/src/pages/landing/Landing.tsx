@@ -1,5 +1,5 @@
 // Owner: PENG XUJIAN. Page: Landing.
-import { useState, type JSX, type ReactNode } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { useCurrentAccount } from '@/core/auth';
 import { DevelopmentSignIn } from '@/core/devSignIn';
 import { PROJECT_PLACEHOLDER, saveProjectDraft, useNewProject } from '@/core/newProject';
@@ -23,19 +23,12 @@ export function Landing(): JSX.Element {
     onUnauthorized: refreshAccount,
   });
   const signedOut = auth.status === 'signed-out';
-  // Set when the person signs in from this page with a question waiting. The
-  // question is not sent for them, because a start spends money, but the line
-  // under the field says the next step: before, it went back to the generic
-  // promise and the question looked forgotten.
-  const [resumed, setResumed] = useState(false);
-
-  // One line under the field says what happens next. A problem replaces the
-  // promise and prints in ink, because it asks the person to act; red stays
-  // for work that waits on them inside a run.
+  // The line under the field is for a problem only, printed in ink because it
+  // asks the person to act; red stays for work that waits on them in a run.
   let hint: ReactNode;
   let asks = false;
   if (pending) {
-    hint = 'Starting.';
+    hint = 'Starting…';
   } else if (error || uncertain) {
     asks = true;
     hint = (
@@ -44,11 +37,11 @@ export function Landing(): JSX.Element {
         {error && uncertain ? ' ' : null}
         {uncertain ? (
           <>
-            The request may have reached the server. Check{' '}
+            This may have started. Check{' '}
             <a href="#/home" className="underline">
               Projects
             </a>{' '}
-            to find the saved project. This form does not start a second run.
+            before you send again.
           </>
         ) : null}
         {error === SIGN_IN_FIRST && signedOut ? (
@@ -62,12 +55,7 @@ export function Landing(): JSX.Element {
       </>
     );
   } else {
-    hint =
-      auth.status !== 'ready'
-        ? ''
-        : resumed && draft.question.trim()
-          ? 'You are signed in. Your question is ready. Press the arrow to start.'
-          : '';
+    hint = '';
   }
 
   return (
@@ -94,10 +82,6 @@ export function Landing(): JSX.Element {
             <span className="block">Now you can do any frontier work.</span>
             <span className="block text-ink-2">Just start.</span>
           </h1>
-          <p className="mt-4 max-w-[30em] text-ink-2 roomy:mt-6">
-            lumen is a research agent for mathematics. It reads the literature, runs the
-            computations and tells you what is new, with the evidence.
-          </p>
           <Composer
             className="mt-6 roomy:mt-10"
             id="research-question"
@@ -109,25 +93,30 @@ export function Landing(): JSX.Element {
             }}
             placeholder={PROJECT_PLACEHOLDER}
             hint={hint}
-            hintTone={
-              asks || (resumed && auth.status === 'ready' && draft.question.trim())
-                ? 'ask'
-                : 'quiet'
-            }
+            hintTone={asks ? 'ask' : 'quiet'}
+            allowEmpty
             sendLabel="Start"
             sendDisabled={pending || uncertain}
             disabled={pending}
           />
-          {auth.status === 'ready' ? (
-            <p className="mt-4 text-sm">
+          <p className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            <button
+              type="button"
+              disabled={pending || uncertain}
+              onClick={() => void submit(true)}
+              className="font-medium text-ink underline decoration-[1.5px] underline-offset-[0.15em] disabled:opacity-50"
+            >
+              Surprise me
+            </button>
+            {auth.status === 'ready' ? (
               <a
                 href="#/home"
-                className="font-medium text-ink underline decoration-[1.5px] underline-offset-[0.15em]"
+                className="font-medium text-ink-2 underline decoration-[1.5px] underline-offset-[0.15em] hover:text-ink"
               >
-                View your projects
+                Your projects
               </a>
-            </p>
-          ) : null}
+            ) : null}
+          </p>
           {signedOut && auth.mode === 'stub' ? (
             // Development only: the stub account stands in for sign-in. It
             // is folded under the field, small and grey, because the field
@@ -144,7 +133,6 @@ export function Landing(): JSX.Element {
                 className="mt-3"
                 onSignedIn={() => {
                   clearError();
-                  setResumed(true);
                 }}
               />
             </details>

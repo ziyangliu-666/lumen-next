@@ -216,7 +216,9 @@ export class SandboxFs {
    */
   async saveUpload(name: string, data: Buffer): Promise<string> {
     const safe = (name.split(/[\\/]/).pop() ?? '')
-      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      // Letters and digits of any script stay: a Chinese file name lost
+      // every character and came back as "v2.csv".
+      .replace(/[^\p{L}\p{N}._-]+/gu, '-')
       .replace(/^[.-]+/, '')
       .slice(0, 120);
     if (!safe) throw new SandboxPathError('the file needs a name');

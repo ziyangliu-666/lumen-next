@@ -55,6 +55,9 @@ function asHttpError(error: unknown): unknown {
   return error instanceof SandboxPathError || isNoEnt(error) ? notFound('no such file') : error;
 }
 
+/** Files the browser shows as plain text rather than downloads. */
+const TEXT_FILE = /\.(txt|csv|tsv|md|py|json|tex|log|sage|gp|m|jl|out)$/i;
+
 /** The largest file a person may attach. The sandbox's per-file cap still applies. */
 const UPLOAD_LIMIT = 10 * 1024 * 1024;
 
@@ -123,8 +126,18 @@ export function steeringRoutes(
         try {
           await requireProject?.(principal, request.params.id);
           const sandbox = makeFs(request.params.id);
-          const data = await sandbox.readFile(`/mnt/${request.params['*']}`);
-          return await reply.type('application/octet-stream').send(data);
+          const path = request.params['*'];
+          const data = await sandbox.readFile(`/mnt/${path}`);
+          // Text opens in the tab as plain text: the panel's link was a
+          // download of every table and script. Never as HTML, so a file an
+          // agent wrote cannot run as a page on this origin; nosniff keeps
+          // the browser from guessing otherwise.
+          const text = TEXT_FILE.test(path);
+          return await reply
+            .type(text ? 'text/plain; charset=utf-8' : 'application/octet-stream')
+            .header('x-content-type-options', 'nosniff')
+            .header('content-disposition', text ? 'inline' : 'attachment')
+            .send(data);
         } catch (error) {
           throw asHttpError(error);
         }

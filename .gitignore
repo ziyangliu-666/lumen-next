@@ -13,3 +13,6 @@ coverage/
 
 # SandboxFs's default local volume (LUMEN_VOLUME_ROOT)
 apps/server/.data/
+
+# Session volumes written by a local server run without LUMEN_VOLUME_ROOT.
+.data/

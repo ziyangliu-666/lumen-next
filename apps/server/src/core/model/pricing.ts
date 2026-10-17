@@ -22,6 +22,11 @@ const PRICES: Readonly<Record<string, Price>> = {
   // DeepSeek, read 23 Sep 2026.
   'deepseek-flash': { inputPerMillion: 0.14, outputPerMillion: 0.28 },
   'deepseek-v4-pro': { inputPerMillion: 0.55, outputPerMillion: 2.19 },
+  // Anthropic, read 17 Oct 2026, through its OpenAI-compatible endpoint.
+  // Haiku 5.5 has two tiers; this is the tier for prompts up to 100,000
+  // tokens. A prompt over that is billed at $0.50 / $2.50 and this row
+  // undercharges it, so a run that sends such prompts needs a tiered price.
+  'claude-haiku-5-5': { inputPerMillion: 0.1, outputPerMillion: 0.5 },
 };
 
 /** The price for a model, with the vendor's date suffix stripped ('gpt-4.1-nano-2025-04-14'). */

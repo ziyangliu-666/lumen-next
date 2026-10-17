@@ -4,6 +4,7 @@ import type {
   Money,
   SessionMode,
   SessionSnapshot,
+  SessionSummary,
   StepDetail,
   StepKind,
   Task,
@@ -148,6 +149,24 @@ export class Kernel {
         await this.setStatus(task.id, 'stopped');
       }
     }
+  }
+
+  /**
+   * A project's sessions that this principal opened, newest first, each with
+   * its opening question. The caller has checked the project (the route's
+   * gate); a session another account opened under it is still left out.
+   */
+  async sessionsOf(
+    projectId: string,
+    principal: Principal,
+  ): Promise<(SessionSummary & { readonly title: string })[]> {
+    const listed: (SessionSummary & { readonly title: string })[] = [];
+    for (const summary of await this.trace.summaries(projectId)) {
+      if (!(await this.mayRead(principal, summary.id))) continue;
+      const root = await this.trace.rootOf(summary.id);
+      listed.push({ ...summary, title: root?.title ?? '' });
+    }
+    return listed;
   }
 
   async snapshot(sessionId: string, principal: Principal): Promise<SessionSnapshot> {

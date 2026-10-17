@@ -8,6 +8,7 @@ import {
   Findings,
   receiptOf,
   ReplyActions,
+  Sessions,
   StepStream,
   StopControl,
   WaitingNotice,
@@ -381,5 +382,24 @@ describe('session page: under an answer', () => {
     const html = renderToStaticMarkup(<ReplyActions text="**42**" />);
     expect(html).toContain('aria-label="Copy"');
     expect(html).toContain('aria-label="Copy link"');
+  });
+});
+
+describe('session page: the project sessions', () => {
+  it('lists them newest first, marks this one, and offers New session', () => {
+    const html = renderToStaticMarkup(
+      <Sessions
+        sessions={[
+          { id: 's1', title: 'older', status: 'ended', startedAt: 1 },
+          { id: 's2', title: 'newer', status: 'running', startedAt: 2 },
+        ]}
+        current="s1"
+        starting={false}
+        onNew={() => undefined}
+      />,
+    );
+    expect(html).toMatch(/newer.*older/s);
+    expect(html).toMatch(/aria-current="page"[^>]*>.*older/s);
+    expect(html).toContain('New session');
   });
 });

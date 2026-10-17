@@ -223,7 +223,12 @@ describe('createWorker: the conversation', () => {
     await expect(
       createWorker({ volumeRoot, context, registry, model }).run(taskOf(), 'x', asReport(report)),
     ).rejects.toThrow('the key was refused');
-    expect(stepsOf(report)).toEqual([['reply', 'Stopped: the key was refused']]);
+    expect(stepsOf(report)).toEqual([
+      [
+        'reply',
+        'Stopped: the model key was refused. If you saved an OpenAI key, replace it in Settings, Keys.',
+      ],
+    ]);
     expect(() => registry.steer('task-1', 'late', 'next-step')).toThrow();
   });
 });

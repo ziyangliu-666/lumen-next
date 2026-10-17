@@ -10,6 +10,7 @@ import { Button } from '@/ui/button';
 import { ScrollRegion } from '@/ui/scroll-region';
 import { RegionName, SurfaceMain, Surfaces, SurfaceWell } from '@/ui/surfaces';
 import { rememberReturn, useCurrentAccount } from '@/core/auth';
+import { go } from '@/core/router';
 import { BarActions, BarCrumb, BarStatus } from '@/core/shell';
 import {
   apply,
@@ -27,6 +28,8 @@ import {
   Findings,
   money,
   type ProjectFile,
+  type ProjectSession,
+  Sessions,
   StepStream,
   type SteerWhen,
   StopControl,
@@ -98,6 +101,9 @@ export function Session(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<{ text: string; key: number } | undefined>(undefined);
+  // The project's sessions, and whether the field starts a new one.
+  const [sessions, setSessions] = useState<readonly ProjectSession[]>([]);
+  const [starting, setStarting] = useState(false);
   // The finding last chosen in the well. It stays marked while the
   // conversation shows the task that recorded it.
   const [chosenFinding, setChosenFinding] = useState<string | null>(null);
@@ -253,6 +259,22 @@ export function Session(): JSX.Element {
   // The project's files (steering's files route). Read when the stream opens
   // and again when a run starts or ends: a run starts with what was just
   // attached and ends with its files complete. A failure costs this list, never the page.
+  // The project's sessions, read with the files: when the stream opens and
+  // when a run starts or ends. A failure leaves the list out, never the page.
+  useEffect(() => {
+    if (!projectId || !connected) return;
+    let active = true;
+    request<{ items: ProjectSession[] }>(
+      `/api/projects/${encodeURIComponent(projectId)}/sessions`,
+    ).then(
+      (body) => active && setSessions(body.items),
+      () => undefined,
+    );
+    return () => {
+      active = false;
+    };
+  }, [projectId, connected, running]);
+
   useEffect(() => {
     if (!projectId || !connected) return;
     let active = true;
@@ -385,6 +407,19 @@ export function Session(): JSX.Element {
 
   // A new turn is the lead's. Show it arrive: the lead's stream, at its foot,
   // following. The focus stays in the input, for the turn after this one.
+  // The field in New session mode: the question opens a session of its own
+  // in this project, and the page goes to it.
+  function startNew(text: string): void {
+    if (!projectId) return;
+    void request<{ session: { id: string } }>(
+      `/api/projects/${encodeURIComponent(projectId)}/sessions`,
+      { json: { text, mode: 'seed' } },
+    ).then(
+      (snapshot) => go(`?session=${encodeURIComponent(snapshot.session.id)}#/session`),
+      () => setStarting(false),
+    );
+  }
+
   function say(text: string): void {
     stream.current?.send({ type: 'session.say', sessionId: thisSession, text });
     setSelected(rootId);
@@ -559,7 +594,8 @@ export function Session(): JSX.Element {
             disabled={!ready}
             running={running}
             steerable={shown.status === 'running'}
-            onSay={say}
+            onSay={starting ? startNew : say}
+            newSession={starting}
             onSteer={steer}
             shownAgent={lead ? null : shownName}
             onAttach={projectId ? (file) => upload(projectId, file) : undefined}
@@ -596,6 +632,17 @@ export function Session(): JSX.Element {
             totals={snapshot.totals}
             selected={shown.id}
             onSelect={open}
+          />
+        </WellSection>
+        <WellSection id={`${wellId}-sessions`} name="Sessions" count={sessions.length || undefined}>
+          <Sessions
+            sessions={sessions}
+            current={snapshot.session.id}
+            starting={starting}
+            onNew={() => {
+              setStarting(!starting);
+              document.querySelector<HTMLTextAreaElement>('textarea[name="say"]')?.focus();
+            }}
           />
         </WellSection>
         <WellSection

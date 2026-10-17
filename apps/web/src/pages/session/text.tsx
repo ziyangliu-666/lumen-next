@@ -258,7 +258,12 @@ export function tablesApart(text: string): string {
 /** A reply, drawn from its Markdown. */
 export function ReplyText({ text }: { text: string }): JSX.Element {
   return (
-    <div className="space-y-2 [&_.katex-display]:my-2 [&_.katex-display]:overflow-x-auto">
+    // KaTeX draws at 1.21 times the text, and a fraction in a line of text
+    // shrinks further: formulas read small beside the prose. Inline is set a
+    // little larger, a formula on its own line larger still. Important,
+    // because KaTeX's stylesheet is outside Tailwind's layers and wins over
+    // any layered rule.
+    <div className="space-y-2 [&_.katex]:text-[1.25em]! [&_.katex-display]:my-3 [&_.katex-display]:overflow-x-auto [&_.katex-display>.katex]:text-[1.45em]!">
       <Markdown
         remarkPlugins={[remarkGfm, remarkMath, citations]}
         rehypePlugins={[rehypeKatex]}

@@ -36,7 +36,7 @@ import { fitToViewport, readCanvasTheme, watchThemeClass } from '@/ui/canvas-the
    - prefers-reduced-motion: shots cut, no streaks, the theme changes at once.
    - Tab hidden: the loop stops. */
 
-export type ShotName = 'landing' | 'home' | 'session' | 'quiet';
+export type ShotName = 'landing' | 'signin' | 'home' | 'session' | 'quiet';
 
 export interface Space {
   /** Moves the camera to a shot, eased; with reduced motion, cuts to it. */
@@ -131,9 +131,15 @@ const SHOTS: Record<ShotName, Shot> = {
   home: { ax: 0.86, ay: 0.16, size: 0.07, dist: 9, show: 0.42, yaw: 1.4 },
   session: { ax: 0.9, ay: 0.12, size: 0.05, dist: 12, show: 0.32, yaw: 2.6 },
   quiet: { ax: 0.88, ay: 0.14, size: 0.06, dist: 10, show: 0.36, yaw: -1.2 },
+  // Sign-in: the form on the left, the whole sphere standing in the right
+  // half, a step back from the landing, so the page is one composition and
+  // not a form beside an empty sky with a sphere cut at its corner.
+  signin: { ax: 0.72, ay: 0.5, size: 0.22, dist: 4.2, show: 0.6, yaw: 2.4 },
 };
 const NARROW: Partial<Record<ShotName, Shot>> = {
   landing: { ax: 0.5, ay: 0.2, size: 0.13, dist: 3.2, show: 1, yaw: 0 },
+  // A phone has no right half: the form takes the screen, the scene is far.
+  signin: { ax: 0.86, ay: 0.12, size: 0.05, dist: 10, show: 0.36, yaw: 0.6 },
 };
 const SHOT_MS = 1600;
 

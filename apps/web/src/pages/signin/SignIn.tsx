@@ -26,7 +26,9 @@ function FormColumn({ children }: { readonly children: ReactNode }): JSX.Element
     // Over the split width the form stands on the screen's centre line;
     // top-aligned, it hung from the bar with the screen empty under it.
     <div className="grid gap-x-gutter roomy:grid-cols-12 split:flex-1 split:[align-content:safe_center]">
-      <div className="grid content-start gap-6 roomy:col-span-6 split:col-span-4">{children}</div>
+      <div data-quiet="" className="grid content-start gap-6 roomy:col-span-6 split:col-span-4">
+        {children}
+      </div>
     </div>
   );
 }

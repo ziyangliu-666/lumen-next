@@ -17,7 +17,16 @@ primary_region = "sin"
   LUMEN_MODEL_PROVIDER = "openai"
   LUMEN_WORKER = "steering"
   LUMEN_COMPUTE_PROVIDER = "docker"
+  LUMEN_VOLUME_ROOT = "/data/projects"
   LUMEN_DEMO_PACE_MS = "300"
+
+# Project files (uploads, kept results, the sandboxes' scratch) on a volume:
+# the machine's own disk is replaced on every deploy, and every project's
+# files went with it. Created with
+#   flyctl volumes create lumen_data --region sin --size 1
+[mounts]
+  source = "lumen_data"
+  destination = "/data"
 
 [http_service]
   internal_port = 4000

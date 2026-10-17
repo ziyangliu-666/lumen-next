@@ -18,17 +18,30 @@ import { SandboxFs, SandboxPathError, SandboxQuotaError, type Scope } from './sa
  */
 export type ProjectGate = (principal: Principal, projectId: string) => Promise<unknown>;
 
-const SCOPES: readonly Scope[] = ['upload', 'output'];
+const SCOPES: readonly Scope[] = ['upload', 'output', 'workspace'];
 
 function isScope(value: unknown): value is Scope {
-  return value === 'upload' || value === 'output';
+  return value === 'upload' || value === 'output' || value === 'workspace';
 }
 
-/** `?scope=upload|output`, defaulting to `upload` — the files a user attached. */
+/**
+ * `?scope=upload|output|workspace`, defaulting to `upload`. The workspace is
+ * one session's scratch, so it needs `?session=<id>` as well: a reader saves
+ * there by default, and a file it called saved was otherwise nowhere the
+ * person could see it.
+ */
 function scopeOf(query: unknown): Scope {
   const raw = (query as { scope?: unknown } | null)?.scope;
   if (raw === undefined) return 'upload';
   if (!isScope(raw)) throw badRequest(`scope must be one of ${SCOPES.join(', ')}`);
+  return raw;
+}
+
+/** `?session=<id>`: whose workspace. The project gate decides the project; the id must be a uuid (SandboxFs). */
+function sessionOf(query: unknown): string | undefined {
+  const raw = (query as { session?: unknown } | null)?.session;
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string') throw badRequest('session must be a string');
   return raw;
 }
 
@@ -64,27 +77,31 @@ const UPLOAD_LIMIT = 10 * 1024 * 1024;
 export function steeringRoutes(
   volumeRoot: string,
   requireProject?: ProjectGate,
-  makeFs: (projectId: string) => SandboxFs = (projectId) => new SandboxFs(volumeRoot, projectId),
+  makeFs: (projectId: string, sessionId?: string) => SandboxFs = (projectId, sessionId) =>
+    new SandboxFs(volumeRoot, projectId, sessionId),
 ): (app: FastifyInstance) => void {
   return (app) => {
-    app.get<{ Params: { id: string }; Querystring: { scope?: string; path?: string } }>(
-      '/api/projects/:id/files',
-      async (request) => {
-        const principal = requireUser(request);
-        const scope = scopeOf(request.query);
-        const path = pathOf(request.query);
-        try {
-          // Validate first, authorise second, touch disk last — same order
-          // session's routes.ts uses, for the same reason: a refused request
-          // should not have to explain what it would have found.
-          await requireProject?.(principal, request.params.id);
-          const sandbox = makeFs(request.params.id);
-          return await sandbox.list(`/mnt/${scope}${path}`);
-        } catch (error) {
-          throw asHttpError(error);
-        }
-      },
-    );
+    app.get<{
+      Params: { id: string };
+      Querystring: { scope?: string; path?: string; session?: string };
+    }>('/api/projects/:id/files', async (request) => {
+      const principal = requireUser(request);
+      const scope = scopeOf(request.query);
+      const path = pathOf(request.query);
+      try {
+        // Validate first, authorise second, touch disk last — same order
+        // session's routes.ts uses, for the same reason: a refused request
+        // should not have to explain what it would have found.
+        await requireProject?.(principal, request.params.id);
+        const session = sessionOf(request.query);
+        if (scope === 'workspace' && !session)
+          throw badRequest('the workspace needs ?session=<id>');
+        const sandbox = makeFs(request.params.id, session);
+        return await sandbox.list(`/mnt/${scope}${path}`);
+      } catch (error) {
+        throw asHttpError(error);
+      }
+    });
 
     // An attachment: the request body is the file, its name is in the path.
     // Raw bytes, not multipart, so the route needs no form parser. Larger
@@ -119,13 +136,13 @@ export function steeringRoutes(
       done();
     });
 
-    app.get<{ Params: { id: string; '*': string } }>(
+    app.get<{ Params: { id: string; '*': string }; Querystring: { session?: string } }>(
       '/api/projects/:id/files/*',
       async (request, reply) => {
         const principal = requireUser(request);
         try {
           await requireProject?.(principal, request.params.id);
-          const sandbox = makeFs(request.params.id);
+          const sandbox = makeFs(request.params.id, sessionOf(request.query));
           const path = request.params['*'];
           const data = await sandbox.readFile(`/mnt/${path}`);
           // Text opens in the tab as plain text: the panel's link was a

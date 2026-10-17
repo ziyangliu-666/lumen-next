@@ -256,13 +256,10 @@ function HomeProjects({ onUnauthorized }: { onUnauthorized: () => void }): JSX.E
               </p>
             )}
             {!state.loading && !state.error && state.items.length === 0 && (
-              <div className="max-w-xl space-y-3 pt-6">
-                <h3 className="text-xl font-semibold text-ink">Your next discovery starts here</h3>
-                <p className="text-ink-2">
-                  Start a project to explore a question and keep the findings together.
-                </p>
-                <Button onClick={focusNewProject}>Start your first project</Button>
-              </div>
+              // The new-project field is beside this (below it on a phone), so
+              // the empty list only says so; a second "start" button was the
+              // same action twice.
+              <p className="pt-2 text-ink-2">No projects yet.</p>
             )}
             {state.items.length > 0 && visible.length === 0 && (
               <p className="text-ink-2">No loaded projects match these filters.</p>

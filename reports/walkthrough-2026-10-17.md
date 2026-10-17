@@ -55,6 +55,8 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | P6 | Search, status filter, Refresh, account menu, back and forward | **ok** | | |
 | P7 | "New activity since your last visit" right after a project you just ran | **fixed** | The visit was marked when the project opened, before the run ended. | A run that ends on screen marks a visit (this branch). |
 | P8 | Settings: Wallet, Account, Keys; sign out | **ok** | Each tab says what this server has; sign out lands on the front page with Sign in. | |
+| P9 | A long question as a project title on Projects | **fixed** | The title was the first 120 UTF-16 units, so it ended mid-word ("and save the t") and could split an emoji. | Cut at a word boundary within 120 characters, marked with an ellipsis. |
+| P10 | The ledger on Wallet, by call | **fixed** | The lead's calls said "openai" and the readers' said "model: …", so one session read as two kinds of spend. | Every model call is "model: <name>". |
 
 ## Phone, 390 px, dark and light
 

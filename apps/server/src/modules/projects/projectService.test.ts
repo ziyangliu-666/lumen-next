@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryProjectStore } from './memoryProjectStore.js';
-import { ProjectService } from './projectService.js';
+import { ProjectService, titleOf } from './projectService.js';
 import type { LatestSession } from './models.js';
 import type { ProjectSessions } from './ports.js';
 
@@ -67,7 +67,8 @@ describe('ProjectService', () => {
     const { service, store, sessions } = setup();
     const question = `  ${'😀'.repeat(121)}\nDetails  `;
     const result = await service.create(owner, { question, mode: 'seed' });
-    expect(result.project.title).toBe('😀'.repeat(120));
+    // Cut by characters, not UTF-16 units, and marked as cut.
+    expect(result.project.title).toBe(`${'😀'.repeat(119)}…`);
     expect(await store.get(result.project.id)).toMatchObject({ accountId: 'owner', mode: 'seed' });
     expect(sessions.start).toHaveBeenCalledWith(result.project.id, owner, question.trim(), 'seed');
     expect(result.project).not.toHaveProperty('accountId');
@@ -234,5 +235,21 @@ describe('ProjectService', () => {
     await expect(
       service.findings(owner, first.items[0]!.project.id, { cursor: first.nextCursor }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe('projects: the title a question gives', () => {
+  it('keeps a short question whole', () => {
+    expect(titleOf('Count Dyck paths.')).toBe('Count Dyck paths.');
+  });
+  it('cuts a long one at the last whole word, with an ellipsis', () => {
+    const question =
+      'Count permutations of length n by number of fixed points for n up to 9, check the table against the OEIS, and save the table as a file.';
+    const title = titleOf(question);
+    expect(title.endsWith('…')).toBe(true);
+    expect([...title].length).toBeLessThanOrEqual(120);
+    expect(title).toBe(
+      'Count permutations of length n by number of fixed points for n up to 9, check the table against the OEIS, and save the…',
+    );
   });
 });

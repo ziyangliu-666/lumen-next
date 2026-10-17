@@ -3,8 +3,8 @@
 UC5 owns the ledger, wallet, budget checks, keys, payments and administration.
 The ledger, Wallet tab, budget guard, durable approvals, Stripe test-mode top-ups,
 Keys and staff account controls are merged.
-[Sprint 3 acceptance](SPRINT3_ACCEPTANCE.md) distinguishes delivered code from
-the remaining core-owned hosted Stripe replay check.
+[Sprint 3 acceptance](SPRINT3_ACCEPTANCE.md) records the delivered code and its
+evidence.
 Keys has encrypted PostgreSQL storage, owner-only HTTP routes and per-account
 model selection for the built-in workers when the keyring is configured.
 [Keys integration](KEYS_DESIGN.md) documents configuration, lifecycle locks and
@@ -120,6 +120,9 @@ A reviewed merge and green CI, Security and Deploy checks are required by
 `docs/DOD.md`; local tests alone do not mean the story is delivered.
 
 ## Budget policy chain (Sprint 2)
+
+[Sprint 4 pattern evidence](PATTERN_EVIDENCE.md) compares a conditional baseline
+with this implementation, explains policy ordering and maps claims to tests.
 
 `BudgetChain` implements `BudgetGuard`. Its constructor copies an ordered list
 of `BudgetHandler`s, each returning `Decision | null`. A decision short-circuits;
@@ -394,10 +397,9 @@ actual endpoint or Stripe CLI listener being used. Do not paste keys in GitHub.
 After merge/deploy, sign in on staging, note the cap, open Wallet and choose
 "Add USD 5 in test mode". Complete hosted Checkout with a Stripe test card. Back
 in Wallet, refresh until the matching receipt appears and verify the cap rose by
-USD 5 while recorded spend stayed unchanged. Redeliver that event from Stripe's
-test dashboard: receipt count and cap must not change. Cancel another checkout:
-no additional receipt or cap change. Hosted acceptance and fixture CI are
-separate evidence; the completed run and remaining replay check are recorded below.
+USD 5 while recorded spend stayed unchanged. Cancel another checkout: no
+additional receipt or cap change. Hosted acceptance and fixture CI are separate
+evidence; the completed run is recorded below.
 
 Verification: `stripe.test.ts` uses the official SDK to sign raw-body fixtures
 and tests invalid/old/tampered signatures, live mode, unpaid/unrelated events,
@@ -419,7 +421,7 @@ This was an agent-operated browser run, not a claim of a separate human walkthro
 - Deployed merge: `df885f84fa9cc9382d02b250e02ca28f076b428e` ([#66](https://github.com/ziyangliu-666/lumen-next/pull/66)).
 - [Deployment run 36962581366](https://github.com/ziyangliu-666/lumen-next/actions/runs/36962581366)
   passed the container build, smoke test, DAST and hosted Fly deployment.
-- [Observed results and replay request](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-5945439466)
+- [Observed results](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-5945439466)
   identify the synthetic account and successful Checkout session for core to inspect.
 - Successful order/receipt: `f0236f89-def2-4702-b9ed-d516ef2e77af`.
 
@@ -434,11 +436,8 @@ therefore observed, rather than inferred from fixture tests. The separate
 PostgreSQL suite proves that a new step can use the raised cap and that repeated
 or concurrent deliveries cannot credit twice, including after store recreation.
 
-**Still pending:** actual redelivery of the successful event from the core-owned
-Stripe test dashboard and verification of a 2xx delivery, the same one receipt
-and cap USD 6.0000. The request is linked above. A stable wallet alone is not
-proof that Stripe redelivered an event. Dashboard replay has not been claimed;
-no signing secret is needed in this repository to finish that check.
+The core owner [waived](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-6116352309) a further redelivery from the Stripe test
+dashboard; no dashboard replay was performed.
 
 
 ### Keys browser UI
@@ -489,3 +488,13 @@ Origin/body/ID validation, self-change refusal, promotion/demotion, suspension,
 restoration without session resurrection, deleted-account refusal and concurrent
 mutual demotion. The latter leaves one eligible staff actor; this is not a global
 last-administrator guarantee for separate account-deletion or maintenance paths.
+
+### Approval lifecycle regression
+
+`approvalLifecycle.test.ts` composes the real Identity API, PostgreSQL and the
+Billing guard. A consumed approval cannot override suspension or deletion.
+Restoring an account does not restore its revoked browser session; after fresh
+sign-in, the original approval is still bound to its original attempt. Reusing
+an email after deletion creates a different owner with no access to the old
+approval. The tests do not claim that suspension cancels work already in flight
+or that restoring eligibility restarts a stopped session.

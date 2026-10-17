@@ -6,7 +6,7 @@
   "main": "./dist/main.js",
   "scripts": {
     "build": "tsc --build && node scripts/copy-migrations.cjs",
-    "dev": "node --experimental-strip-types src/main.ts",
+    "dev": "node scripts/dev.cjs",
     "start": "node dist/main.js"
   },
   "dependencies": {

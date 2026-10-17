@@ -2,7 +2,7 @@
 
 Owner: HE RONG. This is the next UC5 increment after the read-only Admin spending
 view. It does not change the merged Sprint 3 cap, approval or Stripe implementation.
-The core-owned hosted Stripe replay is still pending; see [Sprint 3 acceptance](SPRINT3_ACCEPTANCE.md).
+Sprint 3 acceptance is recorded in [SPRINT3_ACCEPTANCE.md](SPRINT3_ACCEPTANCE.md).
 
 ## Encryption foundation
 

@@ -3,8 +3,8 @@
 Owner: HE RONG. Audited 9 October 2026 against merged main
 `6c9841a660b73ffd0da59ca4734fd879bd87a48b`.
 
-Implementation is merged. Final hosted Stripe acceptance remains pending with
-core; this document does not declare the full Sprint 3 DOD complete.
+Implementation is merged and Sprint 3 acceptance is complete. Core
+[waived](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-6116352309) the Stripe dashboard redelivery on 12 October 2026.
 
 ## Assigned outcomes and evidence
 
@@ -12,7 +12,7 @@ core; this document does not declare the full Sprint 3 DOD complete.
 | --- | --- | --- |
 | The displayed cap gates work; a new account has a usable default | [#55](https://github.com/ziyangliu-666/lumen-next/pull/55), [#56](https://github.com/ziyangliu-666/lumen-next/pull/56), [#59](https://github.com/ziyangliu-666/lumen-next/pull/59); `budgetChain.test.ts`, composed `app.test.ts` | Merged |
 | Over-cap work waits for a durable owner decision, including restart and one-operation resume | [#62](https://github.com/ziyangliu-666/lumen-next/pull/62), [#64](https://github.com/ziyangliu-666/lumen-next/pull/64); `approvals.test.ts`, `../../approvalFlow.test.ts` | Merged |
-| Stripe test-mode USD 5 top-up, durable receipt, SQL numeric cap update and replay protection | [#66](https://github.com/ziyangliu-666/lumen-next/pull/66); `stripe.test.ts`, `topups.test.ts`, `topupRoutes.test.ts`, `../../topupFlow.test.ts` | Merged; hosted payment and cancellation observed, dashboard replay pending |
+| Stripe test-mode USD 5 top-up, durable receipt, SQL numeric cap update and replay protection | [#66](https://github.com/ziyangliu-666/lumen-next/pull/66); `stripe.test.ts`, `topups.test.ts`, `topupRoutes.test.ts`, `../../topupFlow.test.ts` | Merged; hosted payment and cancellation observed, dashboard replay waived by core |
 | Retained ledger labels identify deleted owners without reconnecting by email | [#72](https://github.com/ziyangliu-666/lumen-next/pull/72); `adminLedger.test.ts`, `adminIntegration.test.ts` | Merged |
 | Budget refusals use the shared logger with safe account/task/checkpoint/reason context | [#73](https://github.com/ziyangliu-666/lumen-next/pull/73); `budgetLog.test.ts`, composed `app.test.ts` | Merged |
 
@@ -37,18 +37,16 @@ no replacement implementation is needed for closeout.
   Transactional authorization and concurrent demotion are tested. Self changes
   are refused; suspension revokes login sessions but does not kill running work.
 
-## Remaining hosted acceptance — core owner
+## Stripe dashboard replay — waived
 
 The [2 October observation](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-5945439466)
 records a successful USD 5 hosted Checkout: cap 1 to 6, spend 0 and one receipt.
-Cancellation added no receipt or cap. Core must still redeliver the paid event
-from the Stripe test dashboard and record a 2xx delivery, the same one receipt
-and unchanged cap. See the [9 October request](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-6064445349).
+Cancellation added no receipt or cap. Repeated, concurrent and post-restart
+deliveries crediting once are proved by `topups.test.ts`, `topupRoutes.test.ts`
+and `../../topupFlow.test.ts`.
 
-If the synthetic account has since changed, record actual before/after values.
-A stable Wallet does not prove redelivery occurred. Fixture signatures and replay
-tests cannot replace this hosted check. Do not request or commit signing secrets
-as a shortcut. Close this item only with the core owner's observed result.
+The core owner [waived](https://github.com/ziyangliu-666/lumen-next/pull/66#issuecomment-6116352309) the additional redelivery from the Stripe test
+dashboard on 12 October 2026. No dashboard replay was performed.
 
 Identity owns the deletion disclosure; Billing adds no refund path and does not
 present the spending cap as prepaid credit. Hosted Keys/provider acceptance is
@@ -73,5 +71,5 @@ one skipped; 1,040 tests passed and five skipped. PostgreSQL was configured, so
 these skips do not represent disabling database acceptance. The two existing
 lint warnings remain warnings, with no lint errors. Server and web production
 builds also passed. Documentation corrections made by this closeout do not
-change runtime code or test behavior. The closeout PR itself still needs review
-and its own CI; local verification is not a merge approval.
+change runtime code or test behavior. Closeout PR #88 is now reviewed and merged;
+its checks and the subsequent main CI and staging deployment passed.

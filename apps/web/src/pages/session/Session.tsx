@@ -371,6 +371,11 @@ export function Session(): JSX.Element {
   const thisSession = snapshot.session.id;
   const rootId = root.id;
   const title = project?.title ?? root.title;
+  // With more than one session, the bar names both: the project, then this
+  // session by its own question. It named only the project, so every session
+  // of it looked the same.
+  const several = sessions.length > 1 && Boolean(project?.title);
+  const heading = several ? root.title : title;
   const names = speakerNames(snapshot.tasks);
   const lead = shown.id === root.id;
   const ready = state.stream === 'open' && auth.status === 'ready';
@@ -456,13 +461,23 @@ export function Session(): JSX.Element {
           a link there; bold and inert, it looked like one and did nothing.
           The title of the project opened on Home flies into it (core/router
           `go`). */}
+      {several ? (
+        <>
+          <span className="max-w-[16rem] min-w-0 truncate text-ink-2" title={title}>
+            {title}
+          </span>
+          <span aria-hidden="true" className="text-ink-3">
+            /
+          </span>
+        </>
+      ) : null}
       <h1
         data-flight-target=""
         className="min-w-0 truncate text-sm font-semibold text-ink"
-        title={title}
+        title={heading}
       >
         {lead ? (
-          title
+          heading
         ) : (
           <a
             href={`?session=${encodeURIComponent(thisSession)}#/session`}
@@ -472,7 +487,7 @@ export function Session(): JSX.Element {
             }}
             className="underline decoration-1 underline-offset-[0.15em]"
           >
-            {title}
+            {heading}
           </a>
         )}
       </h1>

@@ -27,6 +27,7 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | A14 | Staging, gpt-4.1-nano, fixed points by n | **open** | The sandbox ran and the file was saved, but the table was wrong (n = 5, k = 2 gave 40, not 20) and the lead said it matched A008290 without searching it. The prompts ask for this check; nano does not do it. Haiku did. | Model choice; kept on gpt-4.1 by decision. |
 | A15 | Stop during a run | **ok** | Arms on the first click, stops on the second; the tree says Stopped. | |
 | A16 | Steering at the end of the turn | **ok** | The timing switch and its hint change together. | |
+| A17 | Staging, gpt-4.1-nano, the first 12 Catalan numbers | **open** | Wrote 16669 for 16796 and said OEIS confirmed it; the search result beside it lists the right term. Same cause as A14. | Model choice. |
 
 ## Files
 
@@ -39,6 +40,8 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | F5 | A file name in Chinese ("数据 表 v2.csv") | **fixed** | The safe-name rule kept ASCII only; it became "v2.csv". | Letters and digits of any script stay (this branch). |
 | F6 | A file over 10 MB | **fixed** | The hint said "Request body is too large". | The field says the 10 MB limit before sending (this branch). |
 | F7 | Opening a kept table | **fixed** | Every file was served as octet-stream, so the browser downloaded it. | Text types open as plain text with nosniff; others download (this branch). |
+| F8 | Staging files after a deploy | **fixed** | Project files lived on the machine's disk, which every deploy replaces: a saved table was gone after the next merge. | A 1 GB Fly volume at /data, `LUMEN_VOLUME_ROOT=/data/projects`. |
+| F9 | A file the lead called saved | **fixed** | Readers save to the session's scratch by default; the panel listed only /mnt/output, so the file was nowhere to be seen. | The files route lists one session's workspace with `?session=`, and the panel shows it under "Scratch, this session only". |
 
 ## Page and navigation
 
@@ -53,7 +56,15 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | P7 | "New activity since your last visit" right after a project you just ran | **fixed** | The visit was marked when the project opened, before the run ended. | A run that ends on screen marks a visit (this branch). |
 | P8 | Settings: Wallet, Account, Keys; sign out | **ok** | Each tab says what this server has; sign out lands on the front page with Sign in. | |
 
+## Phone, 390 px, dark and light
+
+| # | Scenario | Result | Cause | Fix |
+|---|---|---|---|---|
+| M1 | A running session and a finished one | **ok** | No sideways scroll, no page errors; the bar keeps the state, spend and Stop. | |
+| M2 | Projects with none yet | **fixed** | "Your next discovery starts here", a paragraph, and a "Start your first project" button above the new-project field. | "No projects yet."; the field is the one way to start. |
+| M3 | A delegated reader in the stream | **fixed** | The lead writes the reader's whole brief into its title, so one row was half a screen. | Three lines; the reader opens in full. |
+| M4 | The bar over the scene | **fixed** | Stars drifted through "spent" and the elapsed time. | The bar is quiet, so particles fade round it. |
+
 ## Still to try
 
-- Dark and light, 390 px, on a running session.
 - Approvals and top-ups with a billing database (staging).

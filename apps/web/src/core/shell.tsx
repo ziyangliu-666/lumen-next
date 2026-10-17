@@ -209,7 +209,9 @@ export function AppShell({
         {/* The bar is clear, as in the prototype: the scene runs on behind
             it and its rule, so the bar reads as a line printed on the scene
             and not as a band laid over it. */}
-        <header className={cn(BAR, ruled ? 'border-b border-rule' : 'border-b-0')}>
+        {/* Quiet, so the scene's particles step back from the bar's text: the
+            run state and spend read over a clear sky (ui/space). */}
+        <header data-quiet="" className={cn(BAR, ruled ? 'border-b border-rule' : 'border-b-0')}>
           <a
             href={home}
             className="inline-flex shrink-0 items-center gap-2 self-center text-base font-bold tracking-[-0.03em] text-ink [grid-area:mark] hover:no-underline"

@@ -14,7 +14,12 @@ import { zero } from '@lumen/contracts';
 import { allowEverything, type BudgetGuard, type CheckPoint } from '../../core/domain/budget.js';
 import { recordable } from '../../core/domain/money.js';
 import type { PendingApproval } from '../../core/domain/task.js';
-import type { Delegated, Worker, WorkerReport } from '../../core/domain/worker.js';
+import {
+  WaitingForApproval,
+  type Delegated,
+  type Worker,
+  type WorkerReport,
+} from '../../core/domain/worker.js';
 import type { Principal, SessionAccess } from '../../core/http/authGuard.js';
 import { badRequest, notFound } from '../../core/http/httpError.js';
 import { nullLog, taskLog, type Log } from '../../core/log/log.js';
@@ -69,6 +74,13 @@ function findingsInMemory(): FindingSaver {
     return Promise.resolve(finding);
   };
 }
+
+/**
+ * How the parent's turn after an approved fan-out begins. A worker that
+ * fans out on every turn (the demo) reads it as "answer from the reports".
+ */
+export const APPROVED_WORK_DONE =
+  'The work you delegated was blocked by the spending cap, then approved, and has finished. Here is what each task reported. Use it to answer.';
 
 export class Kernel {
   private readonly inFlight = new Set<Promise<void>>();
@@ -135,6 +147,21 @@ export class Kernel {
   }
 
   /** The root's own exchange so far: the opening question, then 'you' and 'reply' steps. */
+  /** The parent's turn after an approved fan-out: what each child reported. */
+  private async continuation(parent: Task, children: readonly Task[]): Promise<string> {
+    const snapshot = await this.trace.snapshot(parent.sessionId);
+    const reports = children.map((child) => {
+      const now = snapshot?.tasks.find((task) => task.id === child.id);
+      const said = [...(snapshot?.steps ?? [])]
+        .reverse()
+        .find((step) => step.taskId === child.id && step.kind === 'reply');
+      return `## ${child.title}\nstatus: ${now?.status ?? child.status}\n${said?.text ?? '(no answer)'}`;
+    });
+    const text = [APPROVED_WORK_DONE, '', ...reports].join('\n');
+    if (parent.parentId !== null) return text;
+    return withConversation(await this.conversation(parent.sessionId, parent), text);
+  }
+
   private async conversation(sessionId: string, root: Task): Promise<Exchange[]> {
     const snapshot = await this.trace.snapshot(sessionId);
     const lines: Exchange[] = [{ who: 'user', text: root.title }];
@@ -182,7 +209,9 @@ export class Kernel {
     for (const summary of await this.trace.summaries(projectId)) {
       if (!(await this.mayRead(principal, summary.id))) continue;
       const root = await this.trace.rootOf(summary.id);
-      listed.push({ ...summary, title: root?.title ?? '' });
+      // The root's own state: a session whose lead waits on an approval
+      // read "Running" in the list.
+      listed.push({ ...summary, status: root?.status ?? summary.status, title: root?.title ?? '' });
     }
     return listed;
   }
@@ -322,12 +351,13 @@ export class Kernel {
     // child exists, so a refusal leaves nothing half-opened on the page. The
     // children carry the fan-out's attempt id: one approval covers all of them.
     const attemptId = randomUUID();
-    const verdict = await this.ask(parent, 'fan-out', `delegate ${work.length}`, attemptId, work);
+    const verdict = await this.ask(parent, 'fan-out', fanOutReason(work), attemptId, work);
     if (verdict !== null) {
       this.log.warn(
         { sessionId: parent.sessionId, taskId: parent.id, verdict: verdict.sentence },
         verdict.waiting ? 'fan-out waits for an approval' : 'fan-out refused',
       );
+      if (verdict.waiting) throw new WaitingForApproval(verdict.sentence);
       throw new DelegationRefused(`the budget does not allow it: ${verdict.sentence}`);
     }
     const children = await this.openChildren(parent, work);
@@ -389,7 +419,7 @@ export class Kernel {
       const verdict = await this.ask(
         parent,
         'fan-out',
-        `delegate ${work.length}`,
+        fanOutReason(work),
         pending.attemptId,
         work,
       );
@@ -407,8 +437,11 @@ export class Kernel {
       await this.delegation.runBounded(children, (child) =>
         this.run(child, child.title, { onlyIfQueued: true, attemptId: pending.attemptId }),
       );
+      // The parent's turn ended at the block, so nothing would read what the
+      // readers found: the session showed Finished with no answer. It is
+      // given one more turn with their reports.
       if ((await this.trace.task(parent.id))?.status === 'running') {
-        await this.setStatus(parent.id, 'ended');
+        await this.run(parent, await this.continuation(parent, children), { approved: true });
       }
     } catch (error) {
       log.error({ err: error }, 'fan-out resume failed');
@@ -481,6 +514,12 @@ export class Kernel {
       readonly attemptId?: string;
       /** The operation was blocked and approved: its pending record is cleared once the guard allows it. */
       readonly resume?: boolean;
+      /**
+       * The rest of an operation the person approved (the parent's turn
+       * after an approved fan-out): not asked again, or the same cap would
+       * block the answer the approval was for.
+       */
+      readonly approved?: boolean;
     },
   ): Promise<void> {
     const startedAt = Date.now();
@@ -491,7 +530,9 @@ export class Kernel {
       if (options.onlyIfQueued && (await this.trace.task(task.id))?.status !== 'queued') return;
       // Check point: a turn of the root, or the opening of a delegated task.
       const at = options.onlyIfQueued ? 'task-open' : 'turn';
-      const refused = await this.ask(task, at, input, options.attemptId ?? randomUUID());
+      const refused = options.approved
+        ? null
+        : await this.ask(task, at, input, options.attemptId ?? randomUUID());
       if (refused !== null) {
         log.warn({ agent: task.agent, refused: refused.sentence }, 'task refused by the budget');
         await this.appendStep(task.id, 'reply', `Not run: ${refused.sentence}.`);
@@ -654,6 +695,15 @@ const CONVERSATION_LIMIT = 24_000;
  * message. When the conversation is long the oldest lines go first, but the
  * opening question always stays, because it says what the session is about.
  */
+/**
+ * What the person reads in Wallet for a blocked fan-out: how many readers,
+ * and on what. "delegate 2" said neither.
+ */
+function fanOutReason(work: readonly Delegated[]): string {
+  const what = work.map((part) => part.title).join('; ');
+  return `Open ${work.length} ${work.length === 1 ? 'reader' : 'readers'}: ${what}`;
+}
+
 const SAID = '\nThe user now says: ';
 const REASON_LIMIT = 300;
 

@@ -53,6 +53,7 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | F11 | A folder the agents wrote (/mnt/output/motzkin/) | **fixed** | A folder was a name that did nothing; the script and table inside it were out of reach. | A folder opens in place and lists its files. |
 | F12 | Saving a file again near the quota | **fixed** | The old copy counted against the quota, so replacing a file the same size was refused. | A write does not count the copy it replaces, for agents and attachments. |
 | F13 | Reading an attached PDF | **fixed** | read_file decoded every file as UTF-8, so a PDF reached the model and the trace as replacement characters. | A binary file is named with its size, and the agent is told to read it with run. |
+| F14 | Editing files: an attachment replaced under the same name, a kept file changed by an agent | **ok** | The next turn read the new attachment (Catalan, then Motzkin). Asked to extend and rename the header of a copy, the agent wrote /mnt/output/edit.csv with two more terms and the new header, and left the upload as it was. Both checked through the files route. | |
 
 ## Page and navigation
 
@@ -103,6 +104,7 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | B4 | Test-mode top-up | **ok, partly** | The server side passes against Postgres with a fake Stripe: top-up accounting, the routes and the end-to-end flow (123 billing tests). This server has no Stripe test key, so the off state shows and Stripe's hosted checkout page was not reached. | Hosted checkout needs a Stripe test-mode key. |
 | B5 | Reject an approval request | **fixed** | Reject works: the turn says "Not run: approval rejected.", the task stops, and the field takes a new turn. Wallet then said "Rejected. Resuming…". | "Rejected. Stopping the task…", then "Rejected. The task stopped." Approve reads "Approved. Resuming…". |
 | B6 | Keys: save a key, run a turn with it, remove it | **fixed** | Save hides the key and says it is saved; a refused key stops the turn with no second call on the platform key; removal works. The stop said OpenAI's own message, a masked key and a link to OpenAI. The notices said the same thing twice. | "Stopped: the model key was refused. If you saved an OpenAI key, replace it in Settings, Keys." and "Key saved." / "Key removed." Note: the personal key goes to api.openai.com whatever the server's model URL; the test sent a random string there. |
+| B7 | A cap reached at a delegation, then Approve once | **fixed** | The readers ran after the approval, but the lead never came back: its turn had ended at the block with "Stopped: the budget does not allow it", so the session read Finished with no answer. Wallet named the request "delegate 2"; Sessions said Running while it waited. | After an approved fan-out the parent gets a turn with each reader's report, not asked again; waiting is no longer written as a stop; the request reads "Open 2 readers: <their tasks>"; Sessions shows the lead's own state. Tested: the lead read both tables, checked A001006 and answered. |
 
 ## Entry page against ChatGPT, Claude and Mistral
 

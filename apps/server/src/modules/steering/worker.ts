@@ -1,5 +1,5 @@
 import type { StepDetail, Task } from '@lumen/contracts';
-import type { Worker, WorkerReport } from '../../core/domain/worker.js';
+import { WaitingForApproval, type Worker, type WorkerReport } from '../../core/domain/worker.js';
 import {
   ModelError,
   nullModel,
@@ -616,6 +616,9 @@ export function createWorker(options: WorkerOptions): Worker {
         const answer = await converse(turn);
         if (!turn.isLead) answers.set(task.id, answer);
       } catch (error) {
+        // Waiting for an approval is not a stop: the page shows the waiting
+        // notice, and the turn comes back once the work is approved.
+        if (error instanceof WaitingForApproval) throw error;
         // Throwing marks the task failed; the trace should also say why, in
         // words, where the user is already looking.
         // A refused key is said in the product's words. The vendor's own

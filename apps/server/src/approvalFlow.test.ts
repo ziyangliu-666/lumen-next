@@ -5,6 +5,7 @@ import type { Db } from './core/db/db.js';
 import { openTestDb, TEST_DATABASE_URL } from './core/db/testDb.js';
 import type { Worker } from './core/domain/worker.js';
 import type { Approval } from './modules/billing/index.js';
+import { APPROVED_WORK_DONE } from './modules/session/index.js';
 const origin = 'http://localhost:4000';
 
 describe.skipIf(!TEST_DATABASE_URL)('composed durable approval flow', () => {
@@ -128,8 +129,14 @@ describe.skipIf(!TEST_DATABASE_URL)('composed durable approval flow', () => {
     expect(run).not.toHaveBeenCalled();
   });
   it('resumes a fan-out and its children without replaying the parent charge', async () => {
-    run.mockImplementation(async (task, _input, report) => {
-      if (task.depth === 0) {
+    const continued: string[] = [];
+    run.mockImplementation(async (task, input, report) => {
+      // After the approval the parent gets a turn back with the reports; it
+      // answers from them and does not charge or fan out again.
+      if (task.depth === 0 && input.includes(APPROVED_WORK_DONE)) {
+        continued.push(input);
+        await report.appendStep(task.id, 'reply', 'answered from the reports');
+      } else if (task.depth === 0) {
         await report.addSpend(task.id, { dollars: 1 }, 'parent charge');
         await report.delegate(task.id, [
           { agent: 'reader', title: 'First' },
@@ -150,7 +157,9 @@ describe.skipIf(!TEST_DATABASE_URL)('composed durable approval flow', () => {
         { timeout: 5000 },
       )
       .toBe(3);
-    expect(run).toHaveBeenCalledTimes(3);
+    await expect.poll(() => continued.length, { timeout: 5000 }).toBe(1);
+    expect(continued[0]).toMatch(/## First[\s\S]*## Second/);
+    expect(run).toHaveBeenCalledTimes(4);
     const wallet = await app.server.inject({ url: '/api/wallet', headers: { cookie } });
     expect(wallet.json()).toEqual({ spent: { dollars: 1.2 }, cap: { dollars: 1 } });
     expect(await approvals()).toHaveLength(1);

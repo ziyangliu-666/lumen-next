@@ -8,7 +8,8 @@ import type { ClientCommand, Step, Task } from '@lumen/contracts';
 import { cn } from '@/lib/utils';
 import { ReplyText } from './text';
 import { Button } from '@/ui/button';
-import { Composer as Field, type ComposerMode } from '@/ui/composer';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
+import { Composer as Field } from '@/ui/composer';
 import { RunState, type Run } from '@/ui/run-state';
 import type { SessionFinding } from '@/core/api';
 import { childrenByStep, speakerNames, took, toolLabel, treeRows, turnToSend } from './tree';
@@ -99,6 +100,8 @@ export function StepStream({
   tasks,
   note,
   onSelect,
+  onRetry,
+  onEdit,
 }: {
   task: Task;
   steps: readonly Step[];
@@ -106,6 +109,13 @@ export function StepStream({
   /** A quiet line under the opening turn: how the session was started. */
   note?: string;
   onSelect: (taskId: string) => void;
+  /**
+   * Asks the person's latest message again, as a new turn. Given only when a
+   * new turn can be sent; drawn under the latest answer.
+   */
+  onRetry?: ((text: string) => void) | undefined;
+  /** Puts the person's latest message back in the field, to change and send. */
+  onEdit?: ((text: string) => void) | undefined;
 }): JSX.Element {
   const children = tasks.filter((candidate) => candidate.parentId === task.id);
   const handedDown = childrenByStep(
@@ -117,6 +127,9 @@ export function StepStream({
   turns.forEach((turn, index) => {
     if (turn.who === 'you') latest = index;
   });
+  const asked = turns[latest];
+  const lastText = asked?.who === 'you' ? asked.text : '';
+  const lastAgent = turns.length - 1;
 
   const draw = (turn: Turn, index: number): JSX.Element => (
     <article
@@ -127,16 +140,29 @@ export function StepStream({
         {turn.who === 'you' ? turn.label : speaker(task, tasks)}
       </h2>
       {turn.who === 'you' ? (
-        <div data-step="you" className="bg-well p-4">
-          <p className="font-medium break-words text-ink">{turn.text}</p>
-          {index === 0 && note ? <p className="mt-1 text-caption text-ink-2">{note}</p> : null}
-        </div>
+        <>
+          <div data-step="you" className="bg-well p-4">
+            <p className="font-medium break-words whitespace-pre-wrap text-ink">{turn.text}</p>
+            {index === 0 && note ? <p className="mt-1 text-caption text-ink-2">{note}</p> : null}
+          </div>
+          {index === latest && onEdit ? (
+            <TurnActions
+              className="mx-0 justify-end"
+              actions={[
+                { key: 'edit', label: 'Edit', icon: <EditIcon />, run: () => onEdit(turn.text) },
+              ]}
+            />
+          ) : null}
+        </>
       ) : (
         <AgentTurn
           steps={turn.steps}
           handedDown={handedDown}
           names={speakerNames(tasks)}
           onSelect={onSelect}
+          {...(index === lastAgent && onRetry && lastText
+            ? { onRetry: () => onRetry(lastText) }
+            : {})}
         />
       )}
     </article>
@@ -168,11 +194,14 @@ function AgentTurn({
   handedDown,
   names,
   onSelect,
+  onRetry,
 }: {
   steps: readonly Step[];
   handedDown: Map<number, readonly Task[]>;
   names: Map<string, string>;
   onSelect: (taskId: string) => void;
+  /** Given on the latest turn: Regenerate under its last answer. */
+  onRetry?: () => void;
 }): JSX.Element {
   const parts: ({ kind: 'work'; steps: Step[] } | { kind: 'reply'; step: Step })[] = [];
   for (const step of steps) {
@@ -196,6 +225,10 @@ function AgentTurn({
             <div className={PROSE}>
               <ReplyText text={part.step.text} />
             </div>
+            <ReplyActions
+              text={part.step.text}
+              {...(onRetry && index === parts.length - 1 ? { onRetry } : {})}
+            />
           </section>
         ) : (
           <div
@@ -215,6 +248,153 @@ function AgentTurn({
         ),
       )}
     </div>
+  );
+}
+
+function CopyIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4">
+      <path d="M7 7h9v9H7z M4 13V4h9" stroke="currentColor" strokeWidth="1.6" fill="none" />
+    </svg>
+  );
+}
+
+function LinkIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4">
+      <path
+        d="M8.5 11.5l3-3M9 5.5l1.2-1.2a3 3 0 0 1 4.3 4.3L13.3 9.8M11 14.5l-1.2 1.2a3 3 0 0 1-4.3-4.3l1.2-1.2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function DoneIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4">
+      <path d="M4.5 10.5l3.5 3.5 7.5-8" stroke="currentColor" strokeWidth="1.8" fill="none" />
+    </svg>
+  );
+}
+
+function RetryIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4">
+      <path
+        d="M15.5 10a5.5 5.5 0 1 1-1.6-3.9M15.5 4v3.5H12"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function EditIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4">
+      <path
+        d="M4 16h3l8.5-8.5-3-3L4 13v3zM11 6l3 3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        fill="none"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+interface TurnAction {
+  readonly key: string;
+  readonly label: string;
+  readonly icon: JSX.Element;
+  /** Resolves once done; a copy then shows a tick for a moment. */
+  readonly run: () => void | Promise<void>;
+  readonly ticks?: boolean;
+}
+
+/** A row of quiet icon buttons under a turn, each named in a tooltip. */
+function TurnActions({
+  actions,
+  className,
+}: {
+  actions: readonly TurnAction[];
+  className?: string;
+}): JSX.Element {
+  const [done, setDone] = useState<string | null>(null);
+  useEffect(() => {
+    if (!done) return;
+    const timer = window.setTimeout(() => setDone(null), 1500);
+    return () => window.clearTimeout(timer);
+  }, [done]);
+  return (
+    <TooltipProvider delayDuration={300}>
+      <div className={cn('-mx-2 mt-2 flex gap-1', className)}>
+        {actions.map((action) => {
+          const ticked = done === action.key;
+          return (
+            <Tooltip key={action.key}>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={ticked ? 'Copied' : action.label}
+                  onClick={() => {
+                    void Promise.resolve(action.run()).then(
+                      () => action.ticks && setDone(action.key),
+                    );
+                  }}
+                  className="text-ink-2 hover:text-ink"
+                >
+                  {ticked ? <DoneIcon /> : action.icon}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{ticked ? 'Copied' : action.label}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * The icons under an answer, as chat products have: copy the answer as
+ * written (Markdown), copy a link to this session, and, under the latest
+ * answer, Regenerate. Regenerate asks the same question again as a new turn:
+ * the trace keeps every turn, so the earlier answer stays above it.
+ */
+export function ReplyActions({
+  text,
+  onRetry,
+}: {
+  text: string;
+  onRetry?: () => void;
+}): JSX.Element {
+  const copy = (value: string): Promise<void> =>
+    navigator.clipboard?.writeText(value) ?? Promise.resolve();
+  return (
+    <TurnActions
+      actions={[
+        { key: 'copy', label: 'Copy', icon: <CopyIcon />, run: () => copy(text), ticks: true },
+        {
+          key: 'link',
+          label: 'Copy link',
+          icon: <LinkIcon />,
+          run: () => copy(window.location.href),
+          ticks: true,
+        },
+        ...(onRetry
+          ? [{ key: 'retry', label: 'Regenerate', icon: <RetryIcon />, run: onRetry }]
+          : []),
+      ]}
+    />
   );
 }
 
@@ -836,17 +1016,14 @@ export function StopControl({
 
 export type SteerWhen = Extract<ClientCommand, { type: 'task.steer' }>['when'];
 
-// When a steer lands, as the composer's modes: two words a person can see at
-// once, instead of a menu they have to open.
-const TIMING: readonly (ComposerMode & { readonly value: SteerWhen })[] = [
-  { value: 'next-step', label: 'At its next step' },
-  { value: 'end-of-turn', label: 'At the end of its turn' },
-];
-
 /**
  * LI ZHUOYANG's. The one field at the foot of the conversation (ui/composer):
  * it says a new turn to the lead, or, while a run is going, steers the task
- * shown, at its next step or at the end of its turn. Stop is in the bar.
+ * shown at its next step. Stop is in the bar.
+ *
+ * A steer always lands at the next step. The field had a switch for "at the
+ * end of its turn" as well, and people could not tell what the switch was;
+ * the server still takes both.
  */
 export function Composer({
   disabled,
@@ -856,6 +1033,7 @@ export function Composer({
   onSteer,
   shownAgent = null,
   onAttach,
+  prefill,
 }: {
   /** The socket is down or the account is not ready: nothing can be sent. */
   disabled: boolean;
@@ -877,9 +1055,23 @@ export function Composer({
    * attachment would sit in a folder nobody was told about.
    */
   onAttach?: ((file: File) => Promise<string>) | undefined;
+  /** Text put in the field from outside (Edit on a message); `key` changes each time. */
+  prefill?: { readonly text: string; readonly key: number } | undefined;
 }): JSX.Element {
-  const [when, setWhen] = useState<SteerWhen>('next-step');
   const [draft, setDraft] = useState('');
+  // A new prefill replaces the draft during render, not in an effect, so
+  // the field never paints the old text first.
+  const [filled, setFilled] = useState<number | null>(null);
+  if (prefill && prefill.key !== filled) {
+    setFilled(prefill.key);
+    setDraft(prefill.text);
+  }
+  useEffect(() => {
+    if (!prefill) return;
+    const field = document.querySelector<HTMLTextAreaElement>('textarea[name="say"]');
+    field?.focus();
+    field?.setSelectionRange(prefill.text.length, prefill.text.length);
+  }, [prefill]);
   const [attached, setAttached] = useState<readonly string[]>([]);
   const [attachNote, setAttachNote] = useState<string | null>(null);
   // Blocked for a reason a run.status can change without a fresh render of
@@ -893,9 +1085,8 @@ export function Composer({
     const typed = turnToSend(draft || (attached.length ? 'Read what I attached.' : ''), blocked);
     if (typed === null) return;
     const text = attached.length ? `${typed}\n\nAttached: ${attached.join(', ')}` : typed;
-    if (running) onSteer(text, when);
+    if (running) onSteer(text, 'next-step');
     else onSay(text);
-    // Clear only the message: the timing remains selected for the next steer.
     setDraft('');
     setAttached([]);
     setAttachNote(null);
@@ -938,20 +1129,8 @@ export function Composer({
       value={draft}
       onValueChange={setDraft}
       onSubmit={submit}
-      // While a run is going, the timing is part of what is sent: it cannot
-      // be chosen while nothing can be sent. The text stays typeable while
-      // the socket is down, so a steer can be drafted for when it is back.
-      // A new turn has no timing at all.
-      {...(running ? { modes: TIMING } : {})}
-      // A steer goes to the task shown, so the switch names it: with
-      // reader 1 shown it said "lumen reads it".
-      modesLabel={`${shownAgent ?? 'lumen'} reads it`}
-      modesLabelVisible
-      modesDisabled={blocked}
-      mode={when}
-      onModeChange={(value) => {
-        if (value === 'next-step' || value === 'end-of-turn') setWhen(value);
-      }}
+      // The text stays typeable while the socket is down, so a steer can be
+      // drafted for when it is back.
       // Only a task that is not running has nothing to steer at all.
       disabled={running && !steerable}
       sendDisabled={blocked}

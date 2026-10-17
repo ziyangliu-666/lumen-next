@@ -128,7 +128,9 @@ const TAU = 6.2832;
 // reading), and a turn of the camera so each shot sees a different phase.
 const SHOTS: Record<ShotName, Shot> = {
   landing: { ax: 0.71, ay: 0.48, size: 0.28, dist: 3.2, show: 1, yaw: 0 },
-  home: { ax: 0.86, ay: 0.16, size: 0.07, dist: 9, show: 0.42, yaw: 1.4 },
+  // Home: the sphere stands in the lower part of the projects column, under
+  // the list, where the column fades to the scene.
+  home: { ax: 0.3, ay: 0.68, size: 0.2, dist: 4.6, show: 0.7, yaw: 1.4 },
   session: { ax: 0.9, ay: 0.12, size: 0.05, dist: 12, show: 0.32, yaw: 2.6 },
   quiet: { ax: 0.88, ay: 0.14, size: 0.06, dist: 10, show: 0.36, yaw: -1.2 },
   // Sign-in: the form on the left, the whole sphere standing in the right
@@ -137,6 +139,8 @@ const SHOTS: Record<ShotName, Shot> = {
   signin: { ax: 0.72, ay: 0.5, size: 0.22, dist: 4.2, show: 0.6, yaw: 2.4 },
 };
 const NARROW: Partial<Record<ShotName, Shot>> = {
+  // Narrow, home stacks the list over the new-project field: the scene goes far.
+  home: { ax: 0.86, ay: 0.16, size: 0.07, dist: 9, show: 0.42, yaw: 1.4 },
   landing: { ax: 0.5, ay: 0.2, size: 0.13, dist: 3.2, show: 1, yaw: 0 },
   // A phone has no right half: the form takes the screen, the scene is far.
   signin: { ax: 0.86, ay: 0.12, size: 0.05, dist: 10, show: 0.36, yaw: 0.6 },
@@ -472,6 +476,32 @@ export function mountSpace(
     }
     drawGiants(B, cx, cy, focal, R, show);
     drawBelt(B, cx, cy, focal, R, show);
+    drawQuiet();
+  }
+
+  // Quiet zones: an element marked data-quiet (the bar, a text column) has
+  // the scene faded out behind it, with a soft edge, so particles never run
+  // through words such as the spend in the bar. The paper is painted back
+  // over the zone in four widening layers. The attribute was set before this
+  // existed, and nothing read it.
+  function drawQuiet(): void {
+    const zones = document.querySelectorAll('[data-quiet]');
+    if (zones.length === 0) return;
+    for (const zone of zones) {
+      const box = zone.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) continue;
+      for (let k = 3; k >= 0; k--) {
+        const pad = k * 8;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(box.left - pad, box.top - pad, box.width + 2 * pad, box.height + 2 * pad);
+        ctx.clip();
+        ctx.globalAlpha = 0.4;
+        ctx.drawImage(paper, 0, 0, W, H);
+        ctx.restore();
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   // One particle: project it, hide it behind the sphere or the hole's

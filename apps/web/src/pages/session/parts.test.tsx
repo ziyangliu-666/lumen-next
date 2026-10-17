@@ -7,6 +7,7 @@ import {
   Files,
   Findings,
   receiptOf,
+  ReplyActions,
   StepStream,
   StopControl,
   WaitingNotice,
@@ -268,19 +269,17 @@ describe('session page: the rail', () => {
     expect(composer(true)).toContain('aria-label="Steer"');
     expect(composer(true)).not.toContain('aria-label="Send"');
     expect(composer(true)).toContain('>Steer the task shown<');
-    // When the steer lands: the composer's modes, one pressed.
-    expect(composer(true)).toMatch(/aria-pressed="true"[^>]*>At its next step</);
-    expect(composer(true)).toContain('At the end of its turn');
+    // A steer lands at the next step; there is no timing switch to read.
+    expect(composer(true)).not.toContain('aria-pressed');
     expect(composer(true)).toContain('placeholder="Steer lumen…"');
     expect(composer(false)).toContain('aria-label="Send"');
     // Nothing typed yet: send waits for text.
     expect(composer(false)).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
     expect(composer(false)).toContain('>Reply to lumen<');
     expect(composer(false)).not.toContain('aria-pressed');
-    expect(composer(true)).toContain('lumen reads it');
   });
 
-  it('names the reader shown as the one that reads a steer', () => {
+  it('names the reader shown as the one a steer goes to', () => {
     const html = renderToStaticMarkup(
       <Composer
         disabled={false}
@@ -291,18 +290,16 @@ describe('session page: the rail', () => {
         onSteer={noop}
       />,
     );
-    expect(html).toContain('reader 1 reads it');
-    expect(html).not.toContain('lumen reads it');
+    expect(html).toContain('placeholder="Steer reader 1…"');
   });
 
   it.each([
     { disabled: true, steerable: true },
     { disabled: false, steerable: false },
-  ])('disables timing when the socket or the task cannot accept a steer: %j', (props) => {
+  ])('disables Steer when the socket or the task cannot accept a steer: %j', (props) => {
     const html = renderToStaticMarkup(
       <Composer {...props} running={true} onSay={noop} onSteer={noop} />,
     );
-    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*disabled=""/);
     expect(html).toMatch(/<button[^>]*aria-label="Steer"[^>]*disabled=""/);
   });
 
@@ -376,5 +373,13 @@ describe('session page: the bar and the well', () => {
     expect(html).toMatch(/Attached.*seq\.csv.*Kept.*results\//s);
     expect(html).toContain('href="/api/projects/p1/files/upload/seq.csv"');
     expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>results\/<\/button>/);
+  });
+});
+
+describe('session page: under an answer', () => {
+  it('offers Copy and Copy link, each with a name', () => {
+    const html = renderToStaticMarkup(<ReplyActions text="**42**" />);
+    expect(html).toContain('aria-label="Copy"');
+    expect(html).toContain('aria-label="Copy link"');
   });
 });

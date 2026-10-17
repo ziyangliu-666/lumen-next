@@ -73,6 +73,10 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | P16 | Work after a stop | **fixed** | Readers went on for 9 s after a stop: a model call, a command, a search, another model call. Nothing told the worker. | The worker asks whether its task was stopped before each model call and each tool. After the fix the lead stopped 0.7 s after the request, with only the call in flight charged. |
 | P17 | The field, on every page | **fixed** | One thin line with a black block beside it read as a form, not as a place to write to lumen. | A message box like chat products draw: two lines of text, Attach and the timing switch at its foot, send inside the box and dimmed until there is text, attachments as chips. |
 | P18 | The small text | **fixed** | Lines explained what the page already showed: "Your research starts here.", "Your question is ready. Press the arrow to start.", "Ended. A reply starts a new turn.", "Read at its next step.", "Sign in before starting. Your question is saved in this tab.", and an instruction as the placeholder. ChatGPT and Claude show one question as the placeholder and no line under the field. | The placeholder asks "What should lumen work on?"; the person always asks: an empty field does not send, and free exploration has no control ("Let lumen choose a question" was unclear); the line under the field is for status and errors only; the landing paragraph is gone; signed out, the hint is "Sign in to start." |
+| P19 | Projects over the scene | **fixed** | The list column was 85 % black and the sphere a speck behind the right panel, so the page was a black box. | The column fades to the scene below the list, and the home shot puts the sphere there. |
+| P20 | The timing switch in the session field | **fixed** | "lumen reads it: At its next step / At the end of its turn" was not understood. | Removed. A steer lands at the next step; the server still takes both. |
+| P21 | Actions on a turn | **fixed** | An answer had no way to copy it, link to it or ask again; a message could not be edited. | Under an answer: Copy (Markdown), Copy link, and on the latest answer Regenerate. On the latest message: Edit, which puts it back in the field. Both start a new turn, because the trace keeps every turn. |
+| P22 | Quiet zones | **fixed** | data-quiet was set on the bar and the sign-in column, but the scene never read it. | The scene paints the paper back over each quiet element, with a soft edge. |
 
 ## Phone, 390 px, dark and light
 
@@ -81,7 +85,7 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | M1 | A running session and a finished one | **ok** | No sideways scroll, no page errors; the bar keeps the state, spend and Stop. | |
 | M2 | Projects with none yet | **fixed** | "Your next discovery starts here", a paragraph, and a "Start your first project" button above the new-project field. | "No projects yet."; the field is the one way to start. |
 | M3 | A delegated reader in the stream | **fixed** | The lead writes the reader's whole brief into its title, so one row was half a screen. | Three lines; the reader opens in full. |
-| M4 | The bar over the scene | **fixed** | Stars drifted through "spent" and the elapsed time. | The bar is quiet, so particles fade round it. |
+| M4 | The bar over the scene | **fixed** | Stars drifted through "spent" and the elapsed time. | The bar is marked quiet, and the scene fades behind quiet elements. The first fix only set the attribute: nothing read it until P22. |
 
 ## Still to try
 

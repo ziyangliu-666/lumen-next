@@ -80,11 +80,33 @@ async function oeis(query: string, fetchImpl: Fetch, signal: AbortSignal): Promi
   };
 }
 
-async function arxiv(query: string, fetchImpl: Fetch, signal: AbortSignal): Promise<SearchResult> {
-  const url = `https://export.arxiv.org/api/query?max_results=${LIMIT}&search_query=${encodeURIComponent(`all:${query}`)}`;
+/**
+ * The arXiv query: every word required, in the mathematics archives. A bare
+ * "all:<words>" is an OR of the words across every archive, and a search for
+ * involution patterns came back with gamma-ray astronomy. With nothing
+ * found that way, the words are tried again as an OR, still in mathematics.
+ */
+export function arxivQuery(query: string, every: boolean): string {
+  const words = query
+    .replace(/[^\p{L}\p{N}\s-]+/gu, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 1)
+    .slice(0, 8);
+  const terms = words.map((word) => `all:${word}`).join(every ? ' AND ' : ' OR ');
+  return `(${terms || `all:${query}`}) AND cat:math.*`;
+}
+
+async function arxivFeed(query: string, fetchImpl: Fetch, signal: AbortSignal): Promise<string> {
+  const url = `https://export.arxiv.org/api/query?max_results=${LIMIT}&search_query=${encodeURIComponent(query)}`;
   const response = await fetchImpl(url, { signal });
   if (!response.ok) throw new Error(`arXiv answered HTTP ${response.status}`);
-  const feed = await response.text();
+  return response.text();
+}
+
+async function arxiv(query: string, fetchImpl: Fetch, signal: AbortSignal): Promise<SearchResult> {
+  let feed = await arxivFeed(arxivQuery(query, true), fetchImpl, signal);
+  if (!feed.includes('<entry>'))
+    feed = await arxivFeed(arxivQuery(query, false), fetchImpl, signal);
   const entries = [...feed.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map((match) => {
     const block = match[1] ?? '';
     const field = (tag: string): string =>

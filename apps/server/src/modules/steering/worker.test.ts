@@ -15,7 +15,7 @@ import {
 } from '../../core/model/index.js';
 import { SandboxFs } from './sandboxFs.js';
 import { SteerRegistry } from './steerRegistry.js';
-import { createWorker } from './worker.js';
+import { createWorker, inSandboxTerms } from './worker.js';
 
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const SESSION = '22222222-2222-4222-8222-222222222222';
@@ -325,8 +325,9 @@ describe('createWorker: tools', () => {
     const results = model.requests[1]!.messages.filter((m) => m.role === 'tool');
     expect(results.map((m) => m.content)).toEqual([
       expect.stringMatching(/^error: /),
-      expect.stringMatching(/^error: EISDIR/),
-      expect.stringMatching(/^error: ENOENT/),
+      // Said in the agent's own /mnt terms, not as Node's host-path errors.
+      'error: /mnt/upload is a folder, not a file',
+      'error: no such file or folder: /mnt/upload/missing.txt',
       'error: run needs "command" as a non-empty string',
       'error: there is no tool called delegate',
     ]);
@@ -442,5 +443,18 @@ describe('createWorker: steering', () => {
     );
 
     expect(() => registry.steer('task-1', 'late', 'next-step')).toThrow();
+  });
+});
+
+describe("createWorker: errors in the agent's terms", () => {
+  it('names the /mnt path the agent asked for, never the host folder', () => {
+    const call = { id: 'c', name: 'read_file', arguments: { path: '/mnt/output/table.txt' } };
+    expect(
+      inSandboxTerms(
+        "ENOENT: no such file or directory, open '/app/.data/p1/output/table.txt'",
+        call,
+      ),
+    ).toBe('no such file or folder: /mnt/output/table.txt');
+    expect(inSandboxTerms('quota reached', call)).toBe('quota reached');
   });
 });

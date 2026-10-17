@@ -54,6 +54,7 @@ const LEAD_PROMPT = [
   'If the message is "Free exploration" or names only an area, choose one specific, open question in that area yourself, say which and why in one sentence, and pursue it.',
   'Look in /mnt/upload only when the user mentions something they attached; it is empty otherwise.',
   'Back the answer with something computed whenever the question allows it: a count, a check, a table. A survey of abstracts is a start, not an answer.',
+  'No one here can read a paper beyond its abstract or reach the web: do not delegate that. Say which paper to read and leave it open.',
   'Before computing, find out what is known: search OEIS for the sequences involved and arXiv for the topic. A result that is already published is worth saying, not rediscovering.',
   'Delegate work that needs commands run or many files read to readers. Each reader sees only its task title, so make every title self-contained: what to compute or find, the exact definitions, and what to report back. Put independent tasks in ONE delegate call so they run in parallel; do not split one task into sequential steps across readers.',
   'Report only what tool results show. If a command could not run or a file is not there, say so plainly and do not claim it. Separate what you verified from what you recall.',
@@ -122,7 +123,7 @@ const TOOLS = {
   search: {
     name: 'search',
     description:
-      'Search the literature: "oeis" for integer sequences (give terms such as 1,2,5,14,42 or words), "arxiv" for papers (give words). Returns the top matches. Use it before computing, to learn what is already known, and after, to check a sequence.',
+      'Search the literature: "oeis" for integer sequences (give terms such as 1,2,5,14,42 or words), "arxiv" for mathematics papers (give a few precise words). Returns the top matches with titles and abstracts only; no tool reads a paper\'s full text. Use it before computing, to learn what is already known, and after, to check a sequence.',
     parameters: {
       type: 'object',
       properties: {
@@ -172,6 +173,22 @@ export interface WorkerOptions {
   readonly timeoutMs?: number;
   /** The literature connectors' HTTP client; tests pass a fake. */
   readonly fetch?: Parameters<typeof search>[2];
+}
+
+/**
+ * An error as the agent and the page should read it. Node names the host
+ * file ("ENOENT: no such file or directory, open '/app/.data/<project>/
+ * output/x'"), which put this server's own folder layout in front of the
+ * model and in the trace. The agent only ever named a /mnt path, so the
+ * message says that path back.
+ */
+export function inSandboxTerms(message: string, call: ToolCall): string {
+  if (!/\bE(NOENT|NOTDIR|ISDIR)\b/.test(message))
+    return message.replace(/\/[^\s']*\.data\/[^\s']*/g, '(a file)');
+  const asked = typeof call.arguments['path'] === 'string' ? call.arguments['path'] : 'that path';
+  if (message.includes('ENOTDIR')) return `${asked} is not a folder`;
+  if (message.includes('EISDIR')) return `${asked} is a folder, not a file`;
+  return `no such file or folder: ${asked}`;
 }
 
 /** A tool call the model got wrong: said back to the model, never thrown out of the turn. */
@@ -303,7 +320,7 @@ export function createWorker(options: WorkerOptions): Worker {
           error instanceof SandboxQuotaError ||
           isPathMistake(error);
         if (!refusal) throw error;
-        const message = `error: ${error.message}`;
+        const message = `error: ${inSandboxTerms(error.message, call)}`;
         await this.traced(`${call.name}: refused`, call.name, startedAt, message);
         return message;
       }

@@ -15,7 +15,7 @@ import {
 } from '../../core/model/index.js';
 import { SandboxFs } from './sandboxFs.js';
 import { SteerRegistry } from './steerRegistry.js';
-import { createWorker, inSandboxTerms } from './worker.js';
+import { createWorker, inSandboxTerms, isBinary } from './worker.js';
 
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const SESSION = '22222222-2222-4222-8222-222222222222';
@@ -351,6 +351,23 @@ describe('createWorker: tools', () => {
     expect(model.requests[1]!.messages.at(-1)!.content).toContain('belongs to no project');
   });
 
+  it('answers a listing of /mnt itself with the three folders', async () => {
+    const model = scripted(
+      { toolCalls: [toolCall('list_files', { path: '/mnt/' })] },
+      { text: 'Seen.' },
+    );
+
+    await createWorker({ volumeRoot, context, registry, model }).run(
+      taskOf({ agent: 'reader' }),
+      'x',
+      asReport(fakeReport()),
+    );
+
+    const listing = model.requests[1]!.messages.at(-1)!.content;
+    expect(listing).toMatch(/\/mnt\/upload.*\/mnt\/workspace.*\/mnt\/output/s);
+    expect(listing).not.toContain('outside');
+  });
+
   it('does not look up the project for a turn that never touches a file', async () => {
     await createWorker({ volumeRoot, context, registry, model: scripted({ text: 'ok' }) }).run(
       taskOf(),
@@ -456,5 +473,17 @@ describe("createWorker: errors in the agent's terms", () => {
       ),
     ).toBe('no such file or folder: /mnt/output/table.txt');
     expect(inSandboxTerms('quota reached', call)).toBe('quota reached');
+  });
+});
+
+describe('isBinary', () => {
+  it('tells a PDF or a NUL byte from text in any script', () => {
+    expect(isBinary(Buffer.from([0x25, 0x50, 0x44, 0x46, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]))).toBe(
+      true,
+    );
+    expect(isBinary(Buffer.from('a\u0000b'))).toBe(true);
+    expect(isBinary(Buffer.from('n,a(n)\n1,1\n数据,表\n'))).toBe(false);
+    // A character cut at the 8 KB mark is still text.
+    expect(isBinary(Buffer.from(`${'x'.repeat(8191)}数`).subarray(0, 8193))).toBe(false);
   });
 });

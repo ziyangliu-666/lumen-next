@@ -202,6 +202,13 @@ function stringArg(call: ToolCall, name: string): string {
   return value;
 }
 
+/** What a listing of /mnt shows: the three folders, and what each is for. */
+const MNT_LISTING = [
+  'dir \t/mnt/upload (what the user attached; read only)',
+  "dir \t/mnt/workspace (this session's scratch)",
+  'dir \t/mnt/output (results kept for the project)',
+].join('\n');
+
 /**
  * A path the model got wrong after the sandbox let it through: a directory
  * read as a file, a file that is not there, a file used as a directory. The
@@ -214,6 +221,18 @@ function isPathMistake(error: unknown): error is Error {
     typeof (error as NodeJS.ErrnoException).code === 'string' &&
     PATH_MISTAKES.has((error as NodeJS.ErrnoException).code!)
   );
+}
+
+/**
+ * Whether a file is not text: a NUL byte, or bytes that are not UTF-8, in its
+ * first 8 KB. An attached PDF was read as UTF-8 and reached the model and
+ * the trace as a page of replacement characters.
+ */
+export function isBinary(data: Buffer): boolean {
+  const head = data.subarray(0, 8192);
+  if (head.includes(0)) return true;
+  // A multi-byte character cut at the 8 KB mark is not a sign of binary.
+  return new TextDecoder().decode(head).slice(0, -1).includes('\uFFFD');
 }
 
 function clip(text: string, limit = MAX_TOOL_RESULT_CHARS): string {
@@ -381,6 +400,13 @@ export function createWorker(options: WorkerOptions): Worker {
         }
         case 'list_files': {
           const path = stringArg(call, 'path');
+          // /mnt itself is not a scope, and a lead that listed it to look
+          // around was told its path was "outside /mnt". It hears the three
+          // folders instead.
+          if (/^\/mnt\/*$/.test(path)) {
+            await this.traced(`list: ${path}`, 'list', startedAt, MNT_LISTING);
+            return MNT_LISTING;
+          }
           const entries = await (await this.requireFiles()).list(path);
           const listing = entries
             .map(
@@ -393,7 +419,10 @@ export function createWorker(options: WorkerOptions): Worker {
         }
         case 'read_file': {
           const path = stringArg(call, 'path');
-          const text = (await (await this.requireFiles()).readFile(path)).toString('utf8');
+          const data = await (await this.requireFiles()).readFile(path);
+          const text = isBinary(data)
+            ? `${path} is a binary file of ${data.byteLength} bytes, not text. Read it with run, using a program that understands its format.`
+            : data.toString('utf8');
           await this.traced(`read: ${path}`, 'read', startedAt, text);
           return clip(text);
         }

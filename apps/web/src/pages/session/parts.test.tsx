@@ -275,6 +275,22 @@ describe('session page: the rail', () => {
     expect(composer(false)).toContain('aria-label="Send"');
     expect(composer(false)).toContain('>Reply to lumen<');
     expect(composer(false)).not.toContain('aria-pressed');
+    expect(composer(true)).toContain('lumen reads it');
+  });
+
+  it('names the reader shown as the one that reads a steer', () => {
+    const html = renderToStaticMarkup(
+      <Composer
+        disabled={false}
+        running={true}
+        steerable={true}
+        shownAgent="reader 1"
+        onSay={noop}
+        onSteer={noop}
+      />,
+    );
+    expect(html).toContain('reader 1 reads it');
+    expect(html).not.toContain('lumen reads it');
   });
 
   it.each([

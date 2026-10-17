@@ -98,7 +98,11 @@ export interface NewProject {
   readonly error: string | null;
   /** Clears a message the person has dealt with, for example after signing in. */
   readonly clearError: () => void;
-  readonly submit: () => Promise<void>;
+  /**
+   * Starts the project. Files go to its /mnt/upload right after it is
+   * created, and the question names them, so lumen looks there.
+   */
+  readonly submit: (files?: readonly File[]) => Promise<void>;
 }
 
 /** The draft, the checks, and the create, visit and open steps of a new project. */
@@ -113,11 +117,14 @@ export function useNewProject({ notReady = null, onUnauthorized }: NewProjectOpt
     saveProjectDraft(next);
   }
 
-  async function submit(): Promise<void> {
+  async function submit(files: readonly File[] = []): Promise<void> {
     if (pending || uncertain) return;
     // The person asks; the field does not send an empty question.
-    const question = draft.question.trim();
-    if (!question) return;
+    const typed = draft.question.trim();
+    if (!typed) return;
+    const question = files.length
+      ? `${typed}\n\nAttached: ${files.map((file) => file.name).join(', ')}`
+      : typed;
     const mode: ProjectMode = 'seed';
     if ([...question].length > LIMIT) {
       setError('Keep it to 10,000 characters or fewer.');
@@ -138,6 +145,17 @@ export function useNewProject({ notReady = null, onUnauthorized }: NewProjectOpt
       }
       // Creation has succeeded. A failed visit must not let a resend create a duplicate.
       setUncertain(true);
+      // The session has started: the uploads go at once, before the lead's
+      // first model call comes back, and one that fails does not stop the
+      // others. The session's field can attach it again.
+      await Promise.all(
+        files.map((file) =>
+          request(
+            `/api/projects/${encodeURIComponent(result.projectId)}/upload/${encodeURIComponent(file.name)}`,
+            { method: 'PUT', headers: { 'content-type': 'application/octet-stream' }, body: file },
+          ).catch(() => undefined),
+        ),
+      );
       await request(`/api/projects/${encodeURIComponent(result.projectId)}/visit`, {
         method: 'POST',
       });

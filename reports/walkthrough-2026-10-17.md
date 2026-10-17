@@ -87,6 +87,18 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | M3 | A delegated reader in the stream | **fixed** | The lead writes the reader's whole brief into its title, so one row was half a screen. | Three lines; the reader opens in full. |
 | M4 | The bar over the scene | **fixed** | Stars drifted through "spent" and the elapsed time. | The bar is marked quiet, and the scene fades behind quiet elements. The first fix only set the attribute: nothing read it until P22. |
 
+## Entry page against ChatGPT, Claude and Mistral
+
+| # | What they have | lumen | Result |
+|---|---|---|---|
+| E1 | Starter cards ("Try") | Three research questions under the field when there are no projects. A card fills the field and does not send. | **fixed** |
+| E2 | Recents | Signed in with projects, the last four under the field, with their state, and All projects. | **fixed** |
+| E3 | "+" to attach before the first message | Attach on the landing and on New project. The files go to the new project right after it is created, and the question names them. Tested: a CSV attached on the landing was read and matched to A001006. | **fixed** |
+| E4 | A greeting for the person | "Good evening, Ada." when signed in; the promise stays for a first visit. | **fixed** |
+| E5 | Sign up beside Sign in | On a server with accounts. A development server has none to create. | **fixed** |
+| E6 | Model picker | Not offered. A server runs one model, set by its operator; the ledger prices each call by that model. | **open** |
+| E7 | Voice input | Not offered. Dictation of formulas and sequences is poor, and it needs a speech service outside the product. | **open** |
+
 ## Still to try
 
 - Approvals and top-ups with a billing database (staging).

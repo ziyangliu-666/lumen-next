@@ -147,6 +147,13 @@ function HomeProjects({ onUnauthorized }: { onUnauthorized: () => void }): JSX.E
         `/api/projects/${encodeURIComponent(card.project.id)}/stop`,
         { method: 'POST' },
       );
+      // The person ended this session; it is not news on their next look.
+      // Without the visit the row said "New activity: 1 session ended".
+      if (result.outcome === 'stop_requested') {
+        await request(`/api/projects/${encodeURIComponent(card.project.id)}/visit`, {
+          method: 'POST',
+        }).catch(() => undefined);
+      }
       setNotice(
         result.outcome === 'stop_requested'
           ? 'Stop requested. Refreshing to confirm the session outcome.'

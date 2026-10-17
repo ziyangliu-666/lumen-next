@@ -310,6 +310,27 @@ describe('session: kernel, delegation and cost', () => {
     ]);
   });
 
+  it('keeps a stop when the turn it interrupted then tries to delegate', async () => {
+    let release = (): void => undefined;
+    const worker: Worker = {
+      async run(task, _input, report) {
+        // A model call in flight when the stop lands, which then asks for a reader.
+        await new Promise<void>((done) => (release = done));
+        await report.delegate(task.id, [{ agent: 'reader', title: 'too late' }]);
+      },
+    };
+    const { kernel } = harness(worker);
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await new Promise((done) => setTimeout(done, 5));
+
+    await kernel.stop(session.id, owner);
+    release();
+    await kernel.idle();
+
+    const { tasks } = await kernel.snapshot(session.id, owner);
+    expect(tasks.map((task) => [task.title, task.status])).toEqual([['q', 'stopped']]);
+  });
+
   it('refuses a spend that is not a non-negative amount', async () => {
     const { kernel } = harness();
     const { tasks } = await kernel.start('p1', owner.accountId, 'q');

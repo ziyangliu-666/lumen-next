@@ -68,6 +68,9 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | P11 | A reply with a Markdown table or a fenced script | **fixed** | Only paragraphs, lists and headings were drawn, so a table of terms became one line of pipes. | Tables and fenced code are drawn, still without HTML from the model. |
 | P12 | Reloading the page during a run | **ok** | The run, its spend and Stop came back; the field stayed usable. | |
 | P13 | Steering a reader: the timing switch | **fixed** | With reader 1 shown, the switch said "lumen reads it". | It names the task shown: "reader 1 reads it". |
+| P14 | Stopping a running project from Projects | **fixed** | The row said Stopped, then Failed after a refresh. The stop landed during a model call; the call came back asking for readers, the delegation was refused because the task had stopped, and that error marked the task failed. | An error in a turn that was stopped leaves the task stopped. |
+| P15 | Activity after stopping a project from Projects | **fixed** | The row then said "New activity since your last visit: 1 session ended", although the person ended it. | A stop from Projects marks a visit. The call in flight is charged after it and still shows as new spend. |
+| P16 | Work after a stop | **fixed** | Readers went on for 9 s after a stop: a model call, a command, a search, another model call. Nothing told the worker. | The worker asks whether its task was stopped before each model call and each tool. After the fix the lead stopped 0.7 s after the request, with only the call in flight charged. |
 
 ## Phone, 390 px, dark and light
 

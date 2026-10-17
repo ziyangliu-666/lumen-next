@@ -32,8 +32,15 @@ EXPOSE 4000
 # Project files live under .data next to the process (LUMEN_VOLUME_ROOT unset).
 # The runtime user must own it, or the first file tool a worker calls fails.
 RUN mkdir -p /app/.data && chown node:node /app/.data
-USER node
+# The readers' sandbox: a Docker daemon in this machine, started by the
+# entrypoint when LUMEN_COMPUTE_PROVIDER=docker. The node user may use it.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends docker.io ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && usermod -aG docker node
+COPY deploy/fly/entrypoint.sh /usr/local/bin/lumen-entrypoint
 # No curl in the slim image; Node is there anyway.
 HEALTHCHECK --interval=10s --timeout=3s --retries=6 \
   CMD node -e "fetch('http://127.0.0.1:4000/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
-CMD ["node", "apps/server/dist/main.js"]
+# Starts as root, and drops to node before the server runs (entrypoint.sh).
+CMD ["/usr/local/bin/lumen-entrypoint"]

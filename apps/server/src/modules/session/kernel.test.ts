@@ -782,10 +782,8 @@ describe('session: kernel, the three budget check points', () => {
     expect(after.tasks.map((task) => task.status)).toEqual(['ended', 'ended', 'ended', 'ended']);
     // The lead's turn comes back with the reports, and it answers.
     const lead = after.steps.filter((step) => step.taskId === after.tasks[0]!.id);
-    expect(lead.at(-1)).toMatchObject({
-      kind: 'reply',
-      text: expect.stringContaining('After the approval, 3 readers finished'),
-    });
+    expect(lead.at(-1)?.kind).toBe('reply');
+    expect(lead.at(-1)?.text).toContain('After the approval, 3 readers finished');
     expect(await trace.task(after.tasks[0]!.id)).not.toHaveProperty('pending');
     // The fan-out check and every child's task-open check carry the fan-out's attempt id.
     expect(asked.slice(1).map((charge) => [charge.at, charge.attemptId])).toEqual([

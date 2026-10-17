@@ -19,10 +19,21 @@ export function textOf(value: unknown, max: number): string {
     throw badRequest(`Text must contain 1 to ${max} characters.`);
   return text;
 }
-export function creationOf(value: unknown): { question: string; mode: ProjectMode } {
-  const body = objectOf(value, ['question', 'mode']);
+export function creationOf(value: unknown): {
+  question: string;
+  mode: ProjectMode;
+  model?: string;
+} {
+  const body = objectOf(value, ['question', 'mode', 'model']);
   if (body.mode !== 'explore' && body.mode !== 'seed') throw badRequest('Choose explore or seed.');
-  return { question: textOf(body.question, 10000), mode: body.mode };
+  // The model is checked against the allowed list where the session opens.
+  if (body.model !== undefined && (typeof body.model !== 'string' || !body.model.trim()))
+    throw badRequest('model must be a name');
+  return {
+    question: textOf(body.question, 10000),
+    mode: body.mode,
+    ...(typeof body.model === 'string' ? { model: body.model } : {}),
+  };
 }
 
 /** A cursor is a position, never an authorisation token. Every query still checks ownership. */

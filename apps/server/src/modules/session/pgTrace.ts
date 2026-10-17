@@ -27,6 +27,7 @@ interface SessionRow {
   project_id: string;
   account_id: string;
   started_at: Date;
+  model?: string | null;
   [column: string]: unknown;
 }
 
@@ -72,6 +73,7 @@ function toSession(row: SessionRow): Session {
     projectId: row.project_id,
     accountId: row.account_id,
     startedAt: row.started_at.getTime(),
+    ...(row.model ? { model: row.model } : {}),
   };
 }
 
@@ -115,11 +117,16 @@ export class PgTrace implements Trace {
     private readonly recordSpend?: SpendRecorder,
   ) {}
 
-  async openSession(projectId: string, accountId: string, mode: SessionMode): Promise<Session> {
+  async openSession(
+    projectId: string,
+    accountId: string,
+    mode: SessionMode,
+    model?: string,
+  ): Promise<Session> {
     const [row] = await this.db.query<SessionRow>(
-      `insert into sessions (id, project_id, account_id, mode) values ($1, $2, $3, $4)
-       returning id, mode, project_id, account_id, started_at`,
-      [randomUUID(), projectId, accountId, mode],
+      `insert into sessions (id, project_id, account_id, mode, model) values ($1, $2, $3, $4, $5)
+       returning id, mode, project_id, account_id, started_at, model`,
+      [randomUUID(), projectId, accountId, mode, model ?? null],
     );
     return toSession(row!);
   }
@@ -127,7 +134,7 @@ export class PgTrace implements Trace {
   async session(id: string): Promise<Session | null> {
     if (!UUID.test(id)) return null;
     const [row] = await this.db.query<SessionRow>(
-      `select id, mode, project_id, account_id, started_at from sessions where id = $1`,
+      `select id, mode, project_id, account_id, started_at, model from sessions where id = $1`,
       [id],
     );
     return row ? toSession(row) : null;

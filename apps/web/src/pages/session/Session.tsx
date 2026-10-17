@@ -10,6 +10,7 @@ import { Button } from '@/ui/button';
 import { ScrollRegion } from '@/ui/scroll-region';
 import { RegionName, SurfaceMain, Surfaces, SurfaceWell } from '@/ui/surfaces';
 import { rememberReturn, useCurrentAccount } from '@/core/auth';
+import { ModelPicker, useModels } from '@/core/models';
 import { go } from '@/core/router';
 import { BarActions, BarCrumb, BarStatus } from '@/core/shell';
 import {
@@ -104,6 +105,8 @@ export function Session(): JSX.Element {
   // The project's sessions, and whether the field starts a new one.
   const [sessions, setSessions] = useState<readonly ProjectSession[]>([]);
   const [starting, setStarting] = useState(false);
+  const models = useModels(auth.status === 'ready');
+  const [nextModel, setNextModel] = useState<string | undefined>(undefined);
   // The finding last chosen in the well. It stays marked while the
   // conversation shows the task that recorded it.
   const [chosenFinding, setChosenFinding] = useState<string | null>(null);
@@ -413,7 +416,7 @@ export function Session(): JSX.Element {
     if (!projectId) return;
     void request<{ session: { id: string } }>(
       `/api/projects/${encodeURIComponent(projectId)}/sessions`,
-      { json: { text, mode: 'seed' } },
+      { json: { text, mode: 'seed', ...(nextModel ? { model: nextModel } : {}) } },
     ).then(
       (snapshot) => go(`?session=${encodeURIComponent(snapshot.session.id)}#/session`),
       () => setStarting(false),
@@ -539,6 +542,10 @@ export function Session(): JSX.Element {
             ) : null}
           </span>
         ) : null}
+        {/* The model this session chose, on a server that offers a choice. */}
+        {models.length > 1 ? (
+          <span className="text-ink-2 max-split:hidden">{snapshot.session.model ?? models[0]}</span>
+        ) : null}
         {/* Under 720px the first row has no room for Stop, Cancel and
             Details together, so Stop ends the status line instead. */}
         {stop ? <span className="ml-auto roomy:hidden">{stop}</span> : null}
@@ -596,6 +603,11 @@ export function Session(): JSX.Element {
             steerable={shown.status === 'running'}
             onSay={starting ? startNew : say}
             newSession={starting}
+            toolbar={
+              starting ? (
+                <ModelPicker models={models} value={nextModel} onChange={setNextModel} />
+              ) : undefined
+            }
             onSteer={steer}
             shownAgent={lead ? null : shownName}
             onAttach={projectId ? (file) => upload(projectId, file) : undefined}

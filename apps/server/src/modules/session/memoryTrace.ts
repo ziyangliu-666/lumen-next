@@ -21,13 +21,19 @@ export class MemoryTrace implements Trace {
   private readonly tasks = new Map<string, TaskRecord>();
   private readonly steps = new Map<string, Step[]>();
 
-  openSession(projectId: string, accountId: string, mode: SessionMode): Promise<Session> {
+  openSession(
+    projectId: string,
+    accountId: string,
+    mode: SessionMode,
+    model?: string,
+  ): Promise<Session> {
     const session: Session = {
       id: randomUUID(),
       mode,
       projectId,
       accountId,
       startedAt: Date.now(),
+      ...(model ? { model } : {}),
     };
     this.sessions.set(session.id, session);
     return Promise.resolve(session);

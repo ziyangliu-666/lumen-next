@@ -15,6 +15,12 @@ export interface Session {
   readonly projectId: string;
   readonly accountId: string;
   readonly startedAt: number;
+  /**
+   * The model this session thinks with, chosen when it opened. Absent: the
+   * server's default. The choice is among the models the server allows
+   * (GET /api/models).
+   */
+  readonly model?: string;
 }
 
 // What a step is. The order of the steps is the reasoning, and the kind says

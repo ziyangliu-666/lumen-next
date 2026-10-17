@@ -61,6 +61,8 @@ interface ComposerProps {
   onRemoveAttachment?: (name: string) => void;
   /** Lets an empty field be sent; otherwise send waits for text. */
   allowEmpty?: boolean;
+  /** More controls in the row at the foot of the box, after Attach (a model picker). */
+  toolbar?: React.ReactNode;
   accept?: string;
   /** The send square's accessible name. */
   sendLabel?: string;
@@ -192,6 +194,7 @@ function Composer({
   attachments = [],
   onRemoveAttachment,
   allowEmpty = false,
+  toolbar,
   accept,
   sendLabel = 'Send',
   sendDisabled = false,
@@ -307,6 +310,7 @@ function Composer({
               />
             </>
           ) : null}
+          {toolbar}
           {modes && modes.length > 0 ? (
             <div
               role="group"

@@ -1099,6 +1099,7 @@ export function Composer({
   onAttach,
   prefill,
   newSession = false,
+  toolbar,
 }: {
   /** The socket is down or the account is not ready: nothing can be sent. */
   disabled: boolean;
@@ -1124,6 +1125,8 @@ export function Composer({
   prefill?: { readonly text: string; readonly key: number } | undefined;
   /** The field starts a new session in this project instead of replying. */
   newSession?: boolean;
+  /** More controls at the foot of the field (the model for a new session). */
+  toolbar?: ReactNode;
 }): JSX.Element {
   const [draft, setDraft] = useState('');
   // A new prefill replaces the draft during render, not in an effect, so
@@ -1208,6 +1211,7 @@ export function Composer({
       sendLabel={newSession ? 'Start the session' : running ? 'Steer' : 'Send'}
       hint={hint}
       {...(onAttach ? { onAttach: attach } : {})}
+      toolbar={toolbar}
       attachments={attached.map((path) => path.replace(/^\/mnt\/upload\//, ''))}
       onRemoveAttachment={(name) =>
         setAttached((list) => list.filter((path) => !path.endsWith(`/${name}`)))

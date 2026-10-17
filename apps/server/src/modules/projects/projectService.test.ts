@@ -70,7 +70,14 @@ describe('ProjectService', () => {
     // Cut by characters, not UTF-16 units, and marked as cut.
     expect(result.project.title).toBe(`${'😀'.repeat(119)}…`);
     expect(await store.get(result.project.id)).toMatchObject({ accountId: 'owner', mode: 'seed' });
-    expect(sessions.start).toHaveBeenCalledWith(result.project.id, owner, question.trim(), 'seed');
+    // No model asked for: the session runs on the server's default.
+    expect(sessions.start).toHaveBeenCalledWith(
+      result.project.id,
+      owner,
+      question.trim(),
+      'seed',
+      undefined,
+    );
     expect(result.project).not.toHaveProperty('accountId');
   });
   it.each([

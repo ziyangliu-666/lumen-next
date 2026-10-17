@@ -14,6 +14,15 @@ export function traceContract(make: () => Trace): void {
     expect(session).toMatchObject({ projectId: 'p1', accountId: 'acc-1', mode: 'explore' });
   });
 
+  it('keeps the model a session was opened with, and none when it chose none', async () => {
+    const trace = make();
+    const chosen = await trace.openSession('p1', 'acc-1', 'seed', 'gpt-4.1-mini');
+    const plain = await trace.openSession('p1', 'acc-1', 'seed');
+
+    expect((await trace.session(chosen.id))?.model).toBe('gpt-4.1-mini');
+    expect(await trace.session(plain.id)).not.toHaveProperty('model');
+  });
+
   it('answers null for an id that names nothing, uuid or not', async () => {
     const trace = make();
 

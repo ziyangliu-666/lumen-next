@@ -19,21 +19,25 @@ export interface SessionDirectory {
     principal: Principal,
     question: string,
     mode: SessionMode,
+    model?: string,
   ): Promise<{ id: string }>;
   /** The project's sessions, newest first: one cheap read, no tasks or steps. */
   list(this: void, projectId: string, principal: Principal): Promise<readonly SessionSummary[]>;
   /** Stops the whole task tree. Answers 404 for a session that is not the principal's. */
   stop(this: void, sessionId: string, principal: Principal): Promise<void>;
   /** Which project and account a session belongs to. Null when there is none. */
-  context(this: void, sessionId: string): Promise<{ projectId: string; accountId: string } | null>;
+  context(
+    this: void,
+    sessionId: string,
+  ): Promise<{ projectId: string; accountId: string; model?: string } | null>;
   /** Which session a task belongs to. Null when there is none. */
   taskSession(this: void, taskId: string): Promise<string | null>;
 }
 
 export function sessionDirectory(kernel: Kernel, trace: Trace): SessionDirectory {
   return {
-    start: async (projectId, principal, question, mode) => {
-      const snapshot = await kernel.start(projectId, principal.accountId, question, mode);
+    start: async (projectId, principal, question, mode, model) => {
+      const snapshot = await kernel.start(projectId, principal.accountId, question, mode, model);
       return { id: snapshot.session.id };
     },
     list: async (projectId, principal) => {
@@ -51,7 +55,13 @@ export function sessionDirectory(kernel: Kernel, trace: Trace): SessionDirectory
     stop: (sessionId, principal) => kernel.stop(sessionId, principal),
     context: async (sessionId) => {
       const session = await trace.session(sessionId);
-      return session ? { projectId: session.projectId, accountId: session.accountId } : null;
+      return session
+        ? {
+            projectId: session.projectId,
+            accountId: session.accountId,
+            ...(session.model ? { model: session.model } : {}),
+          }
+        : null;
     },
     taskSession: async (taskId) => (await trace.task(taskId))?.sessionId ?? null,
   };

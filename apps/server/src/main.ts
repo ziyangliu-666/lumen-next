@@ -11,7 +11,7 @@ import { composeApp, type IdentityConfig } from './app.js';
 import { openDatabase, type Db } from './core/db/db.js';
 import { defaultWebRoot } from './core/http/server.js';
 import { createLog } from './core/log/log.js';
-import { modelFromEnv } from './core/model/index.js';
+import { modelChoicesFromEnv, modelFromEnv } from './core/model/index.js';
 import { mailFromEnvironment, oauthProvidersFromEnvironment } from './modules/identity/index.js';
 import { secretCipherFromEnvironment, stripeFromEnvironment } from './modules/billing/index.js';
 import { paceFromEnv } from './modules/session/index.js';
@@ -121,6 +121,8 @@ async function bootstrap(): Promise<void> {
   // LUMEN_MODEL_PROVIDER: who either worker thinks and replies with. Without
   // it the model is the one that does nothing, and nothing is spent.
   const model = modelFromEnv(process.env);
+  // LUMEN_MODELS: the models a session may choose, beside the default.
+  const modelChoices = modelChoicesFromEnv(process.env);
   const { server, orphans, resolver, mailWorker } = await composeApp({
     db,
     log,
@@ -135,6 +137,7 @@ async function bootstrap(): Promise<void> {
     ...(volumeRoot ? { volumeRoot } : {}),
     ...(provider ? { computeProvider: provider } : {}),
     model,
+    modelChoices,
   });
 
   await server.listen({ port: port(), host: '0.0.0.0' });

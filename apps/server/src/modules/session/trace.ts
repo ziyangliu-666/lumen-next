@@ -28,7 +28,12 @@ export interface Charged {
 }
 
 export interface Trace {
-  openSession(projectId: string, accountId: string, mode: SessionMode): Promise<Session>;
+  openSession(
+    projectId: string,
+    accountId: string,
+    mode: SessionMode,
+    model?: string,
+  ): Promise<Session>;
   session(id: string): Promise<Session | null>;
   /** Throws when parentId names no task: a child of nothing is a bug upstream. */
   openTask(

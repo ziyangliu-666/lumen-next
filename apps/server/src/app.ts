@@ -14,6 +14,7 @@ import { createLog, type Log } from './core/log/log.js';
 import { Broker } from './core/protocol/broker.js';
 import type { Worker } from './core/domain/worker.js';
 import { OpenAICompatible, nullModel, type ModelProvider } from './core/model/index.js';
+import { sessionModel } from './sessionModel.js';
 import { accountModel } from './accountModel.js';
 import {
   createBillingSlice,
@@ -74,6 +75,11 @@ export interface AppOptions {
   readonly computeProvider?: 'docker' | 'none';
   /** Who steering's worker thinks with. The model that does nothing if omitted. */
   readonly model?: ModelProvider;
+  /**
+   * The models a session may choose, the default first (modelChoicesFromEnv).
+   * One or none: no choice, and `model` is used as before.
+   */
+  readonly modelChoices?: ReadonlyMap<string, ModelProvider>;
   /**
    * Run every session's worker on steering's own agent loop instead of the
    * demo worker — false by default, deliberately, not because it is unready:
@@ -159,9 +165,16 @@ export async function composeApp(options: AppOptions): Promise<App> {
         }
       : {}),
   });
+  // A session's chosen model, when the server offers more than one. It sits
+  // under the account's key choice: a saved key still decides who pays.
+  const choice =
+    options.modelChoices && options.modelChoices.size > 1
+      ? sessionModel(options.modelChoices, options.model ?? nullModel)
+      : null;
+  const platform = choice?.model ?? options.model;
   const account = billing.secret
     ? accountModel(
-        options.model ?? nullModel,
+        platform ?? nullModel,
         billing.secret,
         options.openaiWithKey ??
           ((key) =>
@@ -173,7 +186,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
             })),
       )
     : null;
-  const model = account?.model ?? options.model;
+  const model = account?.model ?? platform;
   // Steering needs session's SessionDirectory to check a task.steer's
   // ownership and to find a task's project; session may run steering's own
   // worker. Each is given closures over the other, declared first — same
@@ -201,13 +214,21 @@ export async function composeApp(options: AppOptions): Promise<App> {
   const session = createSessionSlice({
     broker,
     db,
-    worker:
-      account && !options.worker
+    worker: ((): Worker => {
+      if (options.worker) return worker;
+      const keyed = account
         ? account.wrap(
             worker,
             async (id) => (await session.projects.context(id))?.accountId ?? null,
           )
-        : worker,
+        : worker;
+      return choice
+        ? choice.wrap(keyed, async (id) => (await session.projects.context(id))?.model)
+        : keyed;
+    })(),
+    ...(options.modelChoices && options.modelChoices.size > 1
+      ? { models: [...options.modelChoices.keys()] }
+      : {}),
     requireProject: (principal, id) => projects.requireProject(principal, id),
     recordFinding: (sessionId, taskId, text) => projects.recordFinding(sessionId, taskId, text),
     ...(db ? { recordSpend: billing.record } : {}),

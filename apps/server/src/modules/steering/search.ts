@@ -95,31 +95,49 @@ export function arxivQuery(query: string, every: boolean): string {
   return `(${terms || `all:${query}`}) AND cat:math.*`;
 }
 
+/**
+ * Papers one arXiv search returns. More than OEIS's five: a question about
+ * the best known result needs the newer papers too, and with every word
+ * required a search for the 1324 pattern found four.
+ */
+const ARXIV_LIMIT = 8;
+
 async function arxivFeed(query: string, fetchImpl: Fetch, signal: AbortSignal): Promise<string> {
-  const url = `https://export.arxiv.org/api/query?max_results=${LIMIT}&search_query=${encodeURIComponent(query)}`;
+  const url = `https://export.arxiv.org/api/query?max_results=${ARXIV_LIMIT}&search_query=${encodeURIComponent(query)}`;
   const response = await fetchImpl(url, { signal });
   if (!response.ok) throw new Error(`arXiv answered HTTP ${response.status}`);
   return response.text();
 }
 
+function blocks(feed: string): string[] {
+  return [...feed.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map((match) => match[1] ?? '');
+}
+
 async function arxiv(query: string, fetchImpl: Fetch, signal: AbortSignal): Promise<SearchResult> {
-  let feed = await arxivFeed(arxivQuery(query, true), fetchImpl, signal);
-  if (!feed.includes('<entry>'))
-    feed = await arxivFeed(arxivQuery(query, false), fetchImpl, signal);
-  const entries = [...feed.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map((match) => {
-    const block = match[1] ?? '';
-    const field = (tag: string): string =>
-      (block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`))?.[1] ?? '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    const id = field('id')
-      .replace(/^https?:\/\/arxiv\.org\/abs\//, '')
-      .replace(/v\d+$/, '');
-    // The year, so the model can tell the newest result from an old one: it
-    // gave a 2012 bound as the best known when a 2017 one was in reach.
-    const year = field('published').slice(0, 4);
-    return { id, year, title: field('title'), summary: field('summary').slice(0, 300) };
-  });
+  // Papers with every word first; when they are fewer than the limit, the
+  // list is filled with papers that have any of the words.
+  const every = blocks(await arxivFeed(arxivQuery(query, true), fetchImpl, signal));
+  const any =
+    every.length < ARXIV_LIMIT
+      ? blocks(await arxivFeed(arxivQuery(query, false), fetchImpl, signal))
+      : [];
+  const seen = new Set<string>();
+  const entries = [...every, ...any]
+    .map((block) => {
+      const field = (tag: string): string =>
+        (block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`))?.[1] ?? '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      const id = field('id')
+        .replace(/^https?:\/\/arxiv\.org\/abs\//, '')
+        .replace(/v\d+$/, '');
+      // The year, so the model can tell the newest result from an old one: it
+      // called a 2012 bound the newest.
+      const year = field('published').slice(0, 4);
+      return { id, year, title: field('title'), summary: field('summary').slice(0, 300) };
+    })
+    .filter((entry) => entry.id && !seen.has(entry.id) && seen.add(entry.id))
+    .slice(0, ARXIV_LIMIT);
   if (entries.length === 0) {
     return {
       rows: [{ source: 'arXiv', text: query, result: 'Nothing', empty: true }],

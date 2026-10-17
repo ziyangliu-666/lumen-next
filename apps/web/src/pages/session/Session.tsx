@@ -97,6 +97,7 @@ export function Session(): JSX.Element {
   const [files, setFiles] = useState<readonly ProjectFile[] | 'failed'>([]);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<{ text: string; key: number } | undefined>(undefined);
   // The finding last chosen in the well. It stays marked while the
   // conversation shows the task that recorded it.
   const [chosenFinding, setChosenFinding] = useState<string | null>(null);
@@ -347,6 +348,7 @@ export function Session(): JSX.Element {
   const title = project?.title ?? root.title;
   const names = speakerNames(snapshot.tasks);
   const lead = shown.id === root.id;
+  const ready = state.stream === 'open' && auth.status === 'ready';
   const shownName = lead ? 'lumen' : (names.get(shown.id) ?? shown.agent);
   // The clock counts the current turn. A page opened on the first turn
   // can take the task's own start; on a later turn it counts from when this
@@ -395,6 +397,11 @@ export function Session(): JSX.Element {
   // Steers the task the stream shows, not necessarily the root: a person
   // reading a reader's own stream steers that reader, not the lead. The
   // composer chooses whether it lands at the next step or the end of the turn.
+  // Edit on a message: its text goes back in the field, to change and send.
+  function edit(text: string): void {
+    setPrefill({ text, key: Date.now() });
+  }
+
   function steer(text: string, when: SteerWhen): void {
     stream.current?.send({ type: 'task.steer', taskId: shown.id, text, when });
   }
@@ -541,18 +548,22 @@ export function Session(): JSX.Element {
             steps={snapshot.steps.filter((step) => step.taskId === shown.id)}
             tasks={snapshot.tasks}
             onSelect={open}
+            // Regenerate and Edit start a new turn of the lead, so they are
+            // offered on the lead's own stream, when a turn can be sent.
+            {...(lead && !running && ready ? { onRetry: say, onEdit: edit } : {})}
           />
         </ScrollRegion>
         <div className="flex-none pt-4 pb-6">
           <WaitingNotice task={shown} />
           <Composer
-            disabled={state.stream !== 'open' || auth.status !== 'ready'}
+            disabled={!ready}
             running={running}
             steerable={shown.status === 'running'}
             onSay={say}
             onSteer={steer}
             shownAgent={lead ? null : shownName}
             onAttach={projectId ? (file) => upload(projectId, file) : undefined}
+            prefill={prefill}
           />
         </div>
       </SurfaceMain>

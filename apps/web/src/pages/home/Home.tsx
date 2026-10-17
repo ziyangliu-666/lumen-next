@@ -175,7 +175,10 @@ function HomeProjects({ onUnauthorized }: { onUnauthorized: () => void }): JSX.E
     <>
       <PageCrumb />
       <Surfaces collapse="stack">
-        <SurfaceMain>
+        {/* The list stands on paper at its head and lets the scene through
+            below it, where the home shot puts the sphere: an empty or short
+            list sat in a black box with the scene hidden behind it. */}
+        <SurfaceMain className="bg-transparent bg-linear-to-b from-paper/85 from-20% via-paper/55 via-45% to-transparent to-80%">
           {/* The same height as the new-project heading row on the well, so
               the two region names stand on one line across the split. */}
           <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-4">

@@ -575,7 +575,19 @@ export interface ProjectFile {
 }
 
 /** LI ZHUOYANG's. What the project has written to its output, newest first. */
-export function Files({ files }: { files: readonly ProjectFile[] | 'failed' }): JSX.Element {
+/**
+ * What the project kept: /mnt/output, newest first. The agents are told to
+ * save what is worth keeping there; their scratch (/mnt/workspace) belongs to
+ * one session and is not listed. A file opens in a new tab from steering's
+ * files route, which it never did before; a folder is only named.
+ */
+export function Files({
+  files,
+  projectId,
+}: {
+  files: readonly ProjectFile[] | 'failed';
+  projectId?: string | undefined;
+}): JSX.Element {
   if (files === 'failed') {
     return <p className="text-sm text-ink-2">The files could not be read.</p>;
   }
@@ -584,15 +596,34 @@ export function Files({ files }: { files: readonly ProjectFile[] | 'failed' }): 
     <ul>
       {[...files]
         .sort((a, b) => b.modifiedAt - a.modifiedAt)
-        .map((file) => (
-          <li
-            key={file.virtualPath}
-            className="border-t border-rule-minor py-1 font-mono text-xs break-all text-ink first:border-t-0"
-          >
-            {file.virtualPath.replace(/^\/mnt\/output\//, '')}
-            {file.kind === 'directory' ? '/' : ''}
-          </li>
-        ))}
+        .map((file) => {
+          const name = file.virtualPath.replace(/^\/mnt\/output\//, '');
+          const label = (
+            <>
+              {name}
+              {file.kind === 'directory' ? '/' : ''}
+            </>
+          );
+          return (
+            <li
+              key={file.virtualPath}
+              className="border-t border-rule-minor py-1 font-mono text-xs break-all text-ink first:border-t-0"
+            >
+              {projectId && file.kind === 'file' ? (
+                <a
+                  href={`/api/projects/${encodeURIComponent(projectId)}/files/${file.virtualPath.replace(/^\/mnt\//, '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:underline"
+                >
+                  {label}
+                </a>
+              ) : (
+                <span>{label}</span>
+              )}
+            </li>
+          );
+        })}
     </ul>
   );
 }

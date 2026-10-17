@@ -483,14 +483,6 @@ export function Session(): JSX.Element {
             task={shown}
             steps={snapshot.steps.filter((step) => step.taskId === shown.id)}
             tasks={snapshot.tasks}
-            // How the session was started belongs to the person's question,
-            // not to a task lumen wrote for a reader.
-            {...(lead
-              ? {
-                  note:
-                    snapshot.session.mode === 'seed' ? 'From a starting point' : 'Free exploration',
-                }
-              : {})}
             onSelect={open}
           />
         </ScrollRegion>
@@ -542,7 +534,7 @@ export function Session(): JSX.Element {
           name="Files"
           count={files === 'failed' ? undefined : files.length}
         >
-          <Files files={files} />
+          <Files files={files} projectId={projectId ?? undefined} />
         </WellSection>
         {/* The space under the last section. The region keeps no block padding
             of its own (ScrollRegion), so its end is a child. */}

@@ -9,7 +9,7 @@ import type { ServerEvent } from '@lumen/contracts';
 import { Button } from '@/ui/button';
 import { ScrollRegion } from '@/ui/scroll-region';
 import { RegionName, SurfaceMain, Surfaces, SurfaceWell } from '@/ui/surfaces';
-import { useCurrentAccount } from '@/core/auth';
+import { rememberReturn, useCurrentAccount } from '@/core/auth';
 import { BarActions, BarCrumb, BarStatus } from '@/core/shell';
 import {
   apply,
@@ -200,6 +200,21 @@ export function Session(): JSX.Element {
   const snapshot = state?.snapshot;
   const root = snapshot?.tasks.find((task) => task.parentId === null);
   const running = root !== undefined && root.endedAt === null;
+  // A run that ends while it is on screen has been seen. The visit was
+  // marked when the project opened, before the run ended, so the projects
+  // page then called its own end "new activity since your last visit".
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (running) {
+      wasRunning.current = true;
+      return;
+    }
+    if (!wasRunning.current || !projectId) return;
+    wasRunning.current = false;
+    request(`/api/projects/${encodeURIComponent(projectId)}/visit`, { method: 'POST' }).catch(
+      () => undefined,
+    );
+  }, [running, projectId]);
   useEffect(() => {
     if (!running) return;
     // Once at once, then every second: a run that starts again (a second turn)
@@ -270,24 +285,31 @@ export function Session(): JSX.Element {
   }, []);
 
   if (!state || !snapshot || !root) {
+    // Signed out, the server's own words ("sign in first") read as a
+    // fragment; the page says what to do and offers the one way in.
+    const signedOut = auth.status === 'signed-out';
     return (
-      <div className="mx-auto mt-12 w-full max-w-xl space-y-4">
-        {error ? (
-          <p role="alert" className="font-medium text-ink">
-            {error}
-          </p>
-        ) : null}
-        <p className="text-ink-2">
-          A session belongs to a project. Start one from a question, or open one from your projects,
-          and what the agents think and do draws here.
-        </p>
+      <div className="w-full max-w-xl space-y-4 px-margin pt-12">
+        <h1 className="text-xl font-semibold text-ink">
+          {signedOut
+            ? 'Sign in to open this session'
+            : error
+              ? 'This session could not be opened'
+              : 'Opening the session'}
+        </h1>
+        {!signedOut && error ? <p className="text-ink-2">{error}</p> : null}
         <div className="flex flex-wrap gap-2">
-          <Button asChild>
-            <a href="#/">Ask a question</a>
-          </Button>
-          <Button asChild variant="outline">
-            <a href="#/home">Your projects</a>
-          </Button>
+          {signedOut ? (
+            <Button asChild>
+              <a href="#/signin" onClick={() => rememberReturn(window.location.href)}>
+                Sign in
+              </a>
+            </Button>
+          ) : (
+            <Button asChild variant="outline">
+              <a href="#/home">Your projects</a>
+            </Button>
+          )}
         </div>
       </div>
     );

@@ -648,6 +648,9 @@ export function WaitingNotice({ task }: { task: Task }): JSX.Element | null {
   );
 }
 
+/** The largest file Attach sends; steering's upload route refuses more. */
+const ATTACH_LIMIT = 10 * 1024 * 1024;
+
 /** How long an armed Stop waits for the second click before it is quiet again. */
 const ARMED_MS = 4000;
 
@@ -789,6 +792,12 @@ export function Composer({
   }
   function attach(file: File): void {
     if (!onAttach) return;
+    // The upload route takes up to 10 MB; saying so here beats the server's
+    // "Request body is too large".
+    if (file.size > ATTACH_LIMIT) {
+      setAttachNote(`${file.name} is larger than 10 MB, the most one file can be.`);
+      return;
+    }
     setAttachNote(`Attaching ${file.name}…`);
     onAttach(file).then(
       (path) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arxivQuery, search } from './search.js';
+import { arxivQuery, arxivSynonym, search } from './search.js';
 
 const answer =
   (body: string, ok = true) =>
@@ -57,6 +57,18 @@ describe('steering: the literature connectors', () => {
 
   it('turns a source that is down into an error the worker can report', async () => {
     await expect(search('arxiv', 'x', answer('', false))).rejects.toThrow('HTTP 503');
+  });
+});
+
+describe('steering: the arXiv synonyms', () => {
+  it('also searches "growth rate" for a Stanley-Wilf limit, and nothing else for other words', () => {
+    expect(arxivSynonym('Stanley-Wilf limit 1324-avoiding permutations')).toBe(
+      'growth rate 1324-avoiding permutations',
+    );
+    expect(arxivSynonym('lower bound Stanley Wilf limits of 1324')).toBe(
+      'lower bound growth rate of 1324',
+    );
+    expect(arxivSynonym('Dyck paths by peaks')).toBeNull();
   });
 });
 

@@ -113,10 +113,33 @@ function blocks(feed: string): string[] {
   return [...feed.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map((match) => match[1] ?? '');
 }
 
+/**
+ * Names the literature uses for the same thing. A query in one is also run
+ * in the other: papers on the 1324 pattern's Stanley-Wilf limit call it its
+ * growth rate, and a search in the first words missed the 2017 and 2026
+ * bounds that the second finds at the top.
+ */
+const SYNONYMS: readonly (readonly [RegExp, string])[] = [
+  [/stanley[\s-]*wilf\s+limits?/iu, 'growth rate'],
+];
+
+/** The query in the literature's other words, or null when it has none. */
+export function arxivSynonym(query: string): string | null {
+  for (const [name, other] of SYNONYMS) {
+    if (name.test(query)) return query.replace(name, other);
+  }
+  return null;
+}
+
 async function arxiv(query: string, fetchImpl: Fetch, signal: AbortSignal): Promise<SearchResult> {
-  // Papers with every word first; when they are fewer than the limit, the
-  // list is filled with papers that have any of the words.
-  const every = blocks(await arxivFeed(arxivQuery(query, true), fetchImpl, signal));
+  // Papers with every word first, then with every word of the synonym query;
+  // when they are fewer than the limit, the list is filled with papers that
+  // have any of the words.
+  const other = arxivSynonym(query);
+  const every = [
+    ...blocks(await arxivFeed(arxivQuery(query, true), fetchImpl, signal)),
+    ...(other ? blocks(await arxivFeed(arxivQuery(other, true), fetchImpl, signal)) : []),
+  ];
   const any =
     every.length < ARXIV_LIMIT
       ? blocks(await arxivFeed(arxivQuery(query, false), fetchImpl, signal))

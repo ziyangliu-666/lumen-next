@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
 import { request, RequestFailure } from '@/core/api';
+import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
+import { Section } from '@/ui/section';
 
 interface Metadata {
   provider: 'openai';
@@ -83,62 +84,96 @@ export function Keys(): JSX.Element {
     void mutate('PUT');
   }
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>OpenAI API key</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4 text-sm">
-        <p className="text-muted-foreground">
+    // Refresh sits at the section's head, as on the other tabs, in the
+    // same outlined button: it was the one bold text link among them.
+    <Section
+      title="OpenAI API key"
+      // No Refresh when the server has no key store: there is nothing it
+      // could load.
+      actions={
+        state === 'disabled' ? undefined : (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending || state === 'loading'}
+            onClick={() => {
+              setError('');
+              setValue('');
+              setConfirm(false);
+              setState('loading');
+              setRevision((n) => n + 1);
+            }}
+          >
+            Refresh
+          </Button>
+        )
+      }
+    >
+      <div className="grid gap-4 text-sm">
+        <p className="text-ink-2">
           Your key is encrypted and never shown again. Only your account can use it. Calls use
           OpenAI’s gpt-4.1-nano model.
         </p>
-        <p className="text-muted-foreground">
-          OpenAI bills your own account for these calls. Lumen still records their estimated cost in
-          Wallet and applies your Lumen spending cap. Your key does not bypass approval.
+        <p className="text-ink-2">
+          OpenAI bills your own account for these calls. lumen still records their estimated cost in
+          Wallet and applies your lumen spending cap. Your key does not bypass approval.
         </p>
-        {state === 'loading' ? <p role="status">Loading key status…</p> : null}
-        {state === 'disabled' ? (
-          <p role="status">Personal keys are not enabled on this server.</p>
-        ) : null}
-        {error ? (
-          <p role="alert" className="text-gap">
-            {error}
+        {state === 'loading' ? (
+          <p role="status" className="text-ink-2">
+            Loading key status…
           </p>
         ) : null}
+        {state === 'disabled' ? (
+          <Alert role="status" title="Personal keys are not available on this server">
+            This server has no key store. Calls use the platform model when available.
+          </Alert>
+        ) : null}
+        {error ? <Alert title="Your key status is not known">{error}</Alert> : null}
         {notice ? (
-          <p role="status" className="text-keep">
+          <p role="status" className="text-ink">
             {notice}
           </p>
         ) : null}
         {state === 'ready' ? (
           <>
-            <p>
-              {metadata
-                ? `Key saved · updated ${new Date(metadata.updatedAt).toLocaleString()}`
-                : 'No saved key. Calls use the platform model when available.'}
+            <p className="text-ink">
+              {metadata ? (
+                <>
+                  Key saved. Updated{' '}
+                  <span className="font-mono tabular-nums">
+                    {new Date(metadata.updatedAt).toLocaleString()}
+                  </span>
+                  .
+                </>
+              ) : (
+                'No saved key. Calls use the platform model when available.'
+              )}
             </p>
-            <form onSubmit={submit} className="grid gap-3" aria-busy={pending}>
+            <form onSubmit={submit} className="grid max-w-md gap-2" aria-busy={pending}>
               <Label htmlFor="openai-key">
                 {metadata ? 'Replacement OpenAI key' : 'OpenAI key'}
               </Label>
-              <Input
-                id="openai-key"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                disabled={pending}
-                maxLength={16384}
-                required
-              />
-              <Button type="submit" disabled={pending || !value.trim()}>
-                {pending ? 'Please wait…' : metadata ? 'Replace key' : 'Save key'}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  id="openai-key"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  disabled={pending}
+                  maxLength={16384}
+                  className="min-w-0 flex-1 font-mono"
+                  required
+                />
+                <Button type="submit" disabled={pending || !value.trim()}>
+                  {pending ? 'Please wait…' : metadata ? 'Replace key' : 'Save key'}
+                </Button>
+              </div>
             </form>
             {metadata ? (
               confirm ? (
-                <div className="grid gap-2 rounded-md border p-3">
+                <div className="grid max-w-md gap-3 border border-ink p-4">
                   <p>Remove your saved key? Calls already sent to OpenAI are not cancelled.</p>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -156,31 +191,20 @@ export function Keys(): JSX.Element {
                   </div>
                 </div>
               ) : (
-                <Button variant="outline" disabled={pending} onClick={() => setConfirm(true)}>
-                  Remove saved key
-                </Button>
+                <div>
+                  <Button variant="outline" disabled={pending} onClick={() => setConfirm(true)}>
+                    Remove saved key
+                  </Button>
+                </div>
               )
             ) : null}
           </>
         ) : null}
-        <Button
-          variant="ghost"
-          disabled={pending || state === 'loading'}
-          onClick={() => {
-            setError('');
-            setValue('');
-            setConfirm(false);
-            setState('loading');
-            setRevision((n) => n + 1);
-          }}
-        >
-          Refresh status
-        </Button>
-        <p className="text-muted-foreground">
+        <p className="border-t border-rule-minor pt-4 text-ink-2">
           A rejected or unreadable saved key stops the call; it does not silently switch to a
           platform key. Deleting your account removes its saved key.
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   );
 }

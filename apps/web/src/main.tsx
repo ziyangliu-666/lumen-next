@@ -1,6 +1,6 @@
-import { StrictMode, type JSX } from 'react';
+import { StrictMode, useEffect, type JSX } from 'react';
 import { createRoot } from 'react-dom/client';
-import { StaffGuard } from './core/auth.js';
+import { StaffGuard, useCurrentAccount } from './core/auth.js';
 import { renderRoute, useHash, type Route } from './core/router.js';
 import { AppShell } from './core/shell.js';
 import { Landing } from './pages/landing/Landing.js';
@@ -48,12 +48,26 @@ const routes: readonly Route[] = [
   },
 ];
 
+/**
+ * An address no route knows, such as #/projects. Signed in, it goes to the
+ * projects: before, it drew the signed-out front page under the account's
+ * bar, which looked broken. Signed out, it is the front page.
+ */
+function UnknownRoute(): JSX.Element {
+  const { state } = useCurrentAccount();
+  const ready = state.status === 'ready';
+  useEffect(() => {
+    if (ready) window.location.replace('#/home');
+  }, [ready]);
+  return ready ? <></> : <Landing />;
+}
+
 function App(): JSX.Element {
   const path = useHash();
   return (
     <AppShell path={path} accountActions={<AccountActions />}>
       {renderRoute(routes, path, () => (
-        <Landing />
+        <UnknownRoute />
       ))}
     </AppShell>
   );

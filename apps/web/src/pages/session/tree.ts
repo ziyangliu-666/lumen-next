@@ -112,3 +112,30 @@ export function atFoot(box: {
 }): boolean {
   return box.scrollHeight - box.scrollTop - box.clientHeight <= FOOT_PX;
 }
+
+/**
+ * The name a person reads for each task: 'lumen' for the lead, the agent's
+ * name for a child, and a number after it when several children share one
+ * agent ('reader 1', 'reader 2'), counted in call-tree order. Without the
+ * number, three findings each said "Recorded by reader", and nothing tied a
+ * finding to one of the three reader rows.
+ */
+export function speakerNames(tasks: readonly Task[]): Map<string, string> {
+  const rows = treeRows(tasks).map((row) => row.task);
+  const total = new Map<string, number>();
+  for (const task of rows) {
+    if (task.parentId !== null) total.set(task.agent, (total.get(task.agent) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  const names = new Map<string, string>();
+  for (const task of rows) {
+    if (task.parentId === null) {
+      names.set(task.id, 'lumen');
+      continue;
+    }
+    const n = (seen.get(task.agent) ?? 0) + 1;
+    seen.set(task.agent, n);
+    names.set(task.id, (total.get(task.agent) ?? 0) > 1 ? `${task.agent} ${n}` : task.agent);
+  }
+  return names;
+}

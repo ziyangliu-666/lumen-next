@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
 import { Button } from '@/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/tabs';
+
+type Mode = 'forgot' | 'reset' | 'verify';
+const MODES: readonly { readonly value: Mode; readonly label: string }[] = [
+  { value: 'forgot', label: 'Request password reset' },
+  { value: 'reset', label: 'Enter reset code' },
+  { value: 'verify', label: 'Verify email' },
+];
+const isMode = (value: string): value is Mode => MODES.some((mode) => mode.value === value);
 
 /** Codes are pasted from email, never read from URLs or browser storage. */
 export function RecoveryPanel(): JSX.Element {
-  const [mode, setMode] = useState<'forgot' | 'reset' | 'verify'>('forgot');
+  const [mode, setMode] = useState<Mode>('forgot');
   const [enabled, setEnabled] = useState(false);
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -32,7 +40,7 @@ export function RecoveryPanel(): JSX.Element {
       .catch(() => undefined);
     return () => controller.abort();
   }, []);
-  function select(next: 'forgot' | 'reset' | 'verify'): void {
+  function select(next: Mode): void {
     setMode(next);
     setCode('');
     setPassword('');
@@ -97,86 +105,76 @@ export function RecoveryPanel(): JSX.Element {
       void send('/api/auth/reset-password', { code, newPassword: password });
     else void send('/api/me/email/verify', { code });
   }
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Password recovery and email verification</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={pending} onClick={() => select('forgot')}>
-            Request password reset
-          </Button>
-          <Button variant="outline" disabled={pending} onClick={() => select('reset')}>
-            Enter reset code
-          </Button>
-          <Button variant="outline" disabled={pending} onClick={() => select('verify')}>
-            Verify email
+  // The three tasks are one choice, so they are tabs: words with a rule under
+  // the current one, as in the composer's modes. Radix renders the children of
+  // the active panel only, so the shared body below mounts once and its field
+  // ids stay unique.
+  const panel = (
+    <div className="grid gap-4 pt-4">
+      {!enabled ? (
+        <p className="text-sm text-ink-2">
+          Mail actions are unavailable until configured on this server.
+        </p>
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-sm font-medium text-ink">
+          {error}
+        </p>
+      ) : null}
+      {message ? (
+        <p role="status" className="text-sm text-ink">
+          {message}
+        </p>
+      ) : null}
+      {mode === 'verify' ? (
+        <div className="grid justify-items-start gap-2">
+          <p className="text-sm text-ink-2">
+            Sign in first. A verification code is bound to your current account and email.
+          </p>
+          <Button
+            variant="outline"
+            disabled={pending || !enabled}
+            onClick={() => {
+              void send('/api/me/email/verification');
+            }}
+          >
+            Send verification email
           </Button>
         </div>
-        {!enabled ? (
-          <p className="text-sm text-muted-foreground">
-            Mail actions are unavailable until configured on this server.
-          </p>
-        ) : null}
-        {error ? (
-          <p role="alert" className="text-sm text-gap">
-            {error}
-          </p>
-        ) : null}
-        {message ? (
-          <p role="status" className="text-sm text-keep">
-            {message}
-          </p>
-        ) : null}
-        {mode === 'verify' ? (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Sign in first. A verification code is bound to your current account and email.
-            </p>
-            <Button
-              variant="outline"
-              disabled={pending || !enabled}
-              onClick={() => {
-                void send('/api/me/email/verification');
-              }}
-            >
-              Send verification email
-            </Button>
+      ) : null}
+      <form onSubmit={submit} className="grid gap-4">
+        {mode === 'forgot' ? (
+          <div className="grid gap-2">
+            <Label htmlFor="recovery-email">Account email</Label>
+            <Input
+              id="recovery-email"
+              type="email"
+              autoComplete="email"
+              required
+              maxLength={320}
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              disabled={pending}
+            />
           </div>
-        ) : null}
-        <form onSubmit={submit} className="space-y-3">
-          {mode === 'forgot' ? (
-            <>
-              <Label htmlFor="recovery-email">Account email</Label>
-              <Input
-                id="recovery-email"
-                type="email"
-                autoComplete="email"
-                required
-                maxLength={320}
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                disabled={pending}
-              />
-            </>
-          ) : (
-            <>
-              <Label htmlFor="recovery-code">Code from email</Label>
-              <Input
-                id="recovery-code"
-                autoComplete="off"
-                required
-                minLength={43}
-                maxLength={43}
-                value={code}
-                onChange={(event) => setCode(event.target.value.trim())}
-                disabled={pending}
-              />
-            </>
-          )}
-          {mode === 'reset' ? (
-            <>
+        ) : (
+          <div className="grid gap-2">
+            <Label htmlFor="recovery-code">Code from email</Label>
+            <Input
+              id="recovery-code"
+              autoComplete="off"
+              required
+              minLength={43}
+              maxLength={43}
+              value={code}
+              onChange={(event) => setCode(event.target.value.trim())}
+              disabled={pending}
+            />
+          </div>
+        )}
+        {mode === 'reset' ? (
+          <>
+            <div className="grid gap-2">
               <Label htmlFor="recovery-password">New password</Label>
               <Input
                 id="recovery-password"
@@ -188,6 +186,8 @@ export function RecoveryPanel(): JSX.Element {
                 onChange={(event) => setPassword(event.target.value)}
                 disabled={pending}
               />
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="recovery-confirm">Confirm new password</Label>
               <Input
                 id="recovery-confirm"
@@ -199,19 +199,45 @@ export function RecoveryPanel(): JSX.Element {
                 onChange={(event) => setConfirmation(event.target.value)}
                 disabled={pending}
               />
-            </>
-          ) : null}
-          <Button type="submit" disabled={pending || !enabled}>
-            {pending
-              ? 'Please wait…'
-              : mode === 'forgot'
-                ? 'Send reset email'
-                : mode === 'reset'
-                  ? 'Reset password'
-                  : 'Confirm email verification'}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+            </div>
+          </>
+        ) : null}
+        <Button type="submit" className="w-full" disabled={pending || !enabled}>
+          {pending
+            ? 'Please wait…'
+            : mode === 'forgot'
+              ? 'Send reset email'
+              : mode === 'reset'
+                ? 'Reset password'
+                : 'Confirm email verification'}
+        </Button>
+      </form>
+    </div>
+  );
+  return (
+    <section aria-labelledby="recovery-heading" className="grid gap-2">
+      <h2 id="recovery-heading" className="sr-only">
+        Password recovery and email verification
+      </h2>
+      <Tabs
+        value={mode}
+        onValueChange={(next: string) => {
+          if (isMode(next)) select(next);
+        }}
+      >
+        <TabsList aria-label="Recovery task" className="flex-wrap gap-x-6 gap-y-2">
+          {MODES.map((option) => (
+            <TabsTrigger key={option.value} value={option.value} disabled={pending}>
+              {option.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {MODES.map((option) => (
+          <TabsContent key={option.value} value={option.value}>
+            {panel}
+          </TabsContent>
+        ))}
+      </Tabs>
+    </section>
   );
 }

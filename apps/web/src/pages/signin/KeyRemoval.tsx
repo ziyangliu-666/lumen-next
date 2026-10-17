@@ -48,65 +48,78 @@ export function KeyRemoval({
     void remove();
   }
   return (
-    <div className="grid gap-4">
-      <h1 className="text-xl font-semibold">Remove your OpenAI key</h1>
-      <p className="text-sm text-muted-foreground">
-        This deletes only your saved key. It does not sign you in, delete your account or restore a
-        suspended account. Confirm using your account’s existing sign-in method. Calls already sent
-        are not cancelled.
-      </p>
+    <div className="grid gap-6">
+      <div className="grid gap-1">
+        <h1 className="text-xl font-semibold tracking-[-0.01em] text-ink">
+          Remove your OpenAI key
+        </h1>
+        <p className="text-sm text-ink-2">
+          This deletes only your saved key. It does not sign you in, delete your account or restore
+          a suspended account. Confirm using your account’s existing sign-in method. Calls already
+          sent are not cancelled.
+        </p>
+      </div>
       {message ? (
-        <p role="status" className="text-sm text-keep">
+        <p role="status" className="text-sm text-ink">
           {message}
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="text-sm text-gap">
+        <p role="alert" className="text-sm font-medium text-ink">
           {error}
         </p>
       ) : null}
-      <form onSubmit={submit} className="grid gap-3" aria-busy={pending}>
-        <Label htmlFor="removal-email">Account email</Label>
-        <Input
-          id="removal-email"
-          type="email"
-          autoComplete="username"
-          required
-          maxLength={320}
-          disabled={pending}
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <Label htmlFor="removal-password">Current password</Label>
-        <Input
-          id="removal-password"
-          type="password"
-          autoComplete="current-password"
-          required
-          maxLength={1024}
-          disabled={pending}
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        <Button variant="destructive" type="submit" disabled={pending}>
+      <form onSubmit={submit} className="grid gap-4" aria-busy={pending}>
+        <div className="grid gap-2">
+          <Label htmlFor="removal-email">Account email</Label>
+          <Input
+            id="removal-email"
+            type="email"
+            autoComplete="username"
+            required
+            maxLength={320}
+            disabled={pending}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="removal-password">Current password</Label>
+          <Input
+            id="removal-password"
+            type="password"
+            autoComplete="current-password"
+            required
+            maxLength={1024}
+            disabled={pending}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </div>
+        <Button variant="destructive" type="submit" className="w-full" disabled={pending}>
           Confirm removal with password
         </Button>
       </form>
-      {(['github', 'google'] as const)
-        .filter((provider) => providers[provider])
-        .map((provider) => (
-          <Button
-            key={provider}
-            variant="outline"
-            disabled={pending}
-            onClick={() => {
-              void remove(provider);
-            }}
-          >
-            Confirm removal with {provider === 'github' ? 'GitHub' : 'Google'}
-          </Button>
-        ))}
-      <Button variant="ghost" disabled={pending} onClick={onBack}>
+      {providers.github || providers.google ? (
+        <div className="grid gap-2">
+          {(['github', 'google'] as const)
+            .filter((provider) => providers[provider])
+            .map((provider) => (
+              <Button
+                key={provider}
+                variant="outline"
+                className="w-full"
+                disabled={pending}
+                onClick={() => {
+                  void remove(provider);
+                }}
+              >
+                Confirm removal with {provider === 'github' ? 'GitHub' : 'Google'}
+              </Button>
+            ))}
+        </div>
+      ) : null}
+      <Button variant="link" className="justify-self-start" disabled={pending} onClick={onBack}>
         Back to sign in
       </Button>
     </div>

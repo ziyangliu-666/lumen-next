@@ -43,7 +43,7 @@ describe('Account settings access', () => {
       const html = render(
         status === 'ready' ? { status, mode: 'stub', account } : { status, mode: 'stub' },
       );
-      expect(html).toContain('requires database-backed authentication');
+      expect(html).toContain('This server has no account database');
       expect(html).not.toContain('Account editor');
     },
   );

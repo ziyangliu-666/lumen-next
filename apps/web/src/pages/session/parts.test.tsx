@@ -1,7 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Step, Task } from '@lumen/contracts';
-import { CallTree, Composer, Findings, receiptOf, StepStream, WaitingNotice } from './parts';
+import {
+  CallTree,
+  Composer,
+  Files,
+  Findings,
+  receiptOf,
+  StepStream,
+  StopControl,
+  WaitingNotice,
+} from './parts';
 
 // Rendered to a string: no browser, no clicks, but every class of "the page
 // stopped drawing it" is caught here, which no other test does.
@@ -50,7 +59,7 @@ describe('session page: a tool step', () => {
     const html = stream([search]);
 
     expect(html).toContain('>search<');
-    expect(html).toContain('6 s · $0.0100');
+    expect(html).toContain('6 s, $0.0100');
   });
 
   it('draws every row: source, query, result', () => {
@@ -71,7 +80,10 @@ describe('session page: a tool step', () => {
     const html = stream([search]);
 
     expect(html).toContain('found nothing: </span>nothing');
-    expect(html).toMatch(/font-semibold[^"]*text-decide|text-decide[^"]*font-semibold/);
+    // Marked by its words, not by weight: a bold "nothing" read as an alert.
+    expect(html).not.toMatch(/font-semibold[^"]*text-ink[^"]*">nothing/);
+    // Red means "waits on you" and nothing else, so an empty row is never red.
+    expect(html).not.toMatch(/text-(signal|decide)/);
   });
 
   it('shows rows or output in place of the line of text, and the line when there is nothing else', () => {
@@ -125,17 +137,17 @@ describe('session page: the other blocks', () => {
     expect(html).toContain('2 in parallel');
     expect(html).toContain('what is known');
     expect(html).toContain('what changed');
-    expect(html).toContain('>running<');
+    expect(html).toContain('>Running<');
     expect(html).not.toContain('a later turn');
   });
 
-  it('opens the stream with what the task was asked: YOU for the lead, TASK for a child', () => {
-    expect(stream([])).toContain('>you<');
+  it('opens the stream with what the task was asked: You for the lead, Task for a child', () => {
+    expect(stream([])).toContain('>You<');
     const child = task('r1', 'lead');
     const html = renderToStaticMarkup(
       <StepStream task={child} steps={[]} tasks={[lead, child]} onSelect={noop} />,
     );
-    expect(html).toContain('>task<');
+    expect(html).toContain('>Task<');
     expect(html).toContain('title of r1');
   });
 
@@ -146,9 +158,29 @@ describe('session page: the other blocks', () => {
       step(2, 'reply', 'it holds at n = 11'),
     ]);
 
-    expect(html).toContain('push it to n = 11');
-    expect(html).toMatch(/bg-ground[^>]*>.*thinking/s);
-    expect(html).toMatch(/border-ink[^>]*>.*reply/s);
+    expect(html).toMatch(/data-step="you"[^>]*>.*push it to n = 11/s);
+    expect(html).toMatch(/data-step="thinking"[^>]*>.*that is 40 million permutations/s);
+    expect(html).toMatch(/data-step="reply"[^>]*>.*it holds at n = 11/s);
+    // Your turns sit on the well; the work hangs on a rule; the reply sits below it.
+    expect(html).toMatch(/data-step="you" class="[^"]*bg-well/);
+    expect(html).toMatch(/border-l[^>]*>.*data-step="thinking"/s);
+    expect(html).not.toMatch(/border-l[^>]*>(?:(?!<\/div>).)*data-step="reply"/s);
+  });
+
+  it('starts a new turn at each thing you say, and keeps the latest exchange at least a screen tall', () => {
+    const html = stream([
+      step(0, 'reply', 'first answer'),
+      step(1, 'you', 'push it to n = 11'),
+      step(2, 'reply', 'second answer'),
+    ]);
+
+    expect(html.match(/<article/g)).toHaveLength(4);
+    // The region opens at its end. With the latest exchange as tall as the
+    // region, that is the start of your latest turn.
+    expect(html).toMatch(
+      /<div data-latest="" class="min-h-full">.*push it to n = 11.*second answer/s,
+    );
+    expect(html).not.toMatch(/<div data-latest="" class="min-h-full">.*first answer/s);
   });
 });
 
@@ -204,7 +236,7 @@ describe('session page: the rail', () => {
     expect(html).toContain('>$0.0100<');
   });
 
-  it('lists findings under the agent that recorded them, and says so when there are none', () => {
+  it('lists findings with the agent that recorded them, and says so when there are none', () => {
     const html = renderToStaticMarkup(
       <Findings
         findings={[{ id: 'f1', taskId: 'r1', text: 'holds at n = 11' }]}
@@ -216,10 +248,10 @@ describe('session page: the rail', () => {
     expect(html).toContain('>reader<');
     expect(
       renderToStaticMarkup(<Findings findings={[]} tasks={[lead]} onSelect={noop} />),
-    ).toContain('Nothing recorded yet.');
+    ).toContain('None yet.');
   });
 
-  it('offers Steer and Stop while a run is going, and Send when it is not, each with a name', () => {
+  it('offers Steer while a run is going, and Send when it is not, each with a name', () => {
     const composer = (running: boolean, steerable = true): string =>
       renderToStaticMarkup(
         <Composer
@@ -228,20 +260,21 @@ describe('session page: the rail', () => {
           steerable={steerable}
           onSay={noop}
           onSteer={noop}
-          onStop={noop}
         />,
       );
 
-    expect(composer(true)).toContain('aria-label="Stop"');
+    // Stop is in the bar now (StopControl), not in the field.
+    expect(composer(true)).not.toContain('>Stop<');
     expect(composer(true)).toContain('aria-label="Steer"');
     expect(composer(true)).not.toContain('aria-label="Send"');
-    expect(composer(true)).toContain('aria-label="Steer the task shown"');
-    expect(composer(true)).toContain('Apply message');
-    expect(composer(true)).toContain('role="combobox"');
+    expect(composer(true)).toContain('>Steer the task shown<');
+    // When the steer lands: the composer's modes, one pressed.
+    expect(composer(true)).toMatch(/aria-pressed="true"[^>]*>At its next step</);
+    expect(composer(true)).toContain('At the end of its turn');
     expect(composer(true)).toContain('Steer this task before its next step…');
     expect(composer(false)).toContain('aria-label="Send"');
-    expect(composer(false)).toContain('aria-label="Say something to the lead"');
-    expect(composer(false)).not.toContain('role="combobox"');
+    expect(composer(false)).toContain('>Reply to lumen<');
+    expect(composer(false)).not.toContain('aria-pressed');
   });
 
   it.each([
@@ -249,23 +282,65 @@ describe('session page: the rail', () => {
     { disabled: false, steerable: false },
   ])('disables timing when the socket or the task cannot accept a steer: %j', (props) => {
     const html = renderToStaticMarkup(
-      <Composer {...props} running={true} onSay={noop} onSteer={noop} onStop={noop} />,
+      <Composer {...props} running={true} onSay={noop} onSteer={noop} />,
     );
-    expect(html).toMatch(/<button[^>]*role="combobox"[^>]*disabled=""/);
+    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*disabled=""/);
+    expect(html).toMatch(/<button[^>]*aria-label="Steer"[^>]*disabled=""/);
   });
 
   it('disables the field once the task shown is not the one running', () => {
     const html = renderToStaticMarkup(
-      <Composer
-        disabled={false}
-        running={true}
-        steerable={false}
-        onSay={noop}
-        onSteer={noop}
-        onStop={noop}
+      <Composer disabled={false} running={true} steerable={false} onSay={noop} onSteer={noop} />,
+    );
+    expect(html).toMatch(/<textarea[^>]*disabled=""/);
+    expect(html).toContain('nothing to steer');
+  });
+
+  it('keeps a new turn writable while the socket is down, and only sending is off', () => {
+    const html = renderToStaticMarkup(
+      <Composer disabled={true} running={false} steerable={false} onSay={noop} onSteer={noop} />,
+    );
+    expect(html).not.toMatch(/<textarea[^>]*disabled=""/);
+    expect(html).toMatch(/<button[^>]*aria-label="Send"[^>]*disabled=""/);
+  });
+});
+
+describe('session page: the bar and the well', () => {
+  // Outlined at every width: bare text on a desktop read as a weak control.
+  it('draws Stop as an outlined square and a word until it is armed', () => {
+    const html = renderToStaticMarkup(<StopControl disabled={false} onStop={noop} />);
+    expect(html).toContain('>Stop<');
+    expect(html).toContain('data-variant="outline"');
+    expect(html).not.toContain('Stop now?');
+  });
+
+  it('shows the three newest findings first, and offers the rest', () => {
+    const findings = [1, 2, 3, 4, 5].map((n) => ({
+      id: `f${n}`,
+      taskId: 'lead',
+      text: `claim ${n}`,
+    }));
+    const html = renderToStaticMarkup(
+      <Findings findings={findings} tasks={[lead]} onSelect={noop} />,
+    );
+    expect(html).toMatch(/claim 5.*claim 4.*claim 3/s);
+    expect(html).not.toContain('claim 2');
+    expect(html).toContain('Show all 5');
+    expect(html).toContain('Recorded by <span>lumen</span>');
+  });
+
+  it('lists the files newest first, marks a folder, and says so when there are none or they failed', () => {
+    const html = renderToStaticMarkup(
+      <Files
+        files={[
+          { name: 'old.py', virtualPath: '/mnt/output/old.py', kind: 'file', modifiedAt: 1 },
+          { name: 'results', virtualPath: '/mnt/output/results', kind: 'directory', modifiedAt: 2 },
+        ]}
       />,
     );
-    expect(html).toContain('disabled=""');
-    expect(html).toContain('nothing to steer');
+    expect(html).toMatch(/results\/.*old\.py/s);
+    expect(html).not.toContain('/mnt/');
+    expect(renderToStaticMarkup(<Files files={[]} />)).toContain('None yet.');
+    expect(renderToStaticMarkup(<Files files="failed" />)).toContain('could not be read');
   });
 });

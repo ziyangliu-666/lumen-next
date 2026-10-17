@@ -11,10 +11,16 @@ This page is the agreement that stops that. It is short on purpose.
   modules, no styled-components.
 - **shadcn/ui** (`new-york`, Radix primitives) for controls. The components are
   source files in `apps/web/src/ui/`, not a dependency. They are ours to edit.
-- **The palette comes from the annotated spec** in `docs/spec/index.html`. It
-  lives in `apps/web/src/styles/theme.css` and nowhere else.
-- **Dark by default.** `<html class="dark">`. Both themes are defined, so a
-  toggle later is one line, not a rewrite.
+- **The palette is "Raster"**, approved as a static prototype and reviewed in
+  rounds before the port. It lives in `apps/web/src/styles/theme.css` and
+  nowhere else.
+  Swiss: zero radius, a flush-left 12-column grid, black ink on white paper
+  (white on black in dark), a grey well for side panels, and one red that
+  means "waits on you" and nothing else.
+- **Light or dark follows the OS.** Key D toggles it and the choice persists
+  (`core/theme.ts`, `public/theme-init.js`).
+- **One screen.** The page never scrolls as a whole; a region inside it does
+  (`ScrollRegion`). The bar is the shell's; a page fills its slots.
 
 ## The five rules
 
@@ -39,55 +45,90 @@ Learn these names once and the app stays consistent without anyone policing it.
 
 | Meaning | Class |
 |---|---|
-| Page background | `bg-ground` |
-| A card, panel, or the header | `bg-surface` |
-| A well inside a card, a hover row | `bg-sunken` |
-| Heading text | `text-ink` |
-| Body text | `text-body` (the default) |
-| Secondary text, captions | `text-muted-foreground` |
-| Disabled, timestamps, the quietest text | `text-faint` |
-| Border | `border-border` (`border-rule-strong` for a control) |
-| The one accent: primary buttons, links, focus | `bg-primary` / `text-primary` |
-| Needs a person to decide | `text-decide` on `bg-decide-soft` |
-| Failed, missing, over cap | `text-gap` on `bg-gap-soft` |
-| Finished and kept | `text-keep` on `bg-keep-soft` |
-| Per-owner or per-series colour in a chart | `text-chart-1` … `text-chart-5` |
+| The page and the main content | `bg-paper` |
+| The second surface: side panels, a selected row on paper, code | `bg-well` |
+| A selected row on the well (paper in light, one step up in dark) | `bg-raised` |
+| Text, control borders, marks | `text-ink`, `border-ink` |
+| Secondary text, captions | `text-ink-2` |
+| Placeholders, the quietest text | `text-ink-3` |
+| A rule between regions / between items | `border-rule-major` / `border-rule-minor` |
+| Waits on you, and nothing else | `text-signal` (prefer `RunState state="waiting"`) |
+| The 13px hint line under a field | `text-caption` |
+| The page margin, the column gutter, the bar height | `px-margin`, `gap-gutter`, `h-bar` |
+
+The earlier names (`bg-surface`, `bg-sunken`, `text-muted-foreground`,
+`text-faint`, `text-decide`, `text-gap`, `text-keep` and their `-soft`
+backgrounds) still compile, mapped onto the palette above. Do not use them in
+new code. `gap` and `keep` are ink now: a failure is said in words, not in red.
+
+State is a mark and a word, never a coloured box:
+
+- A run: `RunState` (`@/ui/run-state`). Circles: waiting, running, finished, stopped.
+- A finding: `Verdict` (`@/ui/verdict`). Squares: open question, confirmed, dropped.
+
+A message about the page itself (a load failed, a feature is off on this
+server) is an `Alert` (`@/ui/alert`): an ink rule on the left, a short title,
+one sentence. Never a bare line of body text, and never a raw server string.
+Give it an action (Retry) only when the action can succeed.
+
+Copy is sentence case, with no middle-dot meta strings, no em dashes and no
+emoji.
 
 Money, IDs, timestamps and code are `font-mono`. Everything else inherits the
 sans stack; you never write `font-sans`.
 
 Spacing: stay on the 4px scale Tailwind gives you (`gap-2`, `p-4`, `p-6`).
-A page is `gap-4 p-6`-ish (comfortable) or `gap-2 p-4`-ish (dense). Pick one per
-page and hold it.
+Space that is not on the scale (the margin, the gutter, the bar) has a name.
+
+Import `cn` from `@/lib/utils`, not from the `cn` package. That one knows our
+font sizes; the package alone drops `text-caption` next to a text colour.
 
 ## The shape of a page
 
-Every page opens the same way, so a reader always knows where they are.
+The bar, the margin and the one screen come from `AppShell`. A page renders
+what goes inside it and nothing around it. There are two shapes.
+
+An app page (home, session, admin) is two surfaces, paper and well:
 
 ```tsx
 // Owner: <YOUR NAME>. Page: <NAME>.
 import type { JSX } from 'react';
-import { Button } from '@/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
-import { PageHeader } from '@/core/shell';
+import { BarCrumb } from '@/core/shell';
+import { ScrollRegion } from '@/ui/scroll-region';
+import { RegionName, SurfaceMain, Surfaces, SurfaceWell } from '@/ui/surfaces';
 
 export function Projects(): JSX.Element {
   return (
-    <>
-      <PageHeader title="Projects" description="One line of context." actions={<Button>New</Button>} />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card>…</Card>
-      </div>
-    </>
+    <Surfaces collapse="stack">
+      <BarCrumb>
+        <h1 className="text-sm font-semibold text-ink">Projects</h1>
+      </BarCrumb>
+      <SurfaceMain>
+        <RegionName count={3}>Projects</RegionName>
+        <ScrollRegion className="flex-1">…</ScrollRegion>
+      </SurfaceMain>
+      <SurfaceWell aria-label="New project and findings">…</SurfaceWell>
+    </Surfaces>
   );
 }
 ```
 
-The header, the width and the navigation come from `AppShell`. A page renders
-what goes inside the column and nothing around it.
+- `BarCrumb`, `BarStatus` and `BarActions` (`@/core/shell`) put the page's
+  breadcrumb, status and actions in the bar. Under 720px the shell gives the
+  breadcrumb and the status a line each; a page does not draw its own.
+- A signed-in page that is not a session names itself with `PageCrumb`
+  (`@/core/shell`): `<PageCrumb />` is "Projects", `<PageCrumb page="Settings" />`
+  is "Projects / Settings". Do not add an in-page title as well.
+- A row that opens something marks the open one with a 2px ink rule on its
+  left (and, on the well, the `bg-raised` fill). Hover is lighter than that,
+  never the same: a hovered row must not look open.
+- `collapse="stack"` puts the well under the paper below 1080px;
+  `collapse="sheet"` makes it a sheet that the page opens from `BarActions`.
 
-Every page in `apps/web/src/pages/` is already written this way. The closest one
-to what you are building is the fastest thing to read.
+A single-column page (settings, sign in) is `PageHeader` and then ruled
+`Section`s (`@/ui/section`), not cards.
+
+The closest page to what you are building is the fastest thing to read.
 
 ## Adding a component
 

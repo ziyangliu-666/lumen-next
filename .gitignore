@@ -13,3 +13,10 @@ coverage/
 
 # SandboxFs's default local volume (LUMEN_VOLUME_ROOT)
 apps/server/.data/
+
+# Session volumes written by a local server run without LUMEN_VOLUME_ROOT.
+.data/
+
+# Design prototypes and review rounds, kept on the designer's machine. The
+# app in apps/web is the one source of the design.
+design/

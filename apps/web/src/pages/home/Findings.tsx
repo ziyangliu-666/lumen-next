@@ -1,10 +1,19 @@
 import { useCallback, type JSX } from 'react';
+import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
+import { RegionName } from '@/ui/surfaces';
 import { sessionLink, type Finding } from './api';
+import { ago, useNow } from './ago';
 import { usePages } from './usePages';
 import { OpenProjectButton } from './OpenProjectButton';
 
+// The findings of one project, on the well under the new-project form. The
+// well is where the session page keeps findings too, so the surface that
+// means "what lumen produced" says the same on both pages.
+//
+// A finding carries no verdict on the wire yet, so the list shows the claim,
+// where it came from and when. The verdict mark joins it once the contract
+// has one; inventing "Open question" for every finding would be a false claim.
 export function Findings({
   projectId,
   title,
@@ -19,55 +28,87 @@ export function Findings({
     `/api/projects/${encodeURIComponent(projectId)}/findings`,
     shouldPoll,
   );
+  const now = useNow();
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between gap-4">
-        <CardTitle className="text-base">Findings · {title}</CardTitle>
+    <section aria-labelledby="latest-findings-name" className="pt-8 pb-8">
+      <div className="mb-4 flex items-baseline justify-between gap-4">
+        <div className="min-w-0">
+          <RegionName id="latest-findings-name" className="mb-0">
+            Latest findings
+          </RegionName>
+          {/* It wraps: cut with an ellipsis, it ended mid-word while the
+              findings under it wrapped in full. */}
+          <p className="text-caption break-words text-ink-2">From {title}</p>
+        </div>
+        {/* The same secondary button as every other refresh: as grey text
+            it did not read as something to press. */}
         <Button variant="outline" size="sm" onClick={state.refresh} disabled={state.loading}>
           {state.error ? 'Retry' : 'Refresh findings'}
         </Button>
-      </CardHeader>
-      <CardContent className="space-y-4" aria-busy={state.loading}>
+      </div>
+      <div aria-busy={state.loading}>
         {state.error && (
-          <p role="alert" className="text-gap">
+          <Alert title="The findings could not be loaded" className="mb-3">
             {state.error} {state.paused && 'Automatic retries paused. Choose Retry to try again.'}
-          </p>
+          </Alert>
         )}
         {state.loading && state.items.length === 0 && (
-          <p role="status" className="text-muted-foreground">
+          <p role="status" className="text-sm text-ink-2">
             Loading findings…
           </p>
         )}
         {!state.loading && !state.error && state.items.length === 0 && (
-          <p className="text-muted-foreground">
+          <p className="text-sm text-ink-2">
             No findings yet. Saved results will appear here as the research progresses.
           </p>
         )}
-        {state.items.map((finding) => (
-          <article key={finding.id} className="space-y-3 rounded-md border border-border p-4">
-            <p className="break-words whitespace-pre-wrap text-body">{finding.text}</p>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <time
-                className="font-mono text-xs text-faint"
-                dateTime={new Date(finding.createdAt).toISOString()}
+        {state.items.length > 0 && (
+          <ul>
+            {state.items.map((finding) => (
+              <li
+                key={finding.id}
+                // The same 8px inset and hover as the findings on the session
+                // page, so one list looks the same on both pages.
+                className="border-t border-rule-minor px-2 py-3 first:border-t-0 hover:bg-raised/50"
               >
-                {new Date(finding.createdAt).toLocaleString()}
-              </time>
-              <OpenProjectButton
-                projectId={projectId}
-                target={sessionLink(finding.sessionId, finding.taskId)}
-              >
-                Open source session
-              </OpenProjectButton>
-            </div>
-          </article>
-        ))}
+                <OpenProjectButton
+                  variant="plain"
+                  projectId={projectId}
+                  target={sessionLink(finding.sessionId, finding.taskId)}
+                >
+                  <span className="sr-only">Open the source session of: </span>
+                  {/* Regular weight and no project title on each one: the
+                      title is over the list once, and a column of bold
+                      paragraphs was a wall. */}
+                  <span className="line-clamp-3 text-sm break-words whitespace-pre-wrap text-ink">
+                    {finding.text}
+                  </span>
+                  <span className="mt-1 block text-caption text-ink-2">
+                    Recorded{' '}
+                    <time
+                      dateTime={new Date(finding.createdAt).toISOString()}
+                      title={new Date(finding.createdAt).toLocaleString()}
+                    >
+                      {ago(finding.createdAt, now)}
+                    </time>
+                  </span>
+                </OpenProjectButton>
+              </li>
+            ))}
+          </ul>
+        )}
         {state.hasMore && (
-          <Button variant="outline" onClick={state.loadMore} disabled={state.loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={state.loadMore}
+            disabled={state.loading}
+          >
             More findings
           </Button>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

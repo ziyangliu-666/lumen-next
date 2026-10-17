@@ -1,10 +1,10 @@
 // Owner: LU YI. Account content for the shell-owned Settings composition.
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
 import { Button } from '@/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { accountRequest as request } from './accountClient';
+import { Field, Section } from '@/ui/section';
 import { DeleteAccountSection } from './DeleteAccountSection';
 
 interface Account {
@@ -87,33 +87,32 @@ export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void
     onSignedOut();
   }
   return (
-    <Card className="gap-4 py-0">
-      <CardHeader className="flex-row items-center justify-between p-4 pb-0 md:flex md:px-6">
-        <CardTitle>Account</CardTitle>
-        {account ? <p className="text-sm text-muted-foreground">Role: {account.role}</p> : null}
-      </CardHeader>
-      <CardContent className="space-y-4 p-4 pt-0 md:px-6">
-        {error ? (
-          <p role="alert" className="rounded-md bg-gap-soft p-3 text-sm text-gap">
-            {error}
-          </p>
-        ) : null}
-        {message ? (
-          <p role="status" className="text-sm text-keep">
-            {message}
-          </p>
-        ) : null}
-        {!account ? (
-          <p className="text-muted-foreground">
-            {error ? 'Account unavailable.' : 'Loading account…'}
-          </p>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 md:gap-6">
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="account-current-password">
-                  Current password (required for sensitive changes)
-                </Label>
+    <div className="grid gap-10">
+      {error || message ? (
+        <div className="grid gap-2">
+          {error ? (
+            <p role="alert" className="text-sm font-medium text-ink">
+              {error}
+            </p>
+          ) : null}
+          {message ? (
+            <p role="status" className="text-sm text-ink">
+              {message}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {!account ? (
+        <p className="text-sm text-ink-2">{error ? 'Account unavailable.' : 'Loading account…'}</p>
+      ) : (
+        <>
+          <Section
+            title="Current password"
+            description="Required for sensitive changes: a new email or a new password."
+          >
+            <div className="grid max-w-md gap-4">
+              <Field>
+                <Label htmlFor="account-current-password">Current password</Label>
                 <Input
                   id="account-current-password"
                   type="password"
@@ -123,25 +122,29 @@ export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void
                   disabled={pending}
                   maxLength={1024}
                 />
-              </div>
-              <form
-                className="space-y-3"
-                onSubmit={(event) =>
-                  submit(event, async () => {
-                    const changedEmail = email.trim().toLowerCase() !== account.email;
-                    const updated = accountOf(
-                      await request('/api/me', 'PATCH', {
-                        displayName: name,
-                        ...(changedEmail ? { email, currentPassword } : {}),
-                      }),
-                    );
-                    setAccount(updated);
-                    setName(updated.displayName);
-                    setEmail(updated.email);
-                    setMessage('Profile updated.');
-                  })
-                }
-              >
+              </Field>
+            </div>
+          </Section>
+          <Section title="Profile" description={`Role: ${account.role}`}>
+            <form
+              className="grid max-w-md gap-4"
+              onSubmit={(event) =>
+                submit(event, async () => {
+                  const changedEmail = email.trim().toLowerCase() !== account.email;
+                  const updated = accountOf(
+                    await request('/api/me', 'PATCH', {
+                      displayName: name,
+                      ...(changedEmail ? { email, currentPassword } : {}),
+                    }),
+                  );
+                  setAccount(updated);
+                  setName(updated.displayName);
+                  setEmail(updated.email);
+                  setMessage('Profile updated.');
+                })
+              }
+            >
+              <Field>
                 <Label htmlFor="account-name">Name</Label>
                 <Input
                   id="account-name"
@@ -151,6 +154,8 @@ export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void
                   maxLength={80}
                   disabled={pending}
                 />
+              </Field>
+              <Field>
                 <Label htmlFor="account-email">Email</Label>
                 <Input
                   id="account-email"
@@ -161,27 +166,29 @@ export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void
                   maxLength={320}
                   disabled={pending}
                 />
-                <Button type="submit" disabled={pending}>
-                  Save profile
-                </Button>
-              </form>
-            </div>
-            <div className="space-y-4">
-              <form
-                className="space-y-3"
-                onSubmit={(event) =>
-                  submit(event, async () => {
-                    if (newPassword !== confirmation) throw new Error('Passwords do not match.');
-                    if (
-                      [...newPassword].length < 8 ||
-                      new TextEncoder().encode(newPassword).length > 1024
-                    )
-                      throw new Error('Use at least 8 characters and at most 1024 UTF-8 bytes.');
-                    await request('/api/me/password', 'POST', { currentPassword, newPassword });
-                    setMessage('Password changed. Other sessions have been signed out.');
-                  })
-                }
-              >
+              </Field>
+              <Button type="submit" className="justify-self-start" disabled={pending}>
+                Save profile
+              </Button>
+            </form>
+          </Section>
+          <Section title="Password">
+            <form
+              className="grid max-w-md gap-4"
+              onSubmit={(event) =>
+                submit(event, async () => {
+                  if (newPassword !== confirmation) throw new Error('Passwords do not match.');
+                  if (
+                    [...newPassword].length < 8 ||
+                    new TextEncoder().encode(newPassword).length > 1024
+                  )
+                    throw new Error('Use at least 8 characters and at most 1024 UTF-8 bytes.');
+                  await request('/api/me/password', 'POST', { currentPassword, newPassword });
+                  setMessage('Password changed. Other sessions have been signed out.');
+                })
+              }
+            >
+              <Field>
                 <Label htmlFor="account-new-password">New password</Label>
                 <Input
                   id="account-new-password"
@@ -193,6 +200,8 @@ export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void
                   disabled={pending}
                   maxLength={1024}
                 />
+              </Field>
+              <Field>
                 <Label htmlFor="account-confirm-password">Confirm new password</Label>
                 <Input
                   id="account-confirm-password"
@@ -204,37 +213,40 @@ export function AccountPanel({ onSignedOut }: { readonly onSignedOut: () => void
                   disabled={pending}
                   maxLength={1024}
                 />
-                <Button type="submit" disabled={pending}>
-                  Change password
-                </Button>
-              </form>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  disabled={pending}
-                  onClick={() => {
-                    void run(() => signout(false));
-                  }}
-                >
-                  Sign out
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={pending}
-                  onClick={() => {
-                    void run(() => signout(true));
-                  }}
-                >
-                  Sign out everywhere
-                </Button>
-              </div>
+              </Field>
+              <Button type="submit" className="justify-self-start" disabled={pending}>
+                Change password
+              </Button>
+            </form>
+          </Section>
+          <Section
+            title="Sessions"
+            description="Sign out everywhere ends the session on every device, this one too."
+          >
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  void run(() => signout(false));
+                }}
+              >
+                Sign out
+              </Button>
+              <Button
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  void run(() => signout(true));
+                }}
+              >
+                Sign out everywhere
+              </Button>
             </div>
-            <div className="md:col-span-2">
-              <DeleteAccountSection onDeleted={onSignedOut} />
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          </Section>
+          <DeleteAccountSection onDeleted={onSignedOut} />
+        </>
+      )}
+    </div>
   );
 }

@@ -14,6 +14,7 @@ import {
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
+import { Field, Section } from '@/ui/section';
 import { deleteOwnAccount, RECENT_SIGN_IN_MINUTES } from './accountDeletion';
 
 export interface DeleteAccountViewProps {
@@ -34,38 +35,35 @@ export function DeleteAccountView({
   onConfirm,
 }: DeleteAccountViewProps): JSX.Element {
   return (
-    <section aria-labelledby="delete-account-heading" className="space-y-3 border-t pt-4">
-      <h3 id="delete-account-heading" className="font-medium text-ink">
-        Delete account
-      </h3>
-      <p className="text-sm text-muted-foreground">
-        Deletion is immediate and cannot be undone. Your sign-in methods, sessions and personal
-        details are removed. Projects, research sessions and billing records are kept under an
-        anonymous placeholder.
-      </p>
+    <Section
+      title="Delete account"
+      description="Deletion is immediate and cannot be undone. Your sign-in methods, sessions and personal details are removed. Projects, research sessions and billing records are kept under an anonymous placeholder."
+    >
       {error ? (
-        <p role="alert" className="rounded-md bg-gap-soft p-3 text-sm text-gap">
+        <p role="alert" className="text-sm font-medium text-ink">
           {error}
         </p>
       ) : null}
-      <div className="space-y-2">
-        <Label htmlFor="delete-account-password">
-          Current password (leave empty if you sign in only with GitHub or Google and signed in
-          within the last {RECENT_SIGN_IN_MINUTES} minutes)
-        </Label>
+      <Field className="max-w-md">
+        <Label htmlFor="delete-account-password">Current password</Label>
         <Input
           id="delete-account-password"
           type="password"
           autoComplete="current-password"
+          aria-describedby="delete-account-password-hint"
           value={currentPassword}
           onChange={(event) => onPasswordChange(event.target.value)}
           disabled={pending}
           maxLength={1024}
         />
-      </div>
+        <p id="delete-account-password-hint" className="text-caption text-ink-2">
+          Leave it empty if you sign in only with GitHub or Google and signed in within the last{' '}
+          {RECENT_SIGN_IN_MINUTES} minutes.
+        </p>
+      </Field>
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant="destructive" disabled={pending}>
+          <Button variant="destructive" className="justify-self-start" disabled={pending}>
             {pending ? 'Deleting…' : 'Delete account'}
           </Button>
         </AlertDialogTrigger>
@@ -85,7 +83,7 @@ export function DeleteAccountView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </Section>
   );
 }
 

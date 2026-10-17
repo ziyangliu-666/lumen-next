@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@lumen/contracts';
-import { atFoot, childrenByStep, elapsed, took, toolLabel, treeRows, turnToSend } from './tree';
+import {
+  atFoot,
+  childrenByStep,
+  elapsed,
+  speakerNames,
+  took,
+  toolLabel,
+  treeRows,
+  turnToSend,
+} from './tree';
 
 const task = (id: string, parentId: string | null): Task => ({
   id,
@@ -153,5 +162,18 @@ describe('session page: when a new step pulls the stream down', () => {
     expect(atFoot({ scrollHeight: 1200, scrollTop: 600, clientHeight: 600 })).toBe(true);
     expect(atFoot({ scrollHeight: 1200, scrollTop: 560, clientHeight: 600 })).toBe(true);
     expect(atFoot({ scrollHeight: 1200, scrollTop: 300, clientHeight: 600 })).toBe(false);
+  });
+});
+
+describe('session page: the names of the speakers', () => {
+  it('numbers children that share an agent, in call-tree order, and names the lead lumen', () => {
+    const reader = (id: string): Task => ({ ...task(id, 'lead'), agent: 'reader' });
+    const names = speakerNames([
+      task('lead', null),
+      reader('r1'),
+      { ...task('c', 'lead'), agent: 'compute' },
+      reader('r2'),
+    ]);
+    expect([...names.values()]).toEqual(['lumen', 'reader 1', 'compute', 'reader 2']);
   });
 });

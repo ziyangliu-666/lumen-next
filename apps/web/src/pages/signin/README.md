@@ -6,13 +6,16 @@ Pending requests disable controls, duplicate submits are guarded, and passwords
 are cleared after attempts. Signup requires 8 Unicode code points. Users go to
 `#/home`; staff go to `#/admin`, protected by shell StaffGuard.
 
-AccountActions provides shell-injected Account and Sign out controls. Successful
+AccountActions provides shell-injected controls: the account avatar (initials of
+the display name) with the name beside it, which opens a menu with Projects,
+Settings, Admin (staff only) and Sign out. A development account signs out by
+dropping its cookie; it never calls the session signout route. Successful
 signup/password login also refreshes the shared account hook, so a persistent
 header updates without a reload. `main.tsx` passes it to the shell's
 `accountActions` slot.
 
 AccountSettings is mounted by `main.tsx` in the Settings Account tab
-(`#/settings/account`), reached from the header's Account link. It uses the shared
+(`#/settings/account`), reached from Settings in the account menu. It uses the shared
 account hook to guard AccountPanel, with loading, retry, signed-out and stub states.
 AccountPanel supports profile/password changes and signout-one/all. Successful
 mutations announce the existing shared auth event; refresh temporarily disables
@@ -22,6 +25,9 @@ provider-only account that signed in within 10 minutes), confirms in an
 AlertDialog, calls `DELETE /api/me` and then leaves for `#/signin`. No
 cross-page imports. See
 [the integration notes](../../../../../docs/identity/ACCOUNT_INTEGRATION.md).
+
+On a server without an account database (`/api/me` answers 404) the page says
+so first and offers the development account instead of forms that cannot work.
 
 The sign-in page is one focused column: a single heading, the configured
 providers, an "or use email" divider, the email form with one primary action, and

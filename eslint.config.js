@@ -21,6 +21,11 @@ export default tseslint.config(
       'apps/server/scripts/**',
       // The status board: one static page and its data, read by a browser as they are.
       'docs/status/**',
+      // Files the web server sends to the browser byte for byte (theme-init.js
+      // runs before the bundle, so it cannot be TypeScript).
+      'apps/web/public/**',
+      // Local design prototypes, not in the repository (see .gitignore).
+      'design/**',
       // Review records, kept as the agents returned them; the workflow scripts are not built.
       'reports/**',
       // Vendored shadcn/ui sources. They are updated by `npx shadcn add`, not by

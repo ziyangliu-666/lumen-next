@@ -187,6 +187,31 @@ describe('createWorker: the conversation', () => {
     expect(stepsOf(report).at(-1)).toEqual(['reply', expect.stringContaining('Stopped after 12')]);
   });
 
+  it('runs no tool and calls the model no more once the task is stopped, and still charges the call', async () => {
+    const model = scripted(
+      {
+        text: 'Listing first.',
+        toolCalls: [toolCall('list_files', { path: '/mnt/workspace' })],
+        cost: { dollars: 0.002 },
+      },
+      { text: 'never asked' },
+    );
+    const report = fakeReport();
+    // The stop lands while the first model call is in flight.
+    const stopped = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+
+    await createWorker({ volumeRoot, context, registry, model }).run(
+      taskOf({ agent: 'reader' }),
+      'x',
+      { ...asReport(report), stopped },
+    );
+
+    expect(model.requests).toHaveLength(1);
+    expect(stepsOf(report)).toEqual([['thinking', 'Listing first.']]);
+    expect(report.appendStep.mock.calls[0]![3]).toMatchObject({ cost: { dollars: 0.002 } });
+    expect(context).not.toHaveBeenCalled();
+  });
+
   it('writes why on the trace and fails the task when the model cannot be reached', async () => {
     const model: ModelProvider = {
       name: 'broken',

@@ -227,6 +227,7 @@ export class Kernel {
       delegate: (taskId, work) => this.delegate(taskId, work),
       recordFinding: (taskId, text) => this.recordFinding(taskId, text),
       addSpend: (taskId, amount, reason) => this.addSpend(taskId, amount, reason),
+      stopped: async (taskId) => (await this.trace.task(taskId))?.status === 'stopped',
     };
   }
 
@@ -477,8 +478,16 @@ export class Kernel {
     } catch (error) {
       // A fan-out the guard escalated ends the worker's turn with an error, and
       // the task is waiting for the approval: that is not a failure.
-      if ((await this.trace.task(task.id).catch(() => null))?.status === 'waiting') {
+      const status = (await this.trace.task(task.id).catch(() => null))?.status;
+      if (status === 'waiting') {
         log.info({ agent: task.agent }, 'task waits for an approval');
+        return;
+      }
+      // Stopped while a model call was in flight: the call came back asking
+      // to delegate, the delegation was refused because the task had
+      // stopped, and the task was marked failed. The person's stop stands.
+      if (status === 'stopped') {
+        log.info({ agent: task.agent, err: error }, 'task stopped during its turn');
         return;
       }
       // The record itself may be what failed. A run is never awaited by a

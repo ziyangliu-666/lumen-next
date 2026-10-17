@@ -202,6 +202,9 @@ function stringArg(call: ToolCall, name: string): string {
   return value;
 }
 
+/** What a stopped reader hands its parent, which has also been stopped. */
+const STOPPED_ANSWER = 'Stopped by the user before this task finished.';
+
 /** What a listing of /mnt shows: the three folders, and what each is for. */
 const MNT_LISTING = [
   'dir \t/mnt/upload (what the user attached; read only)',
@@ -480,7 +483,12 @@ export function createWorker(options: WorkerOptions): Worker {
     const tools = turn.isLead ? LEAD_TOOLS : READER_TOOLS;
     let retold = false;
     let partial = '';
+    // A stop is read before each model call and each tool. What a call in
+    // flight cost is still charged: its receipt is written before the check.
+    const stopped = async (): Promise<boolean> =>
+      (await turn.report.stopped?.(turn.task.id)) ?? false;
     for (let round = 0; round < MAX_ROUNDS; round++) {
+      if (await stopped()) return STOPPED_ANSWER;
       await turn.land('next-step');
       // Logged with the task's ids: model, tokens, cost, duration, never the text.
       const completion = await withLog(model, turn.report.log).complete({
@@ -560,6 +568,7 @@ export function createWorker(options: WorkerOptions): Worker {
         toolCalls: completion.toolCalls,
       });
       for (const call of completion.toolCalls) {
+        if (await stopped()) return STOPPED_ANSWER;
         turn.messages.push({ role: 'tool', toolCallId: call.id, content: await turn.call(call) });
       }
     }

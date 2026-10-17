@@ -51,6 +51,13 @@ export interface WorkerReport {
    * to its ancestors is the kernel's.
    */
   addSpend(taskId: string, amount: Money, reason: string): Promise<void>;
+  /**
+   * Whether the person stopped the task. A worker asks before each model call
+   * and each tool: a stop marks the task at once, and readers otherwise went
+   * on calling the model and running commands for seconds after it. A worker
+   * that does not ask runs its turn to the end, and the stop still stands.
+   */
+  stopped?(taskId: string): Promise<boolean>;
 }
 
 export interface Worker {

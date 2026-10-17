@@ -40,9 +40,18 @@ const step = (index: number, kind: Step['kind'], text: string, detail?: Step['de
 const noop = (): void => undefined;
 const lead = task('lead', null);
 
-function stream(steps: Step[], tasks: Task[] = [lead]): string {
+// A running lead, so its work is open: these tests read the steps themselves.
+const live = task('lead', null, { status: 'running' });
+
+function stream(steps: Step[], tasks: Task[] = [live]): string {
+  const shown = tasks.find((candidate) => candidate.id === 'lead') ?? live;
   return renderToStaticMarkup(
-    <StepStream task={lead} steps={steps} tasks={tasks} onSelect={noop} />,
+    <StepStream
+      task={{ ...shown, status: 'running' }}
+      steps={steps}
+      tasks={tasks}
+      onSelect={noop}
+    />,
   );
 }
 
@@ -143,8 +152,9 @@ describe('session page: the other blocks', () => {
     expect(html).not.toContain('a later turn');
   });
 
-  it('opens the stream with what the task was asked: You for the lead, Task for a child', () => {
-    expect(stream([])).toContain('>You<');
+  it('opens the stream with what the task was asked, named only on a child: Task', () => {
+    // The lead's question is a bubble with no heading, as in chat products.
+    expect(stream([])).not.toContain('>You<');
     const child = task('r1', 'lead');
     const html = renderToStaticMarkup(
       <StepStream task={child} steps={[]} tasks={[lead, child]} onSelect={noop} />,
@@ -153,20 +163,23 @@ describe('session page: the other blocks', () => {
     expect(html).toContain('title of r1');
   });
 
-  it('draws you, thinking and reply each in its own block', () => {
+  it("draws your words as a bubble, and folds an answered turn's work into one line", () => {
     const html = stream([
       step(0, 'you', 'push it to n = 11'),
-      step(1, 'thinking', 'that is 40 million permutations'),
+      step(1, 'thinking', 'that is 40 million permutations', { durationMs: 34000 }),
       step(2, 'reply', 'it holds at n = 11'),
     ]);
-
-    expect(html).toMatch(/data-step="you"[^>]*>.*push it to n = 11/s);
-    expect(html).toMatch(/data-step="thinking"[^>]*>.*that is 40 million permutations/s);
+    expect(html).toMatch(/data-step="you" class="[^"]*bg-well[^"]*"[^>]*>.*push it to n = 11/s);
     expect(html).toMatch(/data-step="reply"[^>]*>.*it holds at n = 11/s);
-    // Your turns sit on the well; the work hangs on a rule; the reply sits below it.
-    expect(html).toMatch(/data-step="you" class="[^"]*bg-well/);
-    expect(html).toMatch(/border-l[^>]*>.*data-step="thinking"/s);
-    expect(html).not.toMatch(/border-l[^>]*>(?:(?!<\/div>).)*data-step="reply"/s);
+    // Answered: the work is one line that opens, and its steps are not drawn.
+    expect(html).toMatch(/aria-expanded="false"[^>]*>Worked for 34 s/);
+    expect(html).not.toContain('that is 40 million permutations');
+  });
+
+  it('keeps the work of a turn still running open, to watch', () => {
+    const html = stream([step(0, 'you', 'go'), step(1, 'thinking', 'counting now')]);
+    expect(html).toMatch(/aria-expanded="true"[^>]*>Working/);
+    expect(html).toMatch(/border-l[^>]*>.*data-step="thinking"[^>]*>.*counting now/s);
   });
 
   it('starts a new turn at each thing you say, and keeps the latest exchange at least a screen tall', () => {

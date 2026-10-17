@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ReplyFiles, ReplyText, tablesApart } from './text';
@@ -55,5 +57,20 @@ describe('ReplyText', () => {
     expect(out).not.toContain('<script');
     expect(out).not.toContain('<img');
     expect(out).not.toContain('href="javascript');
+  });
+});
+
+describe('KaTeX', () => {
+  it('loads the stylesheet of the same version that rehype-katex renders with', () => {
+    // Two versions name their classes differently: with 0.19's CSS over
+    // 0.16's HTML every fraction and exponent was drawn at full size, on top
+    // of each other.
+    const here = createRequire(import.meta.url);
+    const fromPlugin = createRequire(here.resolve('rehype-katex'));
+    const version = (path: string): string =>
+      (JSON.parse(readFileSync(path, 'utf8')) as { version: string }).version;
+    expect(version(here.resolve('katex/package.json'))).toBe(
+      version(fromPlugin.resolve('katex/package.json')),
+    );
   });
 });

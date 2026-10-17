@@ -591,6 +591,7 @@ export function Session(): JSX.Element {
       <SurfaceMain>
         <ScrollRegion
           as="section"
+          fades={false}
           ref={streamBox}
           tabIndex={-1}
           onScroll={(event) => {

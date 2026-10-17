@@ -128,6 +128,34 @@ describe('session: routes', () => {
     expect(theirs.statusCode).toBe(404);
   });
 
+  it("lists a project's sessions with their opening question, the caller's only", async () => {
+    const { app: server, slice } = await build();
+    for (const text of ['first question', 'second question']) {
+      await server.inject({
+        method: 'POST',
+        url: '/api/projects/p1/sessions',
+        headers: AUTH,
+        payload: { text },
+      });
+    }
+    await server.inject({
+      method: 'POST',
+      url: '/api/projects/p1/sessions',
+      headers: { authorization: 'stub acc-2:user' },
+      payload: { text: 'someone else' },
+    });
+    await slice.kernel.idle();
+
+    const listed = await server.inject({
+      method: 'GET',
+      url: '/api/projects/p1/sessions',
+      headers: AUTH,
+    });
+    expect(listed.statusCode).toBe(200);
+    const titles = listed.json<{ items: { title: string }[] }>().items.map((item) => item.title);
+    expect(titles.sort()).toEqual(['first question', 'second question']);
+  });
+
   it('stops a session and answers 204', async () => {
     const { app: server } = await build();
     const started = await server.inject({

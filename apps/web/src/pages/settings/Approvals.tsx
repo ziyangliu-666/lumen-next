@@ -126,8 +126,13 @@ export function Approvals(): JSX.Element {
                 </div>
               ) : (
                 <p role="status" className="text-sm text-ink-2">
-                  {row.status === 'rejected' ? 'Rejected.' : 'Approved for this operation.'}{' '}
-                  {row.resumePending ? 'Resuming…' : 'Done.'}
+                  {row.status === 'rejected'
+                    ? row.resumePending
+                      ? 'Rejected. Stopping the task…'
+                      : 'Rejected. The task stopped.'
+                    : row.resumePending
+                      ? 'Approved. Resuming…'
+                      : 'Approved. The task went on.'}
                 </p>
               )}
             </li>

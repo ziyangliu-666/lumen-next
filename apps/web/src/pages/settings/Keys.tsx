@@ -64,11 +64,7 @@ export function Keys(): JSX.Element {
         ...(method === 'PUT' ? { json: { value: submitted } } : {}),
         cache: 'no-store',
       });
-      setNotice(
-        method === 'PUT'
-          ? 'Key saved. It will be used on the next model call.'
-          : 'Key removed. Future calls use the platform model when available.',
-      );
+      setNotice(method === 'PUT' ? 'Key saved.' : 'Key removed.');
       setConfirm(false);
       setState('loading');
       setRevision((n) => n + 1);

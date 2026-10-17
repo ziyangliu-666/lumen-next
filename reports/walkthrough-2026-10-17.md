@@ -98,6 +98,8 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | B2 | A follow-up turn over the cap | **fixed** | "Not run: the budget could not be checked." The kernel gave billing the whole conversation as the reason, and billing refuses one over 2,000 characters; the guard's error was swallowed without a log. A first question over 2,000 characters failed the same way. | The budget is told the person's latest words, cut to 300 characters; a failed check is logged with its cause. Now the turn waits, Wallet lists the request, and Approve once resumes it to the end. |
 | B3 | The field while a task waits for approval | **fixed** | It said "This task has finished". | "Nothing to steer right now". |
 | B4 | Test-mode top-up | **todo** | This server has no Stripe test key; the off state shows. | Needs a Stripe test key on a test server. |
+| B5 | Reject an approval request | **fixed** | Reject works: the turn says "Not run: approval rejected.", the task stops, and the field takes a new turn. Wallet then said "Rejected. Resuming…". | "Rejected. Stopping the task…", then "Rejected. The task stopped." Approve reads "Approved. Resuming…". |
+| B6 | Keys: save a key, run a turn with it, remove it | **fixed** | Save hides the key and says it is saved; a refused key stops the turn with no second call on the platform key; removal works. The stop said OpenAI's own message, a masked key and a link to OpenAI. The notices said the same thing twice. | "Stopped: the model key was refused. If you saved an OpenAI key, replace it in Settings, Keys." and "Key saved." / "Key removed." Note: the personal key goes to api.openai.com whatever the server's model URL; the test sent a random string there. |
 
 ## Entry page against ChatGPT, Claude and Mistral
 
@@ -108,10 +110,10 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | E3 | "+" to attach before the first message | Attach on the landing and on New project. The files go to the new project right after it is created, and the question names them. Tested: a CSV attached on the landing was read and matched to A001006. | **fixed** |
 | E4 | A greeting for the person | "Good evening, Ada." when signed in; the promise stays for a first visit. | **fixed** |
 | E5 | Sign up beside Sign in | On a server with accounts; checked on the local account server. A development server has none to create. | **fixed** |
-| E6 | Model picker | Not offered. A server runs one model, set by its operator; the ledger prices each call by that model. | **open** |
-| E7 | Voice input | Not offered. Dictation of formulas and sequences is poor, and it needs a speech service outside the product. | **open** |
+| E6 | Model picker | Not offered. It needs a list of allowed models in the server's settings, the model kept with each session (a migration), a contracts change and a model chosen per call. Which models, at what price, is the operator's decision. | **open, decision** |
+| E7 | Voice input | A microphone in the field where the browser has speech recognition (Chrome, Edge, Safari). The words go into the field; nothing is sent. Checked with a stand-in recogniser. | **fixed** |
+| E8 | Several chats in a project | Sessions in the session page's panel, newest first, and New session, which turns the field into the first question of a new session. Tested: a second session read the first one's kept catalan.csv; the list goes back to the first. | **fixed** |
 
 ## Still to try
 
 - Approvals and top-ups with a billing database (staging).
-- A second session in a project. The client has `startSession`, but nothing calls it, so a project has one session and every reply continues it. Offering it needs a list of a project's sessions, or the earlier ones become unreachable: a product decision, not a fix.

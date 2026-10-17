@@ -748,6 +748,70 @@ export function Findings({
   );
 }
 
+/** A session's state in the list, in the words the bar uses. */
+const SESSION_WORD: Record<Task['status'], string> = {
+  queued: 'Queued',
+  running: 'Running',
+  waiting: 'Waiting on you',
+  ended: 'Finished',
+  stopped: 'Stopped',
+  failed: 'Failed',
+};
+
+/** One of a project's sessions, as the sessions route lists it. */
+export interface ProjectSession {
+  readonly id: string;
+  readonly title: string;
+  readonly status: Task['status'];
+  readonly startedAt: number;
+}
+
+/**
+ * The project's sessions, newest first, and New session. A project holds
+ * more than one: each starts from its own question, and the kept files are
+ * the project's, so a later session works on what an earlier one saved.
+ * Without this list a reply only ever continued the one session.
+ */
+export function Sessions({
+  sessions,
+  current,
+  starting,
+  onNew,
+}: {
+  sessions: readonly ProjectSession[];
+  current: string;
+  /** The field is set to start a new session. */
+  starting: boolean;
+  onNew: () => void;
+}): JSX.Element {
+  return (
+    <div className="space-y-3">
+      <ul>
+        {[...sessions]
+          .sort((a, b) => b.startedAt - a.startedAt)
+          .map((item) => (
+            <li key={item.id} className="border-t border-rule-minor first:border-t-0">
+              <a
+                href={`?session=${encodeURIComponent(item.id)}#/session`}
+                aria-current={item.id === current ? 'page' : undefined}
+                className={cn(
+                  'flex items-baseline justify-between gap-4 py-2 text-sm hover:underline',
+                  item.id === current ? 'font-medium text-ink' : 'text-ink-2',
+                )}
+              >
+                <span className="truncate">{item.title}</span>
+                <span className="shrink-0 text-caption">{SESSION_WORD[item.status]}</span>
+              </a>
+            </li>
+          ))}
+      </ul>
+      <Button variant="outline" size="sm" aria-pressed={starting} onClick={onNew}>
+        {starting ? 'Cancel new session' : 'New session'}
+      </Button>
+    </div>
+  );
+}
+
 /** A file or folder the project has written, as the files route lists it. */
 export interface ProjectFile {
   readonly name: string;
@@ -1034,6 +1098,7 @@ export function Composer({
   shownAgent = null,
   onAttach,
   prefill,
+  newSession = false,
 }: {
   /** The socket is down or the account is not ready: nothing can be sent. */
   disabled: boolean;
@@ -1057,6 +1122,8 @@ export function Composer({
   onAttach?: ((file: File) => Promise<string>) | undefined;
   /** Text put in the field from outside (Edit on a message); `key` changes each time. */
   prefill?: { readonly text: string; readonly key: number } | undefined;
+  /** The field starts a new session in this project instead of replying. */
+  newSession?: boolean;
 }): JSX.Element {
   const [draft, setDraft] = useState('');
   // A new prefill replaces the draft during render, not in an effect, so
@@ -1077,7 +1144,8 @@ export function Composer({
   // Blocked for a reason a run.status can change without a fresh render of
   // this form's own props, so this is computed at submit time, not baked into
   // one boolean passed in.
-  const blocked = disabled || (running && !steerable);
+  // A new session does not wait on this one: it can start while this runs.
+  const blocked = disabled || (!newSession && running && !steerable);
   function submit(): void {
     // Enter submits too. Nothing is sent, and the text is kept, while the
     // socket is down, or the root is busy with a task that is not the one
@@ -1085,7 +1153,7 @@ export function Composer({
     const typed = turnToSend(draft || (attached.length ? 'Read what I attached.' : ''), blocked);
     if (typed === null) return;
     const text = attached.length ? `${typed}\n\nAttached: ${attached.join(', ')}` : typed;
-    if (running) onSteer(text, 'next-step');
+    if (running && !newSession) onSteer(text, 'next-step');
     else onSay(text);
     setDraft('');
     setAttached([]);
@@ -1118,14 +1186,16 @@ export function Composer({
   return (
     <Field
       name="say"
-      label={running ? 'Steer the task shown' : 'Reply to lumen'}
+      label={newSession ? 'New session' : running ? 'Steer the task shown' : 'Reply to lumen'}
       placeholder={
-        running
-          ? steerable
-            ? `Steer ${shownAgent ?? 'lumen'}…`
-            : // Not running: finished, stopped, or waiting for an approval.
-              'Nothing to steer right now'
-          : 'Reply to lumen…'
+        newSession
+          ? 'Start a new session in this project…'
+          : running
+            ? steerable
+              ? `Steer ${shownAgent ?? 'lumen'}…`
+              : // Not running: finished, stopped, or waiting for an approval.
+                'Nothing to steer right now'
+            : 'Reply to lumen…'
       }
       value={draft}
       onValueChange={setDraft}
@@ -1133,9 +1203,9 @@ export function Composer({
       // The text stays typeable while the socket is down, so a steer can be
       // drafted for when it is back.
       // Only a task that is not running has nothing to steer at all.
-      disabled={running && !steerable}
+      disabled={!newSession && running && !steerable}
       sendDisabled={blocked}
-      sendLabel={running ? 'Steer' : 'Send'}
+      sendLabel={newSession ? 'Start the session' : running ? 'Steer' : 'Send'}
       hint={hint}
       {...(onAttach ? { onAttach: attach } : {})}
       attachments={attached.map((path) => path.replace(/^\/mnt\/upload\//, ''))}

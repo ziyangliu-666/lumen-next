@@ -1,6 +1,7 @@
 import type { StepDetail, Task } from '@lumen/contracts';
 import type { Worker, WorkerReport } from '../../core/domain/worker.js';
 import {
+  ModelError,
   nullModel,
   withLog,
   type Message,
@@ -586,7 +587,14 @@ export function createWorker(options: WorkerOptions): Worker {
       } catch (error) {
         // Throwing marks the task failed; the trace should also say why, in
         // words, where the user is already looking.
-        const why = error instanceof Error ? error.message : String(error);
+        // A refused key is said in the product's words. The vendor's own
+        // message named a masked key and sent the person to OpenAI's site.
+        const why =
+          error instanceof ModelError && error.kind === 'auth'
+            ? 'the model key was refused. If you saved an OpenAI key, replace it in Settings, Keys.'
+            : error instanceof Error
+              ? error.message
+              : String(error);
         await report.appendStep(task.id, 'reply', `Stopped: ${why}`).catch(() => undefined);
         throw error;
       } finally {

@@ -52,6 +52,14 @@ export function sessionRoutes(
       return reply.status(201).send(snapshot);
     });
 
+    // The project's sessions, for the page's list of them: a project holds
+    // more than one, and without a list an earlier one could not be reached.
+    app.get<{ Params: { id: string } }>('/api/projects/:id/sessions', async (request) => {
+      const principal = requireUser(request);
+      await requireProject?.(principal, request.params.id);
+      return { items: await kernel.sessionsOf(request.params.id, principal) };
+    });
+
     app.get<{ Params: { id: string } }>('/api/sessions/:id', (request) =>
       kernel.snapshot(request.params.id, requireUser(request)),
     );

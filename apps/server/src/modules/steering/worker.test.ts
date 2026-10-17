@@ -136,7 +136,7 @@ describe('createWorker: the conversation', () => {
     );
 
     expect(report.appendStep).toHaveBeenCalledWith('task-1', 'reply', 'It was the config.', {
-      tool: 'scripted',
+      tool: 'model: scripted-1',
       durationMs: 3,
       cost: { dollars: 0.001 },
     });

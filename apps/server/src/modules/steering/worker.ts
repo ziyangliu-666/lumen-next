@@ -461,7 +461,11 @@ export function createWorker(options: WorkerOptions): Worker {
         maxTokens: MAX_TOKENS,
       });
       const receipt: StepDetail = {
-        tool: model.name,
+        // The ledger's reason for this charge. The same words as a call
+        // charged without a step (addSpend below): the ledger showed one
+        // call as "openai" and the next as "model: gpt-4.1-nano-…", which
+        // read as two charges for one call.
+        tool: `model: ${completion.model}`,
         durationMs: completion.durationMs,
         cost: completion.cost,
       };

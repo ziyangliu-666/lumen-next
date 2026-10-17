@@ -48,7 +48,7 @@ export class ProjectService {
     const project: Project = {
       id: randomUUID(),
       accountId: principal.accountId,
-      title: [...question.replace(/\s+/gu, ' ')].slice(0, 120).join(''),
+      title: titleOf(question),
       mode,
       createdAt: Date.now(),
       lastOpenedAt: null,
@@ -193,4 +193,20 @@ export class ProjectService {
       pollAfterMs,
     };
   }
+}
+
+/** The longest project title, in characters. */
+const TITLE_LIMIT = 120;
+
+/**
+ * A project is named by its first question. A long question is cut at the
+ * last whole word and marked with an ellipsis: cut at 120 characters, "and
+ * save the table" became "and save the t", which read as a typo.
+ */
+export function titleOf(question: string): string {
+  const flat = [...question.replace(/\s+/gu, ' ').trim()];
+  if (flat.length <= TITLE_LIMIT) return flat.join('');
+  const head = flat.slice(0, TITLE_LIMIT - 1).join('');
+  const space = head.lastIndexOf(' ');
+  return `${(space > TITLE_LIMIT / 2 ? head.slice(0, space) : head).replace(/[\s,;:.]+$/u, '')}…`;
 }

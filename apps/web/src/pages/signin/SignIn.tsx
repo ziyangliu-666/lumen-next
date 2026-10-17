@@ -1,8 +1,10 @@
 // Owner: LU YI. Page: Sign in / sign up.
-import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type JSX, type ReactNode } from 'react';
+import { useCurrentAccount } from '@/core/auth';
+import { DevelopmentSignIn } from '@/core/devSignIn';
 import { PageHeader } from '@/core/shell';
+import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
-import { Card, CardContent } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Separator } from '@/ui/separator';
@@ -11,7 +13,69 @@ import { KeyRemoval } from './KeyRemoval';
 import { RecoveryPanel } from './RecoveryPanel.js';
 import { offersProviders, ProviderSignIn, type ProviderStatus } from './ProviderSignIn.js';
 
+/**
+ * The narrow form column every sign-in view shares. It sits flush left on the
+ * 12-column grid, as Raster does everywhere, rather than centred in a card: the
+ * left edge is where the reader's eye already is after the bar's wordmark.
+ */
+function FormColumn({ children }: { readonly children: ReactNode }): JSX.Element {
+  // The shell's scene stands behind the form, in its quiet shot: the
+  // camera pulls back from the landing's sphere, so the way in is the same
+  // scene as the front page instead of a form alone on a blank screen.
+  return (
+    // Over the split width the form stands on the screen's centre line;
+    // top-aligned, it hung from the bar with the screen empty under it.
+    <div className="grid gap-x-gutter roomy:grid-cols-12 split:flex-1 split:[align-content:safe_center]">
+      <div className="grid content-start gap-6 roomy:col-span-6 split:col-span-4">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * A server with no account database (development) has no email or provider
+ * sign-in: every route behind those forms answers 404. Before, the page still
+ * drew them, and a visitor learnt it only after filling in all four fields.
+ * Here it says so first and offers the development account, the one way in
+ * that works on such a server.
+ */
+function DevelopmentServer(): JSX.Element {
+  const { state } = useCurrentAccount();
+  return (
+    <FormColumn>
+      <div className="grid gap-1">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Sign in to lumen</h1>
+        <p className="text-sm text-ink-2">Your research starts here.</p>
+      </div>
+      <Alert role="status" title="Accounts are not available on this server">
+        This is a development server without an account database, so email, Google and GitHub
+        sign-in are off. Use a development account to try lumen.
+      </Alert>
+      {state.status === 'ready' ? (
+        <p className="text-sm text-ink">
+          You use the development account {state.account.displayName}.{' '}
+          <a href="#/home" className="font-medium underline underline-offset-[0.15em]">
+            Go to your projects
+          </a>
+        </p>
+      ) : (
+        <DevelopmentSignIn
+          onSignedIn={() => {
+            window.location.hash = '/home';
+          }}
+        />
+      )}
+    </FormColumn>
+  );
+}
+
 export function SignIn(): JSX.Element {
+  const { state } = useCurrentAccount();
+  if (state.status !== 'loading' && state.status !== 'error' && state.mode === 'stub')
+    return <DevelopmentServer />;
+  return <AccountSignIn />;
+}
+
+function AccountSignIn(): JSX.Element {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [showKeyRemoval, setShowKeyRemoval] = useState(false);
   const [keyRemovalResult] = useState(() =>
@@ -77,7 +141,7 @@ export function SignIn(): JSX.Element {
     return () => controller.abort();
   }, [providerRevision]);
   const submitting = useRef(false);
-  const feedback = useRef<HTMLParagraphElement>(null);
+  const feedback = useRef<HTMLDivElement>(null);
   const signup = mode === 'signup';
 
   function showError(message: string): void {
@@ -137,173 +201,192 @@ export function SignIn(): JSX.Element {
 
   if (showKeyRemoval)
     return (
-      <div className="mx-auto w-full max-w-md p-4">
+      <FormColumn>
         <KeyRemoval providers={providers} onBack={() => setShowKeyRemoval(false)} />
-      </div>
+      </FormColumn>
     );
 
   if (showRecovery)
     return (
-      <div className="mx-auto grid w-full max-w-md gap-4">
+      <FormColumn>
+        {/* The column gap is the only space above the tabs, so the header
+            drops its own bottom margin. */}
         <PageHeader
           title="Reset your password"
           description="Use the one-time code from your email."
+          className="mb-0"
         />
         <RecoveryPanel />
-        <Button variant="ghost" onClick={() => setShowRecovery(false)}>
+        <Button
+          variant="link"
+          className="justify-self-start"
+          onClick={() => setShowRecovery(false)}
+        >
           Back to sign in
         </Button>
-      </div>
+      </FormColumn>
     );
 
   const showProviders = offersProviders(providerStatus, providers);
   return (
-    <div className="mx-auto grid w-full max-w-sm gap-6 pt-4 sm:pt-10">
-      <div className="grid gap-1 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">
+    <FormColumn>
+      <div className="grid gap-1">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
           {signup ? 'Create your lumen account' : 'Sign in to lumen'}
         </h1>
-        <p className="text-sm text-muted-foreground">Your research starts here.</p>
+        <p className="text-sm text-ink-2">Your research starts here.</p>
       </div>
       {keyRemovalResult === 'complete' ? (
-        <p role="status" className="text-sm text-keep">
+        <p role="status" className="text-sm text-ink">
           Key removal completed. You have not been signed in.
         </p>
       ) : keyRemovalResult === 'failed' ? (
-        <p role="alert" className="text-sm text-gap">
+        <p role="alert" className="text-sm text-ink">
           Key removal failed or expired. Start a new removal attempt.
         </p>
       ) : null}
-      <Card className="gap-0 py-0">
-        <CardContent className="grid gap-4 p-6">
-          <ProviderSignIn
-            status={providerStatus}
-            providers={providers}
-            pending={pending}
-            onRefresh={() => {
-              setProviderStatus('loading');
-              setProviderRevision((value) => value + 1);
-            }}
-          />
-          {showProviders ? (
-            <div className="flex items-center gap-3" aria-hidden="true">
-              <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground">or use email</span>
-              <Separator className="flex-1" />
+      <div className="grid gap-4">
+        <ProviderSignIn
+          status={providerStatus}
+          providers={providers}
+          pending={pending}
+          onRefresh={() => {
+            setProviderStatus('loading');
+            setProviderRevision((value) => value + 1);
+          }}
+        />
+        {showProviders ? (
+          <div className="flex items-center gap-3" aria-hidden="true">
+            <Separator className="flex-1" />
+            <span className="text-xs text-ink-2">or use email</span>
+            <Separator className="flex-1" />
+          </div>
+        ) : null}
+        <form
+          onSubmit={(event) => {
+            void submit(event);
+          }}
+          aria-busy={pending}
+          className="grid gap-3"
+        >
+          {signup ? (
+            <div className="grid gap-2">
+              <Label htmlFor="auth-name">Name</Label>
+              <Input
+                id="auth-name"
+                name="displayName"
+                autoComplete="name"
+                required
+                maxLength={80}
+                value={displayName}
+                disabled={pending}
+                onChange={(event) => setDisplayName(event.target.value)}
+              />
             </div>
           ) : null}
-          <form
-            onSubmit={(event) => {
-              void submit(event);
-            }}
-            aria-busy={pending}
-            className="grid gap-3"
-          >
-            {signup ? (
-              <div className="grid gap-2">
-                <Label htmlFor="auth-name">Name</Label>
-                <Input
-                  id="auth-name"
-                  name="displayName"
-                  autoComplete="name"
-                  required
-                  maxLength={80}
-                  value={displayName}
+          <div className="grid gap-2">
+            <Label htmlFor="auth-email">Email</Label>
+            <Input
+              id="auth-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              maxLength={320}
+              placeholder="you@example.edu"
+              value={email}
+              disabled={pending}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="auth-password">Password</Label>
+              {!signup && mailEnabled ? (
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="text-xs font-medium"
                   disabled={pending}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                />
-              </div>
-            ) : null}
-            <div className="grid gap-2">
-              <Label htmlFor="auth-email">Email</Label>
-              <Input
-                id="auth-email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                maxLength={320}
-                placeholder="you@example.edu"
-                value={email}
-                disabled={pending}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="auth-password">Password</Label>
-                {!signup && mailEnabled ? (
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="sm"
-                    className="h-auto p-0 text-xs"
-                    disabled={pending}
-                    onClick={() => {
-                      setPassword('');
-                      setShowRecovery(true);
-                    }}
-                  >
-                    Forgot password?
-                  </Button>
-                ) : null}
-              </div>
-              <Input
-                id="auth-password"
-                name="password"
-                type="password"
-                autoComplete={signup ? 'new-password' : 'current-password'}
-                required
-                maxLength={1024}
-                value={password}
-                disabled={pending}
-                aria-describedby={signup ? 'password-policy' : undefined}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              {signup ? (
-                <p id="password-policy" className="text-xs text-muted-foreground">
-                  At least 8 characters. Spaces and Unicode are welcome.
-                </p>
+                  onClick={() => {
+                    setPassword('');
+                    setShowRecovery(true);
+                  }}
+                >
+                  Forgot password?
+                </Button>
               ) : null}
             </div>
+            <Input
+              id="auth-password"
+              name="password"
+              type="password"
+              autoComplete={signup ? 'new-password' : 'current-password'}
+              required
+              maxLength={1024}
+              value={password}
+              disabled={pending}
+              aria-describedby={signup ? 'password-policy' : undefined}
+              onChange={(event) => setPassword(event.target.value)}
+            />
             {signup ? (
-              <div className="grid gap-2">
-                <Label htmlFor="auth-confirmation">Confirm password</Label>
-                <Input
-                  id="auth-confirmation"
-                  name="passwordConfirmation"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  maxLength={1024}
-                  value={confirmation}
-                  disabled={pending}
-                  onChange={(event) => setConfirmation(event.target.value)}
-                />
-              </div>
-            ) : null}
-            {error ? (
-              <p
-                ref={feedback}
-                tabIndex={-1}
-                role="alert"
-                className="rounded-md bg-gap-soft p-3 text-sm text-gap"
-              >
-                {error}
+              <p id="password-policy" className="text-caption text-ink-2">
+                At least 8 characters. Spaces and Unicode are welcome.
               </p>
             ) : null}
-            <Button type="submit" className="mt-1 w-full" disabled={pending}>
-              {pending ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}
-            </Button>
-            <p role="status" className="sr-only">
-              {pending ? 'Submitting your request.' : ''}
-            </p>
-          </form>
-        </CardContent>
-      </Card>
+          </div>
+          {signup ? (
+            <div className="grid gap-2">
+              <Label htmlFor="auth-confirmation">Confirm password</Label>
+              <Input
+                id="auth-confirmation"
+                name="passwordConfirmation"
+                type="password"
+                autoComplete="new-password"
+                required
+                maxLength={1024}
+                value={confirmation}
+                disabled={pending}
+                onChange={(event) => setConfirmation(event.target.value)}
+              />
+            </div>
+          ) : null}
+          {error ? (
+            <Alert
+              ref={feedback}
+              tabIndex={-1}
+              title={signup ? 'The account was not created' : 'You are not signed in'}
+            >
+              {error}
+            </Alert>
+          ) : null}
+          <Button type="submit" className="mt-1 w-full" disabled={pending}>
+            {pending ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}
+          </Button>
+          <p role="status" className="sr-only">
+            {pending ? 'Submitting your request.' : ''}
+          </p>
+        </form>
+      </div>
+      <p className="text-sm text-ink-2">
+        {signup ? 'Already have an account?' : 'New to lumen?'}{' '}
+        <Button
+          type="button"
+          variant="link"
+          className="underline"
+          onClick={switchMode}
+          disabled={pending}
+        >
+          {signup ? 'Sign in' : 'Create an account'}
+        </Button>
+      </p>
+      {/* For a person who wants a saved key gone without opening the
+          account. It is rare, so it sits last and small. */}
       {!signup ? (
         <Button
-          variant="ghost"
+          variant="link"
+          className="justify-self-start text-caption font-normal text-ink-2 hover:text-ink"
           disabled={pending}
           onClick={() => {
             setPassword('');
@@ -314,18 +397,6 @@ export function SignIn(): JSX.Element {
           Remove a saved OpenAI key without signing in
         </Button>
       ) : null}
-      <p className="text-center text-sm text-muted-foreground">
-        {signup ? 'Already have an account?' : 'New to lumen?'}{' '}
-        <Button
-          type="button"
-          variant="link"
-          className="h-auto p-0"
-          onClick={switchMode}
-          disabled={pending}
-        >
-          {signup ? 'Sign in' : 'Create an account'}
-        </Button>
-      </p>
-    </div>
+    </FormColumn>
   );
 }

@@ -35,8 +35,8 @@ describe('Home project activity preparation', () => {
         activity={{ sessionsEnded: 0, findingsAdded: 0, spend: { dollars: 0 } }}
       />,
     );
-    expect(html).not.toContain('New activity');
-    expect(html).toContain('No changes since your last visit');
+    // An unchanged project says nothing: its state and age already say it.
+    expect(html).toBe('');
   });
   it('does not claim zero spend or no changes when spend is unavailable', () => {
     const html = renderToStaticMarkup(

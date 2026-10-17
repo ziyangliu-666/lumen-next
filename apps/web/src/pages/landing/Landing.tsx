@@ -1,239 +1,156 @@
 // Owner: PENG XUJIAN. Page: Landing.
-import { useState, type FormEvent, type JSX } from 'react';
-import { request, RequestFailure, signInStub } from '@/core/api';
+import { useState, type JSX, type ReactNode } from 'react';
 import { useCurrentAccount } from '@/core/auth';
-import { Button } from '@/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
-import { Input } from '@/ui/input';
-import { Label } from '@/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
-import { Textarea } from '@/ui/textarea';
+import { DevelopmentSignIn } from '@/core/devSignIn';
+import { PROJECT_PLACEHOLDER, saveProjectDraft, useNewProject } from '@/core/newProject';
+import { Composer } from '@/ui/composer';
+import { Bleed } from '@/ui/surfaces';
 
-const DRAFT = 'lumen.projects.draft';
-interface Draft {
-  question: string;
-  mode: 'explore' | 'seed';
-}
-function readDraft(): Draft {
-  try {
-    const raw: unknown = JSON.parse(sessionStorage.getItem(DRAFT) ?? 'null');
-    if (
-      raw &&
-      typeof raw === 'object' &&
-      'question' in raw &&
-      typeof raw.question === 'string' &&
-      'mode' in raw &&
-      (raw.mode === 'explore' || raw.mode === 'seed')
-    )
-      return { question: raw.question, mode: raw.mode };
-  } catch {
-    /* Storage may be disabled; the form still works in memory. */
-  }
-  return { question: '', mode: 'explore' };
-}
-function saveDraft(draft: Draft): void {
-  try {
-    sessionStorage.setItem(DRAFT, JSON.stringify(draft));
-  } catch {
-    /* Keep the in-memory input. */
-  }
-}
+// The signed-out front page: one screen and one object. The halftone sphere on
+// the right is the image, and the cursor turns the camera round it. The text column on the
+// left says what lumen is and takes the first question, so a visitor can
+// start before they have an account. The draft waits in this tab while they
+// sign in.
+
+const SIGN_IN_FIRST = 'Sign in before starting. Your question is saved in this tab.';
+
 export function Landing(): JSX.Element {
-  const [draft, setDraft] = useState(readDraft);
   // Who is signed in is the shell's answer, not this page's: real sign-in and
   // the development account both arrive through the same hook.
   const { state: auth, refresh: refreshAccount } = useCurrentAccount();
-  const [accountInput, setAccountInput] = useState('');
-  const [pending, setPending] = useState(false);
-  const [uncertain, setUncertain] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  function update(next: Draft): void {
-    setDraft(next);
-    saveDraft(next);
+  const { draft, setQuestion, pending, uncertain, error, clearError, submit } = useNewProject({
+    notReady: auth.status === 'ready' ? null : SIGN_IN_FIRST,
+    onUnauthorized: refreshAccount,
+  });
+  const signedOut = auth.status === 'signed-out';
+  // Set when the person signs in from this page with a question waiting. The
+  // question is not sent for them, because a start spends money, but the line
+  // under the field says the next step: before, it went back to the generic
+  // promise and the question looked forgotten.
+  const [resumed, setResumed] = useState(false);
+
+  // One line under the field says what happens next. A problem replaces the
+  // promise and prints in ink, because it asks the person to act; red stays
+  // for work that waits on them inside a run.
+  let hint: ReactNode;
+  let asks = false;
+  if (pending) {
+    hint = 'Starting.';
+  } else if (error || uncertain) {
+    asks = true;
+    hint = (
+      <>
+        {error}
+        {error && uncertain ? ' ' : null}
+        {uncertain ? (
+          <>
+            The request may have reached the server. Check{' '}
+            <a href="#/home" className="underline">
+              Projects
+            </a>{' '}
+            to find the saved project. This form does not start a second run.
+          </>
+        ) : null}
+        {error === SIGN_IN_FIRST && signedOut ? (
+          <>
+            {' '}
+            <a href="#/signin" onClick={() => saveProjectDraft(draft)} className="underline">
+              Sign in
+            </a>
+          </>
+        ) : null}
+      </>
+    );
+  } else {
+    hint =
+      auth.status !== 'ready'
+        ? ''
+        : resumed && draft.question.trim()
+          ? 'You are signed in. Your question is ready. Press the arrow to start.'
+          : '';
   }
-  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    if (pending || uncertain) return;
-    const question = draft.question.trim();
-    if (!question || [...question].length > 10000) {
-      setError('Enter a question of 1 to 10,000 characters.');
-      return;
-    }
-    if (auth.status !== 'ready') {
-      setError('Sign in before starting. Your question is saved in this tab.');
-      return;
-    }
-    saveDraft(draft);
-    setPending(true);
-    setError(null);
-    try {
-      const result = await request<unknown>('/api/projects', {
-        json: { question, mode: draft.mode },
-      });
-      if (
-        !result ||
-        typeof result !== 'object' ||
-        !('sessionId' in result) ||
-        typeof result.sessionId !== 'string' ||
-        !('project' in result) ||
-        !result.project ||
-        typeof result.project !== 'object' ||
-        !('id' in result.project) ||
-        typeof result.project.id !== 'string'
-      ) {
-        setUncertain(true);
-        throw new Error('Creation response was incomplete. Check Projects before trying again.');
-      }
-      // Creation has succeeded. A failed visit must not let Retry create a duplicate.
-      setUncertain(true);
-      await request(`/api/projects/${encodeURIComponent(result.project.id)}/visit`, {
-        method: 'POST',
-      });
-      try {
-        sessionStorage.removeItem(DRAFT);
-      } catch {
-        /* Navigation still works. */
-      }
-      window.location.assign(`?session=${encodeURIComponent(result.sessionId)}#/session`);
-    } catch (failure: unknown) {
-      if (failure instanceof RequestFailure) {
-        if (failure.status === 401) refreshAccount();
-        if (failure.status >= 500) setUncertain(true);
-      }
-      if (failure instanceof TypeError || failure instanceof SyntaxError) setUncertain(true);
-      setError(failure instanceof Error ? failure.message : 'Could not start the project.');
-    } finally {
-      setPending(false);
-    }
-  }
+
   return (
-    <section className="mx-auto max-w-2xl space-y-8 py-12">
-      <div className="space-y-4">
-        <p className="text-sm font-medium text-primary">A question worth exploring</p>
-        <h1 className="text-4xl font-semibold tracking-tight text-ink">Start with curiosity.</h1>
-        <p className="text-muted-foreground">
-          Give your agents a research question. Follow their work, guide the next step, and return
-          to the findings they keep.
-        </p>
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Start a research project</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={(event) => {
-              void submit(event);
+    <Bleed>
+      {/* The scene runs behind the whole page, so its particles cross the
+          text. A scrim of paper behind the text column, fading to clear
+          toward the sphere, keeps the words on a quiet ground and leaves the
+          sky open on the right. Narrow, the text sits under the sphere, so
+          the scrim rises from the foot instead. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 -z-[5] bg-linear-to-t from-paper from-35% via-paper/70 via-55% to-transparent to-75% roomy:bg-linear-to-r roomy:from-paper roomy:from-30% roomy:via-paper/75 roomy:via-45% roomy:to-transparent roomy:to-62%"
+      />
+      {/* The sphere is the shell's scene (ui/space), in its landing shot: on
+          the right over 720px, above the text under it. The hero hangs from
+          a fixed top, not from the centre: centred, it moved up 50px under
+          the cursor when Developer sign-in opened. Narrow, the top clears
+          the sphere: the shot centres it at 20% of the screen height with a
+          radius of 13%, and the camera's drift swells that to about 17%, so
+          the text starts at 38%. */}
+      <div className="grid min-h-0 flex-1 grid-cols-12 content-start gap-x-gutter overflow-y-auto px-margin pt-[calc(38svh-var(--bar-h))] pb-6 roomy:pt-[max(2.5rem,calc(50svh-17rem))] roomy:pb-10">
+        <div className="col-span-12 roomy:col-span-6 split:col-span-5">
+          <h1 className="text-[clamp(2.25rem,3.9vw,3.5rem)] leading-[1.02] font-medium tracking-[-0.035em] text-ink">
+            <span className="block">Now you can do any frontier work.</span>
+            <span className="block text-ink-2">Just start.</span>
+          </h1>
+          <p className="mt-4 max-w-[30em] text-ink-2 roomy:mt-6">
+            lumen is a research agent for mathematics. It reads the literature, runs the
+            computations and tells you what is new, with the evidence.
+          </p>
+          <Composer
+            className="mt-6 roomy:mt-10"
+            id="research-question"
+            label="What should lumen look into?"
+            value={draft.question}
+            onValueChange={setQuestion}
+            onSubmit={() => {
+              void submit();
             }}
-            className="space-y-6"
-            aria-busy={pending}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="research-question">Research question</Label>
-              <Textarea
-                id="research-question"
-                placeholder="What would you like to understand?"
-                rows={6}
-                value={draft.question}
-                onChange={(event) => update({ ...draft, question: event.target.value })}
-                disabled={pending}
-                required
-                aria-describedby="question-help"
-              />
-              <p id="question-help" className="text-sm text-muted-foreground">
-                Be specific about your question and any constraints. Up to 10,000 characters.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="research-mode">Research mode</Label>
-              <Select
-                value={draft.mode}
-                onValueChange={(mode: string) => {
-                  if (mode === 'explore' || mode === 'seed') update({ ...draft, mode });
-                }}
-                disabled={pending}
+            placeholder={PROJECT_PLACEHOLDER}
+            hint={hint}
+            hintTone={
+              asks || (resumed && auth.status === 'ready' && draft.question.trim())
+                ? 'ask'
+                : 'quiet'
+            }
+            sendLabel="Start"
+            sendDisabled={pending || uncertain}
+            disabled={pending}
+          />
+          {auth.status === 'ready' ? (
+            <p className="mt-4 text-sm">
+              <a
+                href="#/home"
+                className="font-medium text-ink underline decoration-[1.5px] underline-offset-[0.15em]"
               >
-                <SelectTrigger id="research-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="explore">Explore</SelectItem>
-                  <SelectItem value="seed">Seed</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-muted-foreground">
-                Explore a question broadly, or start from a concrete research idea.
-              </p>
-            </div>
-            {error && (
-              <p role="alert" className="rounded-md bg-gap-soft p-3 text-sm text-gap">
-                {error}
-              </p>
-            )}
-            {uncertain && (
-              <p className="text-sm text-muted-foreground">
-                The request may have reached the server. Check Projects to find the saved project;
-                this form will not start a second run automatically.
-              </p>
-            )}
-            <div className="flex flex-wrap gap-3">
-              <Button type="submit" disabled={pending || uncertain}>
-                {pending ? 'Starting…' : 'Start research'}
-              </Button>
-              <Button asChild variant="outline">
-                <a href="#/home">View projects</a>
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-      {auth.status === 'signed-out' ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Continue with your account</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Your draft stays in this tab while you sign in.
-            </p>
-            <Button asChild variant="outline">
-              <a href="#/signin" onClick={() => saveDraft(draft)}>
-                Sign in
+                View your projects
               </a>
-            </Button>
-            {auth.mode === 'stub' && (
-              <form
-                className="space-y-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const id = accountInput.trim();
-                  if (id) {
-                    signInStub(id);
-                    refreshAccount();
-                    setError(null);
-                  }
+            </p>
+          ) : null}
+          {signedOut && auth.mode === 'stub' ? (
+            // Development only: the stub account stands in for sign-in. It
+            // is folded under the field, small and grey, because the field
+            // is the page: open, the form had the same weight as the
+            // question and read as a second way to start.
+            <details className="group mt-4 text-caption text-ink-2">
+              <summary className="cursor-pointer list-none font-medium hover:text-ink [&::-webkit-details-marker]:hidden">
+                <span aria-hidden="true" className="mr-1 inline-block group-open:rotate-90">
+                  ›
+                </span>
+                Developer sign-in
+              </summary>
+              <DevelopmentSignIn
+                className="mt-3"
+                onSignedIn={() => {
+                  clearError();
+                  setResumed(true);
                 }}
-              >
-                <Label htmlFor="development-account">Development account</Label>
-                <Input
-                  id="development-account"
-                  value={accountInput}
-                  onChange={(event) => setAccountInput(event.target.value)}
-                  placeholder="Same account as the Session page"
-                  required
-                />
-                <Button type="submit" variant="secondary">
-                  Use development account
-                </Button>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Ready to start. Your projects are private to your account.
-        </p>
-      )}
-    </section>
+              />
+            </details>
+          ) : null}
+        </div>
+      </div>
+    </Bleed>
   );
 }

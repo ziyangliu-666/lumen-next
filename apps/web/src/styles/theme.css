@@ -1,11 +1,11 @@
 /* The two typefaces, served from this origin (public/fonts, see the README
    there). Variable files: one per family covers every weight the pages use. */
 @font-face {
-  font-family: 'Archivo';
+  font-family: 'Switzer';
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
-  src: url('/fonts/archivo.woff2') format('woff2');
+  src: url('/fonts/switzer.woff2') format('woff2');
 }
 @font-face {
   font-family: 'JetBrains Mono';
@@ -15,118 +15,145 @@
   src: url('/fonts/jetbrains-mono.woff2') format('woff2');
 }
 
-/* The single source of colour, type and radius for the whole web app.
-   The values come from the annotated spec at docs/spec/index.html, so the
-   product and the screens the team reviewed stay the same product.
+/* The single source of colour, type, space and radius for the whole web app.
+   The values are the "Raster" direction approved as a static prototype in
+   design/proposals/a-raster (raster.css and the review rounds beside it).
+
+   Raster in one paragraph: Swiss. Zero radius. Black ink on white paper in
+   light, white on pure black in dark. A grey well is the second surface, for
+   side panels. One red, `signal`, means "waits on you" and nothing else, so a
+   person can find what needs them by colour alone. No shadows, no gradients
+   as decoration.
 
    Every name below is exposed to Tailwind as a utility: `--color-surface`
-   becomes `bg-surface`, `--color-keep` becomes `text-keep`. Pages use those
-   utilities. A page must never write a hex value of its own — ESLint blocks
-   it — because a hex in a page is a colour that no longer follows the theme
-   when the theme changes. */
+   becomes `bg-surface`, `--color-signal` becomes `text-signal`. Pages use
+   those utilities. A page must never write a hex value of its own (ESLint
+   blocks it), because a hex in a page no longer follows the theme. */
 @import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Surfaces, back to front. */
-  --ground: #f6f8fa;
-  --surface: #ffffff;
-  --sunken: #eef1f5;
+  color-scheme: light;
 
-  /* Text, loudest to quietest. */
-  --ink: #131820;
-  --body: #2b3440;
-  --muted: #59646f;
-  --faint: #8b95a1;
+  /* The Raster palette. These are the only colour values in the app. */
+  --paper: #ffffff; /* the page and the main content */
+  --well: #f3f4f5; /* the second surface: side panels, code, hover */
+  --ink: #000000; /* text, control borders, marks */
+  --ink-2: #5e6166; /* secondary text */
+  --ink-3: #6b6f75; /* placeholders and hints, below secondary text */
+  --rule-major: #b4b7bb; /* the rule under the bar, between regions */
+  --rule-minor: #dadcdf; /* the rule between items inside a region */
+  --signal: #e30613; /* waits on you, and nothing else */
+  /* A selected row on the well: one step off the well, toward the reader.
+     In light that is the paper. In dark the paper is black, and a black row
+     on the dark well read as a hole, so it is one step lighter instead. */
+  --raised: var(--paper);
 
-  /* Rules. `rule-strong` is for a border a control needs to look like one. */
-  --rule: #dde3ea;
-  --rule-strong: #c3ccd6;
+  /* The names the pages were written against, mapped onto Raster so that a
+     page which still uses them keeps its meaning without a code change.
+     The three run meanings lose their tints: Raster carries state with a
+     mark and a word (RunState, Verdict in src/ui), not with a coloured box.
+     - decide (needs a person) is the signal red, the one thing red means.
+     - gap (failed, missing, over cap) is ink on the well. It is not red,
+       because red would then say "waits on you" about a failure that does
+       not. Say what failed in words; use `text-signal` only when the
+       person must act.
+     - keep (finished and kept) is ink: settled things are quiet. */
+  --ground: var(--paper);
+  --surface: var(--paper);
+  --sunken: var(--well);
+  --body: var(--ink);
+  --muted: var(--ink-2);
+  --faint: var(--ink-3);
+  --rule: var(--rule-major);
+  --rule-strong: var(--ink);
+  --accent: var(--ink);
+  --accent-soft: var(--well);
+  --on-accent: var(--paper);
+  --decide: var(--signal);
+  --decide-soft: var(--well);
+  --gap: var(--ink);
+  --gap-soft: var(--well);
+  --keep: var(--ink);
+  --keep-soft: var(--well);
 
-  /* The one accent. `on-accent` is the text that sits on top of it. */
-  --accent: #1f5f8b;
-  --accent-soft: #e4eef5;
-  --on-accent: #ffffff;
+  /* Series for charts and ownership marks: steps of grey, because a second
+     hue would compete with the signal. Pair a series with a label or a
+     pattern; grey steps alone do not carry five categories. */
+  --series-1: var(--ink);
+  --series-2: var(--ink-2);
+  --series-3: var(--ink-3);
+  --series-4: var(--rule-major);
+  --series-5: var(--rule-minor);
 
-  /* The three meanings a run can carry. Each has a text colour and the tint
-     it sits on: decide = needs a person, gap = failed or missing,
-     keep = finished and kept. */
-  --decide: #8a6008;
-  --decide-soft: #f7efdc;
-  --gap: #9e3a2c;
-  --gap-soft: #f9e8e5;
-  --keep: #2f6a4f;
-  --keep-soft: #e3f0ea;
+  /* Space that is not on Tailwind's 4px scale: the page margin and the bar.
+     They shrink on a narrow screen, the same as in the prototype. */
+  --margin: 40px;
+  --gutter: 24px;
+  --bar-h: 64px;
 
-  /* Owner and series colours, in slice order: session, projects, identity,
-     steering, billing. Use them for charts and ownership chips, never as a
-     second accent. */
-  --series-1: #3b6ea5;
-  --series-2: #4a8f6d;
-  --series-3: #a5506e;
-  --series-4: #7a5aa5;
-  --series-5: #8a5a3b;
-
-  --radius: 0.5rem;
+  --radius: 0;
 }
 
+@media (max-width: 720px) {
+  :root {
+    --margin: 20px;
+    --gutter: 16px;
+    --bar-h: 56px;
+  }
+}
+
+/* Dark: the same system printed in light on black. The print red is too
+   dark on black, so the signal is a lighter red. */
 .dark {
-  --ground: #0f1318;
-  --surface: #161c23;
-  --sunken: #1c232b;
-
-  --ink: #e6eaef;
-  --body: #c6ced7;
-  --muted: #8c97a3;
-  --faint: #67717c;
-
-  --rule: #262f39;
-  --rule-strong: #38434f;
-
-  --accent: #62a9d9;
-  --accent-soft: #17303f;
-  --on-accent: #0f1318;
-
-  --decide: #d5a447;
-  --decide-soft: #33290f;
-  --gap: #d97a67;
-  --gap-soft: #38201b;
-  --keep: #6fbf95;
-  --keep-soft: #162a21;
-
-  --series-1: #62a9d9;
-  --series-2: #6fbf95;
-  --series-3: #d98aa8;
-  --series-4: #a992d9;
-  --series-5: #c99a72;
+  color-scheme: dark;
+  --paper: #000000;
+  --well: #1a1b1e;
+  --ink: #ffffff;
+  --ink-2: #9a9da3;
+  --ink-3: #7c8086;
+  --rule-major: #45484c;
+  --rule-minor: #36393d;
+  --signal: #ff3b30;
+  --raised: #2a2b2f;
 }
 
 /* The shadcn component sources read the names on the left. Mapping them here,
    instead of editing the components, is what lets `npx shadcn add <name>` keep
    working: a component arrives already wearing our palette. */
 @theme inline {
-  --color-background: var(--ground);
-  --color-foreground: var(--body);
-  --color-card: var(--surface);
-  --color-card-foreground: var(--body);
-  --color-popover: var(--surface);
-  --color-popover-foreground: var(--body);
-  --color-primary: var(--accent);
-  --color-primary-foreground: var(--on-accent);
-  --color-secondary: var(--sunken);
-  --color-secondary-foreground: var(--body);
-  --color-muted: var(--sunken);
-  --color-muted-foreground: var(--muted);
-  --color-accent: var(--accent-soft);
-  --color-accent-foreground: var(--accent);
-  --color-destructive: var(--gap);
-  --color-destructive-foreground: var(--on-accent);
-  --color-border: var(--rule);
-  --color-input: var(--rule-strong);
-  --color-ring: var(--accent);
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --color-card: var(--paper);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--paper);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--paper);
+  --color-secondary: var(--well);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--well);
+  --color-muted-foreground: var(--ink-2);
+  --color-accent: var(--well);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--ink);
+  --color-destructive-foreground: var(--paper);
+  --color-border: var(--rule-minor);
+  --color-input: var(--ink);
+  --color-ring: var(--ink);
 
-  /* Ours, on top of the shadcn set. */
+  /* Raster names. Prefer these in new code. */
+  --color-paper: var(--paper);
+  --color-well: var(--well);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule-major: var(--rule-major);
+  --color-rule-minor: var(--rule-minor);
+  --color-signal: var(--signal);
+  --color-raised: var(--raised);
+
+  /* The earlier names, kept working (see the mapping in :root). */
   --color-ground: var(--ground);
   --color-surface: var(--surface);
   --color-sunken: var(--sunken);
@@ -147,13 +174,59 @@
   --color-chart-4: var(--series-4);
   --color-chart-5: var(--series-5);
 
-  --font-sans: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Switzer', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* The type scale: 12, 13, 14, 16, 18, 20, and 56 for display. Each size
+     carries its own line height on the 4px baseline. 13 is the hint line
+     under a field. Tailwind's text-xs, sm, base and xl already match; lg is
+     moved to 24px so 18px text stays on the baseline. */
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.125rem;
+  --text-lg--line-height: 1.5rem;
+  --text-display: 3.5rem;
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: -0.035em;
+
+  /* `px-margin`, `mx-margin`, `gap-gutter`, `h-bar`, and so on. */
+  --spacing-margin: var(--margin);
+  --spacing-gutter: var(--gutter);
+  --spacing-bar: var(--bar-h);
+
+  /* The two widths where the layout changes. At `roomy` (over 720px) the
+     page has 12 columns and the 40px margin. At `split` (over 1080px) the
+     paper and the well stand side by side instead of one above the other. */
+  --breakpoint-roomy: 45.0625rem;
+  --breakpoint-split: 67.5625rem;
+
+  /* Zero radius everywhere. `rounded-full` still makes a circle, which the
+     run-state dots and the avatar need. */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+
+  /* No shadows as decoration. A shadow class left in a page renders as
+     nothing, instead of a soft edge the system does not have. */
+  --shadow-2xs: 0 0 transparent;
+  --shadow-xs: 0 0 transparent;
+  --shadow-sm: 0 0 transparent;
+  --shadow-md: 0 0 transparent;
+  --shadow-lg: 0 0 transparent;
+  --shadow-xl: 0 0 transparent;
+  --shadow-2xl: 0 0 transparent;
+
+  /* The turning ring of a running state (RunState in src/ui). */
+  --animate-turn: turn 1.4s linear infinite;
+  @keyframes turn {
+    to {
+      transform: rotate(1turn);
+    }
+  }
 }
 
 @layer base {
@@ -161,14 +234,73 @@
     @apply border-border;
   }
 
+  html,
   body {
-    @apply bg-ground font-sans text-body antialiased;
+    height: 100%;
   }
 
-  /* Headings are the one place `ink` is louder than body text. */
+  /* One screen: the page never scrolls as a whole, the way an app does not.
+     A region inside it scrolls when its content is longer than the screen
+     (ScrollRegion in src/ui). */
+  body {
+    @apply bg-paper font-sans text-base text-ink antialiased;
+    overflow: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   h1,
   h2,
   h3 {
     @apply text-ink;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Links are ink and gain an underline on hover, so a link never needs a
+     second colour. */
+  a:hover {
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.15em;
+  }
+
+  /* One focus mark for every control: a 2px ink outline, off the edge. */
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  /* Code and figures in it line up in columns. Money, times and counts in
+     running text take `tabular-nums`. */
+  code,
+  kbd,
+  samp,
+  pre {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Opening a project, its title flies into the session's breadcrumb
+     (core/router `go`). The page under it changes at once: a cross-fade of
+     the whole screen would blur the scene's camera move behind it. */
+  ::view-transition-group(project-title) {
+    animation-duration: 520ms;
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+
+  /* Motion that is not needed to read the page stops for people who ask. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

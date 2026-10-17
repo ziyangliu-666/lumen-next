@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type { Money } from '@lumen/contracts';
 import { request, RequestFailure } from '@/core/api';
+import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/ui/table';
+import { Section } from '@/ui/section';
 
 interface TopupData {
   enabled: boolean;
   receipts: readonly { id: string; amount: Money; paidAt: string }[];
 }
 
-export function Topups({ onRefresh }: { onRefresh: () => void }): JSX.Element {
+/** The wallet remounts it (a new key) when its one Refresh is pressed. */
+export function Topups(): JSX.Element {
   const [data, setData] = useState<TopupData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
   const requestId = useRef<string | null>(null);
   const query = new URLSearchParams(window.location.search);
   const returned = query.get('topup');
@@ -27,13 +29,17 @@ export function Topups({ onRefresh }: { onRefresh: () => void }): JSX.Element {
       })
       .catch((failure: unknown) => {
         if (!controller.signal.aborted)
-          setError(failure instanceof Error ? failure.message : 'Could not load top-ups.');
+          setError(
+            failure instanceof RequestFailure && (failure.status === 404 || failure.status === 503)
+              ? 'Top-ups are not available on this server.'
+              : 'Could not load top-ups. Refresh to try again.',
+          );
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [revision]);
+  }, []);
 
   async function buy(): Promise<void> {
     setBusy(true);
@@ -55,25 +61,15 @@ export function Topups({ onRefresh }: { onRefresh: () => void }): JSX.Element {
       setBusy(false);
     }
   }
-  function refresh(): void {
-    setLoading(true);
-    setError(null);
-    setRevision((value) => value + 1);
-    onRefresh();
-  }
   return (
-    <Card aria-busy={loading || busy}>
-      <CardHeader>
-        <CardTitle className="text-base">Test-mode top-ups</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <p className="text-muted-foreground">
-          Add USD 5 to your spending cap using Stripe test mode. No real money is charged. Top-ups
-          do not reduce recorded spend or automatically resume a waiting task. No refunds; remaining
-          credit is forfeited when the account is deleted.
-        </p>
+    <Section
+      title="Test-mode top-ups"
+      busy={loading || busy}
+      description="Add USD 5 to your spending cap using Stripe test mode. No real money is charged. Top-ups do not reduce recorded spend or automatically resume a waiting task. No refunds; remaining credit is forfeited when the account is deleted."
+    >
+      <div className="grid gap-4 text-sm">
         {returned === 'returned' && confirmed && (
-          <p role="status" className="text-keep">
+          <p role="status" className="text-ink">
             Your USD 5 test top-up is confirmed. The spending cap has been updated.
           </p>
         )}
@@ -86,44 +82,56 @@ export function Topups({ onRefresh }: { onRefresh: () => void }): JSX.Element {
         {returned === 'cancelled' && (
           <p role="status">Checkout was cancelled. Returning here does not add credit.</p>
         )}
-        {error && (
-          <p role="alert" className="text-gap">
-            {error}
+        {error && <Alert title="Top-ups">{error}</Alert>}
+        {loading && (
+          <p role="status" className="text-ink-2">
+            Loading top-ups…
           </p>
         )}
-        {loading && <p role="status">Loading top-ups…</p>}
-        {data && !data.enabled && <p>Test top-ups are not enabled on this server.</p>}
-        <div className="flex flex-wrap gap-3">
-          <Button
-            disabled={!data?.enabled || loading || busy}
-            onClick={() => {
-              void buy();
-            }}
-          >
-            {busy ? 'Opening Stripe…' : 'Add USD 5 in test mode'}
-          </Button>
-          <Button variant="outline" disabled={loading || busy} onClick={refresh}>
-            Refresh top-ups and cap
-          </Button>
-        </div>
-        {data?.receipts.length === 0 && (
-          <p className="text-muted-foreground">No confirmed top-ups yet.</p>
+        {data && !data.enabled && (
+          <Alert role="status" title="Test top-ups are off on this server">
+            No checkout is configured, so no credit can be added here.
+          </Alert>
         )}
+        {data?.enabled ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={loading || busy}
+              onClick={() => {
+                void buy();
+              }}
+            >
+              {busy ? 'Opening Stripe…' : 'Add USD 5 in test mode'}
+            </Button>
+          </div>
+        ) : null}
+        {data?.receipts.length === 0 && <p className="text-ink-2">No confirmed top-ups yet.</p>}
         {!!data?.receipts.length && (
-          <div className="space-y-2">
-            <p className="font-medium">Confirmed top-ups (latest 100)</p>
-            {data.receipts.map((receipt) => (
-              <div
-                key={receipt.id}
-                className="flex flex-wrap justify-between gap-2 border-b border-border py-2"
-              >
-                <span>{new Date(receipt.paidAt).toLocaleString()}</span>
-                <span className="font-mono">USD {receipt.amount.dollars.toFixed(4)}</span>
-              </div>
-            ))}
+          <div className="grid gap-2">
+            <h3 className="font-semibold text-ink">Confirmed top-ups (latest 100)</h3>
+            <Table flush>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Paid</TableHead>
+                  <TableHead className="text-right">USD</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.receipts.map((receipt) => (
+                  <TableRow key={receipt.id}>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">
+                      {new Date(receipt.paidAt).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {receipt.amount.dollars.toFixed(4)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   );
 }

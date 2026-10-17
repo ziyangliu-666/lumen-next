@@ -1,0 +1,174 @@
+import { useState } from 'react';
+import { request, RequestFailure } from './api';
+import { go } from './router';
+
+// Starting a project: the one flow behind the question field on the landing
+// and the new-project field on home. It lives here, and not in either page,
+// so a question starts the same way from both, and a fix to the duplicate
+// guard below lands in both at once.
+//
+// The draft sits in sessionStorage under one key. A question typed on the
+// landing before sign-in therefore waits on home, in the mode it was written
+// in. The key and the mode values are the ones the pages used before the
+// redesign, so a saved draft still loads.
+
+const DRAFT = 'lumen.projects.draft';
+const LIMIT = 10000;
+
+export type ProjectMode = 'explore' | 'seed';
+
+export interface ProjectDraft {
+  readonly question: string;
+  readonly mode: ProjectMode;
+}
+
+// The tab names say what the person does. The values stay the server's names.
+
+export const PROJECT_PLACEHOLDER = 'A question, a paper or a repo, or leave it empty';
+
+export function isProjectMode(value: string): value is ProjectMode {
+  return value === 'explore' || value === 'seed';
+}
+
+function readDraft(): ProjectDraft {
+  try {
+    const raw: unknown = JSON.parse(sessionStorage.getItem(DRAFT) ?? 'null');
+    if (
+      raw &&
+      typeof raw === 'object' &&
+      'question' in raw &&
+      typeof raw.question === 'string' &&
+      'mode' in raw &&
+      typeof raw.mode === 'string' &&
+      isProjectMode(raw.mode)
+    )
+      return { question: raw.question, mode: raw.mode };
+  } catch {
+    /* Storage may be disabled; the form still works in memory. */
+  }
+  return { question: '', mode: 'explore' };
+}
+
+/** Keeps the draft in this tab, for example before the page leaves for sign-in. */
+export function saveProjectDraft(draft: ProjectDraft): void {
+  try {
+    sessionStorage.setItem(DRAFT, JSON.stringify(draft));
+  } catch {
+    /* Keep the in-memory input. */
+  }
+}
+
+function created(result: unknown): { projectId: string; sessionId: string } | null {
+  if (
+    !result ||
+    typeof result !== 'object' ||
+    !('sessionId' in result) ||
+    typeof result.sessionId !== 'string' ||
+    !('project' in result) ||
+    !result.project ||
+    typeof result.project !== 'object' ||
+    !('id' in result.project) ||
+    typeof result.project.id !== 'string'
+  )
+    return null;
+  return { projectId: result.project.id, sessionId: result.sessionId };
+}
+
+export interface NewProjectOptions {
+  /**
+   * Set when the person cannot send yet, for example nobody is signed in.
+   * The send then stops with this message, after the text itself has passed
+   * its checks, so the person fixes the text first.
+   */
+  readonly notReady?: string | null;
+  /** Called on a 401: the page refreshes the shared account. */
+  readonly onUnauthorized: () => void;
+}
+
+export interface NewProject {
+  readonly draft: ProjectDraft;
+  readonly setQuestion: (question: string) => void;
+  readonly pending: boolean;
+  /**
+   * The server may have created the project, but the page cannot confirm it.
+   * Sending stays off from then on, so a resend never starts a second run.
+   */
+  readonly uncertain: boolean;
+  readonly error: string | null;
+  /** Clears a message the person has dealt with, for example after signing in. */
+  readonly clearError: () => void;
+  readonly submit: () => Promise<void>;
+}
+
+/** The draft, the checks, and the create, visit and open steps of a new project. */
+export function useNewProject({ notReady = null, onUnauthorized }: NewProjectOptions): NewProject {
+  const [draft, setDraft] = useState(readDraft);
+  const [pending, setPending] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function update(next: ProjectDraft): void {
+    setDraft(next);
+    saveProjectDraft(next);
+  }
+
+  async function submit(): Promise<void> {
+    if (pending || uncertain) return;
+    // One field, no mode switch: text is where lumen starts, and an empty
+    // field is free exploration, where lumen picks its own question. Two tabs
+    // for that one difference were a choice the field already makes.
+    const typed = draft.question.trim();
+    const mode: ProjectMode = typed ? 'seed' : 'explore';
+    const question = typed || 'Free exploration';
+    if ([...question].length > LIMIT) {
+      setError('Keep it to 10,000 characters or fewer.');
+      return;
+    }
+    if (notReady) {
+      setError(notReady);
+      return;
+    }
+    saveProjectDraft(draft);
+    setPending(true);
+    setError(null);
+    try {
+      const result = created(await request<unknown>('/api/projects', { json: { question, mode } }));
+      if (!result) {
+        setUncertain(true);
+        throw new Error('The server did not confirm the new project. Check Projects first.');
+      }
+      // Creation has succeeded. A failed visit must not let a resend create a duplicate.
+      setUncertain(true);
+      await request(`/api/projects/${encodeURIComponent(result.projectId)}/visit`, {
+        method: 'POST',
+      });
+      try {
+        sessionStorage.removeItem(DRAFT);
+      } catch {
+        /* Navigation still works. */
+      }
+      // Inside this document, so the scene behind the page moves to the
+      // session's shot instead of starting again after a reload.
+      go(`?session=${encodeURIComponent(result.sessionId)}#/session`);
+    } catch (failure: unknown) {
+      if (failure instanceof RequestFailure) {
+        if (failure.status === 401) onUnauthorized();
+        if (failure.status >= 500) setUncertain(true);
+      }
+      if (failure instanceof TypeError || failure instanceof SyntaxError) setUncertain(true);
+      setError(failure instanceof Error ? failure.message : 'Could not start the project.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return {
+    draft,
+    setQuestion: (question) => update({ ...draft, question }),
+    pending,
+    uncertain,
+    error,
+    clearError: () => setError(null),
+    submit,
+  };
+}

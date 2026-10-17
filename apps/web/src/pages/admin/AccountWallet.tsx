@@ -11,13 +11,13 @@ interface Summary {
 export function WalletFigures({ summary }: { summary: Summary }): JSX.Element {
   return (
     <>
-      <dl className="grid gap-2 text-sm sm:grid-cols-[auto_1fr]">
-        <dt className="text-muted-foreground">Total spent</dt>
-        <dd className="font-mono">USD {summary.spent.dollars.toFixed(4)}</dd>
-        <dt className="text-muted-foreground">Account cap</dt>
-        <dd className="font-mono">USD {summary.cap.dollars.toFixed(4)}</dd>
+      <dl className="grid grid-cols-[7rem_1fr] gap-x-4 gap-y-2 text-sm">
+        <dt className="text-ink-2">Total spent</dt>
+        <dd className="font-mono tabular-nums">USD {summary.spent.dollars.toFixed(4)}</dd>
+        <dt className="text-ink-2">Account cap</dt>
+        <dd className="font-mono tabular-nums">USD {summary.cap.dollars.toFixed(4)}</dd>
       </dl>
-      <p className="mt-2 text-sm text-muted-foreground">
+      <p className="mt-2 text-caption text-ink-2">
         All-time recorded spend, with no monthly reset. The cap is a spending limit, not a balance.
       </p>
     </>
@@ -47,12 +47,14 @@ export function AccountWallet({ accountId }: { accountId: string }): JSX.Element
     return () => controller.abort();
   }, [accountId, revision]);
   return (
-    <section className="mt-4 border-t border-border pt-4" aria-label="Account spending">
+    <section className="mt-6 border-t border-rule-minor pt-4" aria-label="Account spending">
+      <h3 className="mb-3 text-sm font-semibold">Spending</h3>
       {error ? (
-        <div role="alert" className="text-sm text-gap">
-          {error}{' '}
+        <div role="alert" className="flex flex-wrap items-center gap-4 text-sm">
+          {error}
           <Button
             variant="outline"
+            size="sm"
             onClick={() => {
               setError(null);
               setSummary(null);
@@ -65,7 +67,7 @@ export function AccountWallet({ accountId }: { accountId: string }): JSX.Element
       ) : summary ? (
         <WalletFigures summary={summary} />
       ) : (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p role="status" className="text-sm text-ink-2">
           Loading account spending…
         </p>
       )}

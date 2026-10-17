@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type JSX, type ReactNode } from 'react';
 import { Button } from '@/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/ui/card';
+import { Section } from '@/ui/section';
 import { Skeleton } from '@/ui/skeleton';
 import { request, RequestFailure, stubAccount } from './api';
 import { authStateOf, type AuthState } from './authState';
@@ -94,32 +94,28 @@ export function StaffGate({
   readonly refresh: () => void;
   readonly children: ReactNode;
 }): JSX.Element {
+  // Plain ruled sections, not cards: Raster has no boxes around content.
   if (state.status === 'loading') {
     return (
-      <Card aria-busy="true">
-        <CardHeader>
-          <CardTitle>Checking access</CardTitle>
-          <CardDescription>Confirming your current account and role.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <Section title="Checking access" description="Confirming your current account and role." busy>
+        <div className="grid max-w-md gap-3">
           <Skeleton className="h-5 w-2/3" />
           <Skeleton className="h-5 w-1/2" />
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
     );
   }
 
   if (state.status === 'error') {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Unable to check access</CardTitle>
-          <CardDescription>The server could not confirm your current account.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={refresh}>Try again</Button>
-        </CardContent>
-      </Card>
+      <Section
+        title="Unable to check access"
+        description="The server could not confirm your current account."
+      >
+        <Button className="justify-self-start" onClick={refresh}>
+          Try again
+        </Button>
+      </Section>
     );
   }
 

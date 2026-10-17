@@ -25,9 +25,23 @@ export function stubAccount(): string | null {
   return match ? decodeURIComponent(match[1] ?? '') : null;
 }
 
+// Every reader of the current account (the bar, the page) listens for this
+// event. Without it, the bar kept saying "Sign in" after the landing had
+// switched the account, until the next reload.
+function announceAuthChange(): void {
+  window.dispatchEvent(new Event('lumen:auth-changed'));
+}
+
 export function signInStub(accountId: string): void {
   const id = encodeURIComponent(accountId.trim());
   document.cookie = `${STUB_COOKIE}=stub ${id}:user; path=/; SameSite=Lax`;
+  announceAuthChange();
+}
+
+/** Drops the development account. The server has no session to end for it. */
+export function signOutStub(): void {
+  document.cookie = `${STUB_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+  announceAuthChange();
 }
 
 /** A response that was not 2xx. Carries the status, so a page can tell 401 from 500. */
@@ -94,6 +108,12 @@ export interface SessionFinding {
   readonly id: string;
   readonly taskId: string;
   readonly text: string;
+  /**
+   * When it was recorded, in ms, for a finding read from the list. One from
+   * `finding.recorded` has none (the event carries no time) and counts as
+   * the newest. It only orders the list.
+   */
+  readonly createdAt?: number;
 }
 
 export interface SessionState {

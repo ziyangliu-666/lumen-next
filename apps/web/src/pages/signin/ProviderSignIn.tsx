@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
 
 export type ProviderStatus = 'loading' | 'ready' | 'error';
@@ -46,7 +47,7 @@ export function ProviderSignIn({
               Continue with {name}
             </Button>
             {unavailable ? (
-              <p id={`${provider}-availability`} className="text-xs text-muted-foreground">
+              <p id={`${provider}-availability`} className="text-caption text-ink-2">
                 {name} is not configured on this server.
               </p>
             ) : null}
@@ -54,19 +55,27 @@ export function ProviderSignIn({
         );
       })}
       {status === 'loading' ? (
-        <p role="status" className="text-xs text-muted-foreground">
+        <p role="status" className="text-caption text-ink-2">
           Checking sign-in providers…
         </p>
       ) : null}
       {status === 'error' ? (
-        <div className="flex items-center justify-between gap-2">
-          <p role="alert" className="text-xs text-gap">
-            Could not check sign-in providers.
-          </p>
-          <Button type="button" size="sm" variant="link" disabled={pending} onClick={onRefresh}>
-            Try again
-          </Button>
-        </div>
+        <Alert
+          title="Could not check sign-in providers."
+          action={
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={onRefresh}
+            >
+              Try again
+            </Button>
+          }
+        >
+          Email sign-in below does not depend on this check.
+        </Alert>
       ) : null}
     </section>
   );

@@ -1,24 +1,39 @@
-import { useState, type JSX, type ReactNode } from 'react';
+import { useState, type JSX, type MouseEvent, type ReactNode } from 'react';
+import { go } from '@/core/router';
+import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
 import { openProject } from './openProject';
 
+/**
+ * Records the visit, then opens the session. It is a button and not a link
+ * because the visit must land before the page leaves Home. A child marked
+ * `data-flight` (the project's title) flies into the session's breadcrumb
+ * on the way (core/router `go`).
+ * - 'button': a small outline button.
+ * - 'plain': the children are the control, for a project title or a finding
+ *   that opens where it came from. They underline on hover, as a link does.
+ */
 export function OpenProjectButton({
   projectId,
   target,
   children,
+  variant = 'button',
+  className,
 }: {
   readonly projectId: string;
   readonly target: string;
   readonly children: ReactNode;
+  readonly variant?: 'button' | 'plain';
+  readonly className?: string;
 }): JSX.Element {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  async function open(): Promise<void> {
+  async function open(flight: HTMLElement | null): Promise<void> {
     if (pending) return;
     setPending(true);
     setError(null);
     try {
-      await openProject(projectId, target, (url) => window.location.assign(url));
+      await openProject(projectId, target, (url) => go(url, flight));
     } catch {
       setError(
         'Could not record your visit. Try opening again, or sign in if your session expired.',
@@ -27,19 +42,28 @@ export function OpenProjectButton({
       setPending(false);
     }
   }
+  const onClick = (event: MouseEvent<HTMLElement>): void => {
+    void open(event.currentTarget.querySelector<HTMLElement>('[data-flight]'));
+  };
   return (
-    <div className="space-y-2">
-      <Button
-        size="sm"
-        disabled={pending}
-        onClick={() => {
-          void open();
-        }}
-      >
-        {pending ? 'Opening…' : children}
-      </Button>
+    <div className={cn('min-w-0', className)}>
+      {variant === 'plain' ? (
+        <button
+          type="button"
+          disabled={pending}
+          aria-busy={pending}
+          onClick={onClick}
+          className="group block w-full min-w-0 text-left disabled:opacity-50"
+        >
+          {children}
+        </button>
+      ) : (
+        <Button size="sm" variant="outline" disabled={pending} onClick={onClick}>
+          {pending ? 'Opening…' : children}
+        </Button>
+      )}
       {error && (
-        <p role="alert" className="text-sm text-gap">
+        <p role="alert" className="mt-1 text-caption text-ink">
           {error}
         </p>
       )}

@@ -56,30 +56,32 @@ export function AccountActions({
   }
   if (state.status !== 'ready' || state.mode !== 'identity' || state.account.role !== 'staff')
     return (
-      <p className="mt-4 text-sm text-muted-foreground">
+      <p className="mt-6 border-t border-rule-minor pt-4 text-sm text-ink-2">
         Real staff sign-in is required to change accounts.
       </p>
     );
   if (state.account.id === account.id)
     return (
-      <p className="mt-4 text-sm text-muted-foreground">
+      <p className="mt-6 border-t border-rule-minor pt-4 text-sm text-ink-2">
         You cannot change your own role or suspension here. Ask another administrator.
       </p>
     );
   return (
-    <div className="mt-4 grid gap-3 border-t pt-4" aria-busy={pending}>
-      <h3 className="font-medium">Manage account</h3>
+    <div className="mt-6 grid gap-3 border-t border-rule-minor pt-4" aria-busy={pending}>
+      <h3 className="text-sm font-semibold">Manage account</h3>
       {error ? (
-        <p role="alert" className="text-sm text-gap">
+        <p role="alert" className="text-sm font-medium text-ink">
           {error}
         </p>
       ) : null}
       {action ? (
-        <div className="grid gap-3 rounded-md border p-3">
+        // The confirm step sits on paper inside the well, boxed in ink, so it
+        // reads as one decision apart from the record around it.
+        <div className="grid gap-3 border border-ink bg-paper p-4">
           <p className="text-sm break-words">
             {label} for <strong>{account.email}</strong>?
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-ink-2">
             {action === 'role'
               ? role === 'staff'
                 ? 'Staff can view account records and change other accounts. Grant this only to trusted administrators.'
@@ -91,6 +93,7 @@ export function AccountActions({
           <div className="flex flex-wrap gap-2">
             <Button
               variant="destructive"
+              size="sm"
               disabled={pending}
               onClick={() => {
                 void save();
@@ -98,7 +101,7 @@ export function AccountActions({
             >
               {pending ? 'Saving…' : 'Confirm change'}
             </Button>
-            <Button variant="outline" disabled={pending} onClick={() => setAction(null)}>
+            <Button variant="outline" size="sm" disabled={pending} onClick={() => setAction(null)}>
               Cancel
             </Button>
           </div>
@@ -107,6 +110,7 @@ export function AccountActions({
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
+            size="sm"
             onClick={() => {
               setError('');
               setAction('role');
@@ -116,6 +120,7 @@ export function AccountActions({
           </Button>
           <Button
             variant="outline"
+            size="sm"
             onClick={() => {
               setError('');
               setAction('suspension');

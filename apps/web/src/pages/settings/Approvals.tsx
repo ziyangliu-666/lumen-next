@@ -1,7 +1,10 @@
 import { useEffect, useState, type JSX } from 'react';
 import { request, RequestFailure } from '@/core/api';
+import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
+import { RunState } from '@/ui/run-state';
+import { Section } from '@/ui/section';
+
 interface Approval {
   id: string;
   taskId: string;
@@ -16,8 +19,11 @@ function message(error: unknown): string {
   if (error instanceof RequestFailure && error.status === 401) return 'Please sign in again.';
   if (error instanceof RequestFailure && error.status === 403)
     return 'This account cannot approve spending.';
+  if (error instanceof RequestFailure && (error.status === 404 || error.status === 503))
+    return 'Budget approvals are not available on this server.';
   return 'Approvals could not be updated. Refresh to check the saved decision before trying again.';
 }
+/** The wallet remounts it (a new key) when its one Refresh is pressed. */
 export function Approvals(): JSX.Element {
   const [rows, setRows] = useState<Approval[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,76 +58,90 @@ export function Approvals(): JSX.Element {
     }
   }
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-4">
-          <CardTitle className="text-base">Budget approvals</CardTitle>
-          <Button variant="outline" disabled={busy} onClick={refresh}>
-            Refresh approvals
-          </Button>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Approve one blocked operation beyond your cap. This does not raise your cap or add credit.
-          A fan-out approval includes the children it opens.
+    <Section
+      title="Budget approvals"
+      description="Approve one blocked operation beyond your cap. This does not raise your cap or add credit. A fan-out approval includes the children it opens."
+    >
+      {error && <Alert title="Approvals">{error}</Alert>}
+      {!rows && !error && (
+        <p role="status" className="text-sm text-ink-2">
+          Loading approvals…
         </p>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        {error && (
-          <p role="alert" className="text-sm text-gap">
-            {error}
-          </p>
-        )}
-        {!rows && !error && <p role="status">Loading approvals…</p>}
-        {rows?.length === 0 && (
-          <p className="text-sm text-muted-foreground">No approval requests.</p>
-        )}
-        {rows?.map((row) => (
-          <div key={row.id} className="grid gap-2 rounded-md border border-border p-4">
-            <p className="font-medium text-ink">{row.reason}</p>
-            <p className="text-sm text-muted-foreground">
-              {row.checkpoint} · Task <span className="font-mono">{row.taskId.slice(0, 8)}</span>
-            </p>
-            <p className="text-sm">
-              {row.unknownCost
-                ? 'One execution of unknown cost.'
-                : `Estimated cost: $${row.estimate.dollars.toFixed(6)} USD.`}
-            </p>
-            {row.status === 'pending' ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  disabled={busy}
-                  onClick={() => {
-                    void decide(row.id, 'grant');
-                  }}
-                >
-                  Approve once
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => {
-                    void decide(row.id, 'reject');
-                  }}
-                >
-                  Reject
-                </Button>
+      )}
+      {rows?.length === 0 && <p className="text-sm text-ink-2">No approval requests.</p>}
+      {rows && rows.length > 0 && (
+        // Ruled rows, not boxes. A pending request is the one thing on this
+        // page that waits on the reader, so it alone carries the red dot.
+        <ul className="border-t border-rule-minor">
+          {rows.map((row) => (
+            <li key={row.id} className="grid gap-2 border-b border-rule-minor py-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <p className="font-medium text-ink">{row.reason}</p>
+                {row.status === 'pending' ? (
+                  <RunState state="waiting">Waiting on your approval</RunState>
+                ) : row.status === 'rejected' ? (
+                  <RunState state="stopped">Rejected</RunState>
+                ) : (
+                  <RunState state="finished">Approved</RunState>
+                )}
               </div>
-            ) : (
-              <p role="status" className="text-sm text-muted-foreground">
-                {row.status === 'rejected' ? 'Rejected.' : 'Approved for this operation.'}{' '}
-                {row.resumePending
-                  ? 'Applying decision. Refresh to check progress.'
-                  : 'Decision delivered. View the session for its outcome.'}
+              <p className="flex flex-wrap gap-x-4 text-sm text-ink-2">
+                <span>{row.checkpoint}</span>
+                <span>
+                  Task <span className="font-mono">{row.taskId.slice(0, 8)}</span>
+                </span>
               </p>
-            )}
-          </div>
-        ))}
-        {rows && rows.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            Up to 100 requests, pending first. Refresh to load new requests or delivery updates.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+              <p className="text-sm">
+                {row.unknownCost ? (
+                  'One execution of unknown cost.'
+                ) : (
+                  <>
+                    Estimated cost{' '}
+                    <span className="font-mono tabular-nums">
+                      ${row.estimate.dollars.toFixed(6)}
+                    </span>{' '}
+                    USD.
+                  </>
+                )}
+              </p>
+              {row.status === 'pending' ? (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    disabled={busy}
+                    onClick={() => {
+                      void decide(row.id, 'grant');
+                    }}
+                  >
+                    Approve once
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => {
+                      void decide(row.id, 'reject');
+                    }}
+                  >
+                    Reject
+                  </Button>
+                </div>
+              ) : (
+                <p role="status" className="text-sm text-ink-2">
+                  {row.status === 'rejected' ? 'Rejected.' : 'Approved for this operation.'}{' '}
+                  {row.resumePending
+                    ? 'Applying decision. Refresh to check progress.'
+                    : 'Decision delivered. View the session for its outcome.'}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {rows && rows.length > 0 && (
+        <p className="text-xs text-ink-2">
+          Up to 100 requests, pending first. Refresh the wallet to load new requests or delivery
+          updates.
+        </p>
+      )}
+    </Section>
   );
 }

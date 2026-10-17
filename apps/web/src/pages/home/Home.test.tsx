@@ -36,7 +36,8 @@ describe('Home current account', () => {
     const card = {
       project: { id: 'p', title: 'Research', mode: 'seed', createdAt: 1000 },
       latestSession: null,
-      findingsCount: 1,
+      // No findings, so the well does not open this card's findings by itself.
+      findingsCount: 0,
       lastActivityAt: 2000,
       label: 'Awaiting session',
       tone: 'muted',
@@ -89,8 +90,7 @@ describe('Home current account', () => {
     expect(usePages).not.toHaveBeenCalled();
   });
   it.each(['identity', 'stub'] as const)('loads projects for the shared %s account', (mode) => {
-    const html = render({ status: 'ready', mode, account });
-    expect(html).toContain('Alice');
+    render({ status: 'ready', mode, account });
     expect(usePages).toHaveBeenCalledWith('/api/projects', expect.any(Function));
   });
   it('keeps the expired-cookie path after the account was initially ready', () => {

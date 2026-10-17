@@ -87,6 +87,11 @@ export function Session(): JSX.Element {
   // The socket is an external system, not render state: a ref, so opening it
   // does not itself schedule a render.
   const stream = useRef<Stream | null>(null);
+  // The socket's last state, kept apart from the page state. The socket can
+  // open before the snapshot request answers; that 'open' then found no state
+  // to land in, the snapshot wrote 'connecting', and the page said Connecting
+  // and refused to send for as long as it was open.
+  const life = useRef<SessionState['stream']>('connecting');
   // The conversation scrolls inside its surface, with the composer pinned under it.
   const streamBox = useRef<HTMLElement | null>(null);
   // Whether the reader was at the foot of the stream before the newest step
@@ -104,7 +109,7 @@ export function Session(): JSX.Element {
     fetchSession(id).then(
       (snapshot) => {
         if (!active) return;
-        setState({ snapshot, findings: [], stream: 'connecting' });
+        setState({ snapshot, findings: [], stream: life.current });
         const taskId = query.get('task');
         if (taskId && snapshot.tasks.some((task) => task.id === taskId)) setSelected(taskId);
       },
@@ -171,8 +176,10 @@ export function Session(): JSX.Element {
     if (!sessionId) return;
     const onEvent = (event: ServerEvent): void =>
       setState((current) => (current ? apply(current, event) : current));
-    const onState = (life: SessionState['stream']): void =>
-      setState((current) => (current ? { ...current, stream: life } : current));
+    const onState = (next: SessionState['stream']): void => {
+      life.current = next;
+      setState((current) => (current ? { ...current, stream: next } : current));
+    };
     const opened = openStream(sessionId, onEvent, onState);
     stream.current = opened;
     return () => {

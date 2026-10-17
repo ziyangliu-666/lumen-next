@@ -64,6 +64,15 @@ function WellSection({
   );
 }
 
+/** Puts a file in the project's /mnt/upload (steering's upload route) and resolves with its path. */
+async function upload(projectId: string, file: File): Promise<string> {
+  const saved = await request<{ path: string }>(
+    `/api/projects/${encodeURIComponent(projectId)}/upload/${encodeURIComponent(file.name)}`,
+    { method: 'PUT', headers: { 'content-type': 'application/octet-stream' }, body: file },
+  );
+  return saved.path;
+}
+
 export function Session(): JSX.Element {
   const { state: auth } = useCurrentAccount();
   const [state, setState] = useState<SessionState | null>(null);
@@ -495,6 +504,7 @@ export function Session(): JSX.Element {
             onSay={say}
             onSteer={steer}
             shownAgent={lead ? null : shownName}
+            onAttach={projectId ? (file) => upload(projectId, file) : undefined}
           />
         </div>
       </SurfaceMain>

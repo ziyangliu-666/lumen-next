@@ -24,7 +24,7 @@ export interface ProjectDraft {
 
 // The tab names say what the person does. The values stay the server's names.
 
-export const PROJECT_PLACEHOLDER = 'A question, a paper or a repo, or leave it empty';
+export const PROJECT_PLACEHOLDER = 'A question, or leave it empty';
 
 export function isProjectMode(value: string): value is ProjectMode {
   return value === 'explore' || value === 'seed';

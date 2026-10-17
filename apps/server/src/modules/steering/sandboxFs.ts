@@ -208,6 +208,33 @@ export class SandboxFs {
     await fsWriteFile(host, data);
   }
 
+  /**
+   * A file the user attached, written to /mnt/upload/<name>. The agents only
+   * read that folder; the person is the one who writes it. The name is
+   * reduced to its last part and to safe characters, so an upload cannot
+   * name a path, and the same quotas as the agents' writes apply.
+   */
+  async saveUpload(name: string, data: Buffer): Promise<string> {
+    const safe = (name.split(/[\\/]/).pop() ?? '')
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/^[.-]+/, '')
+      .slice(0, 120);
+    if (!safe) throw new SandboxPathError('the file needs a name');
+    if (data.byteLength > this.maxFileBytes) {
+      throw new SandboxQuotaError(`file exceeds ${this.maxFileBytes} bytes`);
+    }
+    const used = await this.usageBytes('upload');
+    if (used + data.byteLength > this.maxTotalBytes) {
+      throw new SandboxQuotaError(`project would exceed ${this.maxTotalBytes} bytes`);
+    }
+    const virtualPath = `/mnt/upload/${safe}`;
+    const { host } = this.parse(virtualPath);
+    await this.rejectSymlinkedAncestors(host, this.roots.upload);
+    await mkdir(dirname(host), { recursive: true });
+    await fsWriteFile(host, data);
+    return virtualPath;
+  }
+
   async remove(virtualPath: string): Promise<void> {
     const { scope, host } = this.parse(virtualPath);
     if (scope === 'upload') throw new SandboxPathError('upload is read-only to the agent');

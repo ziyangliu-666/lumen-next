@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { requireUser, type Principal } from '../../core/http/authGuard.js';
-import { badRequest, notFound } from '../../core/http/httpError.js';
-import { SandboxFs, SandboxPathError, type Scope } from './sandboxFs.js';
+import { badRequest, HttpError, notFound } from '../../core/http/httpError.js';
+import { SandboxFs, SandboxPathError, SandboxQuotaError, type Scope } from './sandboxFs.js';
 
 // The files panel's two routes, per docs/ARCHITECTURE.md §7. Both are project-
 // scoped, not session-scoped: they only ever address `upload` and `output`
@@ -55,6 +55,9 @@ function asHttpError(error: unknown): unknown {
   return error instanceof SandboxPathError || isNoEnt(error) ? notFound('no such file') : error;
 }
 
+/** The largest file a person may attach. The sandbox's per-file cap still applies. */
+const UPLOAD_LIMIT = 10 * 1024 * 1024;
+
 export function steeringRoutes(
   volumeRoot: string,
   requireProject?: ProjectGate,
@@ -79,6 +82,39 @@ export function steeringRoutes(
         }
       },
     );
+
+    // An attachment: the request body is the file, its name is in the path.
+    // Raw bytes, not multipart, so the route needs no form parser. Larger
+    // than the server's 1 MB default, which a paper's PDF passes.
+    app.register((scope, _options, done) => {
+      scope.addContentTypeParser(
+        'application/octet-stream',
+        { parseAs: 'buffer', bodyLimit: UPLOAD_LIMIT },
+        (_request, body, next) => next(null, body),
+      );
+      scope.put<{ Params: { id: string; name: string }; Body: Buffer }>(
+        '/api/projects/:id/upload/:name',
+        { bodyLimit: UPLOAD_LIMIT },
+        async (request, reply) => {
+          const principal = requireUser(request);
+          if (!Buffer.isBuffer(request.body))
+            throw badRequest('send the file as application/octet-stream');
+          try {
+            await requireProject?.(principal, request.params.id);
+            const path = await makeFs(request.params.id).saveUpload(
+              request.params.name,
+              request.body,
+            );
+            return await reply.code(201).send({ path });
+          } catch (error) {
+            if (error instanceof SandboxQuotaError) throw new HttpError(413, error.message);
+            if (error instanceof SandboxPathError) throw badRequest(error.message);
+            throw error;
+          }
+        },
+      );
+      done();
+    });
 
     app.get<{ Params: { id: string; '*': string } }>(
       '/api/projects/:id/files/*',

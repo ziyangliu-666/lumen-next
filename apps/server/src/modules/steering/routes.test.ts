@@ -149,3 +149,37 @@ describe('steering: files routes', () => {
     expect(response.statusCode).toBe(404);
   });
 });
+
+describe('steering: attaching a file', () => {
+  it('writes the body to /mnt/upload under a safe name, where the agents can read it', async () => {
+    const server = await build();
+    const response = await server.inject({
+      method: 'PUT',
+      url: `/api/projects/${PROJECT}/upload/${encodeURIComponent('../My Paper (v2).pdf')}`,
+      headers: { ...AUTH, 'content-type': 'application/octet-stream' },
+      payload: Buffer.from('%PDF-1.7'),
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({ path: '/mnt/upload/My-Paper-v2-.pdf' });
+    const saved = await new SandboxFs(volumeRoot, PROJECT).readFile('/mnt/upload/My-Paper-v2-.pdf');
+    expect(saved.toString()).toBe('%PDF-1.7');
+  });
+
+  it('refuses a stranger and a body that is not raw bytes', async () => {
+    const server = await build();
+    const anonymous = await server.inject({
+      method: 'PUT',
+      url: `/api/projects/${PROJECT}/upload/a.txt`,
+      headers: { 'content-type': 'application/octet-stream' },
+      payload: Buffer.from('x'),
+    });
+    expect(anonymous.statusCode).toBe(401);
+    const json = await server.inject({
+      method: 'PUT',
+      url: `/api/projects/${PROJECT}/upload/a.txt`,
+      headers: AUTH,
+      payload: { x: 1 },
+    });
+    expect(json.statusCode).toBe(400);
+  });
+});

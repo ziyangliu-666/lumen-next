@@ -867,8 +867,8 @@ export function Composer({
   onSteer: (text: string, when: SteerWhen) => void;
   /**
    * The name of the task shown when it is not the lead, for example
-   * "reader 2". A new turn always goes to the lead, so the field says so
-   * there instead of "Reply to lumen", which read as a reply to the reader.
+   * "reader 2". A steer goes to it, so the timing switch names it. A new
+   * turn always goes to the lead, and the field says "Reply to lumen".
    */
   shownAgent?: string | null;
   /**
@@ -938,7 +938,7 @@ export function Composer({
   return (
     <Field
       name="say"
-      label={running ? 'Steer the task shown' : shownAgent ? 'Reply to lumen' : 'Reply to lumen'}
+      label={running ? 'Steer the task shown' : 'Reply to lumen'}
       placeholder={
         running
           ? steerable
@@ -946,9 +946,7 @@ export function Composer({
               ? 'Steer this task before its next step…'
               : 'Steer this task at the end of its turn…'
             : 'This task is not running, so there is nothing to steer'
-          : shownAgent
-            ? 'Reply to lumen'
-            : 'Reply to lumen'
+          : 'Reply to lumen'
       }
       value={draft}
       onValueChange={setDraft}
@@ -958,7 +956,9 @@ export function Composer({
       // the socket is down, so a steer can be drafted for when it is back.
       // A new turn has no timing at all.
       {...(running ? { modes: TIMING } : {})}
-      modesLabel="lumen reads it"
+      // A steer goes to the task shown, so the switch names it: with
+      // reader 1 shown it said "lumen reads it".
+      modesLabel={`${shownAgent ?? 'lumen'} reads it`}
       modesLabelVisible
       modesDisabled={blocked}
       mode={when}

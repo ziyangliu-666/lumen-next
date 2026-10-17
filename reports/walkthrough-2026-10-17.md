@@ -29,6 +29,9 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | A16 | Steering at the end of the turn | **ok** | The timing switch and its hint change together. | |
 | A17 | Staging, gpt-4.1-nano, the first 12 Catalan numbers | **open** | Wrote 16669 for 16796 and said OEIS confirmed it; the search result beside it lists the right term. Same cause as A14. | Model choice. |
 | A18 | Checking computed Motzkin terms to n = 16 against OEIS | **fixed** | The search tool gave the model only the first 16 terms of each entry, so the reader could not check n = 16 and said so. | The whole data line goes to the model. |
+| A19 | The lead lists /mnt to look around | **fixed** | /mnt is not a scope, and the answer was "path is outside /mnt". | A listing of /mnt names the three folders and what each holds. |
+| A20 | A PDF attached, "check its claim for n up to 12" | **ok** | After F13: the lead delegated the text extraction, a reader decompressed the PDF streams with zlib, a second reader counted 321-avoiding involutions to n = 12 and matched A001405. It said which citation it had not checked. | The sandbox has no PDF library; a reader has to decode the file by hand. |
+| A21 | Steering reader 1 mid-run ("also print n = 13") | **ok** | The reader heard it at its next step. Brute force hit the 30-second command limit at n = 12; it tried a background job, which the sandbox does not keep, then used a memoised count checked against the brute-force values and said so. | |
 
 ## Files
 
@@ -41,11 +44,12 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | F5 | A file name in Chinese ("数据 表 v2.csv") | **fixed** | The safe-name rule kept ASCII only; it became "v2.csv". | Letters and digits of any script stay (this branch). |
 | F6 | A file over 10 MB | **fixed** | The hint said "Request body is too large". | The field says the 10 MB limit before sending (this branch). |
 | F7 | Opening a kept table | **fixed** | Every file was served as octet-stream, so the browser downloaded it. | Text types open as plain text with nosniff; others download (this branch). |
-| F8 | Staging files after a deploy | **fixed** | Project files lived on the machine's disk, which every deploy replaces: a saved table was gone after the next merge. | A 1 GB Fly volume at /data, `LUMEN_VOLUME_ROOT=/data/projects`. |
+| F8 | Staging files after a deploy | **fixed** | Project files lived on the machine's disk, which every deploy replaces: a saved table was gone after the next merge. | A 1 GB Fly volume at /data, `LUMEN_VOLUME_ROOT=/data/projects`. Checked on staging: a file saved at 10:29 was still listed after the 10:40 and 10:46 deploys. |
 | F9 | A file the lead called saved | **fixed** | Readers save to the session's scratch by default; the panel listed only /mnt/output, so the file was nowhere to be seen. | The files route lists one session's workspace with `?session=`, and the panel shows it under "Scratch, this session only". |
 | F10 | Seeing a file just attached | **fixed** | The panel listed kept results and scratch, never /mnt/upload, so nothing showed that the file had arrived. | An "Attached" group; each attachment opens like any other file. |
 | F11 | A folder the agents wrote (/mnt/output/motzkin/) | **fixed** | A folder was a name that did nothing; the script and table inside it were out of reach. | A folder opens in place and lists its files. |
 | F12 | Saving a file again near the quota | **fixed** | The old copy counted against the quota, so replacing a file the same size was refused. | A write does not count the copy it replaces, for agents and attachments. |
+| F13 | Reading an attached PDF | **fixed** | read_file decoded every file as UTF-8, so a PDF reached the model and the trace as replacement characters. | A binary file is named with its size, and the agent is told to read it with run. |
 
 ## Page and navigation
 
@@ -62,6 +66,8 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | P9 | A long question as a project title on Projects | **fixed** | The title was the first 120 UTF-16 units, so it ended mid-word ("and save the t") and could split an emoji. | Cut at a word boundary within 120 characters, marked with an ellipsis. |
 | P10 | The ledger on Wallet, by call | **fixed** | The lead's calls said "openai" and the readers' said "model: …", so one session read as two kinds of spend. | Every model call is "model: <name>". |
 | P11 | A reply with a Markdown table or a fenced script | **fixed** | Only paragraphs, lists and headings were drawn, so a table of terms became one line of pipes. | Tables and fenced code are drawn, still without HTML from the model. |
+| P12 | Reloading the page during a run | **ok** | The run, its spend and Stop came back; the field stayed usable. | |
+| P13 | Steering a reader: the timing switch | **fixed** | With reader 1 shown, the switch said "lumen reads it". | It names the task shown: "reader 1 reads it". |
 
 ## Phone, 390 px, dark and light
 
@@ -75,3 +81,4 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 ## Still to try
 
 - Approvals and top-ups with a billing database (staging).
+- A second session in a project. The client has `startSession`, but nothing calls it, so a project has one session and every reply continues it.

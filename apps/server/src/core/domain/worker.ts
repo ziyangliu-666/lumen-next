@@ -16,6 +16,19 @@ export interface Delegated {
   readonly title: string;
 }
 
+/**
+ * What delegate() throws when the fan-out waits for the person's approval.
+ * The turn ends there, but the task is waiting, not stopped: the kernel runs
+ * the work once it is approved and then gives the parent its turn back. A
+ * worker says nothing of its own for it; the page shows the waiting notice.
+ */
+export class WaitingForApproval extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WaitingForApproval';
+  }
+}
+
 export interface WorkerReport {
   /**
    * The log for this task run. Its lines already carry sessionId, taskId and

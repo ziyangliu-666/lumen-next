@@ -15,6 +15,7 @@ import {
 } from '../../core/model/index.js';
 import { SandboxFs } from './sandboxFs.js';
 import { SteerRegistry } from './steerRegistry.js';
+import { WaitingForApproval } from '../../core/domain/worker.js';
 import { createWorker, inSandboxTerms, isBinary } from './worker.js';
 
 const PROJECT = '11111111-1111-4111-8111-111111111111';
@@ -503,6 +504,18 @@ describe("createWorker: errors in the agent's terms", () => {
       ),
     ).toBe('no such file or folder: /mnt/output/table.txt');
     expect(inSandboxTerms('quota reached', call)).toBe('quota reached');
+  });
+});
+
+describe('a fan-out that waits for an approval', () => {
+  it('ends the turn without a "Stopped" line, and lets the kernel see the wait', async () => {
+    const model = scripted({ toolCalls: [toolCall('delegate', { tasks: ['count it'] })] });
+    const report = fakeReport();
+    report.delegate.mockRejectedValue(new WaitingForApproval('it is over the cap'));
+    await expect(
+      createWorker({ volumeRoot, context, registry, model }).run(taskOf(), 'x', asReport(report)),
+    ).rejects.toBeInstanceOf(WaitingForApproval);
+    expect(stepsOf(report).filter(([kind]) => kind === 'reply')).toEqual([]);
   });
 });
 

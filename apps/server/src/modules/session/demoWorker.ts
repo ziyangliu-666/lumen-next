@@ -1,6 +1,7 @@
 import type { StepRow } from '@lumen/contracts';
 import type { Worker, WorkerReport } from '../../core/domain/worker.js';
 import { ModelError, withLog, type ModelProvider } from '../../core/model/index.js';
+import { APPROVED_WORK_DONE } from './kernel.js';
 
 // A worker with no model and no sandbox. It plays the shape of a real run so
 // that the whole path can be seen and tested before the steering slice supplies
@@ -129,6 +130,18 @@ export function demoWorker(options: DemoOptions = {}): Worker {
           `Demo finding for "${task.title}". No model wrote this.`,
         );
         await report.appendStep(task.id, 'reply', `Recorded one finding for "${task.title}".`);
+        return;
+      }
+
+      // The turn after an approved fan-out: the readers have reported, and
+      // the scripted lead answers from them instead of fanning out again.
+      if (input.includes(APPROVED_WORK_DONE)) {
+        const done = (input.match(/\nstatus: ended\n/g) ?? []).length;
+        await report.appendStep(
+          task.id,
+          'reply',
+          `After the approval, ${done} readers finished; each recorded one demo finding.`,
+        );
         return;
       }
 

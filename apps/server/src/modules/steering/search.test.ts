@@ -32,6 +32,22 @@ describe('steering: the literature connectors', () => {
     ]);
   });
 
+  it('fills a short list of every-word papers with any-word ones, without repeats', async () => {
+    const entry = (id: string): string =>
+      `<entry><id>http://arxiv.org/abs/${id}v1</id><title>T ${id}</title><summary>s</summary></entry>`;
+    const feeds = [
+      `<feed>${entry('1111.5736')}</feed>`,
+      `<feed>${entry('math/0502504')}${entry('1111.5736')}</feed>`,
+    ];
+    const fetchImpl = () =>
+      Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(feeds.shift() ?? '') });
+    const result = await search('arxiv', '1324 bounds', fetchImpl);
+    expect(result.rows.map((row) => row.text)).toEqual([
+      '1111.5736, T 1111.5736',
+      'math/0502504, T math/0502504',
+    ]);
+  });
+
   it('gives each paper its year when the feed has one', async () => {
     const feed = `<feed><entry><id>http://arxiv.org/abs/1711.10325v3</id><published>2017-11-28T00:00:00Z</published><title>New bounds for 1324</title><summary>s</summary></entry></feed>`;
     const result = await search('arxiv', '1324 bounds', answer(feed));

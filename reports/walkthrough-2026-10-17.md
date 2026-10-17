@@ -28,6 +28,7 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | A15 | Stop during a run | **ok** | Arms on the first click, stops on the second; the tree says Stopped. | |
 | A16 | Steering at the end of the turn | **ok** | The timing switch and its hint change together. | |
 | A17 | Staging, gpt-4.1-nano, the first 12 Catalan numbers | **open** | Wrote 16669 for 16796 and said OEIS confirmed it; the search result beside it lists the right term. Same cause as A14. | Model choice. |
+| A18 | Checking computed Motzkin terms to n = 16 against OEIS | **fixed** | The search tool gave the model only the first 16 terms of each entry, so the reader could not check n = 16 and said so. | The whole data line goes to the model. |
 
 ## Files
 
@@ -42,6 +43,9 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | F7 | Opening a kept table | **fixed** | Every file was served as octet-stream, so the browser downloaded it. | Text types open as plain text with nosniff; others download (this branch). |
 | F8 | Staging files after a deploy | **fixed** | Project files lived on the machine's disk, which every deploy replaces: a saved table was gone after the next merge. | A 1 GB Fly volume at /data, `LUMEN_VOLUME_ROOT=/data/projects`. |
 | F9 | A file the lead called saved | **fixed** | Readers save to the session's scratch by default; the panel listed only /mnt/output, so the file was nowhere to be seen. | The files route lists one session's workspace with `?session=`, and the panel shows it under "Scratch, this session only". |
+| F10 | Seeing a file just attached | **fixed** | The panel listed kept results and scratch, never /mnt/upload, so nothing showed that the file had arrived. | An "Attached" group; each attachment opens like any other file. |
+| F11 | A folder the agents wrote (/mnt/output/motzkin/) | **fixed** | A folder was a name that did nothing; the script and table inside it were out of reach. | A folder opens in place and lists its files. |
+| F12 | Saving a file again near the quota | **fixed** | The old copy counted against the quota, so replacing a file the same size was refused. | A write does not count the copy it replaces, for agents and attachments. |
 
 ## Page and navigation
 
@@ -57,6 +61,7 @@ expected), **open** (found, not fixed here), **todo** (not yet tried).
 | P8 | Settings: Wallet, Account, Keys; sign out | **ok** | Each tab says what this server has; sign out lands on the front page with Sign in. | |
 | P9 | A long question as a project title on Projects | **fixed** | The title was the first 120 UTF-16 units, so it ended mid-word ("and save the t") and could split an emoji. | Cut at a word boundary within 120 characters, marked with an ellipsis. |
 | P10 | The ledger on Wallet, by call | **fixed** | The lead's calls said "openai" and the readers' said "model: …", so one session read as two kinds of spend. | Every model call is "model: <name>". |
+| P11 | A reply with a Markdown table or a fenced script | **fixed** | Only paragraphs, lists and headings were drawn, so a table of terms became one line of pipes. | Tables and fenced code are drawn, still without HTML from the model. |
 
 ## Phone, 390 px, dark and light
 

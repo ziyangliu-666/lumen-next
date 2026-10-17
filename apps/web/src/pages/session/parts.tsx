@@ -1,8 +1,8 @@
 // The pieces of the Session page, after docs/spec, page 04, in the Raster
 // look. Owner: LIU ZIYANG, except
 // Composer and Files, which are LI ZHUOYANG's: the composer says a new turn to
-// the lead, or steers the task shown while it runs; the files panel lists what
-// the project has written. Attachments are still his to add.
+// the lead, or steers the task shown while it runs, and attaches a file; the
+// files panel lists what the person attached and what the agents wrote.
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import type { ClientCommand, Step, Task } from '@lumen/contracts';
 import { cn } from '@/lib/utils';
@@ -576,71 +576,165 @@ export interface ProjectFile {
   readonly modifiedAt: number;
 }
 
-/** LI ZHUOYANG's. What the project has written to its output, newest first. */
 /**
- * What the agents wrote: the project's kept results (/mnt/output) first, then
- * this session's scratch (/mnt/workspace), each newest first. Readers write
- * scripts and tables to the scratch by default, and the lead then called a
- * file saved that the panel did not show. A file opens in a new tab from
- * steering's files route; a folder is only named.
+ * LI ZHUOYANG's. The project's files, in three groups: what the person
+ * attached (/mnt/upload), the kept results (/mnt/output), and this session's
+ * scratch (/mnt/workspace), each newest first. Readers write to the scratch
+ * by default, and the lead then called a file saved that the panel did not
+ * show. An attachment was listed nowhere at all, so the person could not see
+ * that it had arrived. A file opens in a new tab from steering's files route.
+ * A folder opens in place: an agent that saved its tables to results/ left
+ * them out of reach behind a name that did nothing.
  */
 export function Files({
   files,
   projectId,
   sessionId,
+  openFolder,
 }: {
   files: readonly ProjectFile[] | 'failed';
   projectId?: string | undefined;
   sessionId?: string | undefined;
+  /** What a folder holds; without it a folder is only named. */
+  openFolder?: ((virtualPath: string) => Promise<readonly ProjectFile[]>) | undefined;
 }): JSX.Element {
   if (files === 'failed') {
     return <p className="text-sm text-ink-2">The files could not be read.</p>;
   }
   if (files.length === 0) return <p className="text-sm text-ink-2">None yet.</p>;
-  const kept = files.filter((file) => file.virtualPath.startsWith('/mnt/output/'));
-  const scratch = files.filter((file) => file.virtualPath.startsWith('/mnt/workspace/'));
-  const link = (file: ProjectFile): string | null => {
-    if (!projectId || file.kind !== 'file') return null;
-    const path = file.virtualPath.replace(/^\/mnt\//, '');
-    const session =
-      path.startsWith('workspace/') && sessionId ? `?session=${encodeURIComponent(sessionId)}` : '';
-    return `/api/projects/${encodeURIComponent(projectId)}/files/${path}${session}`;
-  };
-  const list = (group: readonly ProjectFile[]): JSX.Element => (
-    <ul>
-      {[...group]
-        .sort((a, b) => b.modifiedAt - a.modifiedAt)
-        .map((file) => {
-          const name = file.virtualPath.replace(/^\/mnt\/(output|workspace)\//, '');
-          const href = link(file);
-          const label = `${name}${file.kind === 'directory' ? '/' : ''}`;
-          return (
-            <li
-              key={file.virtualPath}
-              className="border-t border-rule-minor py-1 font-mono text-xs break-all text-ink first:border-t-0"
-            >
-              {href ? (
-                <a href={href} target="_blank" rel="noreferrer" className="hover:underline">
-                  {label}
-                </a>
-              ) : (
-                <span>{label}</span>
-              )}
-            </li>
-          );
-        })}
-    </ul>
-  );
+  const under = (root: string): ProjectFile[] =>
+    files.filter((file) => file.virtualPath.startsWith(`/mnt/${root}/`));
+  const groups = [
+    { label: 'Attached', files: under('upload') },
+    { label: 'Kept', files: under('output') },
+    { label: 'Scratch, this session only', files: under('workspace') },
+  ].filter((group) => group.files.length > 0);
   return (
     <div className="space-y-3">
-      {kept.length > 0 ? list(kept) : null}
-      {scratch.length > 0 ? (
-        <div>
-          <p className="mb-1 text-xs text-ink-2">Scratch, this session only</p>
-          {list(scratch)}
+      {groups.map((group) => (
+        <div key={group.label}>
+          <p className="mb-1 text-xs text-ink-2">{group.label}</p>
+          <FileList
+            files={group.files}
+            projectId={projectId}
+            sessionId={sessionId}
+            openFolder={openFolder}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FileList({
+  files,
+  projectId,
+  sessionId,
+  openFolder,
+}: {
+  files: readonly ProjectFile[];
+  projectId: string | undefined;
+  sessionId: string | undefined;
+  openFolder: ((virtualPath: string) => Promise<readonly ProjectFile[]>) | undefined;
+}): JSX.Element {
+  return (
+    <ul>
+      {[...files]
+        .sort((a, b) => b.modifiedAt - a.modifiedAt)
+        .map((file) => (
+          <li
+            key={file.virtualPath}
+            className="border-t border-rule-minor py-1 font-mono text-xs break-all text-ink first:border-t-0"
+          >
+            {file.kind === 'directory' ? (
+              <Folder
+                file={file}
+                projectId={projectId}
+                sessionId={sessionId}
+                openFolder={openFolder}
+              />
+            ) : (
+              <FileLink file={file} projectId={projectId} sessionId={sessionId} />
+            )}
+          </li>
+        ))}
+    </ul>
+  );
+}
+
+function FileLink({
+  file,
+  projectId,
+  sessionId,
+}: {
+  file: ProjectFile;
+  projectId: string | undefined;
+  sessionId: string | undefined;
+}): JSX.Element {
+  if (!projectId) return <span>{file.name}</span>;
+  const path = file.virtualPath.replace(/^\/mnt\//, '');
+  const session =
+    path.startsWith('workspace/') && sessionId ? `?session=${encodeURIComponent(sessionId)}` : '';
+  return (
+    <a
+      href={`/api/projects/${encodeURIComponent(projectId)}/files/${path}${session}`}
+      target="_blank"
+      rel="noreferrer"
+      className="hover:underline"
+    >
+      {file.name}
+    </a>
+  );
+}
+
+function Folder({
+  file,
+  projectId,
+  sessionId,
+  openFolder,
+}: {
+  file: ProjectFile;
+  projectId: string | undefined;
+  sessionId: string | undefined;
+  openFolder: ((virtualPath: string) => Promise<readonly ProjectFile[]>) | undefined;
+}): JSX.Element {
+  const [inside, setInside] = useState<readonly ProjectFile[] | 'failed' | null>(null);
+  const [open, setOpen] = useState(false);
+  if (!openFolder) return <span>{file.name}/</span>;
+  const toggle = (): void => {
+    setOpen(!open);
+    if (open || inside) return;
+    openFolder(file.virtualPath).then(setInside, () => setInside('failed'));
+  };
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={toggle}
+        className="text-left hover:underline"
+      >
+        {file.name}/
+      </button>
+      {open ? (
+        <div className="mt-1 border-l border-rule-minor pl-3">
+          {inside === null ? (
+            <p className="text-ink-2">Reading…</p>
+          ) : inside === 'failed' ? (
+            <p className="text-ink-2">This folder could not be read.</p>
+          ) : inside.length === 0 ? (
+            <p className="text-ink-2">Empty.</p>
+          ) : (
+            <FileList
+              files={inside}
+              projectId={projectId}
+              sessionId={sessionId}
+              openFolder={openFolder}
+            />
+          )}
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
 

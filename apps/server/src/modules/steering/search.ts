@@ -72,10 +72,9 @@ async function oeis(query: string, fetchImpl: Fetch, signal: AbortSignal): Promi
     })),
     text: [
       `OEIS: ${hits.length} of ${list.length} matches for "${query}".`,
-      ...hits.map(
-        (hit) =>
-          `${id(hit.number)}: ${hit.name}\n  ${(hit.data ?? '').split(',').slice(0, 16).join(',')}`,
-      ),
+      // The whole data line, a few hundred characters: cut to 16 terms, a
+      // reader could not check the terms it had computed past n = 15.
+      ...hits.map((hit) => `${id(hit.number)}: ${hit.name}\n  ${hit.data ?? ''}`),
     ].join('\n'),
   };
 }

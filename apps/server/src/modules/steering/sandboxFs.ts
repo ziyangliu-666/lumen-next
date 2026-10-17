@@ -79,6 +79,22 @@ function isNoEnt(error: unknown): boolean {
   );
 }
 
+/**
+ * The bytes a write takes back: the file it replaces. Without this, the old
+ * copy counted against the quota, so saving a table again near the limit
+ * was refused although the project would not grow.
+ */
+async function replacedBytes(host: string): Promise<number> {
+  try {
+    const info = await lstat(host);
+    return info.isFile() ? info.size : 0;
+  } catch {
+    // Nothing there to replace. A path that cannot hold a file fails in
+    // the write itself, with the error the agent should hear.
+    return 0;
+  }
+}
+
 async function walkSizeBytes(root: string): Promise<number> {
   let entries;
   try {
@@ -195,7 +211,7 @@ export class SandboxFs {
     if (data.byteLength > this.maxFileBytes) {
       throw new SandboxQuotaError(`file exceeds ${this.maxFileBytes} bytes`);
     }
-    const used = await this.usageBytes(scope);
+    const used = (await this.usageBytes(scope)) - (await replacedBytes(host));
     if (used + data.byteLength > this.maxTotalBytes) {
       throw new SandboxQuotaError(`project would exceed ${this.maxTotalBytes} bytes`);
     }
@@ -225,12 +241,12 @@ export class SandboxFs {
     if (data.byteLength > this.maxFileBytes) {
       throw new SandboxQuotaError(`file exceeds ${this.maxFileBytes} bytes`);
     }
-    const used = await this.usageBytes('upload');
+    const virtualPath = `/mnt/upload/${safe}`;
+    const { host } = this.parse(virtualPath);
+    const used = (await this.usageBytes('upload')) - (await replacedBytes(host));
     if (used + data.byteLength > this.maxTotalBytes) {
       throw new SandboxQuotaError(`project would exceed ${this.maxTotalBytes} bytes`);
     }
-    const virtualPath = `/mnt/upload/${safe}`;
-    const { host } = this.parse(virtualPath);
     await this.rejectSymlinkedAncestors(host, this.roots.upload);
     await mkdir(dirname(host), { recursive: true });
     await fsWriteFile(host, data);

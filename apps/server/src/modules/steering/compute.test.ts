@@ -59,6 +59,32 @@ describe('compute() factory', () => {
     expect(args.indexOf('alpine:3')).toBeGreaterThan(args.lastIndexOf('--security-opt'));
   });
 
+  it('mounts the packages read-only on the import path, before the image', () => {
+    const args = dockerArgs({
+      name: 'lumen-2',
+      image: 'python:3.12-slim',
+      memory: '256m',
+      hostMounts: { upload: '/h/u', workspace: '/h/w', output: '/h/o' },
+      cwd: '/mnt/workspace',
+      command: 'python3 plot.py',
+      libs: '/opt/sandbox-lib',
+    });
+    expect(args).toContain('/opt/sandbox-lib:/opt/lumen-lib:ro');
+    expect(args).toContain('PYTHONPATH=/opt/lumen-lib');
+    expect(args).toContain('MPLBACKEND=Agg');
+    expect(args.indexOf('python:3.12-slim')).toBeGreaterThan(args.indexOf('MPLCONFIGDIR=/tmp'));
+    expect(
+      dockerArgs({
+        name: 'n',
+        image: 'i',
+        memory: 'm',
+        hostMounts: { upload: 'u', workspace: 'w', output: 'o' },
+        cwd: '/',
+        command: 'x',
+      }),
+    ).not.toContain('PYTHONPATH=/opt/lumen-lib');
+  });
+
   it("selects a DockerCompute for 'docker'", () => {
     expect(compute('docker', mounts)).toBeInstanceOf(DockerCompute);
   });

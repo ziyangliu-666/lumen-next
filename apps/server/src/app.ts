@@ -33,7 +33,7 @@ import {
 } from './modules/identity/index.js';
 import { createProjectsSlice, type ProjectsSlice } from './modules/projects/index.js';
 import { demoWorker, createSessionSlice, type SessionSlice } from './modules/session/index.js';
-import { createSteeringSlice } from './modules/steering/index.js';
+import { createSteeringSlice, type SandboxSetup } from './modules/steering/index.js';
 
 export interface IdentityConfig {
   /** The one origin the browser uses. Every request that is not a GET must name it. */
@@ -73,6 +73,8 @@ export interface AppOptions {
   readonly volumeRoot?: string;
   /** Which Compute steering's worker runs a reader's command against. Defaults to 'none': no Docker required. */
   readonly computeProvider?: 'docker' | 'none';
+  /** The sandbox's image and packages (LUMEN_SANDBOX_IMAGE, LUMEN_SANDBOX_LIBS). */
+  readonly sandbox?: SandboxSetup;
   /** Who steering's worker thinks with. The model that does nothing if omitted. */
   readonly model?: ModelProvider;
   /**
@@ -198,6 +200,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
     taskSession: (taskId) => session.projects.taskSession(taskId),
     sessionContext: (sessionId) => session.projects.context(sessionId),
     ...(options.computeProvider ? { computeProvider: options.computeProvider } : {}),
+    ...(options.sandbox ? { sandbox: options.sandbox } : {}),
     ...(model ? { model } : {}),
   });
   const worker =

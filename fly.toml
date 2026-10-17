@@ -23,6 +23,10 @@ primary_region = "sin"
   LUMEN_MODELS = "gpt-4.1-mini,gpt-4.1-nano"
   LUMEN_WORKER = "steering"
   LUMEN_COMPUTE_PROVIDER = "docker"
+  # The sandbox: the same Python as the packages built into the app image
+  # (Dockerfile, sandbox-lib stage), so readers can plot, solve and count.
+  LUMEN_SANDBOX_IMAGE = "python:3.12-slim-bookworm"
+  LUMEN_SANDBOX_LIBS = "/opt/sandbox-lib"
   LUMEN_VOLUME_ROOT = "/data/projects"
   LUMEN_DEMO_PACE_MS = "300"
 

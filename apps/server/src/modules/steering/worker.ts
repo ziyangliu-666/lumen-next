@@ -9,7 +9,7 @@ import {
   type Tool,
   type ToolCall,
 } from '../../core/model/index.js';
-import { compute } from './compute.js';
+import { compute, type SandboxSetup } from './compute.js';
 import { SandboxFs, SandboxPathError, SandboxQuotaError } from './sandboxFs.js';
 import { search, SEARCH_SOURCES, type SearchSource } from './search.js';
 import type { SteerQueue } from './steerCommand.js';
@@ -166,6 +166,8 @@ export interface WorkerOptions {
   readonly volumeRoot: string;
   /** How long a read in /mnt/upload waits for a file still uploading. 15 s if omitted. */
   readonly uploadWaitMs?: number;
+  /** The sandbox's image and packages. The default image, with none, if omitted. */
+  readonly sandbox?: SandboxSetup;
   /** From the session slice's own SessionDirectory: which project a session belongs to. */
   readonly context: (
     sessionId: string,
@@ -410,7 +412,7 @@ export function createWorker(options: WorkerOptions): Worker {
         case 'run': {
           const command = stringArg(call, 'command');
           const sandbox = await this.requireFiles();
-          const result = await compute(provider, sandbox.hostMounts).run(command, {
+          const result = await compute(provider, sandbox.hostMounts, options.sandbox).run(command, {
             cwd: '/mnt/workspace',
             timeoutMs,
           });

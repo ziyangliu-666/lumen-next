@@ -526,10 +526,16 @@ export class Kernel {
         attemptId,
         estimate: zero,
         at,
-        reason,
+        reason: budgetReason(reason),
       });
-    } catch {
-      // A guard that could not answer has not said yes.
+    } catch (error) {
+      // A guard that could not answer has not said yes. Its error is logged:
+      // the person sees only "could not be checked", and without the cause
+      // an over-cap turn and a broken guard looked the same.
+      taskLog(this.log, { sessionId: task.sessionId, taskId: task.id }).error(
+        { err: error, at },
+        'budget check failed',
+      );
       decision = { kind: 'deny' as const, reason: 'the budget could not be checked' };
     }
     if (decision.kind === 'allow') return null;
@@ -611,6 +617,23 @@ const CONVERSATION_LIMIT = 24_000;
  * message. When the conversation is long the oldest lines go first, but the
  * opening question always stays, because it says what the session is about.
  */
+const SAID = '\nThe user now says: ';
+const REASON_LIMIT = 300;
+
+/**
+ * What the budget and an approval request are told a turn is for: the
+ * person's latest words, cut short. The turn's input carries the whole
+ * conversation (withConversation), and billing refuses a reason over 2,000
+ * characters, so every follow-up turn over the cap failed as "the budget
+ * could not be checked" instead of asking for an approval.
+ */
+export function budgetReason(input: string): string {
+  const at = input.lastIndexOf(SAID);
+  const said = (at >= 0 ? input.slice(at + SAID.length) : input).replace(/\s+/gu, ' ').trim();
+  const chars = [...said];
+  return chars.length <= REASON_LIMIT ? said : `${chars.slice(0, REASON_LIMIT - 1).join('')}…`;
+}
+
 export function withConversation(earlier: readonly Exchange[], text: string): string {
   const render = (line: Exchange): string =>
     `${line.who === 'user' ? 'User' : 'You'}: ${line.text}`;
@@ -630,6 +653,6 @@ export function withConversation(earlier: readonly Exchange[], text: string): st
     render(first),
     ...kept,
     '',
-    `The user now says: ${text}`,
+    `${SAID.slice(1)}${text}`,
   ].join('\n');
 }

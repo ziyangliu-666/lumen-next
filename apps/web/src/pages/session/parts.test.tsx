@@ -308,7 +308,7 @@ describe('session page: the rail', () => {
       <Composer disabled={false} running={true} steerable={false} onSay={noop} onSteer={noop} />,
     );
     expect(html).toMatch(/<textarea[^>]*disabled=""/);
-    expect(html).toContain('This task has finished');
+    expect(html).toContain('Nothing to steer right now');
   });
 
   it('keeps a new turn writable while the socket is down, and only sending is off', () => {

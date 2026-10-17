@@ -65,23 +65,18 @@ export function Topups(): JSX.Element {
     <Section
       title="Test-mode top-ups"
       busy={loading || busy}
-      description="Add USD 5 to your spending cap using Stripe test mode. No real money is charged. Top-ups do not reduce recorded spend or automatically resume a waiting task. No refunds; remaining credit is forfeited when the account is deleted."
+      description="Adds USD 5 to your cap in Stripe test mode; no real money is charged. No refunds."
     >
       <div className="grid gap-4 text-sm">
         {returned === 'returned' && confirmed && (
           <p role="status" className="text-ink">
-            Your USD 5 test top-up is confirmed. The spending cap has been updated.
+            USD 5 added to your cap.
           </p>
         )}
         {returned === 'returned' && !confirmed && (
-          <p role="status">
-            Back from Stripe. This payment is waiting for its confirmed receipt. Refresh to check
-            for confirmation and the updated cap.
-          </p>
+          <p role="status">Waiting for Stripe to confirm the payment. Refresh to check.</p>
         )}
-        {returned === 'cancelled' && (
-          <p role="status">Checkout was cancelled. Returning here does not add credit.</p>
-        )}
+        {returned === 'cancelled' && <p role="status">Checkout cancelled. Nothing was added.</p>}
         {error && <Alert title="Top-ups">{error}</Alert>}
         {loading && (
           <p role="status" className="text-ink-2">
@@ -89,9 +84,9 @@ export function Topups(): JSX.Element {
           </p>
         )}
         {data && !data.enabled && (
-          <Alert role="status" title="Test top-ups are off on this server">
-            No checkout is configured, so no credit can be added here.
-          </Alert>
+          <p role="status" className="text-ink-2">
+            Top-ups are off on this server.
+          </p>
         )}
         {data?.enabled ? (
           <div className="flex flex-wrap gap-2">

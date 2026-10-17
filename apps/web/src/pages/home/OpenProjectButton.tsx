@@ -53,7 +53,11 @@ export function OpenProjectButton({
           disabled={pending}
           aria-busy={pending}
           onClick={onClick}
-          className="group block w-full min-w-0 text-left disabled:opacity-50"
+          // The plain button stretches its hit area over the whole row (the
+          // nearest positioned parent), so the row opens wherever it is
+          // clicked; only the title text was a target before, and it was
+          // hard to hit.
+          className="group block w-full min-w-0 text-left after:absolute after:inset-0 after:content-[''] disabled:opacity-50"
         >
           {children}
         </button>

@@ -34,8 +34,13 @@ export const NullCompute: Compute = {
 
 /** No tool a "no model yet" worker runs needs more than this; raise it once one does. */
 const DEFAULT_MEMORY = '512m';
-/** Pinned, not `:latest`: a worker's output must not change because an image did. */
-const DEFAULT_IMAGE = 'alpine:3.20';
+/**
+ * Pinned, not `:latest`: a worker's output must not change because an image
+ * did. Alpine with Python 3: the readers count and check sequences by writing
+ * small Python programs, and bare Alpine has no interpreter, so every such
+ * run failed with "python3: not found".
+ */
+const DEFAULT_IMAGE = 'python:3.12-alpine3.20';
 
 export interface DockerComputeOptions {
   readonly image?: string;

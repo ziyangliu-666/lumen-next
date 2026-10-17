@@ -159,8 +159,9 @@ describe('createWorker: the conversation', () => {
     await worker.run(taskOf({ id: 'r', agent: 'reader' }), 'x', asReport(fakeReport()));
 
     const names = (request: ModelRequest): string[] => (request.tools ?? []).map((t) => t.name);
-    expect(names(model.requests[0]!)).toEqual(['delegate', 'list_files', 'read_file']);
+    expect(names(model.requests[0]!)).toEqual(['search', 'delegate', 'list_files', 'read_file']);
     expect(names(model.requests[1]!)).toEqual([
+      'search',
       'run',
       'list_files',
       'read_file',

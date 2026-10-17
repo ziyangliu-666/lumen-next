@@ -100,11 +100,31 @@ export class Kernel {
     return snapshot;
   }
 
-  /** A new turn on the root: the user's words become a step, then the worker runs again. */
+  /**
+   * A new turn on the root: the user's words become a step, then the worker
+   * runs again. A worker starts each turn from what it is given, so the turn
+   * is given the conversation so far: the question that opened the session,
+   * then each later message and each answer, in order. Without it a
+   * follow-up such as "compute it yourself" reached a lead that no longer
+   * knew what "it" was, and it went off on a task of its own.
+   */
   async say(sessionId: string, principal: Principal, text: string): Promise<void> {
     const root = await this.rootFor(sessionId, principal);
+    const earlier = await this.conversation(sessionId, root);
     await this.appendStep(root.id, 'you', text);
-    this.track(this.run(root, text, {}));
+    this.track(this.run(root, withConversation(earlier, text), {}));
+  }
+
+  /** The root's own exchange so far: the opening question, then 'you' and 'reply' steps. */
+  private async conversation(sessionId: string, root: Task): Promise<Exchange[]> {
+    const snapshot = await this.trace.snapshot(sessionId);
+    const lines: Exchange[] = [{ who: 'user', text: root.title }];
+    for (const step of snapshot?.steps ?? []) {
+      if (step.taskId !== root.id) continue;
+      if (step.kind === 'you') lines.push({ who: 'user', text: step.text });
+      else if (step.kind === 'reply') lines.push({ who: 'lumen', text: step.text });
+    }
+    return lines;
   }
 
   async stop(sessionId: string, principal: Principal): Promise<void> {
@@ -567,4 +587,40 @@ export class Kernel {
     }
     return { ...snapshot, totals, spend: tree?.cost() ?? zero };
   }
+}
+
+interface Exchange {
+  readonly who: 'user' | 'lumen';
+  readonly text: string;
+}
+
+/** The most of the earlier conversation a turn is given, newest kept, in characters. */
+const CONVERSATION_LIMIT = 24_000;
+
+/**
+ * The input for a follow-up turn: the conversation so far, then the new
+ * message. When the conversation is long the oldest lines go first, but the
+ * opening question always stays, because it says what the session is about.
+ */
+export function withConversation(earlier: readonly Exchange[], text: string): string {
+  const render = (line: Exchange): string =>
+    `${line.who === 'user' ? 'User' : 'You'}: ${line.text}`;
+  const [first, ...rest] = earlier;
+  if (!first) return text;
+  const kept: string[] = [];
+  let size = render(first).length;
+  for (let i = rest.length - 1; i >= 0; i--) {
+    const line = render(rest[i]!);
+    if (size + line.length > CONVERSATION_LIMIT) break;
+    kept.unshift(line);
+    size += line.length;
+  }
+  return [
+    'The conversation so far:',
+    '',
+    render(first),
+    ...kept,
+    '',
+    `The user now says: ${text}`,
+  ].join('\n');
 }

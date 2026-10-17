@@ -135,9 +135,12 @@ export function demoWorker(options: DemoOptions = {}): Worker {
       // The first turn of a root is its question. A later turn is the user
       // speaking again, and gets one reader rather than the whole fan-out.
       const firstTurn = input === task.title;
+      // A later turn arrives with the conversation before it (kernel `say`);
+      // the scripted demo works on the new message only.
+      const said = firstTurn ? input : (input.split('\nThe user now says: ').pop() ?? input);
       const parts = firstTurn
         ? PARTS.map((part) => ({ agent: 'reader', title: `${part}: ${input}` }))
-        : [{ agent: 'reader', title: input }];
+        : [{ agent: 'reader', title: said }];
 
       // A later turn thinks for a moment. The first one goes straight to its
       // search, which waits for itself: two waits in a row showed a person
@@ -159,7 +162,7 @@ export function demoWorker(options: DemoOptions = {}): Worker {
           task.id,
           'thinking',
           'You lead a small research team. In two sentences, say what must be checked first and why. Plain words, no list.',
-          firstTurn ? `The question is: ${input}` : `The user now says: ${input}`,
+          firstTurn ? `The question is: ${input}` : input,
         );
       } else {
         await report.appendStep(
@@ -167,7 +170,7 @@ export function demoWorker(options: DemoOptions = {}): Worker {
           'thinking',
           firstTurn
             ? `Before anything else, find out what is already known about "${input}": a result that is rediscovered is worth nothing. Then split it ${parts.length} ways.`
-            : `"${input}" is one line of enquiry. One reader.`,
+            : `"${said}" is one line of enquiry. One reader.`,
         );
       }
       // delegate() writes the delegate step itself, naming the tasks it opened.
@@ -179,7 +182,7 @@ export function demoWorker(options: DemoOptions = {}): Worker {
           task.id,
           'reply',
           'You lead a small research team. Your readers have reported. In two sentences, tell the user what was found and what you would do next. Be honest that the readers are a demo and found nothing real.',
-          `Question: ${input}. ${ended} of ${children.length} readers finished; each recorded one demo finding.`,
+          `Question: ${said}. ${ended} of ${children.length} readers finished; each recorded one demo finding.`,
         );
       } else {
         await report.appendStep(

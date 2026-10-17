@@ -118,7 +118,8 @@ export function ProjectRow({
           </time>
         </span>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 empty:hidden">
+      {/* Above the row's stretched open target, so these still get their clicks. */}
+      <div className="relative z-10 mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 empty:hidden">
         {/* A button that looks like one: underlined, it looked like the link
             to the project, but it only changes what the well shows. */}
         {card.findingsCount > 0 || showingFindings ? (

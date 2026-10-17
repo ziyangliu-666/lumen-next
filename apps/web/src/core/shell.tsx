@@ -108,6 +108,7 @@ export function PageCrumb({ page }: { page?: string }): JSX.Element {
 // the quiet shot.
 function shotOf(path: string): ShotName {
   if (path === '/') return 'landing';
+  if (path === '/signin') return 'signin';
   if (path === '/home') return 'home';
   if (path === '/session') return 'session';
   return 'quiet';
@@ -189,7 +190,10 @@ export function AppShell({
   const [crumb, setCrumb] = useState<HTMLElement | null>(null);
   const [status, setStatus] = useState<HTMLElement | null>(null);
   const [actions, setActions] = useState<HTMLElement | null>(null);
-  const home = PUBLIC.has(path) ? '#/' : '#/home';
+  // The wordmark is the front page from everywhere, signed in or not: the
+  // breadcrumb's Projects is the way to the projects, and the front page
+  // shows the account in the corner once someone is signed in.
+  const home = '#/';
   // The landing and sign-in have one surface and no regions for a rule to
   // separate, so the prototype draws their bar without one, the same on
   // both, because they are one flow. Every other page keeps it.

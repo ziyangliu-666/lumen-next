@@ -8,7 +8,7 @@ import { capture } from '../../core/log/testLog.js';
 import { Broker } from '../../core/protocol/broker.js';
 import { Delegation } from './delegation.js';
 import { demoWorker } from './demoWorker.js';
-import { Kernel } from './kernel.js';
+import { Kernel, withConversation } from './kernel.js';
 import { MemoryTrace } from './memoryTrace.js';
 
 const owner: Principal = { accountId: 'acc-1', role: 'user' };
@@ -130,7 +130,7 @@ describe('session: kernel', () => {
     expect((await kernel.snapshot(session.id, owner)).tasks[0]?.status).toBe('failed');
   });
 
-  it('turns a say into a "you" step on the root and another turn with those words', async () => {
+  it('turns a say into a "you" step on the root and another turn given the conversation so far', async () => {
     const { kernel } = harness();
     const { session } = await kernel.start('p1', owner.accountId, 'q');
     await kernel.idle();
@@ -141,7 +141,12 @@ describe('session: kernel', () => {
     expect(steps.map((step) => [step.kind, step.text])).toEqual([
       ['reply', 'got "q"'],
       ['you', 'go deeper'],
-      ['reply', 'got "go deeper"'],
+      // The follow-up turn knows what came before: without it, "go deeper"
+      // reached a worker that no longer knew the question.
+      [
+        'reply',
+        'got "The conversation so far:\n\nUser: q\nYou: got "q"\n\nThe user now says: go deeper"',
+      ],
     ]);
   });
 
@@ -823,5 +828,24 @@ describe('session: kernel, the three budget check points', () => {
     const { tasks, steps } = await kernel.snapshot(session.id, owner);
     expect(tasks[0]?.status).toBe('stopped');
     expect(steps[0]?.text).toBe('Not run: the budget could not be checked.');
+  });
+});
+
+describe('session: the conversation a follow-up turn is given', () => {
+  it('keeps the opening question and drops the oldest lines when it is long', () => {
+    const long = 'x'.repeat(10_000);
+    const input = withConversation(
+      [
+        { who: 'user', text: 'the question' },
+        { who: 'lumen', text: `old ${long}` },
+        { who: 'user', text: `middle ${long}` },
+        { who: 'lumen', text: `newest ${long}` },
+      ],
+      'next',
+    );
+    expect(input).toContain('User: the question');
+    expect(input).toContain('You: newest');
+    expect(input).not.toContain('You: old');
+    expect(input.endsWith('The user now says: next')).toBe(true);
   });
 });

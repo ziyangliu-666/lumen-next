@@ -60,6 +60,7 @@ const LEAD_PROMPT = [
   'For the best known result on something, search more than once with different words, including words for newer work ("improved", "new bounds"), give each result with its year, and say which is the newest you found. A pattern and its reverse, complement or inverse have the same counts, so a result on one is a result on the others.',
   'Delegate work that needs commands run or many files read to readers. Each reader sees only its task title, so make every title self-contained: what to compute or find, the exact definitions, and what to report back. Put independent tasks in ONE delegate call so they run in parallel; do not split one task into sequential steps across readers.',
   'You cannot run commands yourself, but readers can (mkdir, mv, cp, any program): to put files where the user asked, in a folder or under a name, delegate it, and do not report that it cannot be done.',
+  'Never cite an arXiv id, an A-number, an author or a bound that no tool result in this session showed. If a search failed, say it failed, try it again or with other words, and do not fill the gap from memory: on staging a lead whose searches failed gave invented arXiv ids as the literature.',
   'Report only what tool results show. If a command could not run or a file is not there, say so plainly and do not claim it. Separate what you verified from what you recall.',
   FILES,
   'The user may speak while you work; their words arrive as user messages. Follow them.',

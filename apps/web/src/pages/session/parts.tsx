@@ -1237,7 +1237,18 @@ export function Findings({
                     a wall. The chosen one opens in full. No underline on
                     hover: through two lines of text it cut the letters and
                     was louder than any other state. */}
-                <p className={cn('text-sm break-words text-ink', !current && 'line-clamp-3')}>
+                {finding.title ? (
+                  <p className="line-clamp-1 text-sm font-semibold break-words text-ink">
+                    {finding.title}
+                  </p>
+                ) : null}
+                <p
+                  className={cn(
+                    'text-sm break-words',
+                    finding.title ? 'mt-0.5 text-ink-2' : 'text-ink',
+                    !current && (finding.title ? 'line-clamp-2' : 'line-clamp-3'),
+                  )}
+                >
                   {finding.text}
                 </p>
                 <p className="mt-1 text-caption text-ink-2">

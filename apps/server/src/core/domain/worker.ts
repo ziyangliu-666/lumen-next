@@ -58,7 +58,7 @@ export interface WorkerReport {
    * it announced to the page. Required, not optional: a report that lacked it
    * would let a worker lose a finding without anybody hearing an error.
    */
-  recordFinding(taskId: string, text: string): Promise<Finding>;
+  recordFinding(taskId: string, text: string, title?: string): Promise<Finding>;
   /**
    * Add to the task's own cost, for a spend that is not a step's. The roll-up
    * to its ancestors is the kernel's.

@@ -202,7 +202,7 @@ describe('createWorker: the conversation', () => {
     const model = scripted(
       (request) =>
         request.system.startsWith('Write a title')
-          ? { text: '"Catalan numbers and Dyck paths."', cost: { dollars: 0.0001 } }
+          ? { text: '\n\n"Catalan numbers and Dyck paths."', cost: { dollars: 0.0001 } }
           : { text: 'They count Dyck paths.' },
       (request) =>
         request.system.startsWith('Write a title')

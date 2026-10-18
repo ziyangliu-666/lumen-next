@@ -237,6 +237,14 @@ describe('ProjectService', () => {
     expect(await service.listFindings(sessionId)).toEqual([finding]);
     expect((await service.findings(owner, project.id, {})).items).toEqual([finding]);
     expect((await service.get(owner, project.id)).findingsCount).toBe(1);
+    const named = await service.recordFinding(
+      sessionId,
+      taskId,
+      'Motzkin numbers to n = 16 match A001006.',
+      '  Motzkin   numbers match A001006  ',
+    );
+    expect(named.title).toBe('Motzkin numbers match A001006');
+    expect(finding).not.toHaveProperty('title');
   });
   it('rejects mismatched session ownership and unknown sessions', async () => {
     const { service, sessions } = setup();

@@ -108,6 +108,8 @@ export interface SessionFinding {
   readonly id: string;
   readonly taskId: string;
   readonly text: string;
+  /** The finding's short name, when the agent wrote one. */
+  readonly title?: string;
   /**
    * When it was recorded, in ms, for a finding read from the list. One from
    * `finding.recorded` has none (the event carries no time) and counts as
@@ -212,7 +214,12 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
     case 'finding.recorded': {
       // The first read of the list may already hold it.
       if (state.findings.some((finding) => finding.id === event.findingId)) return state;
-      const finding = { id: event.findingId, taskId: event.taskId, text: event.text };
+      const finding = {
+        id: event.findingId,
+        taskId: event.taskId,
+        text: event.text,
+        ...(event.title ? { title: event.title } : {}),
+      };
       return { ...state, findings: [...state.findings, finding] };
     }
     default:

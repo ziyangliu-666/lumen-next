@@ -41,7 +41,12 @@ import { isEnding, type Trace } from './trace.js';
 // parent_id. The BudgetGuard check points from ARCHITECTURE.md §9 arrive with
 // billing and slot in at start(), say() and delegate().
 /** Saves a finding and returns it as saved. The projects slice supplies the real one. */
-export type FindingSaver = (sessionId: string, taskId: string, text: string) => Promise<Finding>;
+export type FindingSaver = (
+  sessionId: string,
+  taskId: string,
+  text: string,
+  title?: string,
+) => Promise<Finding>;
 
 export interface KernelOptions {
   readonly delegation?: Delegation;
@@ -74,8 +79,15 @@ export interface KernelOptions {
 
 function findingsInMemory(): FindingSaver {
   const kept: Finding[] = [];
-  return (sessionId, taskId, text) => {
-    const finding = { id: randomUUID(), sessionId, taskId, text, createdAt: Date.now() };
+  return (sessionId, taskId, text, title) => {
+    const finding = {
+      id: randomUUID(),
+      sessionId,
+      taskId,
+      text,
+      ...(title?.trim() ? { title: title.trim() } : {}),
+      createdAt: Date.now(),
+    };
     kept.push(finding);
     return Promise.resolve(finding);
   };
@@ -368,7 +380,7 @@ export class Kernel {
       }),
       appendStep: (taskId, kind, text, detail) => this.appendStep(taskId, kind, text, detail),
       delegate: (taskId, work) => this.delegate(taskId, work),
-      recordFinding: (taskId, text) => this.recordFinding(taskId, text),
+      recordFinding: (taskId, text, title) => this.recordFinding(taskId, text, title),
       addSpend: (taskId, amount, reason) => this.addSpend(taskId, amount, reason),
       stopped: async (taskId) => (await this.trace.task(taskId))?.status === 'stopped',
       retitle: (taskId, title) => this.retitle(taskId, title),
@@ -530,17 +542,18 @@ export class Kernel {
     }
   }
 
-  async recordFinding(taskId: string, text: string): Promise<Finding> {
+  async recordFinding(taskId: string, text: string, title?: string): Promise<Finding> {
     const task = await this.taskOrThrow(taskId);
     if (text.trim().length === 0) throw new Error('kernel: a finding needs text');
     // Save first, announce second. A page must never show a finding that a
     // reload would not bring back.
-    const finding = await this.saveFinding(task.sessionId, taskId, text);
+    const finding = await this.saveFinding(task.sessionId, taskId, text, title);
     this.broker.publish(task.sessionId, {
       type: 'finding.recorded',
       taskId,
       findingId: finding.id,
       text: finding.text,
+      ...(finding.title ? { title: finding.title } : {}),
     });
     return finding;
   }

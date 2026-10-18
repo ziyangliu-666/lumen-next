@@ -145,8 +145,15 @@ export class ProjectService {
     if (!project || project.accountId !== context.accountId) throw notFound('No such project.');
     return { id: project.id, accountId: project.accountId };
   }
-  async recordFinding(sessionId: string, taskId: string, raw: string): Promise<Finding> {
+  async recordFinding(
+    sessionId: string,
+    taskId: string,
+    raw: string,
+    rawTitle?: string,
+  ): Promise<Finding> {
     const text = textOf(raw, 20000);
+    // A name for the lists, one line: cut as a project's name is cut.
+    const title = rawTitle ? titleOf(rawTitle).slice(0, FINDING_TITLE_LIMIT) : '';
     const session = idOf(sessionId);
     const task = idOf(taskId);
     const project = await this.projectOf(session);
@@ -158,6 +165,7 @@ export class ProjectService {
       sessionId: session,
       taskId: task,
       text,
+      ...(title ? { title } : {}),
       createdAt: Date.now(),
     };
     await this.store.saveFinding(project.id, finding);
@@ -213,6 +221,9 @@ export class ProjectService {
     };
   }
 }
+
+/** The longest finding name, in characters. */
+const FINDING_TITLE_LIMIT = 100;
 
 /** The longest project title, in characters. */
 const TITLE_LIMIT = 120;

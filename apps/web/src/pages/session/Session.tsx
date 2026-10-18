@@ -229,7 +229,13 @@ export function Session(): JSX.Element {
         if (!active) return;
         const mine = reply.items
           .filter((finding) => finding.sessionId === sessionId)
-          .map(({ id, taskId, text, createdAt }) => ({ id, taskId, text, createdAt }))
+          .map(({ id, taskId, text, title, createdAt }) => ({
+            id,
+            taskId,
+            text,
+            ...(title ? { title } : {}),
+            createdAt,
+          }))
           .reverse();
         setState((current) => {
           if (!current) return current;

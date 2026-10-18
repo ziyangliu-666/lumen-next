@@ -118,5 +118,10 @@ export interface Finding {
   readonly sessionId: string;
   readonly taskId: string;
   readonly text: string;
+  /**
+   * A short name for the finding, written by the agent that kept it, for
+   * the lists. Absent on findings kept before names.
+   */
+  readonly title?: string;
   readonly createdAt: number;
 }

@@ -1,4 +1,5 @@
 import { useCallback, type JSX } from 'react';
+import { cn } from '@/lib/utils';
 import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
 import { RegionName } from '@/ui/surfaces';
@@ -76,10 +77,23 @@ export function Findings({
                   target={sessionLink(finding.sessionId, finding.taskId)}
                 >
                   <span className="sr-only">Open the source session of: </span>
-                  {/* Regular weight and no project title on each one: the
-                      title is over the list once, and a column of bold
-                      paragraphs was a wall. */}
-                  <span className="line-clamp-2 text-sm break-words text-ink">{finding.text}</span>
+                  {/* A name in one bold line, then the fact in two quiet
+                      ones, as a list of chats is a name and a line: the
+                      whole fact in two lines was a wall of numbers. A
+                      finding kept before names shows its text alone. */}
+                  {finding.title ? (
+                    <span className="line-clamp-1 text-sm font-semibold break-words text-ink">
+                      {finding.title}
+                    </span>
+                  ) : null}
+                  <span
+                    className={cn(
+                      'line-clamp-2 text-sm break-words',
+                      finding.title ? 'mt-0.5 text-ink-2' : 'text-ink',
+                    )}
+                  >
+                    {finding.text}
+                  </span>
                   <span className="mt-1 block text-caption text-ink-2">
                     Recorded{' '}
                     <time

@@ -6,8 +6,13 @@ import type { ProjectStore } from './ports.js';
 const PROJECT =
   'id, account_id as "accountId", title, mode, (extract(epoch from created_at) * 1000)::float8 as "createdAt", (extract(epoch from last_opened_at) * 1000)::float8 as "lastOpenedAt", spend_at_visit as "spendAtVisit"';
 const FINDING =
-  'id, session_id as "sessionId", task_id as "taskId", text, (extract(epoch from created_at) * 1000)::float8 as "createdAt"';
+  'id, session_id as "sessionId", task_id as "taskId", text, title, (extract(epoch from created_at) * 1000)::float8 as "createdAt"';
 const AFTER = '($2::timestamptz is null or (created_at, id) < ($2::timestamptz, $3::uuid))';
+/** A finding kept before names has a null title; the contract has none. */
+function finding(row: Finding & { title?: string | null }): Finding {
+  const { title, ...rest } = row;
+  return title ? { ...rest, title } : rest;
+}
 function params(scope: string, page: PageRequest): readonly unknown[] {
   return [
     scope,
@@ -58,13 +63,14 @@ export class PgProjectStore implements ProjectStore {
   }
   async saveFinding(projectId: string, finding: Finding): Promise<void> {
     await this.db.query(
-      'insert into findings (id, project_id, session_id, task_id, text, created_at) values ($1, $2, $3, $4, $5, $6)',
+      'insert into findings (id, project_id, session_id, task_id, text, title, created_at) values ($1, $2, $3, $4, $5, $6, $7)',
       [
         finding.id,
         projectId,
         finding.sessionId,
         finding.taskId,
         finding.text,
+        finding.title ?? null,
         new Date(finding.createdAt),
       ],
     );
@@ -79,17 +85,19 @@ export class PgProjectStore implements ProjectStore {
     );
     return rows[0] ?? null;
   }
-  findings(projectId: string, page: PageRequest): Promise<Finding[]> {
-    return this.db.query<Finding & Record<string, unknown>>(
+  async findings(projectId: string, page: PageRequest): Promise<Finding[]> {
+    const rows = await this.db.query<Finding & Record<string, unknown>>(
       `select ${FINDING} from findings where project_id = $1 and ${AFTER} order by created_at desc, id desc limit $4`,
       params(projectId, page),
     );
+    return rows.map(finding);
   }
-  sessionFindings(sessionId: string): Promise<Finding[]> {
-    return this.db.query<Finding & Record<string, unknown>>(
+  async sessionFindings(sessionId: string): Promise<Finding[]> {
+    const rows = await this.db.query<Finding & Record<string, unknown>>(
       `select ${FINDING} from findings where session_id = $1 order by created_at, id`,
       [sessionId],
     );
+    return rows.map(finding);
   }
   async findingStats(
     projectId: string,

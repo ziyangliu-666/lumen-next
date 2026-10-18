@@ -3,6 +3,7 @@
 // they have none, as chat products show their recents and their "Try" cards.
 import { useEffect, useState, type JSX } from 'react';
 import { request } from '@/core/api';
+import { go } from '@/core/router';
 
 /**
  * Three questions of the kind lumen is for. A card fills the field and does
@@ -88,9 +89,26 @@ export function RecentProjects({ items }: { items: readonly Recent[] }): JSX.Ele
                   ? `?session=${encodeURIComponent(item.latestSession.id)}#/session`
                   : '#/home'
               }
+              // Inside this document, as a project row on Projects opens: the
+              // camera moves and the title flies into the bar. As a plain
+              // link the page loaded anew and jumped. A click with a modifier
+              // key still opens the link as the browser does.
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                event.preventDefault();
+                const target = event.currentTarget.getAttribute('href') ?? '#/home';
+                const title = event.currentTarget.querySelector<HTMLElement>('[data-title]');
+                void request(`/api/projects/${encodeURIComponent(item.project.id)}/visit`, {
+                  method: 'POST',
+                })
+                  .catch(() => undefined)
+                  .then(() => go(target, title));
+              }}
               className="flex items-baseline justify-between gap-4 py-2 hover:underline"
             >
-              <span className="truncate text-sm text-ink">{item.project.title}</span>
+              <span data-title="" className="truncate text-sm text-ink">
+                {item.project.title}
+              </span>
               {item.label ? (
                 <span className="shrink-0 text-caption text-ink-2">{item.label}</span>
               ) : null}

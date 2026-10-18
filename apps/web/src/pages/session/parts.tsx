@@ -5,6 +5,7 @@
 // files panel lists what the person attached and what the agents wrote.
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import type { ClientCommand, Step, StepRow, Task } from '@lumen/contracts';
+import { go } from '@/core/router';
 import { cn } from '@/lib/utils';
 import { ReplyText } from './text';
 import { Button } from '@/ui/button';
@@ -954,6 +955,13 @@ export function Sessions({
               href={`?session=${encodeURIComponent(item.id)}#/session`}
               aria-current={item.id === current ? 'page' : undefined}
               title={item.title}
+              // Inside this document, so the scene does not start again; a
+              // click with a modifier key opens the link as the browser does.
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                event.preventDefault();
+                go(event.currentTarget.getAttribute('href') ?? '');
+              }}
               className={cn(
                 'flex items-baseline justify-between gap-3 px-2 py-1.5 text-sm hover:bg-raised/50',
                 item.id === current

@@ -16,11 +16,9 @@ import { OpenProjectButton } from './OpenProjectButton';
 // has one; inventing "Open question" for every finding would be a false claim.
 export function Findings({
   projectId,
-  title,
   pollAfterMs,
 }: {
   projectId: string;
-  title: string;
   pollAfterMs: number | null;
 }): JSX.Element {
   const shouldPoll = useCallback(() => pollAfterMs, [pollAfterMs]);
@@ -36,9 +34,6 @@ export function Findings({
           <RegionName id="latest-findings-name" className="mb-0">
             Latest findings
           </RegionName>
-          {/* It wraps: cut with an ellipsis, it ended mid-word while the
-              findings under it wrapped in full. */}
-          <p className="text-caption break-words text-ink-2">From {title}</p>
         </div>
         {/* The same secondary button as every other refresh: as grey text
             it did not read as something to press. */}
@@ -69,7 +64,11 @@ export function Findings({
                 key={finding.id}
                 // The same 8px inset and hover as the findings on the session
                 // page, so one list looks the same on both pages.
-                className="border-t border-rule-minor px-2 py-3 first:border-t-0 hover:bg-raised/50"
+                // Relative: the button's stretched layer covers this row only.
+                // Without it the layer covered the whole panel, and a click
+                // anywhere there, the new-project field included, opened the
+                // last finding's session.
+                className="relative border-t border-rule-minor px-2 py-3 first:border-t-0 hover:bg-raised/50"
               >
                 <OpenProjectButton
                   variant="plain"

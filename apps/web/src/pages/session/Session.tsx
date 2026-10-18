@@ -34,7 +34,6 @@ import {
   Sessions,
   StepStream,
   type SteerWhen,
-  StopControl,
   TaskState,
   WaitingNotice,
 } from './parts';
@@ -550,12 +549,6 @@ export function Session(): JSX.Element {
       )}
     </>
   );
-  const stop = running ? (
-    <StopControl
-      disabled={state.stream !== 'open'}
-      onStop={() => stream.current?.send({ type: 'session.stop', sessionId: thisSession })}
-    />
-  ) : null;
 
   return (
     <Surfaces collapse="sheet">
@@ -591,15 +584,9 @@ export function Session(): JSX.Element {
         {models.length > 1 ? (
           <span className="text-ink-2 max-split:hidden">{snapshot.session.model ?? models[0]}</span>
         ) : null}
-        {/* Under 720px the first row has no room for Stop, Cancel and
-            Details together, so Stop ends the status line instead. */}
-        {stop ? <span className="ml-auto roomy:hidden">{stop}</span> : null}
       </BarStatus>
 
-      {/* Over 720px Stop stands right, beside the account: between the status
-          and the account it floated alone and read as an afterthought. */}
       <BarActions>
-        {stop ? <span className="max-roomy:hidden">{stop}</span> : null}
         <Button
           ref={sheetToggle}
           type="button"
@@ -672,6 +659,15 @@ export function Session(): JSX.Element {
             running={running}
             steerable={shown.status === 'running'}
             onSay={starting ? startNew : say}
+            // Stop is the field's send button while a run goes and nothing is
+            // typed, as in chat products: in the bar's far corner it was out
+            // of sight.
+            {...(running && !starting
+              ? {
+                  onStop: () =>
+                    stream.current?.send({ type: 'session.stop', sessionId: thisSession }),
+                }
+              : {})}
             newSession={starting}
             toolbar={
               starting ? (

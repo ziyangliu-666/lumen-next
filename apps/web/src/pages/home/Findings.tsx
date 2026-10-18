@@ -53,13 +53,13 @@ export function Findings({
           </p>
         )}
         {!state.loading && !state.error && state.items.length === 0 && (
-          <p className="text-sm text-ink-2">
-            No findings yet. Saved results will appear here as the research progresses.
-          </p>
+          <p className="text-sm text-ink-2">No findings yet.</p>
         )}
         {state.items.length > 0 && (
           <ul>
-            {state.items.map((finding) => (
+            {/* Three, two lines each: a column of long findings read as a
+                wall of text. The session shows them all. */}
+            {state.items.slice(0, 3).map((finding) => (
               <li
                 key={finding.id}
                 // The same 8px inset and hover as the findings on the session
@@ -79,9 +79,7 @@ export function Findings({
                   {/* Regular weight and no project title on each one: the
                       title is over the list once, and a column of bold
                       paragraphs was a wall. */}
-                  <span className="line-clamp-3 text-sm break-words whitespace-pre-wrap text-ink">
-                    {finding.text}
-                  </span>
+                  <span className="line-clamp-2 text-sm break-words text-ink">{finding.text}</span>
                   <span className="mt-1 block text-caption text-ink-2">
                     Recorded{' '}
                     <time

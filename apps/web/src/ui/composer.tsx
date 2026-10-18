@@ -63,6 +63,11 @@ interface ComposerProps {
   allowEmpty?: boolean;
   /** More controls in the row at the foot of the box, after Attach (a model picker). */
   toolbar?: React.ReactNode;
+  /**
+   * Given while something runs: with nothing typed, the send square stops
+   * it, as chat products do. Typing turns it back into send.
+   */
+  onStop?: () => void;
   accept?: string;
   /** The send square's accessible name. */
   sendLabel?: string;
@@ -195,6 +200,7 @@ function Composer({
   onRemoveAttachment,
   allowEmpty = false,
   toolbar,
+  onStop,
   accept,
   sendLabel = 'Send',
   sendDisabled = false,
@@ -360,14 +366,26 @@ function Composer({
                 <MicIcon />
               </button>
             ) : null}
-            <button
-              type="submit"
-              aria-label={sendLabel}
-              disabled={cannotSend}
-              className="grid size-8 shrink-0 place-items-center bg-ink text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-25"
-            >
-              <SendIcon />
-            </button>
+            {onStop && empty ? (
+              <button
+                type="button"
+                aria-label="Stop"
+                disabled={disabled}
+                onClick={onStop}
+                className="grid size-8 shrink-0 place-items-center bg-ink text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-25"
+              >
+                <span aria-hidden="true" className="size-3 bg-paper" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                aria-label={sendLabel}
+                disabled={cannotSend}
+                className="grid size-8 shrink-0 place-items-center bg-ink text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-25"
+              >
+                <SendIcon />
+              </button>
+            )}
           </span>
         </div>
       </div>

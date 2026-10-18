@@ -183,15 +183,42 @@ export function StepStream({
       {turns.slice(0, latest).map(draw)}
       <div data-latest="" className="min-h-full">
         {turns.slice(latest).map((turn, offset) => draw(turn, latest + offset))}
+        {/* Before the first step: what is happening now, the same live line
+            as later work, not a heading over "Nothing yet." */}
         {steps.length === 0 ? (
-          <article className="border-t border-rule-minor py-6 max-roomy:py-4">
-            <h2 className="pt-1 pb-2 text-sm font-semibold text-ink">{speaker(task, tasks)}</h2>
-            <p className="text-sm text-ink-2">Nothing yet.</p>
+          <article className="py-4">
+            {running ? (
+              <p className="flex items-center gap-2 text-sm text-ink-2">
+                <RunState state="running">{''}</RunState>
+                <span className="shimmer-text motion-safe:animate-shimmer">Thinking</span>
+              </p>
+            ) : (
+              <p className="text-sm text-ink-2">Nothing yet.</p>
+            )}
           </article>
         ) : null}
       </div>
     </>
   );
+}
+
+/** What a running block is doing now, from its latest step and the readers it waits on. */
+function nowDoing(steps: readonly Step[], handedDown: Map<number, readonly Task[]>): string {
+  const waiting = steps
+    .flatMap((step) => handedDown.get(step.index) ?? [])
+    .filter((child) => child.status === 'running' || child.status === 'queued').length;
+  if (waiting > 0) return `Waiting for ${waiting} ${waiting === 1 ? 'reader' : 'readers'}`;
+  const last = steps.at(-1);
+  if (!last || last.kind === 'thinking') return 'Thinking';
+  if (last.kind === 'tool') {
+    const tool = last.detail?.tool ?? toolLabel(last.text).label;
+    if (tool === 'search') {
+      const source = last.detail?.rows?.[0]?.source ?? 'the literature';
+      return `Searched ${source}, reading the results`;
+    }
+    if (tool === 'run') return 'Ran a command, reading its output';
+  }
+  return 'Working';
 }
 
 /**
@@ -239,16 +266,24 @@ function WorkFold({
     count('run') ? plural(count('run'), 'command', 'commands') : null,
     readers ? plural(readers, 'reader', 'readers') : null,
   ].filter(Boolean);
-  const label = `${open ? 'Working' : 'Worked'}${ms >= 1000 ? ` for ${took(ms)}` : ''}${what.length ? `, ${what.join(', ')}` : ''}`;
+  const done = `Worked${ms >= 1000 ? ` for ${took(ms)}` : ''}${what.length ? `, ${what.join(', ')}` : ''}`;
+  const label = open ? nowDoing(steps, handedDown) : done;
   return (
     <div className={className}>
       <button
         type="button"
         aria-expanded={expanded}
         onClick={() => setShown(!expanded)}
-        className="flex items-center gap-1 text-sm text-ink-2 hover:text-ink"
+        className="flex items-center gap-2 text-sm text-ink-2 hover:text-ink"
       >
-        {label}
+        {/* Live: what is happening now, with a light passing over it, as
+            chat products show work in progress. A still line read as if
+            nothing was happening. */}
+        {/* The ring alone: its own word, "Running", stood before the line. */}
+        {open ? <RunState state="running">{''}</RunState> : null}
+        <span className={open ? 'shimmer-text motion-safe:animate-shimmer' : undefined}>
+          {label}
+        </span>
         <span
           aria-hidden="true"
           className={cn('inline-block transition-transform', expanded && 'rotate-90')}
@@ -321,13 +356,15 @@ function AgentTurn({
             className={index > 0 ? 'mt-6' : undefined}
           >
             {part.steps.map((step) => (
-              <StepBlock
-                key={step.index}
-                step={step}
-                delegated={handedDown.get(step.index) ?? []}
-                names={names}
-                onSelect={onSelect}
-              />
+              // A step that arrives rises in; those already drawn stay still.
+              <div key={step.index} className="motion-safe:animate-rise">
+                <StepBlock
+                  step={step}
+                  delegated={handedDown.get(step.index) ?? []}
+                  names={names}
+                  onSelect={onSelect}
+                />
+              </div>
             ))}
           </WorkFold>
         ),
@@ -514,16 +551,28 @@ export function SearchSources({
             const [id, ...rest] = row.text.split(', ');
             return (
               <li key={index} className="max-w-full">
-                <a
-                  href={row.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={row.text}
-                  className="flex max-w-[28rem] items-baseline gap-2 border border-rule-minor bg-well px-2 py-1 text-xs hover:border-ink"
-                >
-                  <span className="shrink-0 font-mono text-ink">{id}</span>
-                  <span className="truncate text-ink-2">{rest.join(', ')}</span>
-                </a>
+                {row.url ? (
+                  <a
+                    href={row.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={row.text}
+                    className="flex max-w-[28rem] items-baseline gap-2 border border-rule-minor bg-well px-2 py-1 text-xs hover:border-ink"
+                  >
+                    <span className="shrink-0 font-mono text-ink">{id}</span>
+                    <span className="truncate text-ink-2">{rest.join(', ')}</span>
+                  </a>
+                ) : (
+                  // A result with nowhere to open (the demo's): the same
+                  // chip, not a link.
+                  <span
+                    title={row.text}
+                    className="flex max-w-[28rem] items-baseline gap-2 border border-rule-minor bg-well px-2 py-1 text-xs"
+                  >
+                    <span className="shrink-0 font-mono text-ink">{id}</span>
+                    <span className="truncate text-ink-2">{rest.join(', ')}</span>
+                  </span>
+                )}
               </li>
             );
           })}
@@ -546,9 +595,9 @@ export function SearchSources({
 
 // One measure for prose in the conversation, thinking and answers alike, so
 // the column has one text width. Only tables and output run the full width.
-// The column itself is the measure, as in chat products: at 40rem the answer
-// left an empty strip down the right of the conversation.
-const PROSE = 'max-w-[48rem]';
+// The column itself is the measure, as in chat products: capped at 40rem,
+// then 48rem, the answer left an empty strip down the right of it.
+const PROSE = 'w-full';
 
 /** What a tool step took and cost, beside its label. A free step shows no price. */
 export function receiptOf(step: Step): string {
@@ -623,10 +672,10 @@ function StepBlock({
       // A literature search with links is drawn as its sources, the way chat
       // products show what they read: one line saying what was searched, and
       // the results as links. As a table, nothing could be opened.
-      if (detail?.rows?.some((row) => row.url)) {
+      if (name === 'search' && detail?.rows?.length) {
         return (
           <SearchSources
-            query={step.text.replace(/^search\s+\w+:\s*/u, '')}
+            query={step.text.replace(/^search(?:\s+\w+)?:\s*/u, '')}
             rows={detail.rows}
             receipt={receipt === 'tool call' ? undefined : receipt}
           />
@@ -1273,6 +1322,7 @@ export function Composer({
   prefill,
   newSession = false,
   toolbar,
+  onStop,
 }: {
   /** The socket is down or the account is not ready: nothing can be sent. */
   disabled: boolean;
@@ -1298,6 +1348,8 @@ export function Composer({
   prefill?: { readonly text: string; readonly key: number } | undefined;
   /** The field starts a new session in this project instead of replying. */
   newSession?: boolean;
+  /** Given while the run goes: the empty field's send button stops it. */
+  onStop?: (() => void) | undefined;
   /** More controls at the foot of the field (the model for a new session). */
   toolbar?: ReactNode;
 }): JSX.Element {
@@ -1385,6 +1437,7 @@ export function Composer({
       hint={hint}
       {...(onAttach ? { onAttach: attach } : {})}
       toolbar={toolbar}
+      {...(onStop ? { onStop } : {})}
       attachments={attached.map((path) => path.replace(/^\/mnt\/upload\//, ''))}
       onRemoveAttachment={(name) =>
         setAttached((list) => list.filter((path) => !path.endsWith(`/${name}`)))

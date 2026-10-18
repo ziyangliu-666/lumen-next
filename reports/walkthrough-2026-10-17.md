@@ -8,6 +8,44 @@ Status: **fixed** (merged or on the open branch), **ok** (worked as
 expected), **open** (found, not fixed here), **todo** (not yet tried),
 **deferred** (left for later by the owner's decision).
 
+## Checklist
+
+Every feature of the desktop web app, one line each, with the rows that
+walked it. Phone layouts are out of scope by the owner's decision (desktop
+web only); the rows under "Phone, 390 px" are kept as they were found.
+
+| Feature | Walked in | Status |
+|---|---|---|
+| Ask a question, get an answer with evidence | A1, A5, A8, A17, S2 rows of the sweep | ok |
+| Follow-up turns keep the context | A2, A10, sweep (a(7) = 127) | ok |
+| OEIS, arXiv and OpenAlex search, sources as links | A5, A11, A12, E12, sweep | ok |
+| Python in the sandbox, plots | A6, E13, S3 | ok |
+| Readers in parallel (fan-out), their live lines | A4, M3, second pass 6 | ok |
+| Steering while running, and at the end of a turn | A9, A16, A21, P13, P20 | ok |
+| Stop: from the field, from Projects, mid-stream | A15, P14 to P16, P28, second pass 2 | ok |
+| Answers stream word by word | second pass 1, 3 | ok |
+| Long replies, tables, formulas, diagrams, images | A7, P11, E11, E15, S3 | ok |
+| Attach: button, drop, paste; Chinese names; 10 MB limit; PDF | F3 to F6, F10, F13, A20, S5, S6 | ok |
+| Files the agents save: panel, folders, opening, quota | F1, F2, F7 to F9, F11, F12, A25 | ok |
+| Edit, Regenerate, Copy, Copy link | P21, second pass 5, sweep | ok |
+| Sessions: new, moving between, several per project | E8 to E10, P26, sweep | ok |
+| Projects: list, search, Refresh, findings, activity mark | P2, P6, P7, P9, P27, second pass 8, sweep | ok |
+| Landing: starters, Recent, greeting, model picker, voice | E1 to E7 | ok |
+| Landing intro for a first visit, signed out | second pass 9 | ok |
+| Page transitions and the scene between pages | P26, row 13 | ok |
+| Sign in, sign up, sign out, wrong password | P4, P5, P25, sweep, S1 | ok |
+| Settings: cap, Account, Keys, Wallet, ledger | P8, P10, P24, B6, sweep | ok |
+| Budget approvals: approve, reject, at a delegation | B1 to B3, B5, B7, rows 10 to 12 | ok |
+| Test-mode top-up through Stripe | B4 | ok (webhook delivered by hand: Stripe cannot reach localhost) |
+| Reload, reconnect, a tab left open across a deploy | P12, P23, second pass 3 | ok |
+| Dark and light theme, the D key | sweep, dark screenshots of the second pass | ok |
+| Unknown address, missing session | sweep | ok |
+| Hard research question on gpt-4.1-mini (1324 bounds) | A23 | model limit: gpt-4.1 is offered for it (A26) |
+
+What this list does not settle: the owner has not yet looked at the
+local build of session/polish-3, and staging runs the build before it.
+Both follow the owner's approval to merge.
+
 ## Agent behaviour (autoresearch)
 
 | # | Scenario | Result | Cause | Fix |

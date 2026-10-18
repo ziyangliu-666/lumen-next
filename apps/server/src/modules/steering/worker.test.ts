@@ -74,7 +74,9 @@ function stepsOf(report: FakeReport): [string, string][] {
   return report.appendStep.mock.calls.map((call) => [String(call[1]), String(call[2])]);
 }
 
-type Answer = Partial<Completion> | ((request: ModelRequest) => Partial<Completion>);
+type Answer =
+  | Partial<Completion>
+  | ((request: ModelRequest) => Partial<Completion> | Promise<Partial<Completion>>);
 
 /**
  * A model that gives the answers it was scripted with, one per call, and
@@ -87,13 +89,13 @@ function scripted(...answers: Answer[]): ModelProvider & { readonly requests: Mo
     name: 'scripted',
     model: 'scripted-1',
     requests,
-    complete(request) {
+    async complete(request) {
       // The worker keeps adding to its conversation; keep what this call saw.
       requests.push({ ...request, messages: [...request.messages] });
       const next = answers.shift();
-      if (!next) return Promise.reject(new Error('the script ran out'));
-      const answer = typeof next === 'function' ? next(request) : next;
-      return Promise.resolve({
+      if (!next) throw new Error('the script ran out');
+      const answer = await (typeof next === 'function' ? next(request) : next);
+      return {
         text: '',
         toolCalls: [],
         stopReason: answer.toolCalls?.length ? 'tool' : 'end',
@@ -102,7 +104,7 @@ function scripted(...answers: Answer[]): ModelProvider & { readonly requests: Mo
         model: 'scripted-1',
         durationMs: 3,
         ...answer,
-      });
+      };
     },
   };
 }
@@ -167,6 +169,33 @@ describe('createWorker: the conversation', () => {
     // Two pieces within one interval go as one draft, the latest.
     expect(order).toEqual(['draft It was the config.', 'reply']);
     expect(draft).toHaveBeenCalledWith('task-1', 'It was the config.');
+  });
+
+  it('keeps what the page showed when Stop was pressed as the reply, and still charges the call', async () => {
+    const model = scripted(async (request) => {
+      request.onText?.('Catalan numbers');
+      // The page has the draft; the person presses Stop; the model writes on.
+      await new Promise((done) => setTimeout(done, 400));
+      request.onText?.('Catalan numbers count many things, among them Dyck paths.');
+      return { text: 'Catalan numbers count many things, among them Dyck paths.' };
+    });
+    const report = fakeReport();
+    let stop = false;
+    const stopped = vi.fn(() => Promise.resolve(stop));
+    const draft = vi.fn();
+    setTimeout(() => {
+      stop = true;
+    }, 120);
+
+    await createWorker({ volumeRoot, context, registry, model }).run(taskOf(), 'x', {
+      ...asReport(report),
+      stopped,
+      draft,
+    });
+
+    expect(stepsOf(report)).toEqual([['reply', 'Catalan numbers\n\n(Stopped here.)']]);
+    expect(report.appendStep.mock.calls[0]![3]).toMatchObject({ cost: { dollars: 0.001 } });
+    expect(draft).not.toHaveBeenCalledWith('task-1', expect.stringContaining('Dyck'));
   });
 
   it('asks for no stream when the kernel takes no drafts', async () => {

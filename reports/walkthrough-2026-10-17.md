@@ -162,3 +162,21 @@ with no page errors.
 | 13 | Recent on the landing opens a project inside the page | pass |
 | 14 | On Projects, a click in the new-project field stays there; a finding opens its session | pass |
 
+
+## Second pass, local build, 18 Oct 2026: streaming and live work
+
+Run after answers began to stream and the landing gained its intro, in
+browser scripts against the local server (Claude Haiku 5.5 through the
+OpenAI-compatible endpoint, the Docker sandbox).
+
+| # | Item | Result |
+|---|---|---|
+| 1 | An answer streams: 40 drafts in about 6 s for 1,700 characters, the page grows smoothly, and the reply replaces the draft with the same text | pass |
+| 2 | Stop while the answer streams | fail, then fixed: the draft vanished and the full answer appeared seconds later. Now the text on screen at the stop stays, and becomes the reply with "(Stopped here.)"; the call is still charged to the token |
+| 3 | A reconnect while the answer streams leaves no draft behind, and the full reply arrives | pass |
+| 4 | A file attached mid-session is read, changed (a 2^n column) and saved to /mnt/output; Files lists Attached and Kept | pass |
+| 5 | Regenerate and Edit after a streamed answer | pass |
+| 6 | Two readers in parallel each say what they do now ("Starting", "Searched OEIS, reading the results", "Ran a command, reading its output", "Writing") | pass |
+| 7 | A long session title in the panel stays inside it | fail, then fixed: the new folding grid took the width of its content |
+| 8 | Projects rows: "New activity / Since project creation …" | fixed: a short "New: 3 findings" in the meta line, the sentence in its tooltip |
+| 9 | Landing, first visit signed out: the intro plays, then the headline, field and starters rise in; Skip, a key or a click ends it; a second visit does not play it | pass |

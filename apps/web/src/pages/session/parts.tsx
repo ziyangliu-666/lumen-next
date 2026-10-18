@@ -145,6 +145,8 @@ export function StepStream({
   const lead = task.parentId === null;
   const running = task.status === 'running';
   const writing = running && Boolean(draft);
+  // A draft held after a stop: drawn still, until the reply replaces it.
+  const held = task.status === 'stopped' && Boolean(draft);
   const draw = (turn: Turn, index: number): JSX.Element => (
     <article key={turn.key} className="py-4">
       {turn.who === 'you' ? (
@@ -192,11 +194,11 @@ export function StepStream({
       {turns.slice(0, latest).map(draw)}
       <div data-latest="" className="min-h-full">
         {turns.slice(latest).map((turn, offset) => draw(turn, latest + offset))}
-        {writing && draft ? (
+        {(writing || held) && draft ? (
           // Spaced as the reply it becomes: 1rem under the work of its turn,
           // or a turn's own padding under the person's message.
           <article className={turns.at(-1)?.who === 'you' ? 'py-4' : 'pb-4'}>
-            <DraftReply text={draft} />
+            <DraftReply text={draft} still={held} />
           </article>
         ) : null}
         {/* Before the first step: what is happening now, the same live line
@@ -312,14 +314,16 @@ export function closeOpen(text: string): string {
 }
 
 /** The answer while the model writes it: the same text as the reply it becomes, and a pulse where it grows. */
-function DraftReply({ text }: { text: string }): JSX.Element {
-  const shown = closeOpen(useSmoothText(text));
+function DraftReply({ text, still = false }: { text: string; still?: boolean }): JSX.Element {
+  const smooth = useSmoothText(text);
+  const shown = closeOpen(still ? text : smooth);
   return (
     <section data-step="draft" aria-live="off" className="break-words text-ink">
       <div
         className={cn(
           PROSE,
-          "[&>div>:last-child]:after:ml-1 [&>div>:last-child]:after:inline-block [&>div>:last-child]:after:size-[0.55em] [&>div>:last-child]:after:rounded-full [&>div>:last-child]:after:bg-ink [&>div>:last-child]:after:align-middle [&>div>:last-child]:after:content-[''] motion-safe:[&>div>:last-child]:after:animate-pulse",
+          !still &&
+            "[&>div>:last-child]:after:ml-1 [&>div>:last-child]:after:inline-block [&>div>:last-child]:after:size-[0.55em] [&>div>:last-child]:after:rounded-full [&>div>:last-child]:after:bg-ink [&>div>:last-child]:after:align-middle [&>div>:last-child]:after:content-[''] motion-safe:[&>div>:last-child]:after:animate-pulse",
         )}
       >
         <ReplyText text={shown} />

@@ -32,6 +32,8 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_ROUNDS = 12;
 /** How often the text a model is writing goes to the page: about twenty times a second. */
 const DRAFT_EVERY_MS = 50;
+/** How often a call that is writing asks whether the person pressed Stop. */
+const STOP_CHECK_MS = 300;
 /** Every request has a cap; reasoning models spend part of it before they write a word. */
 // Room for an answer with a table in it. At 4,000 a lead with a long reply
 // was cut off mid-sentence and the page showed nothing.
@@ -527,25 +529,41 @@ export function createWorker(options: WorkerOptions): Worker {
   function drafting(
     report: WorkerReport,
     taskId: string,
-  ): { text: (text: string) => void; done: () => void } | null {
+  ): { text: (text: string) => void; done: () => void; cut: () => string | null } | null {
     const send = report.draft?.bind(report);
     if (!send) return null;
     let latest = '';
     let sent = '';
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // The text at the moment the person pressed Stop, once seen. The call
+    // runs on, so its cost is known to the token, but the page stops there
+    // and the reply is what they saw.
+    let cut: string | null = null;
+    let askedAt = 0;
     const flush = (): void => {
       timer = null;
-      if (latest !== sent) send(taskId, (sent = latest));
+      if (cut === null && latest !== sent) send(taskId, (sent = latest));
     };
     return {
       text: (text) => {
         latest = text;
+        if (cut !== null) return;
         timer ??= setTimeout(flush, DRAFT_EVERY_MS);
+        if (report.stopped && Date.now() - askedAt >= STOP_CHECK_MS) {
+          askedAt = Date.now();
+          void report.stopped(taskId).then(
+            (stopped) => {
+              if (stopped && cut === null) cut = sent;
+            },
+            () => undefined,
+          );
+        }
       },
       done: () => {
         if (timer) clearTimeout(timer);
         flush();
       },
+      cut: () => cut,
     };
   }
 
@@ -580,6 +598,28 @@ export function createWorker(options: WorkerOptions): Worker {
         durationMs: completion.durationMs,
         cost: completion.cost,
       };
+
+      // Stopped while the call ran: the reply is what the page showed when
+      // Stop was pressed, said to be cut there, and nothing after it runs.
+      // Before, the call's whole answer appeared seconds after the stop.
+      if (await stopped()) {
+        const shown = draft?.cut() ?? completion.text;
+        // Text that came with tool calls was thinking on the way; it stays
+        // thinking, and the tools are not run.
+        if (shown && completion.toolCalls.length > 0) {
+          await turn.report.appendStep(turn.task.id, 'thinking', shown, receipt);
+          return STOPPED_ANSWER;
+        }
+        if (shown) {
+          const answer = `${shown}\n\n(Stopped here.)`;
+          await turn.report.appendStep(turn.task.id, 'reply', answer, receipt);
+          return answer;
+        }
+        if (completion.cost.dollars > 0) {
+          await turn.report.addSpend(turn.task.id, completion.cost, `model: ${completion.model}`);
+        }
+        return STOPPED_ANSWER;
+      }
 
       // A reply cut off at the length limit is not an answer: on staging a
       // lead tried to enumerate a table by hand, ran out of room, and the page

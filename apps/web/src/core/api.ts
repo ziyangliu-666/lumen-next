@@ -157,7 +157,10 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
       return {
         ...state,
         snapshot: { ...snapshot, tasks: patchTask(snapshot.tasks, event.taskId, patch) },
-        ...(event.status === 'running' ? {} : { drafts: without(state.drafts, event.taskId) }),
+        // A stopped task keeps its draft, frozen, until the reply that keeps
+        // it lands: it vanished at the stop and came back seconds later. A
+        // new turn starts with none.
+        ...(event.status === 'stopped' ? {} : { drafts: without(state.drafts, event.taskId) }),
       };
     }
     case 'task.cost':
@@ -193,7 +196,11 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
           };
     }
     case 'step.draft':
-      if (!snapshot.tasks.some((task) => task.id === event.taskId)) return state;
+      // Only a running task writes; frames still on the way after a stop
+      // would grow a text the person has already stopped.
+      if (!snapshot.tasks.some((task) => task.id === event.taskId && task.status === 'running')) {
+        return state;
+      }
       return { ...state, drafts: { ...state.drafts, [event.taskId]: event.text } };
     case 'finding.recorded': {
       // The first read of the list may already hold it.

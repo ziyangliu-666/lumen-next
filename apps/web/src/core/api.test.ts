@@ -63,7 +63,8 @@ describe('web core: applying events to the session state', () => {
       // A task the page does not know is not drawn.
       { type: 'step.draft', taskId: 'nobody', text: 'x' },
     ] as const;
-    const writing = drafted.reduce(apply, state);
+    const running = apply(state, { type: 'task.status', taskId: 'lead', status: 'running' });
+    const writing = drafted.reduce(apply, running);
     expect(writing.drafts).toEqual({ lead: 'The answer is' });
 
     const landed = apply(writing, {
@@ -75,8 +76,15 @@ describe('web core: applying events to the session state', () => {
     });
     expect(landed.drafts).toEqual({});
 
-    const stopped = apply(writing, { type: 'task.status', taskId: 'lead', status: 'stopped' });
-    expect(stopped.drafts).toEqual({});
+    // Stopped, the text stays as it was, and later frames do not grow it.
+    const stopped = [
+      { type: 'task.status', taskId: 'lead', status: 'stopped' },
+      { type: 'step.draft', taskId: 'lead', text: 'The answer is 391' },
+    ] as const;
+    expect(stopped.reduce(apply, writing).drafts).toEqual({ lead: 'The answer is' });
+
+    const failed = apply(writing, { type: 'task.status', taskId: 'lead', status: 'failed' });
+    expect(failed.drafts).toEqual({});
   });
 
   it('keeps what a step carried, not only its line of text', () => {

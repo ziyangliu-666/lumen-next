@@ -203,3 +203,7 @@ Two did not:
 | S2 | Projects, signed out, said "Sign in from Landing" and "Continue to Landing": the page's name in the code | fixed: "Sign in to see your projects." with Sign in, or the front page for the development account |
 
 The script's "Spend tab" was its own mistake: Spend is a heading in Wallet.
+
+| # | Item | Result |
+|---|---|---|
+| S3 | A streamed answer with a Mermaid flowchart, a plot a reader saved to /mnt/output (shown as an image) and a table: no "could not be drawn" while it streamed; the final reply has the diagram, the loaded image and the table | pass |

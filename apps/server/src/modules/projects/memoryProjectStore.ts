@@ -6,6 +6,8 @@ import { afterPosition, newest } from './validation.js';
 export class MemoryProjectStore implements ProjectStore {
   private readonly projects = new Map<string, Project>();
   private readonly records = new Map<string, Finding & { projectId: string }>();
+  /** Where each name came from; absent is 'question'. */
+  private readonly sources = new Map<string, 'model' | 'person'>();
 
   insert(project: Project): Promise<void> {
     if (this.projects.has(project.id)) return Promise.reject(new Error('Duplicate project.'));
@@ -17,6 +19,13 @@ export class MemoryProjectStore implements ProjectStore {
       return Promise.reject(new Error('Project has findings.'));
     this.projects.delete(id);
     return Promise.resolve();
+  }
+  retitle(id: string, title: string, source: 'model' | 'person'): Promise<boolean> {
+    const project = this.projects.get(id);
+    if (!project || (source === 'model' && this.sources.has(id))) return Promise.resolve(false);
+    this.projects.set(id, { ...project, title });
+    this.sources.set(id, source);
+    return Promise.resolve(true);
   }
   get(id: string): Promise<Project | null> {
     const project = this.projects.get(id);

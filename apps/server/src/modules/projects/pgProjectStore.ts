@@ -32,6 +32,14 @@ export class PgProjectStore implements ProjectStore {
       ],
     );
   }
+  async retitle(id: string, title: string, source: 'model' | 'person'): Promise<boolean> {
+    const rows = await this.db.query<{ id: string }>(
+      `update projects set title = $2, title_source = $3
+        where id = $1 and ($3 = 'person' or title_source = 'question') returning id`,
+      [id, title, source],
+    );
+    return rows.length > 0;
+  }
   async remove(id: string): Promise<void> {
     await this.db.query('delete from projects where id = $1', [id]);
   }

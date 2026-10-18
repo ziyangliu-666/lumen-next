@@ -234,6 +234,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
       : {}),
     requireProject: (principal, id) => projects.requireProject(principal, id),
     recordFinding: (sessionId, taskId, text) => projects.recordFinding(sessionId, taskId, text),
+    onTitle: (projectId, title) => projects.autoTitle(projectId, title),
     ...(db ? { recordSpend: billing.record } : {}),
     log,
     ...(db ? { budget: billing.budgetGuard } : {}),

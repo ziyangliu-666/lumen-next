@@ -1,5 +1,6 @@
 // Public index for the session slice. Owner: LIU ZIYANG.
 import type { FastifyInstance } from 'fastify';
+import type { Session } from '@lumen/contracts';
 import type { Log } from '../../core/log/log.js';
 import type { Db } from '../../core/db/db.js';
 import type { BudgetApprovalResume, BudgetGuard } from '../../core/domain/budget.js';
@@ -56,6 +57,8 @@ export function createSessionSlice(deps: {
   log?: Log;
   /** The models a session may be opened with, the default first. */
   models?: readonly string[];
+  /** From the projects slice: a session was named; name its project after it. */
+  onTitle?: (projectId: string, title: string) => Promise<void>;
 }): SessionSlice {
   const trace = deps.db ? new PgTrace(deps.db, deps.recordSpend) : new MemoryTrace();
   const kernel = new Kernel(trace, deps.broker, deps.worker ?? demoWorker(), {
@@ -63,6 +66,9 @@ export function createSessionSlice(deps: {
     ...(deps.budget ? { budget: deps.budget } : {}),
     ...(deps.log ? { log: deps.log.child({ slice: 'session' }) } : {}),
     ...(deps.models ? { models: deps.models } : {}),
+    ...(deps.onTitle
+      ? { onTitle: (session: Session, title: string) => deps.onTitle!(session.projectId, title) }
+      : {}),
   });
   return {
     kernel,

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   Finding,
   Money,
+  Session,
   SessionMode,
   SessionSnapshot,
   SessionSummary,
@@ -64,6 +65,11 @@ export interface KernelOptions {
   readonly budget?: BudgetGuard;
   /** The slice's logger. Each task run writes through a child of it. */
   readonly log?: Log;
+  /**
+   * Told when a session is named, so the projects slice can name the project
+   * after its first session. main.ts passes `projects.autoTitle`.
+   */
+  readonly onTitle?: (session: Session, title: string) => Promise<void>;
 }
 
 function findingsInMemory(): FindingSaver {
@@ -79,6 +85,9 @@ function findingsInMemory(): FindingSaver {
  * How the parent's turn after an approved fan-out begins. A worker that
  * fans out on every turn (the demo) reads it as "answer from the reports".
  */
+/** The longest session name, in characters. */
+const MAX_TITLE_CHARS = 80;
+
 export const APPROVED_WORK_DONE =
   'The work you delegated was blocked by the spending cap, then approved, and has finished. Here is what each task reported. Use it to answer.';
 
@@ -96,6 +105,30 @@ export class Kernel {
     this.budget = options.budget ?? allowEverything;
     this.log = options.log ?? nullLog;
     this.models = options.models ?? [];
+    this.onTitle = options.onTitle;
+  }
+
+  private readonly onTitle: KernelOptions['onTitle'];
+
+  /**
+   * Names the session, once: a later call, or one for a task that is not
+   * the root, is ignored. The project is told after the name is kept.
+   */
+  private async retitle(taskId: string, title: string): Promise<void> {
+    const task = await this.trace.task(taskId);
+    if (!task || task.parentId !== null) return;
+    const session = await this.trace.session(task.sessionId);
+    if (!session || session.title) return;
+    const name = title.replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_CHARS);
+    if (!name) return;
+    await this.trace.setTitle(session.id, name);
+    this.broker.publish(session.id, { type: 'session.titled', sessionId: session.id, title: name });
+    try {
+      await this.onTitle?.(session, name);
+    } catch (error) {
+      // The session keeps its name; only the project's copy is missing.
+      this.log.warn({ err: error, sessionId: session.id }, 'project title not updated');
+    }
   }
 
   private readonly models: readonly string[];
@@ -250,7 +283,12 @@ export class Kernel {
       const root = await this.trace.rootOf(summary.id);
       // The root's own state: a session whose lead waits on an approval
       // read "Running" in the list.
-      listed.push({ ...summary, status: root?.status ?? summary.status, title: root?.title ?? '' });
+      const named = (await this.trace.session(summary.id))?.title;
+      listed.push({
+        ...summary,
+        status: root?.status ?? summary.status,
+        title: named ?? root?.title ?? '',
+      });
     }
     return listed;
   }
@@ -333,6 +371,7 @@ export class Kernel {
       recordFinding: (taskId, text) => this.recordFinding(taskId, text),
       addSpend: (taskId, amount, reason) => this.addSpend(taskId, amount, reason),
       stopped: async (taskId) => (await this.trace.task(taskId))?.status === 'stopped',
+      retitle: (taskId, title) => this.retitle(taskId, title),
       draft: (taskId, text) => {
         this.broker.publish(task.sessionId, { type: 'step.draft', taskId, text: storable(text) });
       },

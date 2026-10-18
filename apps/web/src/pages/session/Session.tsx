@@ -211,6 +211,9 @@ export function Session(): JSX.Element {
   const sessionId = state?.snapshot.session.id;
   const projectId = state?.snapshot.session.projectId;
   const connected = state?.stream === 'open';
+  // Read again when the session is named: the project takes the first
+  // session's name, and the list of sessions shows it.
+  const named = state?.snapshot.session.title;
   useEffect(() => {
     if (!sessionId || !projectId || !connected) return;
     let active = true;
@@ -240,7 +243,7 @@ export function Session(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [sessionId, projectId, connected]);
+  }, [sessionId, projectId, connected, named]);
 
   // One socket per open session; closed when the session changes or the page goes.
   useEffect(() => {
@@ -311,7 +314,7 @@ export function Session(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [projectId, connected, running]);
+  }, [projectId, connected, running, named]);
 
   useEffect(() => {
     if (!projectId || !connected) return;
@@ -405,12 +408,14 @@ export function Session(): JSX.Element {
   const shown = snapshot.tasks.find((task) => task.id === selected) ?? root;
   const thisSession = snapshot.session.id;
   const rootId = root.id;
-  const title = project?.title ?? root.title;
+  // The session's short name once the model wrote one, else its question.
+  const sessionTitle = snapshot.session.title ?? root.title;
+  const title = project?.title ?? sessionTitle;
   // With more than one session, the bar names both: the project, then this
   // session by its own question. It named only the project, so every session
   // of it looked the same.
   const several = sessions.length > 1 && Boolean(project?.title);
-  const heading = several ? root.title : title;
+  const heading = several ? sessionTitle : title;
   const names = speakerNames(snapshot.tasks);
   const lead = shown.id === root.id;
   const ready = state.stream === 'open' && auth.status === 'ready';

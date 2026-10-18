@@ -7,6 +7,12 @@ export interface ProjectStore {
   insert(project: Project): Promise<void>;
   remove(id: string): Promise<void>;
   get(id: string): Promise<Project | null>;
+  /**
+   * Renames a project. 'person' always applies. 'model' applies only over
+   * a name cut from the question, so a later session or a generated title
+   * never replaces the first title or the person's own. True when applied.
+   */
+  retitle(id: string, title: string, source: 'model' | 'person'): Promise<boolean>;
   visit(id: string, accountId: string, at: number, spend: number): Promise<Project | null>;
   /** Return at most limit + 1 records, newest first. */
   list(accountId: string, page: PageRequest): Promise<Project[]>;

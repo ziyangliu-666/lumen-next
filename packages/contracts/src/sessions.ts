@@ -18,9 +18,14 @@ export interface Session {
   /**
    * The model this session thinks with, chosen when it opened. Absent: the
    * server's default. The choice is among the models the server allows
-   * (GET /api/models).
+   * (GET /api/models). A later turn may change it.
    */
   readonly model?: string;
+  /**
+   * A short name the model wrote after the first question. Absent: the page
+   * names the session by its question, as it did before titles.
+   */
+  readonly title?: string;
 }
 
 // What a step is. The order of the steps is the reasoning, and the kind says

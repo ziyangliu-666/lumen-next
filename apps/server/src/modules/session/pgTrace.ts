@@ -28,6 +28,7 @@ interface SessionRow {
   account_id: string;
   started_at: Date;
   model?: string | null;
+  title?: string | null;
   [column: string]: unknown;
 }
 
@@ -74,6 +75,7 @@ function toSession(row: SessionRow): Session {
     accountId: row.account_id,
     startedAt: row.started_at.getTime(),
     ...(row.model ? { model: row.model } : {}),
+    ...(row.title ? { title: row.title } : {}),
   };
 }
 
@@ -125,7 +127,7 @@ export class PgTrace implements Trace {
   ): Promise<Session> {
     const [row] = await this.db.query<SessionRow>(
       `insert into sessions (id, project_id, account_id, mode, model) values ($1, $2, $3, $4, $5)
-       returning id, mode, project_id, account_id, started_at, model`,
+       returning id, mode, project_id, account_id, started_at, model, title`,
       [randomUUID(), projectId, accountId, mode, model ?? null],
     );
     return toSession(row!);
@@ -134,10 +136,15 @@ export class PgTrace implements Trace {
   async session(id: string): Promise<Session | null> {
     if (!UUID.test(id)) return null;
     const [row] = await this.db.query<SessionRow>(
-      `select id, mode, project_id, account_id, started_at, model from sessions where id = $1`,
+      `select id, mode, project_id, account_id, started_at, model, title from sessions where id = $1`,
       [id],
     );
     return row ? toSession(row) : null;
+  }
+
+  async setTitle(sessionId: string, title: string): Promise<void> {
+    if (!UUID.test(sessionId)) return;
+    await this.db.query(`update sessions set title = $2 where id = $1`, [sessionId, title]);
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {

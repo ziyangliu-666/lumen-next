@@ -77,6 +77,11 @@ export interface WorkerReport {
    * the record, and a draft that is dropped loses nothing.
    */
   draft?(taskId: string, text: string): void;
+  /**
+   * A short name for the session, from its first question. Only the root's
+   * first one counts; the kernel ignores the rest.
+   */
+  retitle?(taskId: string, title: string): Promise<void>;
 }
 
 export interface Worker {

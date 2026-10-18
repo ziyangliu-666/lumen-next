@@ -205,6 +205,32 @@ describe('session: kernel', () => {
     });
   });
 
+  it('names a session once, from its root, and tells the project', async () => {
+    const named: string[] = [];
+    const titler: Worker = {
+      run: async (task, input, report) => {
+        await report.retitle?.(task.id, '  Catalan   numbers ');
+        await report.retitle?.(task.id, 'Second name');
+        await report.appendStep(task.id, 'reply', `got "${input}"`);
+      },
+    };
+    const trace = new MemoryTrace();
+    const kernel = new Kernel(trace, new Broker(), titler, {
+      onTitle: (session, title) => {
+        named.push(`${session.projectId}:${title}`);
+        return Promise.resolve();
+      },
+    });
+    const { session } = await kernel.start('p1', owner.accountId, 'Count Dyck paths');
+    await kernel.idle();
+
+    expect((await trace.session(session.id))?.title).toBe('Catalan numbers');
+    expect(named).toEqual(['p1:Catalan numbers']);
+    expect((await kernel.sessionsOf('p1', owner))[0]?.title).toBe('Catalan numbers');
+    // The question is still the conversation's first message.
+    expect((await kernel.snapshot(session.id, owner)).tasks[0]?.title).toBe('Count Dyck paths');
+  });
+
   it('answers a stranger with 404, the same as for a session that does not exist', async () => {
     const { kernel } = harness();
     const { session } = await kernel.start('p1', owner.accountId, 'q');

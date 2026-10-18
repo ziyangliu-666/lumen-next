@@ -53,6 +53,14 @@ const FILES =
 // - said a file was saved when no command had run, because the sandbox had
 //   no compute;
 // - read "Free exploration" as a question to clarify.
+/** For the session's name: what chat products show in their list. */
+const TITLE_PROMPT = [
+  'Write a title for this research question, as a chat app titles a conversation.',
+  'At most six words, in the language of the question, in sentence case (only the first word and names capitalised).',
+  'Name the mathematical object or claim.',
+  'No quotes, no final full stop, no "Question about". Reply with the title only.',
+].join(' ');
+
 const LEAD_PROMPT = [
   'You are the lead agent of Lumen, a research agent for mathematics. You find out what is true and say so with the evidence.',
   'Work, do not ask. If the question can be settled by reading, searching or computing, do that instead of asking the user for data or permission. Ask only when the question itself is ambiguous.',
@@ -567,6 +575,33 @@ export function createWorker(options: WorkerOptions): Worker {
     };
   }
 
+  /**
+   * A title of a few words for the session, from its question, as chat
+   * products name a chat: the list showed whole questions, cut off at two
+   * lines. One small call on the session's model, charged like any other.
+   * A failure leaves the question as the name; it never fails the turn.
+   */
+  async function nameSession(task: Task, question: string, report: WorkerReport): Promise<void> {
+    if (!report.retitle) return;
+    try {
+      const completion = await withLog(model, report.log).complete({
+        system: TITLE_PROMPT,
+        messages: [{ role: 'user', content: question.slice(0, 2000) }],
+        maxTokens: 24,
+      });
+      if (completion.cost.dollars > 0) {
+        await report.addSpend(task.id, completion.cost, `model: ${completion.model}`);
+      }
+      const title = completion.text
+        .split('\n')[0]!
+        .replace(/^["'“”«»\s]+|["'“”«».\s]+$/gu, '')
+        .trim();
+      if (title) await report.retitle(task.id, title);
+    } catch (error) {
+      report.log.warn({ err: error }, 'session title not written');
+    }
+  }
+
   async function converse(turn: Turn): Promise<string> {
     const tools = turn.isLead ? LEAD_TOOLS : READER_TOOLS;
     let retold = false;
@@ -694,6 +729,10 @@ export function createWorker(options: WorkerOptions): Worker {
   return {
     async run(task, input, report) {
       const turn = new Turn(task, input, report);
+      // The session's name, written beside the first turn of the lead (its
+      // input is then the question itself), not after it.
+      const naming =
+        task.parentId === null && input === task.title ? nameSession(task, input, report) : null;
       try {
         const answer = await converse(turn);
         if (!turn.isLead) answers.set(task.id, answer);
@@ -718,6 +757,7 @@ export function createWorker(options: WorkerOptions): Worker {
         // that and was never reached still belongs in the trace, not nowhere.
         options.registry.end(task.id);
         await turn.land('next-step', 'end-of-turn').catch(() => undefined);
+        await naming;
       }
     },
   };

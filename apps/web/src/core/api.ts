@@ -202,6 +202,13 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
         return state;
       }
       return { ...state, drafts: { ...state.drafts, [event.taskId]: event.text } };
+    case 'session.titled':
+      return event.sessionId === snapshot.session.id
+        ? {
+            ...state,
+            snapshot: { ...snapshot, session: { ...snapshot.session, title: event.title } },
+          }
+        : state;
     case 'finding.recorded': {
       // The first read of the list may already hold it.
       if (state.findings.some((finding) => finding.id === event.findingId)) return state;

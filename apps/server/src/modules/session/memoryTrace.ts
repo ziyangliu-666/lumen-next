@@ -43,6 +43,12 @@ export class MemoryTrace implements Trace {
     return Promise.resolve(this.sessions.get(id) ?? null);
   }
 
+  setTitle(sessionId: string, title: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (session) this.sessions.set(sessionId, { ...session, title });
+    return Promise.resolve();
+  }
+
   setModel(sessionId: string, model: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (session) this.sessions.set(sessionId, { ...session, model });

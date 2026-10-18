@@ -26,6 +26,8 @@ export type ServerEvent =
   // step.appended that follows for the same task replaces it, and a page
   // that missed a draft only misses the animation.
   | { type: 'step.draft'; taskId: string; text: string }
+  // The session's short name, written once after its first question.
+  | { type: 'session.titled'; sessionId: string; title: string }
   | { type: 'finding.recorded'; taskId: string; findingId: string; text: string }
   // A command this socket sent could not be carried out. Says why in words a
   // user may read; never anything about the server's insides.

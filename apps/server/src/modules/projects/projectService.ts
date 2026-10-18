@@ -14,7 +14,7 @@ import type {
 import type { ProjectSessions, ProjectStore } from './ports.js';
 import { ProjectCardContext } from './projectCardContext.js';
 import { cumulativeSpend, sessionsEndedSince, spendSinceVisit } from './lastVisit.js';
-import { creationOf, idOf, pageOf, pageResult, textOf } from './validation.js';
+import { creationOf, idOf, objectOf, pageOf, pageResult, textOf } from './validation.js';
 
 function summary({
   accountId: _accountId,
@@ -102,6 +102,22 @@ export class ProjectService {
     return { lastOpenedAt: saved.lastOpenedAt! };
   }
   /** Metadata-only owner check for session creation; never calls back into session. */
+  /** The person's own name for a project. It is never replaced by a generated one. */
+  async rename(principal: Principal, id: string, body: unknown): Promise<ProjectSummary> {
+    const project = await this.owned(principal, id);
+    const raw = objectOf(body, ['title'])['title'];
+    const title = typeof raw === 'string' ? raw.replace(/\s+/gu, ' ').trim() : '';
+    if (!title || [...title].length > TITLE_LIMIT) {
+      throw badRequest(`title must be 1 to ${TITLE_LIMIT} characters`);
+    }
+    await this.store.retitle(project.id, title, 'person');
+    return summary({ ...project, title });
+  }
+  /** The first session's title, as the project's name, over the cut question only. */
+  async autoTitle(projectId: string, title: string): Promise<void> {
+    const name = titleOf(title);
+    if (name) await this.store.retitle(projectId, name, 'model');
+  }
   async requireProject(principal: Principal, id: string): Promise<ProjectSummary> {
     return summary(await this.owned(principal, id));
   }

@@ -16,6 +16,7 @@ export interface ProjectsSlice {
   readonly listFindings: ProjectService['listFindings'];
   readonly projectOf: ProjectService['projectOf'];
   readonly requireProject: ProjectService['requireProject'];
+  readonly autoTitle: ProjectService['autoTitle'];
 }
 /** Instance-scoped composition, matching session; no process-global mutable singleton. */
 export function createProjectsSlice(deps: {
@@ -34,5 +35,6 @@ export function createProjectsSlice(deps: {
     listFindings: service.listFindings.bind(service),
     projectOf: service.projectOf.bind(service),
     requireProject: service.requireProject.bind(service),
+    autoTitle: service.autoTitle.bind(service),
   };
 }

@@ -165,7 +165,91 @@ export function arxivSynonym(query: string): string | null {
   return null;
 }
 
+interface OpenAlexWork {
+  readonly title?: string | null;
+  readonly publication_year?: number | null;
+  readonly doi?: string | null;
+  readonly abstract_inverted_index?: Readonly<Record<string, readonly number[]>> | null;
+}
+
+/** OpenAlex keeps an abstract as word positions; this puts the words back in order. */
+export function abstractOf(index: OpenAlexWork['abstract_inverted_index']): string {
+  if (!index) return '';
+  const words: string[] = [];
+  for (const [word, places] of Object.entries(index)) for (const at of places) words[at] = word;
+  return words.filter(Boolean).join(' ');
+}
+
+/**
+ * The same search through OpenAlex, for when arXiv refuses: it answers this
+ * server's shared address with 429 "Rate exceeded" from the first request,
+ * on staging, whatever the spacing. A work with an arXiv DOI is an arXiv
+ * result, with its id and its abstract page; any other keeps its DOI.
+ */
+async function openalex(query: string, fetchImpl: Fetch): Promise<SearchResult> {
+  const url = `https://api.openalex.org/works?per-page=${ARXIV_LIMIT}&select=title,publication_year,doi,abstract_inverted_index&search=${encodeURIComponent(query)}`;
+  const response = await fetchImpl(url, { signal: AbortSignal.timeout(ARXIV_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`OpenAlex answered HTTP ${response.status}`);
+  const works = ((JSON.parse(await response.text()) as { results?: OpenAlexWork[] }).results ?? [])
+    .filter((work) => work.title)
+    .map((work) => {
+      const doi = (work.doi ?? '').replace(/^https?:\/\/doi\.org\//i, '');
+      const arxivId = /^10\.48550\/arxiv\.(.+)$/i.exec(doi)?.[1];
+      return {
+        id: arxivId ?? (doi || 'no DOI'),
+        source: arxivId ? 'arXiv' : 'OpenAlex',
+        url: arxivId
+          ? `https://arxiv.org/abs/${arxivId}`
+          : doi
+            ? `https://doi.org/${doi}`
+            : undefined,
+        year: work.publication_year ? String(work.publication_year) : '',
+        title: (work.title ?? '').replace(/\s+/g, ' ').trim(),
+        summary: abstractOf(work.abstract_inverted_index).slice(0, 300),
+      };
+    });
+  if (works.length === 0) {
+    return {
+      rows: [{ source: 'arXiv', text: query, result: 'Nothing', empty: true }],
+      text: `arXiv (through OpenAlex): no paper matches "${query}".`,
+    };
+  }
+  return {
+    rows: works.map((work) => ({
+      source: work.source,
+      text: `${work.id}${work.year ? ` (${work.year})` : ''}, ${work.title}`,
+      result: 'Paper',
+      ...(work.url ? { url: work.url } : {}),
+    })),
+    text: [
+      `arXiv was unavailable; ${works.length} papers for "${query}" from OpenAlex.`,
+      ...works.map(
+        (work) =>
+          `${work.id}${work.year ? ` (${work.year})` : ''}: ${work.title}\n  ${work.summary}`,
+      ),
+    ].join('\n'),
+  };
+}
+
 async function arxiv(query: string, fetchImpl: Fetch, spacingMs: number): Promise<SearchResult> {
+  try {
+    return await arxivOnly(query, fetchImpl, spacingMs);
+  } catch (error) {
+    // arXiv refused or stalled: the same question to OpenAlex. Both failing
+    // is the error the worker reports.
+    try {
+      return await openalex(arxivSynonym(query) ?? query, fetchImpl);
+    } catch {
+      throw error;
+    }
+  }
+}
+
+async function arxivOnly(
+  query: string,
+  fetchImpl: Fetch,
+  spacingMs: number,
+): Promise<SearchResult> {
   // Papers with every word first, then with every word of the synonym query;
   // when they are fewer than the limit, the list is filled with papers that
   // have any of the words.

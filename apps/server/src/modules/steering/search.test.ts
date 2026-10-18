@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arxivQuery, arxivSynonym, search } from './search.js';
+import { abstractOf, arxivQuery, arxivSynonym, search } from './search.js';
 
 const answer =
   (body: string, ok = true) =>
@@ -71,6 +71,48 @@ describe('steering: the literature connectors', () => {
       );
     const result = await search('arxiv', '1324 bounds', fetchImpl, 0);
     expect(result.rows.map((row) => row.text)).toEqual(['1711.10325, Bounds']);
+  });
+
+  it('asks OpenAlex when arXiv refuses, and keeps arXiv ids and links', async () => {
+    const openalex = JSON.stringify({
+      results: [
+        {
+          title: 'New bounds on its growth rate',
+          publication_year: 2017,
+          doi: 'https://doi.org/10.48550/arxiv.1711.10325',
+          abstract_inverted_index: { bounds: [1], New: [0] },
+        },
+        { title: 'A journal paper', publication_year: 2020, doi: 'https://doi.org/10.1000/x' },
+      ],
+    });
+    const fetchImpl = (url: string) =>
+      Promise.resolve(
+        url.includes('openalex')
+          ? { ok: true, status: 200, text: () => Promise.resolve(openalex) }
+          : { ok: false, status: 429, text: () => Promise.resolve('Rate exceeded.') },
+      );
+    const result = await search('arxiv', 'Stanley-Wilf limit of 1324', fetchImpl, 0);
+    expect(result.rows).toEqual([
+      {
+        source: 'arXiv',
+        text: '1711.10325 (2017), New bounds on its growth rate',
+        result: 'Paper',
+        url: 'https://arxiv.org/abs/1711.10325',
+      },
+      {
+        source: 'OpenAlex',
+        text: '10.1000/x (2020), A journal paper',
+        result: 'Paper',
+        url: 'https://doi.org/10.1000/x',
+      },
+    ]);
+    expect(result.text).toContain('arXiv was unavailable');
+    expect(result.text).toContain('New bounds');
+  });
+
+  it('puts an OpenAlex abstract back in order', () => {
+    expect(abstractOf({ rate: [3], growth: [2], the: [0, 1] })).toBe('the the growth rate');
+    expect(abstractOf(null)).toBe('');
   });
 
   it('gives each paper its year when the feed has one', async () => {

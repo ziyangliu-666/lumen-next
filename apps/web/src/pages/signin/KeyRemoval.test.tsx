@@ -9,5 +9,5 @@ it('requires explicit action-specific proof and offers only enabled providers', 
   expect(html).toContain('Confirm removal with GitHub');
   expect(html).not.toContain('Confirm removal with Google');
   expect(html).toContain('type="password"');
-  expect(html).toContain('does not sign you in');
+  expect(html).toContain('you stay signed out');
 });

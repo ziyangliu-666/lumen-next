@@ -20,7 +20,9 @@ primary_region = "sin"
   # walkthrough's fixed-points and Catalan runs came back with wrong numbers
   # it said it had checked (report rows A14, A17); mini got both right.
   LUMEN_MODEL = "gpt-4.1-mini"
-  LUMEN_MODELS = "gpt-4.1-mini,gpt-4.1-nano"
+  # gpt-4.1 for a hard question: on the 1324 literature question mini read
+  # the right abstracts and still gave the older bounds (report row A23).
+  LUMEN_MODELS = "gpt-4.1-mini,gpt-4.1-nano,gpt-4.1"
   LUMEN_WORKER = "steering"
   LUMEN_COMPUTE_PROVIDER = "docker"
   # The sandbox: the same Python as the packages built into the app image

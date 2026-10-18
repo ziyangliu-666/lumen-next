@@ -545,7 +545,9 @@ export function SearchSources({
 
 // One measure for prose in the conversation, thinking and answers alike, so
 // the column has one text width. Only tables and output run the full width.
-const PROSE = 'max-w-[40rem]';
+// The column itself is the measure, as in chat products: at 40rem the answer
+// left an empty strip down the right of the conversation.
+const PROSE = 'max-w-[48rem]';
 
 /** What a tool step took and cost, beside its label. A free step shows no price. */
 export function receiptOf(step: Step): string {

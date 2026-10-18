@@ -627,9 +627,8 @@ export function Session(): JSX.Element {
             following.current = atFoot(event.currentTarget);
           }}
           aria-label={shown.id === root.id ? 'Conversation' : `Conversation of ${shown.agent}`}
-          // The region reaches into the gutter, so its scroll bar sits between
-          // the conversation and the well and never over the text.
-          className="flex-1 outline-none split:-mr-gutter split:pr-gutter"
+          // The scroll bar stays in the column: the well now covers the gap.
+          className="flex-1 pr-2 outline-none"
         >
           <ReplyFiles
             link={(path) =>

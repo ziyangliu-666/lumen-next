@@ -149,7 +149,9 @@ function SurfaceWell({
         data-open={sheet ? String(open) : undefined}
         className={cn(
           'bg-well px-margin',
-          'split:col-start-8 split:col-end-[-1] split:-mr-margin split:ml-0 split:border-l split:border-rule-minor',
+          // Into the grid's gap as well: left open, the gap showed the scene
+          // as a dark stripe between the two surfaces.
+          'split:col-start-8 split:col-end-[-1] split:-mr-margin split:-ml-gutter split:border-l split:border-rule-minor split:pl-[calc(var(--spacing-gutter)+var(--spacing-margin))]',
           sheet
             ? cn(
                 // A phone gets the whole width, with no edge left over: a 1px

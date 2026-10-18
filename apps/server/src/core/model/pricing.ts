@@ -15,6 +15,8 @@ export interface Price {
 const PRICES: Readonly<Record<string, Price>> = {
   // OpenAI, read 23 Sep 2026.
   'gpt-4.1-nano': { inputPerMillion: 0.1, outputPerMillion: 0.4 },
+  // Read 18 Oct 2026 (developers.openai.com/api/docs/pricing, standard tier).
+  'gpt-4.1': { inputPerMillion: 2, outputPerMillion: 8 },
   'gpt-4.1-mini': { inputPerMillion: 0.4, outputPerMillion: 1.6 },
   'gpt-4o-mini': { inputPerMillion: 0.15, outputPerMillion: 0.6 },
   'gpt-5-nano': { inputPerMillion: 0.05, outputPerMillion: 0.4 },

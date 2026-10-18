@@ -3,41 +3,193 @@ import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { RunState } from '@/ui/run-state';
 
-// What lumen does, shown once to a visitor who is not signed in, before the
-// front page: one question worked the way the product works it. The words
-// of the page alone ("Now you can do any frontier work") did not say what
-// happens after the question is sent. It plays in under ten seconds, in the
-// session page's own marks (the turning ring, the moving light, the answer
-// written as it comes), and any key, click or Skip ends it. With reduced
-// motion it is not played at all.
+// What lumen is, shown once to a visitor who is not signed in, before the
+// front page: an AI that does research on its own, said in six short
+// scenes of large type over the scene's sphere. Each scene names one thing
+// lumen does and shows one real piece of it: the papers it reads, the
+// numbers it computes, the readers working at once, the claim it checks.
+// The first version played a small copy of the session page, and at that
+// size it read as a screenshot, not as what the product is.
 //
-// The run is real mathematics: 321-avoiding involutions of length n are
-// counted by binomial(n, floor(n/2)) (Simion and Schmidt, 1985), OEIS A001405.
+// About twelve seconds. Any key, a click or Skip ends it, it plays once,
+// and with reduced motion it is not played at all. The mathematics is
+// real: the Catalan numbers count Dyck paths (OEIS A000108).
 
 const SEEN_KEY = 'lumen.intro';
 
-const QUESTION =
-  'Is the number of 321-avoiding involutions of length n the central binomial coefficient?';
-const COUNTS = [1, 2, 3, 6, 10, 20, 35, 70, 126, 252, 462, 924, 1716, 3432];
-const ANSWER =
-  'Yes. For every n up to 14 the counts equal binomial(n, ⌊n/2⌋), which is OEIS A001405, and Simion and Schmidt proved it for all n in 1985.';
+/**
+ * Delays for the words of a line, so they come up one after another.
+ * Important, here and below: the animate-* utility is the animation
+ * shorthand, which set the delay and the length back to their defaults.
+ */
+const WORD = [
+  '[animation-delay:0ms]!',
+  '[animation-delay:70ms]!',
+  '[animation-delay:140ms]!',
+  '[animation-delay:210ms]!',
+  '[animation-delay:280ms]!',
+  '[animation-delay:350ms]!',
+  '[animation-delay:420ms]!',
+  '[animation-delay:490ms]!',
+];
 
-/** When each part starts, in ms from the start. */
-const AT = {
-  type: 200,
-  typed: 1900,
-  search: 2100,
-  found: 3100,
-  readers: 3400,
-  counting: 3800,
-  papers: 5400,
-  counted: 6000,
-  answer: 6300,
-  answered: 8500,
-  kept: 8700,
-  leave: 9800,
-  done: 10300,
-} as const;
+/** Delays for the pieces under a line, after its words. */
+const PIECE = [
+  '[animation-delay:520ms]!',
+  '[animation-delay:640ms]!',
+  '[animation-delay:760ms]!',
+  '[animation-delay:880ms]!',
+  '[animation-delay:1000ms]!',
+  '[animation-delay:1120ms]!',
+  '[animation-delay:1240ms]!',
+  '[animation-delay:1360ms]!',
+  '[animation-delay:1480ms]!',
+];
+
+/** Words that come up out of a blur, one after another. */
+function Words({ text, className }: { text: string; className?: string | undefined }): JSX.Element {
+  const words = text.split(' ');
+  return (
+    <span className={cn('block', className)}>
+      {words.map((word, index) => (
+        <span
+          key={index}
+          className={cn(
+            'inline-block whitespace-pre motion-safe:animate-intro-word',
+            WORD[Math.min(index, WORD.length - 1)],
+          )}
+        >
+          {index < words.length - 1 ? `${word} ` : word}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function Piece({
+  at,
+  spaced = false,
+  children,
+}: {
+  at: number;
+  /** A space after it, as in a list of numbers: an inline block drops its own. */
+  spaced?: boolean;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <span
+      className={cn('inline-block motion-safe:animate-intro-word', PIECE[at], spaced && 'mr-[1ch]')}
+    >
+      {children}
+    </span>
+  );
+}
+
+const CATALAN = [1, 1, 2, 5, 14, 42, 132, 429, 1430];
+
+interface Scene {
+  readonly lines: readonly string[];
+  /** How long it shows, in ms; `out` and `fill` say the same time as classes. */
+  readonly ms: number;
+  readonly out: string;
+  readonly fill: string;
+  readonly piece?: ReactNode;
+}
+
+const SCENES: readonly Scene[] = [
+  {
+    lines: ['An AI that does research', 'on its own.'],
+    ms: 2600,
+    out: '[animation-delay:2240ms]!',
+    fill: '[animation-duration:2600ms]!',
+    piece: (
+      <Piece at={4}>
+        <span className="text-lg text-ink-2">
+          You ask the question. lumen does the work, end to end.
+        </span>
+      </Piece>
+    ),
+  },
+  {
+    lines: ['It reads the literature.'],
+    ms: 2000,
+    out: '[animation-delay:1640ms]!',
+    fill: '[animation-duration:2000ms]!',
+    piece: (
+      <span className="flex flex-wrap gap-2">
+        {['arXiv:1711.10325', 'OEIS A000108', 'arXiv:2408.15075', 'OEIS A001006'].map(
+          (id, index) => (
+            <Piece key={id} at={index}>
+              <span className="border border-rule-major bg-well px-2 py-1 font-mono text-sm text-ink">
+                {id}
+              </span>
+            </Piece>
+          ),
+        )}
+      </span>
+    ),
+  },
+  {
+    lines: ['It runs the computations.'],
+    ms: 2000,
+    out: '[animation-delay:1640ms]!',
+    fill: '[animation-duration:2000ms]!',
+    piece: (
+      <span className="font-mono text-2xl text-ink tabular-nums">
+        {CATALAN.map((count, index) => (
+          <Piece key={index} at={index} spaced={index < CATALAN.length - 1}>
+            {index < CATALAN.length - 1 ? `${count},` : `${count} …`}
+          </Piece>
+        ))}
+      </span>
+    ),
+  },
+  {
+    lines: ['Many at once.'],
+    ms: 2200,
+    out: '[animation-delay:1840ms]!',
+    fill: '[animation-duration:2200ms]!',
+    piece: (
+      <span className="grid gap-2">
+        {[
+          ['reader 1', 'Counting Dyck paths to n = 14'],
+          ['reader 2', 'Searching arXiv and OpenAlex'],
+          ['reader 3', 'Checking the terms against OEIS'],
+        ].map(([who, what], index) => (
+          <Piece key={who} at={index}>
+            <span className="flex items-center gap-3 text-lg">
+              <RunState state="running">{''}</RunState>
+              <span className="w-20 text-ink-2">{who}</span>
+              <span className="shimmer-text motion-safe:animate-shimmer">{what}</span>
+            </span>
+          </Piece>
+        ))}
+      </span>
+    ),
+  },
+  {
+    lines: ['It checks every claim.'],
+    ms: 2000,
+    out: '[animation-delay:1640ms]!',
+    fill: '[animation-duration:2000ms]!',
+    piece: (
+      <Piece at={1}>
+        <span className="flex items-center gap-3 text-lg text-ink">
+          <span aria-hidden="true" className="size-2.5 bg-ink" />
+          Matches OEIS A000108 for every n up to 14
+        </span>
+      </Piece>
+    ),
+  },
+  {
+    lines: ['And shows you', 'the evidence.'],
+    ms: 1800,
+    out: '[animation-delay:1440ms]!',
+    fill: '[animation-duration:1800ms]!',
+  },
+];
+
+const TOTAL = SCENES.reduce((sum, scene) => sum + scene.ms, 0);
 
 /** Whether the intro should play: signed out is the caller's; here, once, and not with reduced motion. */
 export function introWanted(): boolean {
@@ -57,31 +209,14 @@ function remember(): void {
   }
 }
 
-/** The part of `text` written by `now`, between `from` and `to`. */
-function written(text: string, now: number, from: number, to: number): string {
-  if (now <= from) return '';
-  if (now >= to) return text;
-  return text.slice(0, Math.ceil((text.length * (now - from)) / (to - from)));
-}
-
-/** One line of work: the ring while it runs, a dot once done, the light over live words. */
-function Line({
-  running,
-  children,
-  className,
-}: {
-  running: boolean;
-  children: ReactNode;
-  className?: string;
-}): JSX.Element {
-  return (
-    <p className={cn('flex items-center gap-2 text-sm motion-safe:animate-rise', className)}>
-      <RunState state={running ? 'running' : 'finished'}>{''}</RunState>
-      <span className={running ? 'shimmer-text motion-safe:animate-shimmer' : 'text-ink-2'}>
-        {children}
-      </span>
-    </p>
-  );
+/** The scene shown at `now` ms, or -1 once all have played. */
+function sceneAt(now: number): number {
+  let end = 0;
+  for (let index = 0; index < SCENES.length; index++) {
+    end += SCENES[index]!.ms;
+    if (now < end) return index;
+  }
+  return -1;
 }
 
 export function Intro({ onDone }: { onDone: () => void }): JSX.Element {
@@ -95,7 +230,7 @@ export function Intro({ onDone }: { onDone: () => void }): JSX.Element {
     return () => cancelAnimationFrame(frame);
   }, []);
   useEffect(() => {
-    if (now < AT.done) return;
+    if (now < TOTAL) return;
     remember();
     onDone();
   }, [now, onDone]);
@@ -108,18 +243,8 @@ export function Intro({ onDone }: { onDone: () => void }): JSX.Element {
     return () => window.removeEventListener('keydown', skip);
   }, [onDone]);
 
-  const counted = COUNTS.slice(
-    0,
-    Math.max(
-      0,
-      Math.min(
-        COUNTS.length,
-        Math.floor(((now - AT.counting) / (AT.counted - AT.counting)) * COUNTS.length),
-      ),
-    ),
-  );
-  const question = written(QUESTION, now, AT.type, AT.typed);
-  const answer = written(ANSWER, now, AT.answer, AT.answered);
+  const at = sceneAt(now);
+  const scene = SCENES[Math.max(0, at)]!;
   return (
     // A click anywhere skips, as a key does; the button says that it can.
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
@@ -128,81 +253,52 @@ export function Intro({ onDone }: { onDone: () => void }): JSX.Element {
         remember();
         onDone();
       }}
-      className={cn(
-        'transition-[opacity,translate] duration-500 ease-[cubic-bezier(0.2,0.7,0.2,1)]',
-        now >= AT.leave && '-translate-y-3 opacity-0',
-      )}
+      className="flex min-h-[26rem] flex-col"
     >
-      <div aria-hidden="true">
-        {/* The question, typed into a field drawn as the page's own. */}
-        <div className="min-h-24 border border-rule-major bg-paper px-4 py-3 text-ink">
-          {question}
-          {now < AT.typed + 300 ? (
-            <span className="ml-0.5 inline-block h-[1.1em] w-px translate-y-[0.2em] bg-ink motion-safe:animate-pulse" />
-          ) : null}
-        </div>
-        <div className="mt-6 min-h-64 space-y-3">
-          {now >= AT.search ? (
-            <Line running={now < AT.found}>
-              {now < AT.found ? 'Searching OEIS' : 'Found A001405, a(n) = binomial(n, ⌊n/2⌋)'}
-            </Line>
-          ) : null}
-          {now >= AT.readers ? (
-            <div className="space-y-2 motion-safe:animate-rise">
-              <Line running={now < AT.counted}>
-                {now < AT.counted ? 'Working with 2 readers in parallel' : 'Readers finished'}
-              </Line>
-              <div className="ml-1.5 space-y-2 border-l border-rule-minor pl-5">
-                <Line running={now < AT.counted}>
-                  {now < AT.counted ? 'Counting involutions in Python' : 'Counted n = 1 to 14'}
-                </Line>
-                {counted.length > 0 ? (
-                  <p className="font-mono text-xs text-ink-2 tabular-nums">
-                    {counted.map((count, index) => (
-                      <span key={count} className="motion-safe:animate-rise">
-                        {index > 0 ? ', ' : ''}
-                        {count}
-                      </span>
-                    ))}
-                  </p>
-                ) : null}
-                <Line running={now < AT.papers}>
-                  {now < AT.papers ? 'Searching arXiv and OpenAlex' : 'Found the 1985 proof'}
-                </Line>
-              </div>
-            </div>
-          ) : null}
-          {now >= AT.answer ? (
-            <p className="pt-2 text-ink motion-safe:animate-rise">
-              {answer}
-              {now < AT.answered ? (
-                <span className="ml-1 inline-block size-[0.55em] rounded-full bg-ink align-middle motion-safe:animate-pulse" />
-              ) : null}
-            </p>
-          ) : null}
-          {now >= AT.kept ? (
-            <p className="flex items-center gap-2 text-sm text-ink-2 motion-safe:animate-rise">
-              <span className="size-2 bg-ink" />
-              Kept as a finding
-            </p>
-          ) : null}
-        </div>
-      </div>
       <p className="sr-only">
-        lumen takes a research question in mathematics, searches the literature, runs the
-        computations in parallel, and answers with the evidence.
+        lumen is an AI that does research in mathematics on its own: it reads the literature, runs
+        the computations, many at once, checks every claim, and shows you the evidence.
       </p>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          remember();
-          onDone();
-        }}
-        className="mt-6 text-sm text-ink-2 underline decoration-[1.5px] underline-offset-[0.15em] hover:text-ink"
-      >
-        Skip
-      </button>
+      {/* Keyed by the scene, so each one comes up fresh and leaves on its
+          own clock. */}
+      <div key={at} aria-hidden="true" className={cn('motion-safe:animate-intro-out', scene.out)}>
+        <p className="text-[clamp(2.5rem,4.6vw,4.25rem)] leading-[1.02] font-medium tracking-[-0.035em] text-ink">
+          {scene.lines.map((line, index) => (
+            <Words key={line} text={line} className={index > 0 ? 'text-ink-2' : undefined} />
+          ))}
+        </p>
+        {scene.piece ? <div className="mt-8">{scene.piece}</div> : null}
+      </div>
+      <div className="mt-auto flex items-center gap-6 pt-10">
+        {/* One step per scene: those shown are full, the one showing fills. */}
+        <div aria-hidden="true" className="flex flex-1 gap-1.5">
+          {SCENES.map((step, index) => (
+            <span key={index} className="h-0.5 flex-1 overflow-hidden bg-rule-minor">
+              {index < at || at === -1 ? (
+                <span className="block h-full bg-ink" />
+              ) : index === at ? (
+                <span
+                  className={cn(
+                    'block h-full origin-left bg-ink motion-safe:animate-intro-fill',
+                    step.fill,
+                  )}
+                />
+              ) : null}
+            </span>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            remember();
+            onDone();
+          }}
+          className="text-sm text-ink-2 underline decoration-[1.5px] underline-offset-[0.15em] hover:text-ink"
+        >
+          Skip
+        </button>
+      </div>
     </div>
   );
 }

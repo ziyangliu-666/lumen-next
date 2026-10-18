@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useLiveFavicon } from './favicon';
 import { go } from './router';
 import { useNewVersion } from './version';
 import { cn } from '@/lib/utils';
@@ -276,6 +277,7 @@ export function AppShell({
   useThemeFollower();
   useLinksInPage();
   useNoStrayDrops();
+  useLiveFavicon();
   const fresh = useNewVersion();
   const [crumb, setCrumb] = useState<HTMLElement | null>(null);
   const [status, setStatus] = useState<HTMLElement | null>(null);

@@ -68,6 +68,13 @@ export function checkedDetail(detail: StepDetail): StepDetail {
     }
     kept.tool = tool;
   }
+  if (raw['replaces'] !== undefined) {
+    const at = raw['replaces'];
+    if (typeof at !== 'number' || !Number.isInteger(at) || at < -1) {
+      throw new Error('step detail: replaces must be a step index or -1');
+    }
+    kept.replaces = at;
+  }
   if (raw['durationMs'] !== undefined) {
     const ms = raw['durationMs'];
     if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) {

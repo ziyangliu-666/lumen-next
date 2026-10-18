@@ -42,7 +42,14 @@ export function parseCommand(raw: string): ClientCommand | null {
       const sessionId = text(payload['sessionId']);
       const body = text(payload['text']);
       if (!sessionId || !body) return null;
-      return { type: 'session.say', sessionId, text: body };
+      const model = text(payload['model']);
+      return {
+        type: 'session.say',
+        sessionId,
+        text: body,
+        ...(model ? { model } : {}),
+        ...(payload['edit'] === true ? { edit: true } : {}),
+      };
     }
     case 'session.open':
     case 'session.close':

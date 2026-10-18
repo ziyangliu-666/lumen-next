@@ -37,6 +37,8 @@ export type ClientCommand =
   // tab may watch several sessions; each is checked against the principal.
   | { type: 'session.open'; sessionId: string }
   | { type: 'session.close'; sessionId: string }
-  | { type: 'session.say'; sessionId: string; text: string }
+  // `model`: the model from this turn on. `edit`: the text replaces the
+  // person's latest message, and the turn after it, instead of following it.
+  | { type: 'session.say'; sessionId: string; text: string; model?: string; edit?: boolean }
   | { type: 'session.stop'; sessionId: string }
   | { type: 'task.steer'; taskId: string; text: string; when: 'end-of-turn' | 'next-step' };

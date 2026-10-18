@@ -57,6 +57,13 @@ export interface StepDetail {
   readonly output?: string;
   /** The tasks a delegate step opened, in the order it opened them. */
   readonly childTaskIds?: readonly string[];
+  /**
+   * On a 'you' step that edits the person's latest message: the index of
+   * the 'you' step it replaces, or -1 for the question that opened the
+   * session. That message and everything after it are no longer the
+   * conversation; the page hides them and the model is not given them.
+   */
+  readonly replaces?: number;
 }
 
 // One line of a task's trace, and what it carried.

@@ -43,6 +43,12 @@ export class MemoryTrace implements Trace {
     return Promise.resolve(this.sessions.get(id) ?? null);
   }
 
+  setModel(sessionId: string, model: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (session) this.sessions.set(sessionId, { ...session, model });
+    return Promise.resolve();
+  }
+
   openTask(
     sessionId: string,
     parentId: string | null,

@@ -102,7 +102,10 @@ export function sessionCommands(kernel: Kernel): (broker: Broker) => void {
     // here so that the command has an owner and a second claim throws.
     broker.onCommand('session.close', () => undefined);
     broker.onCommand('session.say', (command, principal) =>
-      kernel.say(command.sessionId, principal, command.text),
+      kernel.say(command.sessionId, principal, command.text, {
+        ...(command.model ? { model: command.model } : {}),
+        ...(command.edit ? { edit: true } : {}),
+      }),
     );
     broker.onCommand('session.stop', (command, principal) =>
       kernel.stop(command.sessionId, principal),

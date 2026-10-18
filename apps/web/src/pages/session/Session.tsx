@@ -137,7 +137,6 @@ export function Session(): JSX.Element {
   const [files, setFiles] = useState<readonly ProjectFile[] | 'failed'>([]);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [prefill, setPrefill] = useState<{ text: string; key: number } | undefined>(undefined);
   // The project's sessions, and whether the field starts a new one.
   const [sessions, setSessions] = useState<readonly ProjectSession[]>([]);
   const [starting, setStarting] = useState(false);
@@ -464,8 +463,18 @@ export function Session(): JSX.Element {
     );
   }
 
-  function say(text: string): void {
-    stream.current?.send({ type: 'session.say', sessionId: thisSession, text });
+  // The model shown in the field: the one chosen for the next turn, else the
+  // session's own. A change goes with the next message and stays.
+  const sessionModel = nextModel ?? state?.snapshot.session.model ?? models[0];
+
+  function say(text: string, edit = false): void {
+    stream.current?.send({
+      type: 'session.say',
+      sessionId: thisSession,
+      text,
+      ...(nextModel && nextModel !== state?.snapshot.session.model ? { model: nextModel } : {}),
+      ...(edit ? { edit: true } : {}),
+    });
     setSelected(rootId);
     following.current = true;
     window.requestAnimationFrame(() => {
@@ -476,9 +485,9 @@ export function Session(): JSX.Element {
   // Steers the task the stream shows, not necessarily the root: a person
   // reading a reader's own stream steers that reader, not the lead. The
   // composer chooses whether it lands at the next step or the end of the turn.
-  // Edit on a message: its text goes back in the field, to change and send.
+  // Edit on a message: the changed text replaces it and its answer.
   function edit(text: string): void {
-    setPrefill({ text, key: Date.now() });
+    say(text, true);
   }
 
   function steer(text: string, when: SteerWhen): void {
@@ -589,7 +598,7 @@ export function Session(): JSX.Element {
         ) : null}
         {/* The model this session chose, on a server that offers a choice. */}
         {models.length > 1 ? (
-          <span className="text-ink-2 max-split:hidden">{snapshot.session.model ?? models[0]}</span>
+          <span className="text-ink-2 max-split:hidden">{sessionModel}</span>
         ) : null}
       </BarStatus>
 
@@ -681,15 +690,21 @@ export function Session(): JSX.Element {
                 }
               : {})}
             newSession={starting}
+            // The model for the next turn, as on the front page: a session
+            // could choose one only when it was opened. Not on a reader's
+            // view, where the field steers the reader.
             toolbar={
-              starting ? (
-                <ModelPicker models={models} value={nextModel} onChange={setNextModel} />
+              starting || lead ? (
+                <ModelPicker
+                  models={models}
+                  value={starting ? nextModel : sessionModel}
+                  onChange={setNextModel}
+                />
               ) : undefined
             }
             onSteer={steer}
             shownAgent={lead ? null : shownName}
             onAttach={projectId ? (file) => upload(projectId, file) : undefined}
-            prefill={prefill}
           />
         </div>
       </SurfaceMain>

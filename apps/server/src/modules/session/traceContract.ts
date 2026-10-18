@@ -23,6 +23,14 @@ export function traceContract(make: () => Trace): void {
     expect(await trace.session(plain.id)).not.toHaveProperty('model');
   });
 
+  it('changes the model for later turns', async () => {
+    const trace = make();
+    const session = await trace.openSession('p1', 'acc-1', 'seed', 'gpt-4.1-mini');
+    await trace.setModel(session.id, 'gpt-4.1');
+
+    expect((await trace.session(session.id))?.model).toBe('gpt-4.1');
+  });
+
   it('answers null for an id that names nothing, uuid or not', async () => {
     const trace = make();
 

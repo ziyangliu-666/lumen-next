@@ -162,6 +162,49 @@ describe('session: kernel', () => {
     ]);
   });
 
+  it('an edit replaces the latest message and its answer in what the model is given', async () => {
+    const { kernel } = harness();
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'go deeper');
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'go wider', { edit: true });
+    await kernel.idle();
+
+    const steps = (await kernel.snapshot(session.id, owner)).steps;
+    expect(steps.at(-2)).toMatchObject({ kind: 'you', text: 'go wider', detail: { replaces: 1 } });
+    // "go deeper" and its answer are gone from the conversation.
+    expect(steps.at(-1)?.text).toBe(
+      'got "The conversation so far:\n\nUser: q\nYou: got "q"\n\nThe user now says: go wider"',
+    );
+  });
+
+  it('an edit of the opening question starts the conversation again', async () => {
+    const { kernel } = harness();
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'q2', { edit: true });
+    await kernel.idle();
+
+    const steps = (await kernel.snapshot(session.id, owner)).steps;
+    expect(steps.at(-2)).toMatchObject({ kind: 'you', detail: { replaces: -1 } });
+    expect(steps.at(-1)?.text).toBe('got "q2"');
+  });
+
+  it('changes the model for later turns, and refuses one not offered', async () => {
+    const trace = new MemoryTrace();
+    const kernel = new Kernel(trace, new Broker(), oneStep, { models: ['a', 'b'] });
+    const { session } = await kernel.start('p1', owner.accountId, 'q', undefined, 'a');
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'more', { model: 'b' });
+    await kernel.idle();
+
+    expect((await trace.session(session.id))?.model).toBe('b');
+    await expect(kernel.say(session.id, owner, 'x', { model: 'zzz' })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
   it('answers a stranger with 404, the same as for a session that does not exist', async () => {
     const { kernel } = harness();
     const { session } = await kernel.start('p1', owner.accountId, 'q');

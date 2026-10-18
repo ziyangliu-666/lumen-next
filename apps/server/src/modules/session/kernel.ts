@@ -139,10 +139,36 @@ export class Kernel {
    * follow-up such as "compute it yourself" reached a lead that no longer
    * knew what "it" was, and it went off on a task of its own.
    */
-  async say(sessionId: string, principal: Principal, text: string): Promise<void> {
+  async say(
+    sessionId: string,
+    principal: Principal,
+    text: string,
+    options: { readonly model?: string; readonly edit?: boolean } = {},
+  ): Promise<void> {
     const root = await this.rootFor(sessionId, principal);
-    const earlier = await this.conversation(sessionId, root);
-    await this.appendStep(root.id, 'you', text);
+    if (options.model !== undefined) {
+      if (!this.models.includes(options.model)) {
+        throw badRequest(
+          `model must be one of: ${this.models.join(', ') || 'none on this server'}`,
+        );
+      }
+      // From this turn on: the worker reads the session's model at each run.
+      await this.trace.setModel(sessionId, options.model);
+    }
+    if (options.edit) {
+      // An edit replaces the latest exchange; while it is still being
+      // answered there is no settled message to replace.
+      if (root.status === 'running') throw badRequest('wait for the turn to end before editing');
+      const latest = [...((await this.trace.snapshot(sessionId))?.steps ?? [])]
+        .reverse()
+        .find((step) => step.taskId === root.id && step.kind === 'you');
+      await this.appendStep(root.id, 'you', text, { replaces: latest?.index ?? -1 });
+    } else {
+      await this.appendStep(root.id, 'you', text);
+    }
+    // The conversation as it now stands, edits applied, without the words
+    // just said: they are the turn's own message.
+    const earlier = (await this.conversation(sessionId, root)).slice(0, -1);
     this.track(this.run(root, withConversation(earlier, text), {}));
   }
 
@@ -162,15 +188,28 @@ export class Kernel {
     return withConversation(await this.conversation(parent.sessionId, parent), text);
   }
 
+  /**
+   * An edited message replaces the one it names and everything after it:
+   * the model is given the conversation the person now sees, not the one
+   * they rewrote. `at` is the 'you' step's index, -1 for the opening question.
+   */
   private async conversation(sessionId: string, root: Task): Promise<Exchange[]> {
     const snapshot = await this.trace.snapshot(sessionId);
-    const lines: Exchange[] = [{ who: 'user', text: root.title }];
+    const lines: (Exchange & { readonly at?: number })[] = [
+      { who: 'user', text: root.title, at: -1 },
+    ];
     for (const step of snapshot?.steps ?? []) {
       if (step.taskId !== root.id) continue;
-      if (step.kind === 'you') lines.push({ who: 'user', text: step.text });
-      else if (step.kind === 'reply') lines.push({ who: 'lumen', text: step.text });
+      if (step.kind === 'you') {
+        const replaced = step.detail?.replaces;
+        if (replaced !== undefined) {
+          const cut = lines.findIndex((line) => line.who === 'user' && line.at === replaced);
+          if (cut >= 0) lines.splice(cut);
+        }
+        lines.push({ who: 'user', text: step.text, at: step.index });
+      } else if (step.kind === 'reply') lines.push({ who: 'lumen', text: step.text });
     }
-    return lines;
+    return lines.map(({ who, text }) => ({ who, text }));
   }
 
   async stop(sessionId: string, principal: Principal): Promise<void> {

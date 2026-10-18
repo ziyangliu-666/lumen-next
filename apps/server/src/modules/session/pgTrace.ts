@@ -140,6 +140,11 @@ export class PgTrace implements Trace {
     return row ? toSession(row) : null;
   }
 
+  async setModel(sessionId: string, model: string): Promise<void> {
+    if (!UUID.test(sessionId)) return;
+    await this.db.query(`update sessions set model = $2 where id = $1`, [sessionId, model]);
+  }
+
   async openTask(
     sessionId: string,
     parentId: string | null,

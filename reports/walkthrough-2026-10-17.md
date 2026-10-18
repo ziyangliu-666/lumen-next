@@ -137,3 +137,28 @@ expected), **open** (found, not fixed here), **todo** (not yet tried),
 ## Still to try
 
 - Approvals and top-ups with a billing database (staging).
+
+## Regression pass, local build, 18 Oct 2026
+
+After the conversation, panel and navigation changes, the walkthrough's main
+paths were run again in one browser script against the local server (Claude
+Haiku 5.5, the Docker sandbox with the plotting packages). Every item passed,
+with no page errors.
+
+| # | Item | Result |
+|---|---|---|
+| 1 | The landing greets the person; a starter card fills the field | pass |
+| 2 | A file attached before the first message is read and identified (A000108) | pass |
+| 3 | The same name replaced with a longer file is read anew (A001006) | pass |
+| 4 | A copy saved to /mnt/output/tables/m.csv shows under Files, opens, and holds the header asked for | pass |
+| 5 | A two-reader run shows the live line ("Waiting for 2 readers"), folds to "Worked for 18 s, 1 search, 2 readers", and records findings by reader | pass |
+| 6 | A steer sent mid-run ("also say what M_11 is") is in the answer (5798) | pass |
+| 7 | Stop in the field stops the run | pass |
+| 8 | Edit puts the latest message back in the field | pass |
+| 9 | Regenerate asks again as a new turn | pass |
+| 10 | New session opens on an empty page | pass |
+| 11 | Moving between sessions, and back, stays inside the page | pass |
+| 12 | Formulas render with KaTeX | pass |
+| 13 | Recent on the landing opens a project inside the page | pass |
+| 14 | On Projects, a click in the new-project field stays there; a finding opens its session | pass |
+

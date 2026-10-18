@@ -53,6 +53,14 @@ const FILES =
 // - said a file was saved when no command had run, because the sandbox had
 //   no compute;
 // - read "Free exploration" as a question to clarify.
+/** For the session's name: what chat products show in their list. */
+const TITLE_PROMPT = [
+  'Write a title for this research question, as a chat app titles a conversation.',
+  'At most six words, in the language of the question, in sentence case (only the first word and names capitalised).',
+  'Name the mathematical object or claim.',
+  'No quotes, no final full stop, no "Question about". Reply with the title only.',
+].join(' ');
+
 const LEAD_PROMPT = [
   'You are the lead agent of Lumen, a research agent for mathematics. You find out what is true and say so with the evidence.',
   'Work, do not ask. If the question can be settled by reading, searching or computing, do that instead of asking the user for data or permission. Ask only when the question itself is ambiguous.',
@@ -69,6 +77,7 @@ const LEAD_PROMPT = [
   FILES,
   'The user may speak while you work; their words arrive as user messages. Follow them.',
   'The page draws Markdown: write formulas in LaTeX ($...$ inline for a short one; a formula with a fraction, a sum or a root goes on its own line as $$...$$, where it is drawn full size), a diagram as a mermaid code block when a picture helps, tables as Markdown tables, and an image you saved as ![caption](/mnt/output/name.png). Cite a sequence by its A-number and a paper as arXiv:<id>; both become links.',
+  "A reader keeps its results with record_finding; they are the session's findings, beside the conversation. When a reader says it recorded one, it did: do not doubt it or say you cannot check it.",
   'When you have the answer, reply in plain text without calling a tool: the result first, then the evidence, then what is still open. Keep it under 400 words; never enumerate cases by hand in a reply, delegate that. End with what is still open; do not end by offering more help.',
 ].join('\n');
 
@@ -147,8 +156,15 @@ const TOOLS = {
     description: 'Keep one result: a fact the user should see among the session findings.',
     parameters: {
       type: 'object',
-      properties: { text: { type: 'string' } },
-      required: ['text'],
+      properties: {
+        title: {
+          type: 'string',
+          description:
+            'A name for the finding in at most eight words, sentence case, as a list shows it: "Motzkin numbers to n = 16 match A001006".',
+        },
+        text: { type: 'string', description: 'The fact, with the numbers that support it.' },
+      },
+      required: ['title', 'text'],
     },
   },
 } satisfies Record<string, Tool>;
@@ -485,7 +501,11 @@ export function createWorker(options: WorkerOptions): Worker {
           return `wrote ${path}`;
         }
         case 'record_finding': {
-          await this.report.recordFinding(this.task.id, stringArg(call, 'text'));
+          const title = call.arguments['title'];
+          const text = stringArg(call, 'text');
+          await (typeof title === 'string' && title.trim()
+            ? this.report.recordFinding(this.task.id, text, title)
+            : this.report.recordFinding(this.task.id, text));
           return 'recorded';
         }
         default:
@@ -565,6 +585,36 @@ export function createWorker(options: WorkerOptions): Worker {
       },
       cut: () => cut,
     };
+  }
+
+  /**
+   * A title of a few words for the session, from its question, as chat
+   * products name a chat: the list showed whole questions, cut off at two
+   * lines. One small call on the session's model, charged like any other.
+   * A failure leaves the question as the name; it never fails the turn.
+   */
+  async function nameSession(task: Task, question: string, report: WorkerReport): Promise<void> {
+    if (!report.retitle) return;
+    try {
+      const completion = await withLog(model, report.log).complete({
+        system: TITLE_PROMPT,
+        messages: [{ role: 'user', content: question.slice(0, 2000) }],
+        // A cap, not a size: the call is billed for what it writes (about
+        // 16 tokens). Claude through the OpenAI-compatible endpoint spends
+        // part of the cap thinking before it writes, and at 24 or 40 it
+        // returned no text at all.
+        maxTokens: 400,
+      });
+      if (completion.cost.dollars > 0) {
+        await report.addSpend(task.id, completion.cost, `model: ${completion.model}`);
+      }
+      // The first line that says something: a reply may open with a blank one.
+      const line = completion.text.split('\n').find((part) => part.trim()) ?? '';
+      const title = line.replace(/^["'“”«»\s]+|["'“”«».\s]+$/gu, '').trim();
+      if (title) await report.retitle(task.id, title);
+    } catch (error) {
+      report.log.warn({ err: error }, 'session title not written');
+    }
   }
 
   async function converse(turn: Turn): Promise<string> {
@@ -694,6 +744,10 @@ export function createWorker(options: WorkerOptions): Worker {
   return {
     async run(task, input, report) {
       const turn = new Turn(task, input, report);
+      // The session's name, written beside the first turn of the lead (its
+      // input is then the question itself), not after it.
+      const naming =
+        task.parentId === null && input === task.title ? nameSession(task, input, report) : null;
       try {
         const answer = await converse(turn);
         if (!turn.isLead) answers.set(task.id, answer);
@@ -718,6 +772,7 @@ export function createWorker(options: WorkerOptions): Worker {
         // that and was never reached still belongs in the trace, not nowhere.
         options.registry.end(task.id);
         await turn.land('next-step', 'end-of-turn').catch(() => undefined);
+        await naming;
       }
     },
   };

@@ -58,7 +58,7 @@ export interface WorkerReport {
    * it announced to the page. Required, not optional: a report that lacked it
    * would let a worker lose a finding without anybody hearing an error.
    */
-  recordFinding(taskId: string, text: string): Promise<Finding>;
+  recordFinding(taskId: string, text: string, title?: string): Promise<Finding>;
   /**
    * Add to the task's own cost, for a spend that is not a step's. The roll-up
    * to its ancestors is the kernel's.
@@ -77,6 +77,11 @@ export interface WorkerReport {
    * the record, and a draft that is dropped loses nothing.
    */
   draft?(taskId: string, text: string): void;
+  /**
+   * A short name for the session, from its first question. Only the root's
+   * first one counts; the kernel ignores the rest.
+   */
+  retitle?(taskId: string, title: string): Promise<void>;
 }
 
 export interface Worker {

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   Finding,
   Money,
+  Session,
   SessionMode,
   SessionSnapshot,
   SessionSummary,
@@ -40,7 +41,12 @@ import { isEnding, type Trace } from './trace.js';
 // parent_id. The BudgetGuard check points from ARCHITECTURE.md §9 arrive with
 // billing and slot in at start(), say() and delegate().
 /** Saves a finding and returns it as saved. The projects slice supplies the real one. */
-export type FindingSaver = (sessionId: string, taskId: string, text: string) => Promise<Finding>;
+export type FindingSaver = (
+  sessionId: string,
+  taskId: string,
+  text: string,
+  title?: string,
+) => Promise<Finding>;
 
 export interface KernelOptions {
   readonly delegation?: Delegation;
@@ -64,12 +70,24 @@ export interface KernelOptions {
   readonly budget?: BudgetGuard;
   /** The slice's logger. Each task run writes through a child of it. */
   readonly log?: Log;
+  /**
+   * Told when a session is named, so the projects slice can name the project
+   * after its first session. main.ts passes `projects.autoTitle`.
+   */
+  readonly onTitle?: (session: Session, title: string) => Promise<void>;
 }
 
 function findingsInMemory(): FindingSaver {
   const kept: Finding[] = [];
-  return (sessionId, taskId, text) => {
-    const finding = { id: randomUUID(), sessionId, taskId, text, createdAt: Date.now() };
+  return (sessionId, taskId, text, title) => {
+    const finding = {
+      id: randomUUID(),
+      sessionId,
+      taskId,
+      text,
+      ...(title?.trim() ? { title: title.trim() } : {}),
+      createdAt: Date.now(),
+    };
     kept.push(finding);
     return Promise.resolve(finding);
   };
@@ -79,6 +97,9 @@ function findingsInMemory(): FindingSaver {
  * How the parent's turn after an approved fan-out begins. A worker that
  * fans out on every turn (the demo) reads it as "answer from the reports".
  */
+/** The longest session name, in characters. */
+const MAX_TITLE_CHARS = 80;
+
 export const APPROVED_WORK_DONE =
   'The work you delegated was blocked by the spending cap, then approved, and has finished. Here is what each task reported. Use it to answer.';
 
@@ -96,6 +117,30 @@ export class Kernel {
     this.budget = options.budget ?? allowEverything;
     this.log = options.log ?? nullLog;
     this.models = options.models ?? [];
+    this.onTitle = options.onTitle;
+  }
+
+  private readonly onTitle: KernelOptions['onTitle'];
+
+  /**
+   * Names the session, once: a later call, or one for a task that is not
+   * the root, is ignored. The project is told after the name is kept.
+   */
+  private async retitle(taskId: string, title: string): Promise<void> {
+    const task = await this.trace.task(taskId);
+    if (!task || task.parentId !== null) return;
+    const session = await this.trace.session(task.sessionId);
+    if (!session || session.title) return;
+    const name = title.replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_CHARS);
+    if (!name) return;
+    await this.trace.setTitle(session.id, name);
+    this.broker.publish(session.id, { type: 'session.titled', sessionId: session.id, title: name });
+    try {
+      await this.onTitle?.(session, name);
+    } catch (error) {
+      // The session keeps its name; only the project's copy is missing.
+      this.log.warn({ err: error, sessionId: session.id }, 'project title not updated');
+    }
   }
 
   private readonly models: readonly string[];
@@ -139,10 +184,36 @@ export class Kernel {
    * follow-up such as "compute it yourself" reached a lead that no longer
    * knew what "it" was, and it went off on a task of its own.
    */
-  async say(sessionId: string, principal: Principal, text: string): Promise<void> {
+  async say(
+    sessionId: string,
+    principal: Principal,
+    text: string,
+    options: { readonly model?: string; readonly edit?: boolean } = {},
+  ): Promise<void> {
     const root = await this.rootFor(sessionId, principal);
-    const earlier = await this.conversation(sessionId, root);
-    await this.appendStep(root.id, 'you', text);
+    if (options.model !== undefined) {
+      if (!this.models.includes(options.model)) {
+        throw badRequest(
+          `model must be one of: ${this.models.join(', ') || 'none on this server'}`,
+        );
+      }
+      // From this turn on: the worker reads the session's model at each run.
+      await this.trace.setModel(sessionId, options.model);
+    }
+    if (options.edit) {
+      // An edit replaces the latest exchange; while it is still being
+      // answered there is no settled message to replace.
+      if (root.status === 'running') throw badRequest('wait for the turn to end before editing');
+      const latest = [...((await this.trace.snapshot(sessionId))?.steps ?? [])]
+        .reverse()
+        .find((step) => step.taskId === root.id && step.kind === 'you');
+      await this.appendStep(root.id, 'you', text, { replaces: latest?.index ?? -1 });
+    } else {
+      await this.appendStep(root.id, 'you', text);
+    }
+    // The conversation as it now stands, edits applied, without the words
+    // just said: they are the turn's own message.
+    const earlier = (await this.conversation(sessionId, root)).slice(0, -1);
     this.track(this.run(root, withConversation(earlier, text), {}));
   }
 
@@ -162,15 +233,28 @@ export class Kernel {
     return withConversation(await this.conversation(parent.sessionId, parent), text);
   }
 
+  /**
+   * An edited message replaces the one it names and everything after it:
+   * the model is given the conversation the person now sees, not the one
+   * they rewrote. `at` is the 'you' step's index, -1 for the opening question.
+   */
   private async conversation(sessionId: string, root: Task): Promise<Exchange[]> {
     const snapshot = await this.trace.snapshot(sessionId);
-    const lines: Exchange[] = [{ who: 'user', text: root.title }];
+    const lines: (Exchange & { readonly at?: number })[] = [
+      { who: 'user', text: root.title, at: -1 },
+    ];
     for (const step of snapshot?.steps ?? []) {
       if (step.taskId !== root.id) continue;
-      if (step.kind === 'you') lines.push({ who: 'user', text: step.text });
-      else if (step.kind === 'reply') lines.push({ who: 'lumen', text: step.text });
+      if (step.kind === 'you') {
+        const replaced = step.detail?.replaces;
+        if (replaced !== undefined) {
+          const cut = lines.findIndex((line) => line.who === 'user' && line.at === replaced);
+          if (cut >= 0) lines.splice(cut);
+        }
+        lines.push({ who: 'user', text: step.text, at: step.index });
+      } else if (step.kind === 'reply') lines.push({ who: 'lumen', text: step.text });
     }
-    return lines;
+    return lines.map(({ who, text }) => ({ who, text }));
   }
 
   async stop(sessionId: string, principal: Principal): Promise<void> {
@@ -211,7 +295,12 @@ export class Kernel {
       const root = await this.trace.rootOf(summary.id);
       // The root's own state: a session whose lead waits on an approval
       // read "Running" in the list.
-      listed.push({ ...summary, status: root?.status ?? summary.status, title: root?.title ?? '' });
+      const named = (await this.trace.session(summary.id))?.title;
+      listed.push({
+        ...summary,
+        status: root?.status ?? summary.status,
+        title: named ?? root?.title ?? '',
+      });
     }
     return listed;
   }
@@ -291,9 +380,10 @@ export class Kernel {
       }),
       appendStep: (taskId, kind, text, detail) => this.appendStep(taskId, kind, text, detail),
       delegate: (taskId, work) => this.delegate(taskId, work),
-      recordFinding: (taskId, text) => this.recordFinding(taskId, text),
+      recordFinding: (taskId, text, title) => this.recordFinding(taskId, text, title),
       addSpend: (taskId, amount, reason) => this.addSpend(taskId, amount, reason),
       stopped: async (taskId) => (await this.trace.task(taskId))?.status === 'stopped',
+      retitle: (taskId, title) => this.retitle(taskId, title),
       draft: (taskId, text) => {
         this.broker.publish(task.sessionId, { type: 'step.draft', taskId, text: storable(text) });
       },
@@ -452,17 +542,18 @@ export class Kernel {
     }
   }
 
-  async recordFinding(taskId: string, text: string): Promise<Finding> {
+  async recordFinding(taskId: string, text: string, title?: string): Promise<Finding> {
     const task = await this.taskOrThrow(taskId);
     if (text.trim().length === 0) throw new Error('kernel: a finding needs text');
     // Save first, announce second. A page must never show a finding that a
     // reload would not bring back.
-    const finding = await this.saveFinding(task.sessionId, taskId, text);
+    const finding = await this.saveFinding(task.sessionId, taskId, text, title);
     this.broker.publish(task.sessionId, {
       type: 'finding.recorded',
       taskId,
       findingId: finding.id,
       text: finding.text,
+      ...(finding.title ? { title: finding.title } : {}),
     });
     return finding;
   }

@@ -98,81 +98,6 @@ function AttachIcon() {
   );
 }
 
-function MicIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4">
-      <path
-        d="M10 3a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 10 3zM5 9.5a5 5 0 0 0 10 0M10 14.5V17"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        fill="none"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-// Dictation through the browser's own speech recognition (Chrome, Edge,
-// Safari). The type is declared here: TypeScript's DOM library does not
-// carry it. Where the browser has none, the field shows no microphone.
-interface Recognition {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  start(): void;
-  stop(): void;
-}
-
-function recognitionClass(): (new () => Recognition) | null {
-  if (typeof window === 'undefined') return null;
-  const w = window as unknown as {
-    SpeechRecognition?: new () => Recognition;
-    webkitSpeechRecognition?: new () => Recognition;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
-/**
- * Speech to text into the field. The words are added to what is there and
- * nothing is sent: the person reads them and sends.
- */
-function useDictation(value: string, onValueChange: (value: string) => void) {
-  const [listening, setListening] = React.useState(false);
-  const live = React.useRef<Recognition | null>(null);
-  const latest = React.useRef(value);
-  latest.current = value;
-  const Class = React.useMemo(recognitionClass, []);
-  React.useEffect(() => () => live.current?.stop(), []);
-  if (!Class) return null;
-  const toggle = (): void => {
-    if (live.current) {
-      live.current.stop();
-      return;
-    }
-    const recognition = new Class();
-    recognition.lang = navigator.language || 'en-US';
-    recognition.interimResults = false;
-    recognition.continuous = false;
-    const before = latest.current;
-    recognition.onresult = (event) => {
-      const said = Array.from(event.results, (result) => result[0]?.transcript ?? '').join(' ');
-      onValueChange(`${before}${before && !/\s$/.test(before) ? ' ' : ''}${said.trim()}`);
-    };
-    recognition.onend = () => {
-      live.current = null;
-      setListening(false);
-    };
-    recognition.onerror = recognition.onend;
-    live.current = recognition;
-    setListening(true);
-    recognition.start();
-  };
-  return { listening, toggle };
-}
-
 function SendIcon() {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4">
@@ -218,7 +143,6 @@ function Composer({
   const form = React.useRef<HTMLFormElement | null>(null);
   const picker = React.useRef<HTMLInputElement | null>(null);
   const empty = !allowEmpty && value.trim() === '' && attachments.length === 0;
-  const dictation = useDictation(value, onValueChange);
   const cannotSend = disabled || sendDisabled || empty;
   // A file dragged over the box: it shows that it will take it.
   const [dragging, setDragging] = React.useState(false);
@@ -385,21 +309,6 @@ function Composer({
             </div>
           ) : null}
           <span className="ml-auto flex items-center gap-1">
-            {dictation ? (
-              <button
-                type="button"
-                aria-label={dictation.listening ? 'Stop dictation' : 'Dictate'}
-                aria-pressed={dictation.listening}
-                disabled={disabled}
-                onClick={dictation.toggle}
-                className={cn(
-                  'grid size-8 shrink-0 place-items-center hover:bg-well disabled:opacity-50',
-                  dictation.listening ? 'bg-well text-ink' : 'text-ink-2 hover:text-ink',
-                )}
-              >
-                <MicIcon />
-              </button>
-            ) : null}
             {onStop && empty ? (
               <button
                 type="button"

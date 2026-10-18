@@ -1,6 +1,8 @@
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
+import { request } from '@/core/api';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
+import { Input } from '@/ui/input';
 import { RunState, type Run } from '@/ui/run-state';
 import { sessionLink, type ProjectCard } from './api';
 import { ago } from './ago';
@@ -39,6 +41,10 @@ export function runOf(card: ProjectCard): { state: Run; word?: string } {
   }
 }
 
+/** Paper at 90 percent under a row, fading to nothing over its outer 24px. */
+const ROW_PAPER =
+  'bg-[linear-gradient(to_right,transparent,color-mix(in_srgb,var(--paper)_90%,transparent)_24px,color-mix(in_srgb,var(--paper)_90%,transparent)_calc(100%-24px),transparent)]';
+
 export function ProjectRow({
   card,
   now,
@@ -57,17 +63,80 @@ export function ProjectRow({
 }): JSX.Element {
   const run = runOf(card);
   const session = card.latestSession;
+  // The name as last saved here, until the list is read again.
+  const [saved, setSaved] = useState<string | null>(null);
+  const name = saved ?? card.project.title;
+  // The name being typed, or null when the row is not being renamed.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  async function rename(): Promise<void> {
+    const next = renaming?.trim() ?? '';
+    if (!next || next === name) {
+      setRenaming(null);
+      return;
+    }
+    try {
+      const reply = await request<{ project: { title: string } }>(
+        `/api/projects/${encodeURIComponent(card.project.id)}`,
+        { method: 'PATCH', json: { title: next } },
+      );
+      setSaved(reply.project.title);
+      setRenaming(null);
+      setRenameError(null);
+    } catch {
+      setRenameError('The name was not saved. Try again.');
+    }
+  }
+  if (renaming !== null) {
+    return (
+      <li className={cn('relative -mx-6 px-6 py-4', ROW_PAPER)}>
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void rename();
+          }}
+        >
+          <Input
+            aria-label="Project name"
+            value={renaming}
+            maxLength={120}
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- opened by the person's own click on Rename
+            autoFocus
+            onChange={(event) => setRenaming(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setRenaming(null);
+            }}
+            className="flex-1 font-semibold"
+          />
+          <Button type="submit" size="sm" disabled={!renaming.trim()}>
+            Save
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setRenaming(null)}>
+            Cancel
+          </Button>
+        </form>
+        {renameError ? (
+          <p role="alert" className="mt-2 text-sm text-ink">
+            {renameError}
+          </p>
+        ) : null}
+      </li>
+    );
+  }
   const title = (
-    <h3 className="text-base font-semibold break-words text-ink">
+    // One line: the names of older projects are whole questions, and two
+    // lines of each made the list a wall. The full name is the tooltip.
+    <h3 title={name} className="pr-10 text-base font-semibold text-ink">
       {/* An inline block, so the title flies into the session's breadcrumb
           as its own words: the full-width heading would be squeezed into
           the breadcrumb's width on the way. It carries the hover underline,
           because an underline on the heading does not reach into it. */}
       <span
         data-flight=""
-        className="inline-block decoration-[1.5px] underline-offset-[0.15em] group-hover:underline"
+        className="inline-block max-w-full truncate align-bottom decoration-[1.5px] underline-offset-[0.15em] group-hover:underline"
       >
-        {card.project.title}
+        {name}
       </span>
     </h3>
   );
@@ -79,10 +148,15 @@ export function ProjectRow({
     <li
       className={cn(
         // On paper: over the scene's sphere the row's small text could not
-        // be read. The scene shows only where the list is not.
-        'relative border-t border-rule-minor bg-paper/90 py-4 first:border-t-0',
+        // be read. The paper reaches 24px past the text on each side and
+        // fades out there, so the text has room and the paper no hard edge:
+        // cut at the text, it was a black slab with the text on its border.
+        'group/row relative -mx-6 px-6 py-4',
+        ROW_PAPER,
+        // The rule between rows keeps the text's width.
+        'after:absolute after:inset-x-6 after:top-0 after:h-px after:bg-rule-minor first:after:hidden',
         showingFindings &&
-          'before:absolute before:inset-y-3 before:-left-3 before:w-0.5 before:bg-ink',
+          'before:absolute before:inset-y-3 before:left-3 before:w-0.5 before:bg-ink',
       )}
     >
       {card.actions.openSession && session ? (
@@ -96,6 +170,29 @@ export function ProjectRow({
       ) : (
         title
       )}
+      {/* Rename, as chat products rename a chat: a quiet pencil by the name,
+          shown on hover or focus. Above the row's stretched open target, and after the name in
+          the tab order. */}
+      <button
+        type="button"
+        aria-label={`Rename ${name}`}
+        title="Rename"
+        onClick={() => {
+          setRenameError(null);
+          setRenaming(name);
+        }}
+        className="absolute top-3.5 right-6 z-10 grid size-8 place-items-center text-ink-2 opacity-0 group-hover/row:opacity-100 hover:bg-well hover:text-ink focus-visible:opacity-100"
+      >
+        <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4">
+          <path
+            d="M4 16h3l8.5-8.5-3-3L4 13v3zM11 6l3 3"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            fill="none"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
       {session ? null : (
         <p className="mt-1 max-w-[44em] text-sm text-ink-2">
           Session creation has not been confirmed. Refresh to check its outcome before starting

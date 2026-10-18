@@ -162,6 +162,75 @@ describe('session: kernel', () => {
     ]);
   });
 
+  it('an edit replaces the latest message and its answer in what the model is given', async () => {
+    const { kernel } = harness();
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'go deeper');
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'go wider', { edit: true });
+    await kernel.idle();
+
+    const steps = (await kernel.snapshot(session.id, owner)).steps;
+    expect(steps.at(-2)).toMatchObject({ kind: 'you', text: 'go wider', detail: { replaces: 1 } });
+    // "go deeper" and its answer are gone from the conversation.
+    expect(steps.at(-1)?.text).toBe(
+      'got "The conversation so far:\n\nUser: q\nYou: got "q"\n\nThe user now says: go wider"',
+    );
+  });
+
+  it('an edit of the opening question starts the conversation again', async () => {
+    const { kernel } = harness();
+    const { session } = await kernel.start('p1', owner.accountId, 'q');
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'q2', { edit: true });
+    await kernel.idle();
+
+    const steps = (await kernel.snapshot(session.id, owner)).steps;
+    expect(steps.at(-2)).toMatchObject({ kind: 'you', detail: { replaces: -1 } });
+    expect(steps.at(-1)?.text).toBe('got "q2"');
+  });
+
+  it('changes the model for later turns, and refuses one not offered', async () => {
+    const trace = new MemoryTrace();
+    const kernel = new Kernel(trace, new Broker(), oneStep, { models: ['a', 'b'] });
+    const { session } = await kernel.start('p1', owner.accountId, 'q', undefined, 'a');
+    await kernel.idle();
+    await kernel.say(session.id, owner, 'more', { model: 'b' });
+    await kernel.idle();
+
+    expect((await trace.session(session.id))?.model).toBe('b');
+    await expect(kernel.say(session.id, owner, 'x', { model: 'zzz' })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it('names a session once, from its root, and tells the project', async () => {
+    const named: string[] = [];
+    const titler: Worker = {
+      run: async (task, input, report) => {
+        await report.retitle?.(task.id, '  Catalan   numbers ');
+        await report.retitle?.(task.id, 'Second name');
+        await report.appendStep(task.id, 'reply', `got "${input}"`);
+      },
+    };
+    const trace = new MemoryTrace();
+    const kernel = new Kernel(trace, new Broker(), titler, {
+      onTitle: (session, title) => {
+        named.push(`${session.projectId}:${title}`);
+        return Promise.resolve();
+      },
+    });
+    const { session } = await kernel.start('p1', owner.accountId, 'Count Dyck paths');
+    await kernel.idle();
+
+    expect((await trace.session(session.id))?.title).toBe('Catalan numbers');
+    expect(named).toEqual(['p1:Catalan numbers']);
+    expect((await kernel.sessionsOf('p1', owner))[0]?.title).toBe('Catalan numbers');
+    // The question is still the conversation's first message.
+    expect((await kernel.snapshot(session.id, owner)).tasks[0]?.title).toBe('Count Dyck paths');
+  });
+
   it('answers a stranger with 404, the same as for a session that does not exist', async () => {
     const { kernel } = harness();
     const { session } = await kernel.start('p1', owner.accountId, 'q');

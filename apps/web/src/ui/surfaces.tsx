@@ -77,6 +77,10 @@ function SurfaceMain({ className, ...props }: React.ComponentProps<'div'>) {
         // The well reaches into the gap, so the paper keeps a gutter of its
         // own before it: the field met the well's edge with no space.
         'flex min-h-0 min-w-0 flex-col bg-paper/85 split:col-span-7 split:pr-gutter',
+        // The paper reaches the screen's left edge, under the margin: cut
+        // at the text, the scene showed in the margin and the paper had a
+        // hard black edge with the text on it.
+        'split:-ml-margin split:pl-margin',
         collapse === 'stack' && 'flex-none split:flex-auto',
         className,
       )}

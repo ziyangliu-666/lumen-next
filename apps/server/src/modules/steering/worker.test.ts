@@ -198,6 +198,47 @@ describe('createWorker: the conversation', () => {
     expect(draft).not.toHaveBeenCalledWith('task-1', expect.stringContaining('Dyck'));
   });
 
+  it('names the session beside the first turn of the lead, and charges the call', async () => {
+    const model = scripted(
+      (request) =>
+        request.system.startsWith('Write a title')
+          ? { text: '\n\n"Catalan numbers and Dyck paths."', cost: { dollars: 0.0001 } }
+          : { text: 'They count Dyck paths.' },
+      (request) =>
+        request.system.startsWith('Write a title')
+          ? { text: '"Catalan numbers and Dyck paths."', cost: { dollars: 0.0001 } }
+          : { text: 'They count Dyck paths.' },
+    );
+    const report = fakeReport();
+    const retitle = vi.fn().mockResolvedValue(undefined);
+    const question = 'Why do Catalan numbers count Dyck paths?';
+
+    await createWorker({ volumeRoot, context, registry, model }).run(
+      taskOf({ title: question }),
+      question,
+      asReport({ ...report, retitle } as FakeReport),
+    );
+
+    expect(retitle).toHaveBeenCalledWith('task-1', 'Catalan numbers and Dyck paths');
+    expect(report.addSpend).toHaveBeenCalledWith(
+      'task-1',
+      { dollars: 0.0001 },
+      'model: scripted-1',
+    );
+    expect(stepsOf(report)).toEqual([['reply', 'They count Dyck paths.']]);
+  });
+
+  it('does not name the session on a later turn', async () => {
+    const model = scripted({ text: 'ok' });
+    const retitle = vi.fn();
+    await createWorker({ volumeRoot, context, registry, model }).run(
+      taskOf({ title: 'first question' }),
+      'a follow-up',
+      asReport({ ...fakeReport(), retitle } as FakeReport),
+    );
+    expect(retitle).not.toHaveBeenCalled();
+  });
+
   it('asks for no stream when the kernel takes no drafts', async () => {
     const model = scripted({ text: 'ok' });
     await createWorker({ volumeRoot, context, registry, model }).run(

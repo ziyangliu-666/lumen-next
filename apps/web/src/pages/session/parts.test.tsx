@@ -474,3 +474,27 @@ describe('session parts: work that is seen to go on', () => {
     expect(lines.get('r3')).toBe('Waiting to start');
   });
 });
+
+describe('session parts: an edited message', () => {
+  it('replaces the message and the answer after it, and says it was edited', () => {
+    const html = renderToStaticMarkup(
+      <StepStream
+        task={task('lead', null)}
+        steps={[
+          step(0, 'reply', 'first answer'),
+          step(1, 'you', 'go deeper'),
+          step(2, 'reply', 'deeper answer'),
+          { ...step(3, 'you', 'go wider'), detail: { replaces: 1 } },
+          step(4, 'reply', 'wider answer'),
+        ]}
+        tasks={[]}
+        onSelect={noop}
+      />,
+    );
+    expect(html).not.toContain('go deeper');
+    expect(html).not.toContain('deeper answer');
+    expect(html).toContain('go wider');
+    expect(html).toContain('Edited');
+    expect(html).toContain('first answer');
+  });
+});

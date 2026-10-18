@@ -35,6 +35,10 @@ export interface Trace {
     model?: string,
   ): Promise<Session>;
   session(id: string): Promise<Session | null>;
+  /** The model the session's later turns use. */
+  setModel(sessionId: string, model: string): Promise<void>;
+  /** The session's short name. The root task keeps the question. */
+  setTitle(sessionId: string, title: string): Promise<void>;
   /** Throws when parentId names no task: a child of nothing is a bug upstream. */
   openTask(
     sessionId: string,

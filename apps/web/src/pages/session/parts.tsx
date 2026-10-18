@@ -9,6 +9,7 @@ import { go } from '@/core/router';
 import { cn } from '@/lib/utils';
 import { ReplyText } from './text';
 import { Button } from '@/ui/button';
+import { Textarea } from '@/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
 import { Composer as Field } from '@/ui/composer';
 import { RunState, type Run } from '@/ui/run-state';
@@ -55,7 +56,14 @@ function speaker(task: Task, tasks: readonly Task[]): string {
 }
 
 type Turn =
-  | { readonly who: 'you'; readonly key: string; readonly label: string; readonly text: string }
+  | {
+      readonly who: 'you';
+      readonly key: string;
+      readonly label: string;
+      readonly text: string;
+      /** It replaced an earlier version of the message (an edit). */
+      readonly edited?: boolean;
+    }
   | { readonly who: 'agent'; readonly key: string; readonly steps: Step[] };
 
 /**
@@ -76,7 +84,22 @@ function turnsOf(task: Task, steps: readonly Step[]): Turn[] {
   ];
   for (const step of steps) {
     if (step.kind === 'you') {
-      turns.push({ who: 'you', key: `s${step.index}`, label: 'You', text: step.text });
+      // An edit replaces the message it names and everything after it, as
+      // the conversation the model is given does (session kernel).
+      const replaced = step.detail?.replaces;
+      if (replaced !== undefined) {
+        const cut = turns.findIndex(
+          (turn) => turn.key === (replaced === -1 ? 'asked' : `s${replaced}`),
+        );
+        if (cut >= 0) turns.splice(cut);
+      }
+      turns.push({
+        who: 'you',
+        key: `s${step.index}`,
+        label: 'You',
+        text: step.text,
+        ...(replaced !== undefined ? { edited: true } : {}),
+      });
       continue;
     }
     const last = turns[turns.length - 1];
@@ -121,7 +144,12 @@ export function StepStream({
    * new turn can be sent; drawn under the latest answer.
    */
   onRetry?: ((text: string) => void) | undefined;
-  /** Puts the person's latest message back in the field, to change and send. */
+  /**
+   * Sends a changed version of the person's latest message in its place.
+   * Given only when a new turn can be sent. The message is edited in its
+   * own bubble, as in chat products: Edit used to put the text in the field
+   * at the foot, and sending it added a message instead of changing one.
+   */
   onEdit?: ((text: string) => void) | undefined;
 }): JSX.Element {
   const children = tasks.filter((candidate) => candidate.parentId === task.id);
@@ -144,6 +172,8 @@ export function StepStream({
   // a reader's own view says whose task it is.
   const lead = task.parentId === null;
   const running = task.status === 'running';
+  // The text of the message being edited, or null when none is.
+  const [editing, setEditing] = useState<string | null>(null);
   const writing = running && Boolean(draft);
   // A draft held after a stop: drawn still, until the reply replaces it.
   const held = task.status === 'stopped' && Boolean(draft);
@@ -152,30 +182,74 @@ export function StepStream({
       {turn.who === 'you' ? (
         <div className="flex flex-col items-end">
           {lead ? null : <p className="mb-1 text-caption text-ink-2">{turn.label}</p>}
-          <div
-            data-step="you"
-            className="group relative max-w-[85%] bg-well px-4 py-3 max-roomy:max-w-full"
-          >
-            <p className="break-words whitespace-pre-wrap text-ink">
-              {turn.text}
-              {/* Room for Edit on the last line only: a padding the height
-                  of the bubble left an empty strip down its right side, and
-                  while a run went, with no Edit, the strip stayed. */}
-              {index === latest && onEdit ? (
-                <span aria-hidden="true" className="inline-block w-8" />
-              ) : null}
-            </p>
-            {index === 0 && note ? <p className="mt-1 text-caption text-ink-2">{note}</p> : null}
-            {/* Edit sits in the bubble's corner, not on a row of its own. */}
-            {index === latest && onEdit ? (
-              <TurnActions
-                className="absolute right-0 bottom-0 m-1 opacity-60 group-hover:opacity-100 focus-within:opacity-100"
-                actions={[
-                  { key: 'edit', label: 'Edit', icon: <EditIcon />, run: () => onEdit(turn.text) },
-                ]}
+          {index === latest && onEdit && editing !== null ? (
+            <form
+              data-step="you-editing"
+              className="w-full max-w-[85%] bg-well p-3 max-roomy:max-w-full"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const text = editing.trim();
+                if (!text) return;
+                setEditing(null);
+                if (text !== turn.text) onEdit(text);
+              }}
+            >
+              <Textarea
+                aria-label="Edit your message"
+                value={editing}
+                // eslint-disable-next-line jsx-a11y/no-autofocus -- opened by the person's own click on Edit
+                autoFocus
+                onChange={(event) => setEditing(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setEditing(null);
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                className="field-sizing-content min-h-16 border-0 bg-transparent px-1 text-base"
               />
-            ) : null}
-          </div>
+              <div className="mt-2 flex justify-end gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setEditing(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={!editing.trim()}>
+                  Send
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div
+              data-step="you"
+              className="group relative max-w-[85%] bg-well px-4 py-3 max-roomy:max-w-full"
+            >
+              <p className="break-words whitespace-pre-wrap text-ink">
+                {turn.text}
+                {/* Room for Edit on the last line only: a padding the height
+                    of the bubble left an empty strip down its right side, and
+                    while a run went, with no Edit, the strip stayed. */}
+                {index === latest && onEdit ? (
+                  <span aria-hidden="true" className="inline-block w-8" />
+                ) : null}
+              </p>
+              {index === 0 && note ? <p className="mt-1 text-caption text-ink-2">{note}</p> : null}
+              {turn.edited ? <p className="mt-1 text-caption text-ink-2">Edited</p> : null}
+              {/* Edit sits in the bubble's corner, not on a row of its own. */}
+              {index === latest && onEdit ? (
+                <TurnActions
+                  className="absolute right-0 bottom-0 m-1 opacity-60 group-hover:opacity-100 focus-within:opacity-100"
+                  actions={[
+                    {
+                      key: 'edit',
+                      label: 'Edit',
+                      icon: <EditIcon />,
+                      run: () => setEditing(turn.text),
+                    },
+                  ]}
+                />
+              ) : null}
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -1163,7 +1237,18 @@ export function Findings({
                     a wall. The chosen one opens in full. No underline on
                     hover: through two lines of text it cut the letters and
                     was louder than any other state. */}
-                <p className={cn('text-sm break-words text-ink', !current && 'line-clamp-3')}>
+                {finding.title ? (
+                  <p className="line-clamp-1 text-sm font-semibold break-words text-ink">
+                    {finding.title}
+                  </p>
+                ) : null}
+                <p
+                  className={cn(
+                    'text-sm break-words',
+                    finding.title ? 'mt-0.5 text-ink-2' : 'text-ink',
+                    !current && (finding.title ? 'line-clamp-2' : 'line-clamp-3'),
+                  )}
+                >
                   {finding.text}
                 </p>
                 <p className="mt-1 text-caption text-ink-2">

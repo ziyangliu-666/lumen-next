@@ -22,6 +22,12 @@ export function projectRoutes(service: ProjectService): (app: FastifyInstance) =
       objectOf(request.query, []);
       return { item: await service.get(requireUser(request), request.params.id) };
     });
+    app.patch<{ Params: { id: string } }>('/api/projects/:id', async (request) => {
+      objectOf(request.query, []);
+      return {
+        project: await service.rename(requireUser(request), request.params.id, request.body),
+      };
+    });
     app.post<{ Params: { id: string } }>('/api/projects/:id/stop', async (request, reply) => {
       objectOf(request.query, []);
       if (request.body !== undefined) objectOf(request.body, []);

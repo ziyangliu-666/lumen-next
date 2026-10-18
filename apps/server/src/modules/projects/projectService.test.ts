@@ -32,6 +32,32 @@ function run(status: LatestSession['status'] = 'running', startedAt = 10): Lates
   };
 }
 describe('ProjectService', () => {
+  it('takes the first generated title, never a later one, and never over a rename', async () => {
+    const { service, store } = setup();
+    const { project } = await service.create(owner, {
+      question: 'What is known about the Stanley-Wilf limit of 1324-avoiding permutations?',
+      mode: 'seed',
+    });
+    await service.autoTitle(project.id, 'Stanley-Wilf limit of 1324');
+    expect((await store.get(project.id))?.title).toBe('Stanley-Wilf limit of 1324');
+    await service.autoTitle(project.id, 'A second session');
+    expect((await store.get(project.id))?.title).toBe('Stanley-Wilf limit of 1324');
+
+    const renamed = await service.rename(owner, project.id, { title: '  My  1324 notes ' });
+    expect(renamed.title).toBe('My 1324 notes');
+    await service.autoTitle(project.id, 'Generated');
+    expect((await store.get(project.id))?.title).toBe('My 1324 notes');
+  });
+  it('refuses an empty or foreign rename', async () => {
+    const { service } = setup();
+    const { project } = await service.create(owner, { question: 'Q', mode: 'seed' });
+    await expect(service.rename(owner, project.id, { title: '  ' })).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(
+      service.rename({ accountId: 'other', role: 'user' }, project.id, { title: 'x' }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
   it('records running-session spend as a baseline and leaves polling read-only', async () => {
     const { service, sessions, store } = setup();
     const { project } = await service.create(owner, { question: 'Research', mode: 'seed' });
@@ -211,6 +237,14 @@ describe('ProjectService', () => {
     expect(await service.listFindings(sessionId)).toEqual([finding]);
     expect((await service.findings(owner, project.id, {})).items).toEqual([finding]);
     expect((await service.get(owner, project.id)).findingsCount).toBe(1);
+    const named = await service.recordFinding(
+      sessionId,
+      taskId,
+      'Motzkin numbers to n = 16 match A001006.',
+      '  Motzkin   numbers match A001006  ',
+    );
+    expect(named.title).toBe('Motzkin numbers match A001006');
+    expect(finding).not.toHaveProperty('title');
   });
   it('rejects mismatched session ownership and unknown sessions', async () => {
     const { service, sessions } = setup();

@@ -18,9 +18,14 @@ export interface Session {
   /**
    * The model this session thinks with, chosen when it opened. Absent: the
    * server's default. The choice is among the models the server allows
-   * (GET /api/models).
+   * (GET /api/models). A later turn may change it.
    */
   readonly model?: string;
+  /**
+   * A short name the model wrote after the first question. Absent: the page
+   * names the session by its question, as it did before titles.
+   */
+  readonly title?: string;
 }
 
 // What a step is. The order of the steps is the reasoning, and the kind says
@@ -57,6 +62,13 @@ export interface StepDetail {
   readonly output?: string;
   /** The tasks a delegate step opened, in the order it opened them. */
   readonly childTaskIds?: readonly string[];
+  /**
+   * On a 'you' step that edits the person's latest message: the index of
+   * the 'you' step it replaces, or -1 for the question that opened the
+   * session. That message and everything after it are no longer the
+   * conversation; the page hides them and the model is not given them.
+   */
+  readonly replaces?: number;
 }
 
 // One line of a task's trace, and what it carried.
@@ -106,5 +118,10 @@ export interface Finding {
   readonly sessionId: string;
   readonly taskId: string;
   readonly text: string;
+  /**
+   * A short name for the finding, written by the agent that kept it, for
+   * the lists. Absent on findings kept before names.
+   */
+  readonly title?: string;
   readonly createdAt: number;
 }

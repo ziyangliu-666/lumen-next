@@ -26,7 +26,9 @@ export type ServerEvent =
   // step.appended that follows for the same task replaces it, and a page
   // that missed a draft only misses the animation.
   | { type: 'step.draft'; taskId: string; text: string }
-  | { type: 'finding.recorded'; taskId: string; findingId: string; text: string }
+  // The session's short name, written once after its first question.
+  | { type: 'session.titled'; sessionId: string; title: string }
+  | { type: 'finding.recorded'; taskId: string; findingId: string; text: string; title?: string }
   // A command this socket sent could not be carried out. Says why in words a
   // user may read; never anything about the server's insides.
   | { type: 'error'; message: string };
@@ -37,6 +39,8 @@ export type ClientCommand =
   // tab may watch several sessions; each is checked against the principal.
   | { type: 'session.open'; sessionId: string }
   | { type: 'session.close'; sessionId: string }
-  | { type: 'session.say'; sessionId: string; text: string }
+  // `model`: the model from this turn on. `edit`: the text replaces the
+  // person's latest message, and the turn after it, instead of following it.
+  | { type: 'session.say'; sessionId: string; text: string; model?: string; edit?: boolean }
   | { type: 'session.stop'; sessionId: string }
   | { type: 'task.steer'; taskId: string; text: string; when: 'end-of-turn' | 'next-step' };

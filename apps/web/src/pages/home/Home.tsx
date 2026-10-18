@@ -311,7 +311,6 @@ function HomeProjects({ onUnauthorized }: { onUnauthorized: () => void }): JSX.E
             <Findings
               key={findingsCard.project.id}
               projectId={findingsCard.project.id}
-              title={findingsCard.project.title}
               pollAfterMs={findingsCard.pollAfterMs}
             />
           ) : (

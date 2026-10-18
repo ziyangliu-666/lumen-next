@@ -74,7 +74,9 @@ function SurfaceMain({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot="surface-main"
       className={cn(
-        'flex min-h-0 min-w-0 flex-col bg-paper/85 split:col-span-7',
+        // The well reaches into the gap, so the paper keeps a gutter of its
+        // own before it: the field met the well's edge with no space.
+        'flex min-h-0 min-w-0 flex-col bg-paper/85 split:col-span-7 split:pr-gutter',
         collapse === 'stack' && 'flex-none split:flex-auto',
         className,
       )}
@@ -151,7 +153,7 @@ function SurfaceWell({
           'bg-well px-margin',
           // Into the grid's gap as well: left open, the gap showed the scene
           // as a dark stripe between the two surfaces.
-          'split:col-start-8 split:col-end-[-1] split:-mr-margin split:-ml-gutter split:border-l split:border-rule-minor split:pl-[calc(var(--spacing-gutter)+var(--spacing-margin))]',
+          'split:col-start-8 split:col-end-[-1] split:-mr-margin split:-ml-gutter split:border-l split:border-rule-minor',
           sheet
             ? cn(
                 // A phone gets the whole width, with no edge left over: a 1px

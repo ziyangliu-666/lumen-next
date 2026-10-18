@@ -78,7 +78,9 @@ export function ProjectRow({
     // Refresh button above it.
     <li
       className={cn(
-        'relative border-t border-rule-minor py-4 first:border-t-0',
+        // On paper: over the scene's sphere the row's small text could not
+        // be read. The scene shows only where the list is not.
+        'relative border-t border-rule-minor bg-paper/90 py-4 first:border-t-0',
         showingFindings &&
           'before:absolute before:inset-y-3 before:-left-3 before:w-0.5 before:bg-ink',
       )}

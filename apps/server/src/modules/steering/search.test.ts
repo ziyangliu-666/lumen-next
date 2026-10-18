@@ -31,7 +31,7 @@ describe('steering: the literature connectors', () => {
   it('reads arXiv entries from the Atom feed', async () => {
     const feed = `<feed><entry><id>http://arxiv.org/abs/math/0212221v2</id><title> Tunnels in Dyck
       paths </title><summary>We study tunnels.</summary></entry></feed>`;
-    const result = await search('arxiv', 'Dyck tunnels', answer(feed));
+    const result = await search('arxiv', 'Dyck tunnels', answer(feed), 0);
     expect(result.rows).toEqual([
       {
         source: 'arXiv',
@@ -51,22 +51,37 @@ describe('steering: the literature connectors', () => {
     ];
     const fetchImpl = () =>
       Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(feeds.shift() ?? '') });
-    const result = await search('arxiv', '1324 bounds', fetchImpl);
+    const result = await search('arxiv', '1324 bounds', fetchImpl, 0);
     expect(result.rows.map((row) => row.text)).toEqual([
       '1111.5736, T 1111.5736',
       'math/0502504, T math/0502504',
     ]);
   });
 
+  it('tries a busy arXiv once more, and keeps what the first request found when a later one fails', async () => {
+    const entry = `<feed><entry><id>http://arxiv.org/abs/1711.10325v1</id><title>Bounds</title><summary>s</summary></entry></feed>`;
+    const answers = [
+      { ok: false, status: 429, text: () => Promise.resolve('') },
+      { ok: true, status: 200, text: () => Promise.resolve(entry) },
+      { ok: false, status: 500, text: () => Promise.resolve('') },
+    ];
+    const fetchImpl = () =>
+      Promise.resolve(
+        answers.shift() ?? { ok: false, status: 500, text: () => Promise.resolve('') },
+      );
+    const result = await search('arxiv', '1324 bounds', fetchImpl, 0);
+    expect(result.rows.map((row) => row.text)).toEqual(['1711.10325, Bounds']);
+  });
+
   it('gives each paper its year when the feed has one', async () => {
     const feed = `<feed><entry><id>http://arxiv.org/abs/1711.10325v3</id><published>2017-11-28T00:00:00Z</published><title>New bounds for 1324</title><summary>s</summary></entry></feed>`;
-    const result = await search('arxiv', '1324 bounds', answer(feed));
+    const result = await search('arxiv', '1324 bounds', answer(feed), 0);
     expect(result.rows[0]?.text).toBe('1711.10325 (2017), New bounds for 1324');
     expect(result.text).toContain('1711.10325 (2017): New bounds for 1324');
   });
 
   it('turns a source that is down into an error the worker can report', async () => {
-    await expect(search('arxiv', 'x', answer('', false))).rejects.toThrow('HTTP 503');
+    await expect(search('arxiv', 'x', answer('', false), 0)).rejects.toThrow('HTTP 503');
   });
 });
 

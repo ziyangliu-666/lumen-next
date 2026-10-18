@@ -35,9 +35,12 @@ export async function search(
   source: SearchSource,
   query: string,
   fetchImpl: Fetch = fetch,
+  /** Time between arXiv requests; tests pass 0. */
+  spacingMs: number = ARXIV_SPACING_MS,
 ): Promise<SearchResult> {
-  const signal = AbortSignal.timeout(TIMEOUT_MS);
-  return source === 'oeis' ? oeis(query, fetchImpl, signal) : arxiv(query, fetchImpl, signal);
+  return source === 'oeis'
+    ? oeis(query, fetchImpl, AbortSignal.timeout(TIMEOUT_MS))
+    : arxiv(query, fetchImpl, spacingMs);
 }
 
 interface OeisEntry {
@@ -103,11 +106,41 @@ export function arxivQuery(query: string, every: boolean): string {
  */
 const ARXIV_LIMIT = 8;
 
-async function arxivFeed(query: string, fetchImpl: Fetch, signal: AbortSignal): Promise<string> {
+/**
+ * arXiv asks API users for one request every three seconds. A search makes
+ * up to three (every word, the synonym, any word), and readers search in
+ * parallel: sent at once, they were refused or timed out on staging, every
+ * search came back "Unavailable", and the model answered from memory. Each
+ * request here waits its turn, has its own timeout, and is tried once more
+ * when arXiv says it is busy.
+ */
+export const ARXIV_SPACING_MS = 3_000;
+const ARXIV_TIMEOUT_MS = 15_000;
+let arxivQueue: Promise<unknown> = Promise.resolve();
+
+function arxivTurn<T>(work: () => Promise<T>, spacingMs: number): Promise<T> {
+  const run = arxivQueue.then(work);
+  arxivQueue = run
+    .catch(() => undefined)
+    .then(() => new Promise((done) => setTimeout(done, spacingMs)));
+  return run;
+}
+
+async function arxivFeed(
+  query: string,
+  fetchImpl: Fetch,
+  spacingMs: number = ARXIV_SPACING_MS,
+): Promise<string> {
   const url = `https://export.arxiv.org/api/query?max_results=${ARXIV_LIMIT}&search_query=${encodeURIComponent(query)}`;
-  const response = await fetchImpl(url, { signal });
-  if (!response.ok) throw new Error(`arXiv answered HTTP ${response.status}`);
-  return response.text();
+  for (let attempt = 0; ; attempt++) {
+    const response = await arxivTurn(
+      () => fetchImpl(url, { signal: AbortSignal.timeout(ARXIV_TIMEOUT_MS) }),
+      spacingMs,
+    );
+    if (response.ok) return response.text();
+    const busy = response.status === 429 || response.status === 503;
+    if (!busy || attempt > 0) throw new Error(`arXiv answered HTTP ${response.status}`);
+  }
 }
 
 function blocks(feed: string): string[] {
@@ -132,19 +165,20 @@ export function arxivSynonym(query: string): string | null {
   return null;
 }
 
-async function arxiv(query: string, fetchImpl: Fetch, signal: AbortSignal): Promise<SearchResult> {
+async function arxiv(query: string, fetchImpl: Fetch, spacingMs: number): Promise<SearchResult> {
   // Papers with every word first, then with every word of the synonym query;
   // when they are fewer than the limit, the list is filled with papers that
   // have any of the words.
+  // The first request decides: if it fails, the search failed. A later one
+  // that fails only leaves out what it would have added.
+  const more = (q: string): Promise<string[]> =>
+    arxivFeed(q, fetchImpl, spacingMs).then(blocks, () => []);
   const other = arxivSynonym(query);
   const every = [
-    ...blocks(await arxivFeed(arxivQuery(query, true), fetchImpl, signal)),
-    ...(other ? blocks(await arxivFeed(arxivQuery(other, true), fetchImpl, signal)) : []),
+    ...blocks(await arxivFeed(arxivQuery(query, true), fetchImpl, spacingMs)),
+    ...(other ? await more(arxivQuery(other, true)) : []),
   ];
-  const any =
-    every.length < ARXIV_LIMIT
-      ? blocks(await arxivFeed(arxivQuery(query, false), fetchImpl, signal))
-      : [];
+  const any = every.length < ARXIV_LIMIT ? await more(arxivQuery(query, false)) : [];
   const seen = new Set<string>();
   const entries = [...every, ...any]
     .map((block) => {

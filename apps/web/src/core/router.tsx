@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { Fragment, useEffect, useState, type JSX } from 'react';
 import { flushSync } from 'react-dom';
 
 // A tiny hash router. No dependency; pages are wired in main.tsx and nowhere else.
@@ -9,13 +9,22 @@ export interface Route {
 
 /** The current path, '/' when the hash is empty. Re-renders on navigation. */
 export function useHash(): string {
-  const [hash, setHash] = useState(() => window.location.hash.slice(1) || '/');
+  const read = (): { path: string; search: string } => ({
+    path: window.location.hash.slice(1) || '/',
+    search: window.location.search,
+  });
+  const [where, setWhere] = useState(read);
   useEffect(() => {
-    const on = (): void => setHash(window.location.hash.slice(1) || '/');
+    // The query as well: moving between sessions changes only ?session=.
+    const on = (): void => setWhere(read());
     window.addEventListener('hashchange', on);
-    return () => window.removeEventListener('hashchange', on);
+    window.addEventListener('popstate', on);
+    return () => {
+      window.removeEventListener('hashchange', on);
+      window.removeEventListener('popstate', on);
+    };
   }, []);
-  return hash;
+  return where.path;
 }
 
 export function renderRoute(
@@ -24,7 +33,10 @@ export function renderRoute(
   fallback: () => JSX.Element,
 ): JSX.Element {
   const match = routes.find((r) => r.path === path);
-  return match ? match.render() : fallback();
+  // A page mounts afresh for another session: it reads the query once, on
+  // mount. Other query changes (?task=) keep it mounted.
+  const session = new URLSearchParams(window.location.search).get('session') ?? '';
+  return <Fragment key={session}>{match ? match.render() : fallback()}</Fragment>;
 }
 
 // The name the opening title and the session's breadcrumb share for the one
@@ -78,7 +90,11 @@ function flightTarget(): Promise<HTMLElement | null> {
 export function go(url: string, flight?: HTMLElement | null): void {
   const here = new URL(window.location.href);
   const next = new URL(url, here);
-  if (next.origin !== here.origin || next.pathname !== here.pathname || next.hash === here.hash) {
+  if (
+    next.origin !== here.origin ||
+    next.pathname !== here.pathname ||
+    (next.hash === here.hash && next.search === here.search)
+  ) {
     // A different document, or the same page again: keep the full load, so a
     // page that reads the query on mount still sees the new one.
     window.location.assign(next.href);

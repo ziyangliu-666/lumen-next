@@ -16,7 +16,7 @@ web only); the rows under "Phone, 390 px" are kept as they were found.
 
 | Feature | Walked in | Status |
 |---|---|---|
-| Ask a question, get an answer with evidence | A1, A5, A8, A17, S2 rows of the sweep | ok |
+| Ask a question, get an answer with evidence | A1, A5, A8, A17, sweep | ok |
 | Follow-up turns keep the context | A2, A10, sweep (a(7) = 127) | ok |
 | OEIS, arXiv and OpenAlex search, sources as links | A5, A11, A12, E12, sweep | ok |
 | Python in the sandbox, plots | A6, E13, S3 | ok |

@@ -220,6 +220,12 @@ function Composer({
   const empty = !allowEmpty && value.trim() === '' && attachments.length === 0;
   const dictation = useDictation(value, onValueChange);
   const cannotSend = disabled || sendDisabled || empty;
+  // A file dragged over the box: it shows that it will take it.
+  const [dragging, setDragging] = React.useState(false);
+  const takes = Boolean(onAttach) && !disabled;
+  const attachAll = (files: FileList | null | undefined): void => {
+    for (const file of Array.from(files ?? [])) onAttach?.(file);
+  };
 
   function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
@@ -238,8 +244,28 @@ function Composer({
         onSubmit(event);
       }}
     >
+      {/* Files can be dropped on the box or pasted into the text, as in
+          chat products, besides Attach: both did nothing before. */}
       <div
-        className="relative border border-ink bg-paper has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:-outline-offset-1 has-[textarea:focus-visible]:outline-ink"
+        className={cn(
+          'relative border border-ink bg-paper has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:-outline-offset-1 has-[textarea:focus-visible]:outline-ink',
+          dragging && 'bg-well outline-2 -outline-offset-1 outline-ink',
+        )}
+        onDragOver={(event) => {
+          if (!takes || !event.dataTransfer.types.includes('Files')) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          setDragging(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+        }}
+        onDrop={(event) => {
+          setDragging(false);
+          if (!takes || event.dataTransfer.files.length === 0) return;
+          event.preventDefault();
+          attachAll(event.dataTransfer.files);
+        }}
         // The whole box is the field: a click on its empty part puts the caret in the text.
         onPointerDown={(event) => {
           if (event.target === event.currentTarget) {
@@ -287,6 +313,14 @@ function Composer({
           aria-describedby={hint ? hintId : undefined}
           onChange={(event) => onValueChange(event.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={(event) => {
+            // Files only: a paste that also carries text (a cell copied
+            // from a sheet comes as text and as a picture) pastes the text.
+            const files = event.clipboardData.files;
+            if (!takes || files.length === 0 || event.clipboardData.getData('text')) return;
+            event.preventDefault();
+            attachAll(files);
+          }}
           className="block field-sizing-content max-h-[40svh] min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3 pb-1 text-base outline-none placeholder:text-ink-3 placeholder:opacity-100 focus-visible:outline-none disabled:opacity-50"
         />
         <div className="flex min-h-11 items-center gap-3 pr-1.5 pb-1.5 pl-2">

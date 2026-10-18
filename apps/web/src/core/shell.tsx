@@ -147,6 +147,25 @@ function useLinksInPage(): void {
   }, []);
 }
 
+/**
+ * A file dropped outside the field is not opened by the browser in place of
+ * the app, which lost the page and any draft. The field takes drops itself
+ * (ui/composer) and handles them before this.
+ */
+function useNoStrayDrops(): void {
+  useEffect(() => {
+    const on = (event: DragEvent): void => {
+      if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+    };
+    window.addEventListener('dragover', on);
+    window.addEventListener('drop', on);
+    return () => {
+      window.removeEventListener('dragover', on);
+      window.removeEventListener('drop', on);
+    };
+  }, []);
+}
+
 function Scene({ shot }: { shot: ShotName }): JSX.Element {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const veil = useRef<HTMLCanvasElement | null>(null);
@@ -221,6 +240,7 @@ export function AppShell({
 }): JSX.Element {
   useThemeFollower();
   useLinksInPage();
+  useNoStrayDrops();
   const fresh = useNewVersion();
   const [crumb, setCrumb] = useState<HTMLElement | null>(null);
   const [status, setStatus] = useState<HTMLElement | null>(null);

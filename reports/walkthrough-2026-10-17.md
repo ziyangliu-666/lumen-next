@@ -207,3 +207,6 @@ The script's "Spend tab" was its own mistake: Spend is a heading in Wallet.
 | # | Item | Result |
 |---|---|---|
 | S3 | A streamed answer with a Mermaid flowchart, a plot a reader saved to /mnt/output (shown as an image) and a table: no "could not be drawn" while it streamed; the final reply has the diagram, the loaded image and the table | pass |
+| S4 | Entry field against ChatGPT, Claude and Mistral again: Shift+Enter makes a new line | pass |
+| S5 | A file dropped on the field, or pasted into it | fail, then fixed: both did nothing. Now each adds a chip, and on a session the dropped file is uploaded with the turn and read (A001850) |
+| S6 | A file dropped anywhere else on the page | fail, then fixed: the browser opened the file in place of the app. Now a stray drop does nothing |

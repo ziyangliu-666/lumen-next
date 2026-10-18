@@ -10,10 +10,14 @@ function visitTime(at: number): string {
 }
 
 /**
- * Confirmed server activity; navigation records the visit before leaving Home.
- * It is the row's summary, so it reads as sentences, not as a meta string.
- * Only what changed is counted: a row with nothing new says so in one short
- * sentence, instead of "0 sessions ended, 0 findings added, $0.0000 spent".
+ * Confirmed server activity since the last visit; navigation records the
+ * visit before leaving Home. It sits in the row's meta line as a short mark,
+ * "New: 3 findings, 1 session ended". The full sentence ("Since your last
+ * visit at 15:32 …") is the tooltip: as a line of its own under every title
+ * it made the list read as a log, and the walkthrough called it cluttered.
+ *
+ * Only what changed is counted, and an unchanged project says nothing. Spend
+ * is not repeated here, because the row shows the session's spend beside it.
  */
 export function ProjectActivity({
   lastOpenedAt,
@@ -26,52 +30,22 @@ export function ProjectActivity({
     readonly spend: Money | null;
   };
 }): JSX.Element | null {
-  const changed =
-    activity.sessionsEnded > 0 ||
-    activity.findingsAdded > 0 ||
-    (activity.spend !== null && activity.spend.dollars > 0);
-  const today =
-    lastOpenedAt !== null && new Date(lastOpenedAt).toDateString() === new Date().toDateString();
-  const since =
-    lastOpenedAt === null ? (
-      'Since project creation'
-    ) : (
-      <>
-        Since your last visit {today ? 'at' : 'on'}{' '}
-        <time
-          dateTime={new Date(lastOpenedAt).toISOString()}
-          title={new Date(lastOpenedAt).toLocaleString()}
-        >
-          {visitTime(lastOpenedAt)}
-        </time>
-      </>
-    );
-  // Nothing new is said by saying nothing: the row's state and age already
-  // tell a returning reader that the project has not moved.
-  if (!changed && activity.spend !== null) return null;
   const counts = [
+    activity.findingsAdded > 0
+      ? `${activity.findingsAdded} ${activity.findingsAdded === 1 ? 'finding' : 'findings'}`
+      : null,
     activity.sessionsEnded > 0
       ? `${activity.sessionsEnded} ${activity.sessionsEnded === 1 ? 'session' : 'sessions'} ended`
       : null,
-    activity.findingsAdded > 0
-      ? `${activity.findingsAdded} ${activity.findingsAdded === 1 ? 'finding' : 'findings'} added`
-      : null,
   ].filter((part): part is string => part !== null);
+  if (counts.length === 0) return null;
+  const since =
+    lastOpenedAt === null
+      ? 'Since the project was created'
+      : `Since your last visit, ${visitTime(lastOpenedAt)}`;
   return (
-    <p className="text-sm text-ink-2">
-      {changed && <span className="mr-2 font-semibold text-ink">New activity</span>}
-      {since}
-      {counts.length > 0 ? `: ${counts.join(', ')}` : null}
-      {activity.spend === null ? (
-        `${counts.length > 0 ? '.' : ':'} Spend unavailable.`
-      ) : activity.spend.dollars > 0 ? (
-        <>
-          {counts.length > 0 ? ', ' : ': '}
-          <span className="tabular-nums">${activity.spend.dollars.toFixed(4)} spent</span>.
-        </>
-      ) : (
-        '.'
-      )}
-    </p>
+    <span className="text-ink" title={`${since}: ${counts.join(', ')}`}>
+      <span className="font-semibold">New:</span> {counts.join(', ')}
+    </span>
   );
 }

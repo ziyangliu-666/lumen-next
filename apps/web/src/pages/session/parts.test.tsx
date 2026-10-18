@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { Step, Task } from '@lumen/contracts';
 import {
   CallTree,
+  closeOpen,
   Composer,
   Files,
   Findings,
+  liveLines,
   receiptOf,
   ReplyActions,
   Sessions,
@@ -423,5 +425,52 @@ describe('session page: Stop in the field', () => {
       <Composer disabled={false} running={false} steerable={false} onSay={noop} onSteer={noop} />,
     );
     expect(idle).not.toContain('aria-label="Stop"');
+  });
+});
+
+describe('session parts: work that is seen to go on', () => {
+  it('draws the text a task is writing, and says it is writing', () => {
+    const html = renderToStaticMarkup(
+      <StepStream
+        task={task('lead', null, { status: 'running', endedAt: null })}
+        steps={[]}
+        tasks={[]}
+        draft="The answer is"
+        onSelect={noop}
+      />,
+    );
+    expect(html).toContain('data-step="draft"');
+    expect(html).not.toContain('Thinking');
+  });
+
+  it('closes bold, display math and a code block a draft left open', () => {
+    expect(closeOpen('**Counting by')).toBe('**Counting by**');
+    expect(closeOpen('so $$C_n = ')).toBe('so $$C_n = $$');
+    expect(closeOpen('```py\nprint(1)')).toBe('```py\nprint(1)\n```');
+    expect(closeOpen('**done** and $$x$$')).toBe('**done** and $$x$$');
+  });
+
+  it('says what each running reader is doing, so parallel work shows as parallel', () => {
+    const lead = task('lead', null, { status: 'running', endedAt: null });
+    const searching = task('r1', 'lead', { status: 'running', endedAt: null });
+    const writing = task('r2', 'lead', { status: 'running', endedAt: null });
+    const queued = task('r3', 'lead', { status: 'queued', endedAt: null });
+    const lines = liveLines(
+      [lead, searching, writing, queued],
+      [
+        step(0, 'delegate', 'delegated 3'),
+        {
+          ...step(0, 'tool', 'search: x', {
+            tool: 'search',
+            rows: [{ source: 'OEIS', text: 'A1', result: 'Match' }],
+          }),
+          taskId: 'r1',
+        },
+      ],
+      { r2: 'So far' },
+    );
+    expect(lines.get('r1')).toBe('Searched OEIS, reading the results');
+    expect(lines.get('r2')).toBe('Writing');
+    expect(lines.get('r3')).toBe('Waiting to start');
   });
 });

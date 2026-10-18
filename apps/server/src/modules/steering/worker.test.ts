@@ -144,6 +144,41 @@ describe('createWorker: the conversation', () => {
     expect(model.requests[0]!.messages).toEqual([{ role: 'user', content: 'what changed?' }]);
   });
 
+  it('sends the text as the model writes it, the last of it before the step', async () => {
+    const model = scripted((request) => {
+      request.onText?.('It was');
+      request.onText?.('It was the config.');
+      return { text: 'It was the config.' };
+    });
+    const report = fakeReport();
+    const order: string[] = [];
+    const draft = vi.fn((_taskId: string, text: string) => order.push(`draft ${text}`));
+    report.appendStep.mockImplementation((_taskId: string, kind: string) => {
+      order.push(kind);
+      return Promise.resolve();
+    });
+
+    await createWorker({ volumeRoot, context, registry, model }).run(
+      taskOf(),
+      'what changed?',
+      asReport({ ...report, draft } as FakeReport),
+    );
+
+    // Two pieces within one interval go as one draft, the latest.
+    expect(order).toEqual(['draft It was the config.', 'reply']);
+    expect(draft).toHaveBeenCalledWith('task-1', 'It was the config.');
+  });
+
+  it('asks for no stream when the kernel takes no drafts', async () => {
+    const model = scripted({ text: 'ok' });
+    await createWorker({ volumeRoot, context, registry, model }).run(
+      taskOf(),
+      'hi',
+      asReport(fakeReport()),
+    );
+    expect(model.requests[0]!.onText).toBeUndefined();
+  });
+
   it('with no model given, answers at once through the model that does nothing', async () => {
     const report = fakeReport();
 

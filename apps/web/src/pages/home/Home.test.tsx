@@ -58,7 +58,7 @@ describe('Home current account', () => {
       loadMore: vi.fn(),
     };
     vi.mocked(usePages).mockReturnValue(state);
-    expect(render({ status: 'ready', mode: 'identity', account })).toContain('New activity');
+    expect(render({ status: 'ready', mode: 'identity', account })).toContain('New:');
     vi.mocked(usePages).mockReturnValue({
       ...state,
       items: [
@@ -69,7 +69,7 @@ describe('Home current account', () => {
         },
       ],
     });
-    expect(render({ status: 'ready', mode: 'identity', account })).not.toContain('New activity');
+    expect(render({ status: 'ready', mode: 'identity', account })).not.toContain('New:');
   });
   it('waits for the shared account without mounting project requests', () => {
     expect(render({ status: 'loading' })).toContain('Checking your account');

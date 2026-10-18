@@ -103,6 +103,96 @@ function retryAfterMs(response: Response): number | null {
   return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
 }
 
+interface WireChunk {
+  model?: string;
+  choices?: {
+    finish_reason?: string | null;
+    delta?: {
+      content?: string | null;
+      tool_calls?: {
+        index?: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }[];
+    };
+  }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
+  error?: { message?: string };
+}
+
+/**
+ * Reads a streamed answer (server-sent events, one JSON chunk per `data:`
+ * line) into the reply the vendor would have sent whole, and calls `onText`
+ * with the text so far each time it grows. A tool call comes in pieces keyed
+ * by its index: the id and name first, the arguments as text in parts.
+ */
+async function gather(
+  body: ReadableStream<Uint8Array>,
+  onText: (text: string) => void,
+): Promise<WireReply> {
+  const decoder = new TextDecoder();
+  let buffered = '';
+  let text = '';
+  let model: string | undefined;
+  let finish: string | undefined;
+  let usage: WireReply['usage'];
+  const calls: { id?: string; name: string; arguments: string }[] = [];
+  const take = (line: string): void => {
+    if (!line.startsWith('data:')) return;
+    const data = line.slice(5).trim();
+    if (!data || data === '[DONE]') return;
+    let chunk: WireChunk;
+    try {
+      chunk = JSON.parse(data) as WireChunk;
+    } catch {
+      throw new ModelError('malformed', 'a streamed chunk was not JSON');
+    }
+    if (chunk.error) throw new ModelError('server', chunk.error.message ?? 'the stream failed');
+    model = chunk.model ?? model;
+    if (chunk.usage) usage = chunk.usage;
+    const choice = chunk.choices?.[0];
+    if (!choice) return;
+    if (choice.finish_reason) finish = choice.finish_reason;
+    for (const part of choice.delta?.tool_calls ?? []) {
+      const at = part.index ?? calls.length;
+      const call = (calls[at] ??= { name: '', arguments: '' });
+      if (part.id) call.id = part.id;
+      if (part.function?.name) call.name += part.function.name;
+      if (part.function?.arguments) call.arguments += part.function.arguments;
+    }
+    if (choice.delta?.content) {
+      text += choice.delta.content;
+      onText(text);
+    }
+  };
+  const reader = body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffered += decoder.decode(value, { stream: true });
+    const lines = buffered.split('\n');
+    buffered = lines.pop() ?? '';
+    for (const line of lines) take(line.trimEnd());
+  }
+  take((buffered + decoder.decode()).trimEnd());
+  return {
+    ...(model ? { model } : {}),
+    choices: [
+      {
+        ...(finish ? { finish_reason: finish } : {}),
+        message: {
+          content: text,
+          tool_calls: calls.map((call) => ({
+            ...(call.id ? { id: call.id } : {}),
+            function: { name: call.name, arguments: call.arguments || '{}' },
+          })),
+        },
+      },
+    ],
+    ...(usage ? { usage } : {}),
+  };
+}
+
 export class OpenAICompatible implements ModelProvider {
   readonly name: string;
   readonly model: string;
@@ -138,13 +228,23 @@ export class OpenAICompatible implements ModelProvider {
         function: { name: tool.name, description: tool.description, parameters: tool.parameters },
       }));
     }
+    const onText = request.onText;
+    if (onText) {
+      // Usage comes in a last chunk of its own only when asked for.
+      body['stream'] = true;
+      body['stream_options'] = { include_usage: true };
+    }
     const startedAt = Date.now();
-    const reply = await this.send(JSON.stringify(body), signal);
+    const reply = await this.send(JSON.stringify(body), signal, onText);
     return this.read(reply, Date.now() - startedAt);
   }
 
   /** One request with a timeout, tried again on what is worth trying again. */
-  private async send(body: string, signal: AbortSignal | undefined): Promise<WireReply> {
+  private async send(
+    body: string,
+    signal: AbortSignal | undefined,
+    onText?: (text: string) => void,
+  ): Promise<WireReply> {
     let attempt = 0;
     for (;;) {
       const timeout = AbortSignal.timeout(this.options.timeoutMs);
@@ -173,6 +273,21 @@ export class OpenAICompatible implements ModelProvider {
       }
 
       if (response.ok) {
+        if (onText && response.body) {
+          try {
+            return await gather(response.body, onText);
+          } catch (error) {
+            if (signal?.aborted) throw new ModelError('network', 'the call was cancelled');
+            if (timeout.aborted) {
+              throw new ModelError(
+                'timeout',
+                `${this.name}: no answer in ${this.options.timeoutMs} ms`,
+              );
+            }
+            if (error instanceof ModelError) throw error;
+            throw new ModelError('network', `${this.name}: ${(error as Error).message}`);
+          }
+        }
         try {
           return (await response.json()) as WireReply;
         } catch {

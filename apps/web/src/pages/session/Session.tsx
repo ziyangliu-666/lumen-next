@@ -32,6 +32,8 @@ import {
   type ProjectFile,
   type ProjectSession,
   Sessions,
+  liveLines,
+  Reveal,
   StepStream,
   type SteerWhen,
   TaskState,
@@ -80,7 +82,10 @@ function WellSection({
           >
             <span
               aria-hidden="true"
-              className={cn('inline-block text-ink-2 transition-transform', open && 'rotate-90')}
+              className={cn(
+                'inline-block text-ink-2 transition-transform duration-200',
+                open && 'rotate-90',
+              )}
             >
               ›
             </span>
@@ -92,7 +97,9 @@ function WellSection({
         </h2>
         {action}
       </div>
-      {open ? <div className="mt-2">{children}</div> : null}
+      <Reveal open={open} className="mt-2">
+        {children}
+      </Reveal>
     </section>
   );
 }
@@ -644,6 +651,8 @@ export function Session(): JSX.Element {
                 task={shown}
                 steps={snapshot.steps.filter((step) => step.taskId === shown.id)}
                 tasks={snapshot.tasks}
+                draft={state.drafts?.[shown.id]}
+                activity={liveLines(snapshot.tasks, snapshot.steps, state.drafts)}
                 onSelect={open}
                 // Regenerate and Edit start a new turn of the lead, so they are
                 // offered on the lead's own stream, when a turn can be sent.

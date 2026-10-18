@@ -294,6 +294,9 @@ export class Kernel {
       recordFinding: (taskId, text) => this.recordFinding(taskId, text),
       addSpend: (taskId, amount, reason) => this.addSpend(taskId, amount, reason),
       stopped: async (taskId) => (await this.trace.task(taskId))?.status === 'stopped',
+      draft: (taskId, text) => {
+        this.broker.publish(task.sessionId, { type: 'step.draft', taskId, text: storable(text) });
+      },
     };
   }
 

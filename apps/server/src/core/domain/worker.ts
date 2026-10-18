@@ -7,8 +7,8 @@ import type { Log } from '../log/log.js';
 // proposal: the worker never writes the database, so a worker that dies loses
 // nothing — the report already landed in the trace.
 //
-// Steering adds streamText and ask here when it needs them; the
-// kernel picks them up by implementing them, and no worker call site changes.
+// Steering adds ask here when it needs it; the kernel picks it up by
+// implementing it, and no worker call site changes.
 
 /** One piece of work handed down: which agent does it, and its one-line title. */
 export interface Delegated {
@@ -71,6 +71,12 @@ export interface WorkerReport {
    * that does not ask runs its turn to the end, and the stop still stands.
    */
   stopped?(taskId: string): Promise<boolean>;
+  /**
+   * The text the model has written so far in the call in flight, for the page
+   * to draw as it arrives. Not recorded: the step written after the call is
+   * the record, and a draft that is dropped loses nothing.
+   */
+  draft?(taskId: string, text: string): void;
 }
 
 export interface Worker {

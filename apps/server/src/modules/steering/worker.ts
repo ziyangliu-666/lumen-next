@@ -30,6 +30,8 @@ import type { SteerRegistry } from './steerRegistry.js';
 const DEFAULT_TIMEOUT_MS = 30_000;
 /** Model calls one turn may make. A loop that has not answered by now will not. */
 const MAX_ROUNDS = 12;
+/** How often the text a model is writing goes to the page: about twenty times a second. */
+const DRAFT_EVERY_MS = 50;
 /** Every request has a cap; reasoning models spend part of it before they write a word. */
 // Room for an answer with a table in it. At 4,000 a lead with a long reply
 // was cut off mid-sentence and the page showed nothing.
@@ -516,6 +518,37 @@ export function createWorker(options: WorkerOptions): Worker {
     }
   }
 
+  /**
+   * The model's text as it is written, sent to the page at most every
+   * DRAFT_EVERY_MS: one frame per token was hundreds of frames a reply, each
+   * carrying the whole text so far. The last text is sent when the call ends,
+   * so the page never stops a few words short of the step that follows.
+   */
+  function drafting(
+    report: WorkerReport,
+    taskId: string,
+  ): { text: (text: string) => void; done: () => void } | null {
+    const send = report.draft?.bind(report);
+    if (!send) return null;
+    let latest = '';
+    let sent = '';
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const flush = (): void => {
+      timer = null;
+      if (latest !== sent) send(taskId, (sent = latest));
+    };
+    return {
+      text: (text) => {
+        latest = text;
+        timer ??= setTimeout(flush, DRAFT_EVERY_MS);
+      },
+      done: () => {
+        if (timer) clearTimeout(timer);
+        flush();
+      },
+    };
+  }
+
   async function converse(turn: Turn): Promise<string> {
     const tools = turn.isLead ? LEAD_TOOLS : READER_TOOLS;
     let retold = false;
@@ -528,12 +561,16 @@ export function createWorker(options: WorkerOptions): Worker {
       if (await stopped()) return STOPPED_ANSWER;
       await turn.land('next-step');
       // Logged with the task's ids: model, tokens, cost, duration, never the text.
-      const completion = await withLog(model, turn.report.log).complete({
-        system: turn.isLead ? LEAD_PROMPT : READER_PROMPT,
-        messages: turn.messages,
-        tools,
-        maxTokens: MAX_TOKENS,
-      });
+      const draft = drafting(turn.report, turn.task.id);
+      const completion = await withLog(model, turn.report.log)
+        .complete({
+          system: turn.isLead ? LEAD_PROMPT : READER_PROMPT,
+          messages: turn.messages,
+          tools,
+          maxTokens: MAX_TOKENS,
+          ...(draft ? { onText: draft.text } : {}),
+        })
+        .finally(() => draft?.done());
       const receipt: StepDetail = {
         // The ledger's reason for this charge. The same words as a call
         // charged without a step (addSpend below): the ledger showed one

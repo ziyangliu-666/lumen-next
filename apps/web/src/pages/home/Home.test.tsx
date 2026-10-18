@@ -79,16 +79,19 @@ describe('Home current account', () => {
     const html = render({ status: 'error' });
     expect(html).toContain('Unable to check your account');
     expect(html).toContain('Try again');
-    expect(html).not.toContain('Continue to Landing');
+    expect(html).not.toContain('Sign in to see');
     expect(usePages).not.toHaveBeenCalled();
   });
-  it.each(['identity', 'stub'] as const)('sends a signed-out %s visitor to Landing', (mode) => {
-    const html = render({ status: 'signed-out', mode });
-    expect(html).toContain('href="#/"');
-    expect(html).toContain('Continue to Landing');
-    expect(html).toContain(mode === 'stub' ? 'development account' : 'Sign in');
-    expect(usePages).not.toHaveBeenCalled();
-  });
+  it.each(['identity', 'stub'] as const)(
+    'sends a signed-out %s visitor where they sign in',
+    (mode) => {
+      const html = render({ status: 'signed-out', mode });
+      expect(html).toContain(mode === 'stub' ? 'href="#/"' : 'href="#/signin"');
+      expect(html).not.toContain('Landing');
+      expect(html).toContain(mode === 'stub' ? 'development account' : 'Sign in');
+      expect(usePages).not.toHaveBeenCalled();
+    },
+  );
   it.each(['identity', 'stub'] as const)('loads projects for the shared %s account', (mode) => {
     render({ status: 'ready', mode, account });
     expect(usePages).toHaveBeenCalledWith('/api/projects', expect.any(Function));

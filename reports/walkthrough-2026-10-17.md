@@ -185,3 +185,21 @@ OpenAI-compatible endpoint, the Docker sandbox).
 | 11 | B2 again, streaming build: a follow-up over the cap waits; Approve once answers it | pass |
 | 12 | A task waiting on approval showed "Nothing yet." under the question | fixed: the notice by the field says it waits |
 | 13 | Sign up (?mode=signup#/signin) loaded the document again, so the scene started over with no camera move | fixed: every link to a page of the app moves inside the document; the camera flies to the sign-in shot |
+
+### Sweep of every page and control, local build with accounts
+
+One script over the whole app, signed in with a password account: Settings
+(cap, Account, Keys, Wallet), the landing with an attachment, a search and
+an answer (A001006), the work fold, Copy, Files and opening the attached
+file, a follow-up that keeps context (a(7) = 127), + New and back,
+Projects (list, search, Refresh, open a row), the theme key, back and
+forward, sign out, sign in, a wrong password, an unknown route and a
+missing session. 29 items passed, with no page error and no 5xx response.
+Two did not:
+
+| # | Item | Result |
+|---|---|---|
+| S1 | Sign out from a session page left the address at ?session=…#/signin, so a reload or a copied link carried a session the person had left | fixed: both sign-out paths go to a clean address inside the page |
+| S2 | Projects, signed out, said "Sign in from Landing" and "Continue to Landing": the page's name in the code | fixed: "Sign in to see your projects." with Sign in, or the front page for the development account |
+
+The script's "Spend tab" was its own mistake: Spend is a heading in Wallet.

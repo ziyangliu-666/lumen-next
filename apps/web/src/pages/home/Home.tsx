@@ -72,13 +72,20 @@ export function Home(): JSX.Element {
     return (
       <Notice>
         <h1 className="text-xl font-semibold text-ink">Your projects</h1>
+        {/* "Landing" was the page's name in the code, not a word a
+            visitor knows. The development account is chosen on the front
+            page; a real account signs in on its own page. */}
         <p className="text-ink-2">
           {auth.mode === 'stub'
-            ? 'Choose a development account on Landing to see your projects.'
-            : 'Sign in from Landing to see your projects.'}
+            ? 'Choose a development account on the front page to see your projects.'
+            : 'Sign in to see your projects.'}
         </p>
         <Button asChild>
-          <a href="#/">Continue to Landing</a>
+          {auth.mode === 'stub' ? (
+            <a href="#/">Go to the front page</a>
+          ) : (
+            <a href="#/signin">Sign in</a>
+          )}
         </Button>
       </Notice>
     );

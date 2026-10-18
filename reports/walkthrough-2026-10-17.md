@@ -136,7 +136,8 @@ expected), **open** (found, not fixed here), **todo** (not yet tried),
 
 ## Still to try
 
-- Approvals and top-ups with a billing database (staging).
+Nothing listed. Approvals were walked again on the local server with
+Postgres (rows 10 and 11 of the second pass); the top-up is B4.
 
 ## Regression pass, local build, 18 Oct 2026
 
@@ -180,3 +181,7 @@ OpenAI-compatible endpoint, the Docker sandbox).
 | 7 | A long session title in the panel stays inside it | fail, then fixed: the new folding grid took the width of its content |
 | 8 | Projects rows: "New activity / Since project creation …" | fixed: a short "New: 3 findings" in the meta line, the sentence in its tooltip |
 | 9 | Landing, first visit signed out: the intro plays, then the headline, field and starters rise in; Skip, a key or a click ends it; a second visit does not play it | pass |
+| 10 | B7 again, streaming build: a cap of $0.0005 reached at a two-reader delegation; Wallet names the request "Open 2 readers: …"; Approve once runs the readers and the lead's answer streams in (162 drafts) | pass |
+| 11 | B2 again, streaming build: a follow-up over the cap waits; Approve once answers it | pass |
+| 12 | A task waiting on approval showed "Nothing yet." under the question | fixed: the notice by the field says it waits |
+| 13 | Sign up (?mode=signup#/signin) loaded the document again, so the scene started over with no camera move | fixed: every link to a page of the app moves inside the document; the camera flies to the sign-in shot |

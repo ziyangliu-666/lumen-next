@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { go } from './router';
 import { useNewVersion } from './version';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
@@ -116,6 +117,36 @@ function shotOf(path: string): ShotName {
   return 'quiet';
 }
 
+/**
+ * Every link to a page of this app moves inside the document (router `go`),
+ * so the scene stays mounted and its camera moves to the next shot. A link
+ * that changed the query, such as Sign up (?mode=signup#/signin), loaded the
+ * document again, and the scene started over with no move. A link that opens
+ * elsewhere, in a new tab, or with a modifier key is left to the browser.
+ */
+function useLinksInPage(): void {
+  useEffect(() => {
+    const on = (event: MouseEvent): void => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = (event.target as Element | null)?.closest?.('a[href]');
+      if (!(link instanceof HTMLAnchorElement)) return;
+      if (link.target && link.target !== '_self') return;
+      if (link.hasAttribute('download')) return;
+      const next = new URL(link.href, window.location.href);
+      if (next.origin !== window.location.origin || next.pathname !== window.location.pathname) {
+        return;
+      }
+      // Only links to a page (#/…); a plain anchor on the page stays one.
+      if (!next.hash.startsWith('#/')) return;
+      event.preventDefault();
+      go(next.href);
+    };
+    document.addEventListener('click', on);
+    return () => document.removeEventListener('click', on);
+  }, []);
+}
+
 function Scene({ shot }: { shot: ShotName }): JSX.Element {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const veil = useRef<HTMLCanvasElement | null>(null);
@@ -189,6 +220,7 @@ export function AppShell({
   accountActions?: ReactNode;
 }): JSX.Element {
   useThemeFollower();
+  useLinksInPage();
   const fresh = useNewVersion();
   const [crumb, setCrumb] = useState<HTMLElement | null>(null);
   const [status, setStatus] = useState<HTMLElement | null>(null);

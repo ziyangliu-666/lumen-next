@@ -210,7 +210,8 @@ export function StepStream({
                 <RunState state="running">{''}</RunState>
                 <span className="shimmer-text motion-safe:animate-shimmer">Thinking</span>
               </p>
-            ) : (
+            ) : task.status === 'waiting' ? null : (
+              // A task waiting on approval has its notice by the field.
               <p className="text-sm text-ink-2">Nothing yet.</p>
             )}
           </article>

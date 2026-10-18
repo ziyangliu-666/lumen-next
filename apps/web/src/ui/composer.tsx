@@ -323,7 +323,7 @@ function Composer({
           }}
           className="block field-sizing-content max-h-[40svh] min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3 pb-1 text-base outline-none placeholder:text-ink-3 placeholder:opacity-100 focus-visible:outline-none disabled:opacity-50"
         />
-        <div className="flex min-h-11 items-center gap-3 pr-1.5 pb-1.5 pl-2">
+        <div className="flex min-h-11 items-center gap-3 px-2 pb-2">
           {onAttach ? (
             <>
               <button
@@ -406,9 +406,12 @@ function Composer({
                 aria-label="Stop"
                 disabled={disabled}
                 onClick={onStop}
-                className="grid size-8 shrink-0 place-items-center bg-ink text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-25"
+                // A line square with the stop mark inside, as the field is
+                // drawn: a filled square was the brightest thing on a dark
+                // page, in the corner nobody looks at.
+                className="group/stop grid size-8 shrink-0 place-items-center border border-ink text-ink hover:bg-ink hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-25"
               >
-                <span aria-hidden="true" className="size-3 bg-paper" />
+                <span aria-hidden="true" className="size-2.5 bg-current" />
               </button>
             ) : (
               <button

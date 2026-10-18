@@ -154,6 +154,10 @@ function SurfaceWell({
           // Into the grid's gap as well: left open, the gap showed the scene
           // as a dark stripe between the two surfaces.
           'split:col-start-8 split:col-end-[-1] split:-mr-margin split:-ml-gutter split:border-l split:border-rule-minor',
+          // The same space on both sides of the rule: the paper keeps a
+          // gutter and 8px before it, so the well's text starts as far after it.
+          // At the margin's 40px the two sides read as a stripe.
+          'split:pl-[calc(var(--gutter)+0.5rem)]',
           sheet
             ? cn(
                 // A phone gets the whole width, with no edge left over: a 1px

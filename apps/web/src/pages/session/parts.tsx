@@ -154,9 +154,17 @@ export function StepStream({
           {lead ? null : <p className="mb-1 text-caption text-ink-2">{turn.label}</p>}
           <div
             data-step="you"
-            className="group relative max-w-[85%] bg-well px-4 py-3 pr-11 max-roomy:max-w-full"
+            className="group relative max-w-[85%] bg-well px-4 py-3 max-roomy:max-w-full"
           >
-            <p className="break-words whitespace-pre-wrap text-ink">{turn.text}</p>
+            <p className="break-words whitespace-pre-wrap text-ink">
+              {turn.text}
+              {/* Room for Edit on the last line only: a padding the height
+                  of the bubble left an empty strip down its right side, and
+                  while a run went, with no Edit, the strip stayed. */}
+              {index === latest && onEdit ? (
+                <span aria-hidden="true" className="inline-block w-8" />
+              ) : null}
+            </p>
             {index === 0 && note ? <p className="mt-1 text-caption text-ink-2">{note}</p> : null}
             {/* Edit sits in the bubble's corner, not on a row of its own. */}
             {index === latest && onEdit ? (

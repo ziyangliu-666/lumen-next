@@ -2,7 +2,7 @@
    It is a file and not an inline script because the server's Content Security
    Policy allows scripts from this origin only (script-src 'self').
 
-   The OS setting decides. A stored choice ('light' or 'dark' under
+   Dark for everyone at first. A stored choice ('light' or 'dark' under
    'lumen-theme', written by src/core/theme.ts) overrides it. The class "dark"
    on <html> is the one switch that src/styles/theme.css reads. */
 (function () {
@@ -11,10 +11,8 @@
   try {
     saved = localStorage.getItem('lumen-theme');
   } catch (e) {
-    /* Storage can be disabled; the OS setting still applies. */
+    /* Storage can be disabled; the page is then dark. */
   }
-  var dark =
-    saved === 'dark' ||
-    (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var dark = saved !== 'light';
   root.classList.toggle('dark', dark);
 })();

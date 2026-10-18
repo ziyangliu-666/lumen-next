@@ -622,7 +622,10 @@ export function Session(): JSX.Element {
           }}
           aria-label={shown.id === root.id ? 'Conversation' : `Conversation of ${shown.agent}`}
           // The scroll bar stays in the column: the well now covers the gap.
-          className="flex-1 pr-2 outline-none"
+          // The scrollbar's room is kept whether or not it scrolls, and the
+          // field below keeps the same room, so the person's message and
+          // the field end on one line: they were 8px and a scrollbar apart.
+          className="flex-1 [scrollbar-gutter:stable] pr-2 outline-none"
         >
           <ReplyFiles
             link={(path) =>
@@ -661,7 +664,7 @@ export function Session(): JSX.Element {
             )}
           </ReplyFiles>
         </ScrollRegion>
-        <div className="flex-none pt-4 pb-6">
+        <div className="flex-none [scrollbar-gutter:stable] overflow-y-hidden pt-4 pr-2 pb-6">
           <WaitingNotice task={shown} />
           <Composer
             disabled={!ready}

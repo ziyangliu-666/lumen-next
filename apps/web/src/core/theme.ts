@@ -1,15 +1,17 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
-// Light or dark. The OS setting decides; a stored choice overrides it.
+// Light or dark. Everyone starts dark, the look the product is drawn for;
+// a stored choice overrides it. The OS setting is not followed: on a light
+// OS the first visit opened on a light page the owner did not want first.
 // public/theme-init.js applies the same rule before the first paint, so this
-// module only keeps the class in step after that: when the OS setting changes,
-// when the person toggles, and when another tab stores a choice.
+// module only keeps the class in step after that: when the person toggles,
+// and when another tab stores a choice.
 //
 // The class "dark" on <html> is the one switch. The canvas scene (ui/space)
 // reads its colours from the CSS variables, so it watches that class and
 // redraws.
 //
-// A toggle by the person (the key D, a menu item) runs through the scene's
+// A toggle by the person (the key D, the bar's button) runs through the scene's
 // theme wipe when the shell has mounted one: the new paper grows over the
 // page from the pointer, and the choice is stored and applied when the page
 // is covered. Without a scene (a test, or before the shell mounts) the change
@@ -26,16 +28,13 @@ function stored(): Theme | null {
     const value = localStorage.getItem(KEY);
     return value === 'light' || value === 'dark' ? value : null;
   } catch {
-    // Storage can be disabled; the OS setting still applies.
+    // Storage can be disabled; the default applies.
     return null;
   }
 }
 
-function osTheme(): Theme {
-  return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-    ? 'dark'
-    : 'light';
-}
+/** What a person who has not chosen sees. */
+const DEFAULT_THEME: Theme = 'dark';
 
 export function currentTheme(): Theme {
   if (typeof document === 'undefined') return 'light';
@@ -43,21 +42,21 @@ export function currentTheme(): Theme {
 }
 
 function apply(): void {
-  const next = stored() ?? osTheme();
+  const next = stored() ?? DEFAULT_THEME;
   const root = document.documentElement;
   if (root.classList.contains('dark') === (next === 'dark')) return;
   root.classList.toggle('dark', next === 'dark');
   root.dispatchEvent(new Event(THEME_EVENT));
 }
 
-/** Store a choice and apply it. `null` forgets the choice and follows the OS. */
+/** Store a choice and apply it. `null` forgets the choice and goes back to the default. */
 export function setTheme(theme: Theme | null): void {
   try {
     if (theme) localStorage.setItem(KEY, theme);
     else localStorage.removeItem(KEY);
   } catch {
     // Without storage the choice lasts until the page reloads.
-    document.documentElement.classList.toggle('dark', (theme ?? osTheme()) === 'dark');
+    document.documentElement.classList.toggle('dark', (theme ?? DEFAULT_THEME) === 'dark');
     document.documentElement.dispatchEvent(new Event(THEME_EVENT));
     return;
   }
@@ -101,17 +100,16 @@ function subscribe(onChange: () => void): () => void {
 
 /** The theme on screen now, re-rendering when it changes. */
 export function useTheme(): Theme {
-  return useSyncExternalStore(subscribe, currentTheme, () => 'light');
+  return useSyncExternalStore(subscribe, currentTheme, () => DEFAULT_THEME);
 }
 
 /**
- * Keeps the theme in step with the OS and with other tabs, and lets the key D
+ * Keeps the theme in step with other tabs, and lets the key D
  * toggle it, as in the prototype. D never fires while the person types.
  * The shell calls this once.
  */
 export function useThemeFollower(): void {
   useEffect(() => {
-    const os = window.matchMedia('(prefers-color-scheme: dark)');
     const onStorage = (event: StorageEvent): void => {
       if (event.key === KEY) apply();
     };
@@ -127,11 +125,9 @@ export function useThemeFollower(): void {
       toggleTheme();
     };
     apply();
-    os.addEventListener('change', apply);
     window.addEventListener('storage', onStorage);
     document.addEventListener('keydown', onKey);
     return () => {
-      os.removeEventListener('change', apply);
       window.removeEventListener('storage', onStorage);
       document.removeEventListener('keydown', onKey);
     };

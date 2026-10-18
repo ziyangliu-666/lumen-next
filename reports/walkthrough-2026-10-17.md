@@ -8,6 +8,44 @@ Status: **fixed** (merged or on the open branch), **ok** (worked as
 expected), **open** (found, not fixed here), **todo** (not yet tried),
 **deferred** (left for later by the owner's decision).
 
+## Checklist
+
+Every feature of the desktop web app, one line each, with the rows that
+walked it. Phone layouts are out of scope by the owner's decision (desktop
+web only); the rows under "Phone, 390 px" are kept as they were found.
+
+| Feature | Walked in | Status |
+|---|---|---|
+| Ask a question, get an answer with evidence | A1, A5, A8, A17, sweep | ok |
+| Follow-up turns keep the context | A2, A10, sweep (a(7) = 127) | ok |
+| OEIS, arXiv and OpenAlex search, sources as links | A5, A11, A12, E12, sweep | ok |
+| Python in the sandbox, plots | A6, E13, S3 | ok |
+| Readers in parallel (fan-out), their live lines | A4, M3, second pass 6 | ok |
+| Steering while running, and at the end of a turn | A9, A16, A21, P13, P20 | ok |
+| Stop: from the field, from Projects, mid-stream | A15, P14 to P16, P28, second pass 2 | ok |
+| Answers stream word by word | second pass 1, 3 | ok |
+| Long replies, tables, formulas, diagrams, images | A7, P11, E11, E15, S3 | ok |
+| Attach: button, drop, paste; Chinese names; 10 MB limit; PDF | F3 to F6, F10, F13, A20, S5, S6 | ok |
+| Files the agents save: panel, folders, opening, quota | F1, F2, F7 to F9, F11, F12, A25 | ok |
+| Edit, Regenerate, Copy, Copy link | P21, second pass 5, sweep | ok |
+| Sessions: new, moving between, several per project | E8 to E10, P26, sweep | ok |
+| Projects: list, search, Refresh, findings, activity mark | P2, P6, P7, P9, P27, second pass 8, sweep | ok |
+| Landing: starters, Recent, greeting, model picker, voice | E1 to E7 | ok |
+| Landing intro for a first visit, signed out | second pass 9 | ok |
+| Page transitions and the scene between pages | P26, row 13 | ok |
+| Sign in, sign up, sign out, wrong password | P4, P5, P25, sweep, S1 | ok |
+| Settings: cap, Account, Keys, Wallet, ledger | P8, P10, P24, B6, sweep | ok |
+| Budget approvals: approve, reject, at a delegation | B1 to B3, B5, B7, rows 10 to 12 | ok |
+| Test-mode top-up through Stripe | B4 | ok (webhook delivered by hand: Stripe cannot reach localhost) |
+| Reload, reconnect, a tab left open across a deploy | P12, P23, second pass 3 | ok |
+| Dark and light theme, the D key | sweep, dark screenshots of the second pass | ok |
+| Unknown address, missing session | sweep | ok |
+| Hard research question on gpt-4.1-mini (1324 bounds) | A23 | model limit: gpt-4.1 is offered for it (A26) |
+
+What this list does not settle: the owner has not yet looked at the
+local build of session/polish-3, and staging runs the build before it.
+Both follow the owner's approval to merge.
+
 ## Agent behaviour (autoresearch)
 
 | # | Scenario | Result | Cause | Fix |
@@ -132,7 +170,81 @@ expected), **open** (found, not fixed here), **todo** (not yet tried),
 | A26 | Staging, gpt-4.1, the 1324 bounds question | **fixed** | All four arXiv searches came back "Unavailable": each search sent up to three requests at once under one 10 s timeout, and arXiv, which asks for one request every 3 s, refused or stalled. The lead then answered from memory with arXiv ids no search had shown. | arXiv requests wait their turn 3 s apart, each with its own 15 s timeout, retried once on 429 or 503; a later request that fails keeps what the first found. The lead prompt: never cite an id, author or bound no tool result showed; a failed search is said, retried, not filled from memory. Still "Unavailable" after the spacing: arXiv answers the staging machine 429 "Rate exceeded" to its first request (Fly's shared outbound address); Semantic Scholar does the same. A search arXiv refuses now goes to OpenAlex, which answers there: works with an arXiv DOI come back as arXiv results with their ids and links, others with their DOI. Checked with arXiv blocked: eight papers on 1324 growth rates, 2014 to 2026. |
 | P26 | Opening a project from Recent, and moving between sessions | **fixed** | Both were plain links: the page loaded anew, the scene started again, and the title did not fly. | Recent opens the project inside the page, as a project row on Projects does, with the title's flight. The router mounts a page afresh for another ?session=, so moving between sessions, and back, happens inside the page too. |
 | P27 | The panel on Projects | **fixed** | A finding's stretched button covered the whole panel (its row was not relative), so a click anywhere, the new-project field included, opened the last finding's session; "From <project title>" stood under Latest findings; the list's small text could not be read over the sphere; the panel's padding left a strip and the field met its edge. | The finding's link covers its row; the line is gone; project rows sit on paper; the panel keeps the usual margin and the main column a gutter before it. |
+| P28 | Work in progress, and Stop | **fixed** | A running turn read as still text: the work line said "Working", a search that found nothing was a table, a new turn showed "lumen" over "Nothing yet.", and Stop stood in the bar's far corner. The answer still stopped short of the column; findings on Projects were long. | The live line says what is happening ("Waiting for 1 reader", "Searched OEIS, reading the results", "Thinking") with a light passing over it and the turning ring; steps rise in as they arrive; every search is one line with its results as chips; Stop is the field's send square while a run goes and nothing is typed; the answer uses the column; Projects shows three findings, two lines each. Checked locally: Stop stopped the run; typing turned it back into Steer. |
 
 ## Still to try
 
-- Approvals and top-ups with a billing database (staging).
+Nothing listed. Approvals were walked again on the local server with
+Postgres (rows 10 and 11 of the second pass); the top-up is B4.
+
+## Regression pass, local build, 18 Oct 2026
+
+After the conversation, panel and navigation changes, the walkthrough's main
+paths were run again in one browser script against the local server (Claude
+Haiku 5.5, the Docker sandbox with the plotting packages). Every item passed,
+with no page errors.
+
+| # | Item | Result |
+|---|---|---|
+| 1 | The landing greets the person; a starter card fills the field | pass |
+| 2 | A file attached before the first message is read and identified (A000108) | pass |
+| 3 | The same name replaced with a longer file is read anew (A001006) | pass |
+| 4 | A copy saved to /mnt/output/tables/m.csv shows under Files, opens, and holds the header asked for | pass |
+| 5 | A two-reader run shows the live line ("Waiting for 2 readers"), folds to "Worked for 18 s, 1 search, 2 readers", and records findings by reader | pass |
+| 6 | A steer sent mid-run ("also say what M_11 is") is in the answer (5798) | pass |
+| 7 | Stop in the field stops the run | pass |
+| 8 | Edit puts the latest message back in the field | pass |
+| 9 | Regenerate asks again as a new turn | pass |
+| 10 | New session opens on an empty page | pass |
+| 11 | Moving between sessions, and back, stays inside the page | pass |
+| 12 | Formulas render with KaTeX | pass |
+| 13 | Recent on the landing opens a project inside the page | pass |
+| 14 | On Projects, a click in the new-project field stays there; a finding opens its session | pass |
+
+
+## Second pass, local build, 18 Oct 2026: streaming and live work
+
+Run after answers began to stream and the landing gained its intro, in
+browser scripts against the local server (Claude Haiku 5.5 through the
+OpenAI-compatible endpoint, the Docker sandbox).
+
+| # | Item | Result |
+|---|---|---|
+| 1 | An answer streams: 40 drafts in about 6 s for 1,700 characters, the page grows smoothly, and the reply replaces the draft with the same text | pass |
+| 2 | Stop while the answer streams | fail, then fixed: the draft vanished and the full answer appeared seconds later. Now the text on screen at the stop stays, and becomes the reply with "(Stopped here.)"; the call is still charged to the token |
+| 3 | A reconnect while the answer streams leaves no draft behind, and the full reply arrives | pass |
+| 4 | A file attached mid-session is read, changed (a 2^n column) and saved to /mnt/output; Files lists Attached and Kept | pass |
+| 5 | Regenerate and Edit after a streamed answer | pass |
+| 6 | Two readers in parallel each say what they do now ("Starting", "Searched OEIS, reading the results", "Ran a command, reading its output", "Writing") | pass |
+| 7 | A long session title in the panel stays inside it | fail, then fixed: the new folding grid took the width of its content |
+| 8 | Projects rows: "New activity / Since project creation …" | fixed: a short "New: 3 findings" in the meta line, the sentence in its tooltip |
+| 9 | Landing, first visit signed out: the intro plays, then the headline, field and starters rise in; Skip, a key or a click ends it; a second visit does not play it | pass |
+| 10 | B7 again, streaming build: a cap of $0.0005 reached at a two-reader delegation; Wallet names the request "Open 2 readers: …"; Approve once runs the readers and the lead's answer streams in (162 drafts) | pass |
+| 11 | B2 again, streaming build: a follow-up over the cap waits; Approve once answers it | pass |
+| 12 | A task waiting on approval showed "Nothing yet." under the question | fixed: the notice by the field says it waits |
+| 13 | Sign up (?mode=signup#/signin) loaded the document again, so the scene started over with no camera move | fixed: every link to a page of the app moves inside the document; the camera flies to the sign-in shot |
+
+### Sweep of every page and control, local build with accounts
+
+One script over the whole app, signed in with a password account: Settings
+(cap, Account, Keys, Wallet), the landing with an attachment, a search and
+an answer (A001006), the work fold, Copy, Files and opening the attached
+file, a follow-up that keeps context (a(7) = 127), + New and back,
+Projects (list, search, Refresh, open a row), the theme key, back and
+forward, sign out, sign in, a wrong password, an unknown route and a
+missing session. 29 items passed, with no page error and no 5xx response.
+Two did not:
+
+| # | Item | Result |
+|---|---|---|
+| S1 | Sign out from a session page left the address at ?session=…#/signin, so a reload or a copied link carried a session the person had left | fixed: both sign-out paths go to a clean address inside the page |
+| S2 | Projects, signed out, said "Sign in from Landing" and "Continue to Landing": the page's name in the code | fixed: "Sign in to see your projects." with Sign in, or the front page for the development account |
+
+The script's "Spend tab" was its own mistake: Spend is a heading in Wallet.
+
+| # | Item | Result |
+|---|---|---|
+| S3 | A streamed answer with a Mermaid flowchart, a plot a reader saved to /mnt/output (shown as an image) and a table: no "could not be drawn" while it streamed; the final reply has the diagram, the loaded image and the table | pass |
+| S4 | Entry field against ChatGPT, Claude and Mistral again: Shift+Enter makes a new line | pass |
+| S5 | A file dropped on the field, or pasted into it | fail, then fixed: both did nothing. Now each adds a chip, and on a session the dropped file is uploaded with the turn and read (A001850) |
+| S6 | A file dropped anywhere else on the page | fail, then fixed: the browser opened the file in place of the app. Now a stray drop does nothing |

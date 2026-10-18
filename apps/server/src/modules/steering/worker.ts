@@ -30,6 +30,10 @@ import type { SteerRegistry } from './steerRegistry.js';
 const DEFAULT_TIMEOUT_MS = 30_000;
 /** Model calls one turn may make. A loop that has not answered by now will not. */
 const MAX_ROUNDS = 12;
+/** How often the text a model is writing goes to the page: about twenty times a second. */
+const DRAFT_EVERY_MS = 50;
+/** How often a call that is writing asks whether the person pressed Stop. */
+const STOP_CHECK_MS = 300;
 /** Every request has a cap; reasoning models spend part of it before they write a word. */
 // Room for an answer with a table in it. At 4,000 a lead with a long reply
 // was cut off mid-sentence and the page showed nothing.
@@ -516,6 +520,53 @@ export function createWorker(options: WorkerOptions): Worker {
     }
   }
 
+  /**
+   * The model's text as it is written, sent to the page at most every
+   * DRAFT_EVERY_MS: one frame per token was hundreds of frames a reply, each
+   * carrying the whole text so far. The last text is sent when the call ends,
+   * so the page never stops a few words short of the step that follows.
+   */
+  function drafting(
+    report: WorkerReport,
+    taskId: string,
+  ): { text: (text: string) => void; done: () => void; cut: () => string | null } | null {
+    const send = report.draft?.bind(report);
+    if (!send) return null;
+    let latest = '';
+    let sent = '';
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // The text at the moment the person pressed Stop, once seen. The call
+    // runs on, so its cost is known to the token, but the page stops there
+    // and the reply is what they saw.
+    let cut: string | null = null;
+    let askedAt = 0;
+    const flush = (): void => {
+      timer = null;
+      if (cut === null && latest !== sent) send(taskId, (sent = latest));
+    };
+    return {
+      text: (text) => {
+        latest = text;
+        if (cut !== null) return;
+        timer ??= setTimeout(flush, DRAFT_EVERY_MS);
+        if (report.stopped && Date.now() - askedAt >= STOP_CHECK_MS) {
+          askedAt = Date.now();
+          void report.stopped(taskId).then(
+            (stopped) => {
+              if (stopped && cut === null) cut = sent;
+            },
+            () => undefined,
+          );
+        }
+      },
+      done: () => {
+        if (timer) clearTimeout(timer);
+        flush();
+      },
+      cut: () => cut,
+    };
+  }
+
   async function converse(turn: Turn): Promise<string> {
     const tools = turn.isLead ? LEAD_TOOLS : READER_TOOLS;
     let retold = false;
@@ -528,12 +579,16 @@ export function createWorker(options: WorkerOptions): Worker {
       if (await stopped()) return STOPPED_ANSWER;
       await turn.land('next-step');
       // Logged with the task's ids: model, tokens, cost, duration, never the text.
-      const completion = await withLog(model, turn.report.log).complete({
-        system: turn.isLead ? LEAD_PROMPT : READER_PROMPT,
-        messages: turn.messages,
-        tools,
-        maxTokens: MAX_TOKENS,
-      });
+      const draft = drafting(turn.report, turn.task.id);
+      const completion = await withLog(model, turn.report.log)
+        .complete({
+          system: turn.isLead ? LEAD_PROMPT : READER_PROMPT,
+          messages: turn.messages,
+          tools,
+          maxTokens: MAX_TOKENS,
+          ...(draft ? { onText: draft.text } : {}),
+        })
+        .finally(() => draft?.done());
       const receipt: StepDetail = {
         // The ledger's reason for this charge. The same words as a call
         // charged without a step (addSpend below): the ledger showed one
@@ -543,6 +598,28 @@ export function createWorker(options: WorkerOptions): Worker {
         durationMs: completion.durationMs,
         cost: completion.cost,
       };
+
+      // Stopped while the call ran: the reply is what the page showed when
+      // Stop was pressed, said to be cut there, and nothing after it runs.
+      // Before, the call's whole answer appeared seconds after the stop.
+      if (await stopped()) {
+        const shown = draft?.cut() ?? completion.text;
+        // Text that came with tool calls was thinking on the way; it stays
+        // thinking, and the tools are not run.
+        if (shown && completion.toolCalls.length > 0) {
+          await turn.report.appendStep(turn.task.id, 'thinking', shown, receipt);
+          return STOPPED_ANSWER;
+        }
+        if (shown) {
+          const answer = `${shown}\n\n(Stopped here.)`;
+          await turn.report.appendStep(turn.task.id, 'reply', answer, receipt);
+          return answer;
+        }
+        if (completion.cost.dollars > 0) {
+          await turn.report.addSpend(turn.task.id, completion.cost, `model: ${completion.model}`);
+        }
+        return STOPPED_ANSWER;
+      }
 
       // A reply cut off at the length limit is not an answer: on staging a
       // lead tried to enumerate a table by hand, ran out of room, and the page

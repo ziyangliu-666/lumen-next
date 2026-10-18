@@ -58,7 +58,7 @@ describe('Home current account', () => {
       loadMore: vi.fn(),
     };
     vi.mocked(usePages).mockReturnValue(state);
-    expect(render({ status: 'ready', mode: 'identity', account })).toContain('New activity');
+    expect(render({ status: 'ready', mode: 'identity', account })).toContain('New:');
     vi.mocked(usePages).mockReturnValue({
       ...state,
       items: [
@@ -69,7 +69,7 @@ describe('Home current account', () => {
         },
       ],
     });
-    expect(render({ status: 'ready', mode: 'identity', account })).not.toContain('New activity');
+    expect(render({ status: 'ready', mode: 'identity', account })).not.toContain('New:');
   });
   it('waits for the shared account without mounting project requests', () => {
     expect(render({ status: 'loading' })).toContain('Checking your account');
@@ -79,16 +79,19 @@ describe('Home current account', () => {
     const html = render({ status: 'error' });
     expect(html).toContain('Unable to check your account');
     expect(html).toContain('Try again');
-    expect(html).not.toContain('Continue to Landing');
+    expect(html).not.toContain('Sign in to see');
     expect(usePages).not.toHaveBeenCalled();
   });
-  it.each(['identity', 'stub'] as const)('sends a signed-out %s visitor to Landing', (mode) => {
-    const html = render({ status: 'signed-out', mode });
-    expect(html).toContain('href="#/"');
-    expect(html).toContain('Continue to Landing');
-    expect(html).toContain(mode === 'stub' ? 'development account' : 'Sign in');
-    expect(usePages).not.toHaveBeenCalled();
-  });
+  it.each(['identity', 'stub'] as const)(
+    'sends a signed-out %s visitor where they sign in',
+    (mode) => {
+      const html = render({ status: 'signed-out', mode });
+      expect(html).toContain(mode === 'stub' ? 'href="#/"' : 'href="#/signin"');
+      expect(html).not.toContain('Landing');
+      expect(html).toContain(mode === 'stub' ? 'development account' : 'Sign in');
+      expect(usePages).not.toHaveBeenCalled();
+    },
+  );
   it.each(['identity', 'stub'] as const)('loads projects for the shared %s account', (mode) => {
     render({ status: 'ready', mode, account });
     expect(usePages).toHaveBeenCalledWith('/api/projects', expect.any(Function));

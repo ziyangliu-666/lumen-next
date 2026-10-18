@@ -32,9 +32,10 @@ import {
   type ProjectFile,
   type ProjectSession,
   Sessions,
+  liveLines,
+  Reveal,
   StepStream,
   type SteerWhen,
-  StopControl,
   TaskState,
   WaitingNotice,
 } from './parts';
@@ -81,7 +82,10 @@ function WellSection({
           >
             <span
               aria-hidden="true"
-              className={cn('inline-block text-ink-2 transition-transform', open && 'rotate-90')}
+              className={cn(
+                'inline-block text-ink-2 transition-transform duration-200',
+                open && 'rotate-90',
+              )}
             >
               ›
             </span>
@@ -93,7 +97,9 @@ function WellSection({
         </h2>
         {action}
       </div>
-      {open ? <div className="mt-2">{children}</div> : null}
+      <Reveal open={open} className="mt-2">
+        {children}
+      </Reveal>
     </section>
   );
 }
@@ -550,12 +556,6 @@ export function Session(): JSX.Element {
       )}
     </>
   );
-  const stop = running ? (
-    <StopControl
-      disabled={state.stream !== 'open'}
-      onStop={() => stream.current?.send({ type: 'session.stop', sessionId: thisSession })}
-    />
-  ) : null;
 
   return (
     <Surfaces collapse="sheet">
@@ -591,15 +591,9 @@ export function Session(): JSX.Element {
         {models.length > 1 ? (
           <span className="text-ink-2 max-split:hidden">{snapshot.session.model ?? models[0]}</span>
         ) : null}
-        {/* Under 720px the first row has no room for Stop, Cancel and
-            Details together, so Stop ends the status line instead. */}
-        {stop ? <span className="ml-auto roomy:hidden">{stop}</span> : null}
       </BarStatus>
 
-      {/* Over 720px Stop stands right, beside the account: between the status
-          and the account it floated alone and read as an afterthought. */}
       <BarActions>
-        {stop ? <span className="max-roomy:hidden">{stop}</span> : null}
         <Button
           ref={sheetToggle}
           type="button"
@@ -628,7 +622,10 @@ export function Session(): JSX.Element {
           }}
           aria-label={shown.id === root.id ? 'Conversation' : `Conversation of ${shown.agent}`}
           // The scroll bar stays in the column: the well now covers the gap.
-          className="flex-1 pr-2 outline-none"
+          // The scrollbar's room is kept whether or not it scrolls, and the
+          // field below keeps the same room, so the person's message and
+          // the field end on one line: they were 8px and a scrollbar apart.
+          className="flex-1 [scrollbar-gutter:stable] pr-2 outline-none"
         >
           <ReplyFiles
             link={(path) =>
@@ -657,6 +654,8 @@ export function Session(): JSX.Element {
                 task={shown}
                 steps={snapshot.steps.filter((step) => step.taskId === shown.id)}
                 tasks={snapshot.tasks}
+                draft={state.drafts?.[shown.id]}
+                activity={liveLines(snapshot.tasks, snapshot.steps, state.drafts)}
                 onSelect={open}
                 // Regenerate and Edit start a new turn of the lead, so they are
                 // offered on the lead's own stream, when a turn can be sent.
@@ -665,13 +664,22 @@ export function Session(): JSX.Element {
             )}
           </ReplyFiles>
         </ScrollRegion>
-        <div className="flex-none pt-4 pb-6">
+        <div className="flex-none [scrollbar-gutter:stable] overflow-y-hidden pt-4 pr-2 pb-6">
           <WaitingNotice task={shown} />
           <Composer
             disabled={!ready}
             running={running}
             steerable={shown.status === 'running'}
             onSay={starting ? startNew : say}
+            // Stop is the field's send button while a run goes and nothing is
+            // typed, as in chat products: in the bar's far corner it was out
+            // of sight.
+            {...(running && !starting
+              ? {
+                  onStop: () =>
+                    stream.current?.send({ type: 'session.stop', sessionId: thisSession }),
+                }
+              : {})}
             newSession={starting}
             toolbar={
               starting ? (

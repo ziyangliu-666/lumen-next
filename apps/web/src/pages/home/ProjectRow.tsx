@@ -96,15 +96,12 @@ export function ProjectRow({
       ) : (
         title
       )}
-      <div className="mt-1 max-w-[44em] space-y-1">
-        <ProjectActivity lastOpenedAt={card.lastOpenedAt} activity={card.sinceLastVisit} />
-        {session ? null : (
-          <p className="text-sm text-ink-2">
-            Session creation has not been confirmed. Refresh to check its outcome before starting
-            another project.
-          </p>
-        )}
-      </div>
+      {session ? null : (
+        <p className="mt-1 max-w-[44em] text-sm text-ink-2">
+          Session creation has not been confirmed. Refresh to check its outcome before starting
+          another project.
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm tabular-nums">
         <RunState state={run.state}>{run.word}</RunState>
         <span className="font-medium text-ink" title="Spent by the latest session">
@@ -119,6 +116,7 @@ export function ProjectRow({
             {ago(card.lastActivityAt, now)}
           </time>
         </span>
+        <ProjectActivity lastOpenedAt={card.lastOpenedAt} activity={card.sinceLastVisit} />
       </div>
       {/* Above the row's stretched open target, so these still get their clicks. */}
       <div className="relative z-10 mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 empty:hidden">

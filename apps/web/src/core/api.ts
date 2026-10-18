@@ -124,6 +124,11 @@ export interface SessionState {
    * then keeps the list current from `finding.recorded`.
    */
   readonly findings: readonly SessionFinding[];
+  /**
+   * The text each task's model is writing now, by task id, from `step.draft`.
+   * Gone once the step it becomes is appended, or the task stops running.
+   */
+  readonly drafts?: Readonly<Record<string, string>>;
   /** 'open' once the socket is live; the page shows it, nothing else reads it. */
   readonly stream: 'connecting' | 'open' | 'closed';
 }
@@ -136,7 +141,7 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
       // The whole record, read back. Replace, do not merge: after a dropped
       // connection this is what makes the page right again.
       return event.snapshot.session.id === snapshot.session.id
-        ? { ...state, snapshot: event.snapshot }
+        ? { ...state, snapshot: event.snapshot, drafts: {} }
         : state;
     case 'task.opened':
       // The snapshot may already hold it, if it was read after the event was sent.
@@ -152,6 +157,10 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
       return {
         ...state,
         snapshot: { ...snapshot, tasks: patchTask(snapshot.tasks, event.taskId, patch) },
+        // A stopped task keeps its draft, frozen, until the reply that keeps
+        // it lands: it vanished at the stop and came back seconds later. A
+        // new turn starts with none.
+        ...(event.status === 'stopped' ? {} : { drafts: without(state.drafts, event.taskId) }),
       };
     }
     case 'task.cost':
@@ -177,10 +186,22 @@ export function apply(state: SessionState, event: ServerEvent): SessionState {
       // The snapshot may already hold this step if it was read after the event
       // was sent; the (task, index) pair says so.
       const seen = snapshot.steps.some((s) => s.taskId === step.taskId && s.index === step.index);
+      // The step is what the draft was becoming: it takes the draft's place.
       return seen
         ? state
-        : { ...state, snapshot: { ...snapshot, steps: [...snapshot.steps, step] } };
+        : {
+            ...state,
+            snapshot: { ...snapshot, steps: [...snapshot.steps, step] },
+            drafts: without(state.drafts, step.taskId),
+          };
     }
+    case 'step.draft':
+      // Only a running task writes; frames still on the way after a stop
+      // would grow a text the person has already stopped.
+      if (!snapshot.tasks.some((task) => task.id === event.taskId && task.status === 'running')) {
+        return state;
+      }
+      return { ...state, drafts: { ...state.drafts, [event.taskId]: event.text } };
     case 'finding.recorded': {
       // The first read of the list may already hold it.
       if (state.findings.some((finding) => finding.id === event.findingId)) return state;
@@ -197,6 +218,12 @@ export function inTreeOrder(tasks: readonly Task[]): readonly Task[] {
   const under = (parentId: string | null): Task[] =>
     tasks.filter((task) => task.parentId === parentId).flatMap((task) => [task, ...under(task.id)]);
   return under(null);
+}
+
+function without(drafts: SessionState['drafts'], taskId: string): Readonly<Record<string, string>> {
+  if (!drafts || !(taskId in drafts)) return drafts ?? {};
+  const { [taskId]: _gone, ...rest } = drafts;
+  return rest;
 }
 
 function patchTask(tasks: readonly Task[], taskId: string, patch: Partial<Task>): readonly Task[] {

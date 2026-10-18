@@ -99,6 +99,8 @@ export function StepStream({
   task,
   steps,
   tasks,
+  draft,
+  activity,
   note,
   onSelect,
   onRetry,
@@ -107,6 +109,10 @@ export function StepStream({
   task: Task;
   steps: readonly Step[];
   tasks: readonly Task[];
+  /** What the task's model is writing now, drawn as it grows under the work. */
+  draft?: string | undefined;
+  /** What each running task is doing now (liveLines), under the readers handed work. */
+  activity?: ReadonlyMap<string, string> | undefined;
   /** A quiet line under the opening turn: how the session was started. */
   note?: string;
   onSelect: (taskId: string) => void;
@@ -138,6 +144,9 @@ export function StepStream({
   // a reader's own view says whose task it is.
   const lead = task.parentId === null;
   const running = task.status === 'running';
+  const writing = running && Boolean(draft);
+  // A draft held after a stop: drawn still, until the reply replaces it.
+  const held = task.status === 'stopped' && Boolean(draft);
   const draw = (turn: Turn, index: number): JSX.Element => (
     <article key={turn.key} className="py-4">
       {turn.who === 'you' ? (
@@ -145,9 +154,17 @@ export function StepStream({
           {lead ? null : <p className="mb-1 text-caption text-ink-2">{turn.label}</p>}
           <div
             data-step="you"
-            className="group relative max-w-[85%] bg-well px-4 py-3 pr-11 max-roomy:max-w-full"
+            className="group relative max-w-[85%] bg-well px-4 py-3 max-roomy:max-w-full"
           >
-            <p className="break-words whitespace-pre-wrap text-ink">{turn.text}</p>
+            <p className="break-words whitespace-pre-wrap text-ink">
+              {turn.text}
+              {/* Room for Edit on the last line only: a padding the height
+                  of the bubble left an empty strip down its right side, and
+                  while a run went, with no Edit, the strip stayed. */}
+              {index === latest && onEdit ? (
+                <span aria-hidden="true" className="inline-block w-8" />
+              ) : null}
+            </p>
             {index === 0 && note ? <p className="mt-1 text-caption text-ink-2">{note}</p> : null}
             {/* Edit sits in the bubble's corner, not on a row of its own. */}
             {index === latest && onEdit ? (
@@ -167,8 +184,10 @@ export function StepStream({
             steps={turn.steps}
             handedDown={handedDown}
             names={speakerNames(tasks)}
+            activity={activity}
             onSelect={onSelect}
             live={running && index === lastAgent}
+            writing={writing && index === lastAgent}
             {...(index === lastAgent && onRetry && lastText
               ? { onRetry: () => onRetry(lastText) }
               : {})}
@@ -183,15 +202,194 @@ export function StepStream({
       {turns.slice(0, latest).map(draw)}
       <div data-latest="" className="min-h-full">
         {turns.slice(latest).map((turn, offset) => draw(turn, latest + offset))}
-        {steps.length === 0 ? (
-          <article className="border-t border-rule-minor py-6 max-roomy:py-4">
-            <h2 className="pt-1 pb-2 text-sm font-semibold text-ink">{speaker(task, tasks)}</h2>
-            <p className="text-sm text-ink-2">Nothing yet.</p>
+        {(writing || held) && draft ? (
+          // Spaced as the reply it becomes: 1rem under the work of its turn,
+          // or a turn's own padding under the person's message.
+          <article className={turns.at(-1)?.who === 'you' ? 'py-4' : 'pb-4'}>
+            <DraftReply text={draft} still={held} />
+          </article>
+        ) : null}
+        {/* Before the first step: what is happening now, the same live line
+            as later work, not a heading over "Nothing yet." */}
+        {steps.length === 0 && !writing ? (
+          <article className="py-4">
+            {running ? (
+              <p className="flex items-center gap-2 text-sm text-ink-2">
+                <RunState state="running">{''}</RunState>
+                <span className="shimmer-text motion-safe:animate-shimmer">Thinking</span>
+              </p>
+            ) : task.status === 'waiting' ? null : (
+              // A task waiting on approval has its notice by the field.
+              <p className="text-sm text-ink-2">Nothing yet.</p>
+            )}
           </article>
         ) : null}
       </div>
     </>
   );
+}
+
+/**
+ * Content that opens and closes by growing and shrinking, as chat products
+ * open a block of work, where it used to appear and vanish at once. The
+ * content is first drawn when it first opens, so a long session does not draw
+ * every folded table. While it moves it is clipped; once open it is not, so
+ * focus rings and wide tables show.
+ */
+export function Reveal({
+  open,
+  className,
+  children,
+}: {
+  open: boolean;
+  className?: string | undefined;
+  children: ReactNode;
+}): JSX.Element | null {
+  const [drawn, setDrawn] = useState(open);
+  const [grown, setGrown] = useState(open);
+  const [settled, setSettled] = useState(open);
+  // Set while rendering, from the props: drawn once first opened, and back
+  // to closed whenever it closes, so the next opening grows again.
+  if (open && !drawn) setDrawn(true);
+  if (!open && grown) setGrown(false);
+  if (!open && settled) setSettled(false);
+  const shown = open && grown;
+  useEffect(() => {
+    if (!open || !drawn || grown) return;
+    // Drawn closed first, then opened on the next frame, so it can grow.
+    const frame = requestAnimationFrame(() => setGrown(true));
+    return () => cancelAnimationFrame(frame);
+  }, [open, drawn, grown]);
+  if (!drawn) return null;
+  return (
+    <div
+      inert={!shown}
+      onTransitionEnd={(event) => {
+        if (event.target === event.currentTarget && shown) setSettled(true);
+      }}
+      className={cn(
+        // One column no wider than the box: an auto column took the width of
+        // the content, and a long session title pushed out past the panel.
+        'grid grid-cols-[minmax(0,1fr)] transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none',
+        shown ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+      )}
+    >
+      <div className={cn('min-h-0 min-w-0', !(shown && settled) && 'overflow-hidden')}>
+        <div className={className}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The text so far, let out a few letters a frame. Drafts arrive about twenty
+ * times a second, in pieces of several words, and drawn as they came the
+ * answer moved in jerks. The pace grows with what is still to show, so the
+ * page is never far behind the model. A new call starts a new draft, and the
+ * draft before it is gone by then (its step replaced it), so this starts at
+ * nothing. With reduced motion the text is shown as it is.
+ */
+function useSmoothText(target: string): string {
+  const [length, setLength] = useState(0);
+  const still =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  useEffect(() => {
+    if (still || length >= target.length) return;
+    const frame = requestAnimationFrame(() =>
+      setLength((now) =>
+        Math.min(target.length, now + Math.max(3, Math.ceil((target.length - now) / 6))),
+      ),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [length, target, still]);
+  return still ? target : target.slice(0, length);
+}
+
+/**
+ * A draft cut mid-sentence can leave bold, display math or a code block
+ * open, and it then showed as "**Counting by" until the closing mark came.
+ * The open mark is closed for the drawing; the text itself is not changed.
+ */
+export function closeOpen(text: string): string {
+  const fences = text.match(/^\s*```/gm)?.length ?? 0;
+  if (fences % 2 === 1) return `${text}\n\`\`\``;
+  const outside = text.replace(/```[\s\S]*?```/g, '');
+  let closed = text;
+  if ((outside.match(/\$\$/g)?.length ?? 0) % 2 === 1) closed += '$$';
+  if ((outside.match(/\*\*/g)?.length ?? 0) % 2 === 1) closed += '**';
+  return closed;
+}
+
+/** The answer while the model writes it: the same text as the reply it becomes, and a pulse where it grows. */
+function DraftReply({ text, still = false }: { text: string; still?: boolean }): JSX.Element {
+  const smooth = useSmoothText(text);
+  const shown = closeOpen(still ? text : smooth);
+  return (
+    <section data-step="draft" aria-live="off" className="break-words text-ink">
+      <div
+        className={cn(
+          PROSE,
+          !still &&
+            "[&>div>:last-child]:after:ml-1 [&>div>:last-child]:after:inline-block [&>div>:last-child]:after:size-[0.55em] [&>div>:last-child]:after:rounded-full [&>div>:last-child]:after:bg-ink [&>div>:last-child]:after:align-middle [&>div>:last-child]:after:content-[''] motion-safe:[&>div>:last-child]:after:animate-pulse",
+        )}
+      >
+        <ReplyText text={shown} />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * What each running task is doing now, by task id, for the lines under the
+ * readers a lead handed work to. Readers run in parallel, and with one
+ * "Running" each the page looked as if one thing happened at a time.
+ */
+export function liveLines(
+  tasks: readonly Task[],
+  steps: readonly Step[],
+  drafts: Readonly<Record<string, string>> | undefined,
+): ReadonlyMap<string, string> {
+  const lines = new Map<string, string>();
+  for (const task of tasks) {
+    if (task.status === 'queued') lines.set(task.id, 'Waiting to start');
+    if (task.status !== 'running') continue;
+    if (drafts?.[task.id]) {
+      lines.set(task.id, 'Writing');
+      continue;
+    }
+    const own = steps.filter((step) => step.taskId === task.id);
+    const handedDown = childrenByStep(
+      own.filter((step) => step.kind === 'delegate'),
+      tasks.filter((child) => child.parentId === task.id),
+    );
+    lines.set(task.id, own.length === 0 ? 'Starting' : nowDoing(own, handedDown));
+  }
+  return lines;
+}
+
+/** What a running block is doing now, from its latest step and the readers it waits on. */
+function nowDoing(steps: readonly Step[], handedDown: Map<number, readonly Task[]>): string {
+  const waiting = steps
+    .flatMap((step) => handedDown.get(step.index) ?? [])
+    .filter((child) => child.status === 'running' || child.status === 'queued').length;
+  if (waiting > 0) return `Waiting for ${waiting} ${waiting === 1 ? 'reader' : 'readers'}`;
+  const last = steps.at(-1);
+  if (!last || last.kind === 'thinking') return 'Thinking';
+  if (last.kind === 'tool') {
+    const tool = last.detail?.tool ?? toolLabel(last.text).label;
+    if (tool === 'search') {
+      const source = last.detail?.rows?.[0]?.source ?? 'the literature';
+      return `Searched ${source}, reading the results`;
+    }
+    if (tool === 'run') return 'Ran a command, reading its output';
+    if (tool === 'write_file') return 'Saved a file';
+    if (tool === 'read_file') return 'Reading a file';
+    if (tool === 'list_files') return 'Looking at the files';
+    if (tool === 'record_finding') return 'Recorded a finding';
+  }
+  return 'Working';
 }
 
 /**
@@ -204,12 +402,15 @@ function WorkFold({
   steps,
   handedDown,
   open,
+  writing = false,
   className,
   children,
 }: {
   steps: readonly Step[];
   handedDown: Map<number, readonly Task[]>;
   open: boolean;
+  /** The model is writing text now: the line says so, not the last tool. */
+  writing?: boolean;
   className?: string | undefined;
   children: ReactNode;
 }): JSX.Element {
@@ -239,26 +440,43 @@ function WorkFold({
     count('run') ? plural(count('run'), 'command', 'commands') : null,
     readers ? plural(readers, 'reader', 'readers') : null,
   ].filter(Boolean);
-  const label = `${open ? 'Working' : 'Worked'}${ms >= 1000 ? ` for ${took(ms)}` : ''}${what.length ? `, ${what.join(', ')}` : ''}`;
+  const done = `Worked${ms >= 1000 ? ` for ${took(ms)}` : ''}${what.length ? `, ${what.join(', ')}` : ''}`;
+  const label = open ? (writing ? 'Writing' : nowDoing(steps, handedDown)) : done;
   return (
     <div className={className}>
       <button
         type="button"
         aria-expanded={expanded}
         onClick={() => setShown(!expanded)}
-        className="flex items-center gap-1 text-sm text-ink-2 hover:text-ink"
+        className="flex items-center gap-2 text-sm text-ink-2 hover:text-ink"
       >
-        {label}
+        {/* Live: what is happening now, with a light passing over it, as
+            chat products show work in progress. A still line read as if
+            nothing was happening. */}
+        {/* The ring alone: its own word, "Running", stood before the line. */}
+        {open ? <RunState state="running">{''}</RunState> : null}
+        {/* Keyed by its words: a new "what it is doing" rises in, where
+            the words used to change in place. */}
+        <span
+          key={label}
+          className={
+            open
+              ? 'shimmer-text motion-safe:animate-[rise_240ms_cubic-bezier(0.2,0.7,0.2,1)_both,shimmer_2.2s_linear_infinite]'
+              : 'motion-safe:animate-rise'
+          }
+        >
+          {label}
+        </span>
         <span
           aria-hidden="true"
-          className={cn('inline-block transition-transform', expanded && 'rotate-90')}
+          className={cn('inline-block transition-transform duration-200', expanded && 'rotate-90')}
         >
           ›
         </span>
       </button>
-      {expanded ? (
-        <div className="mt-3 space-y-4 border-l border-rule-minor pl-4">{children}</div>
-      ) : null}
+      <Reveal open={expanded} className="mt-3 space-y-4 border-l border-rule-minor pl-4">
+        {children}
+      </Reveal>
     </div>
   );
 }
@@ -272,18 +490,23 @@ function AgentTurn({
   steps,
   handedDown,
   names,
+  activity,
   onSelect,
   onRetry,
   live = false,
+  writing = false,
 }: {
   steps: readonly Step[];
   handedDown: Map<number, readonly Task[]>;
   names: Map<string, string>;
+  activity?: ReadonlyMap<string, string> | undefined;
   onSelect: (taskId: string) => void;
   /** Given on the latest turn: Regenerate under its last answer. */
   onRetry?: () => void;
   /** The turn is still running: its last block of work stays open to watch. */
   live?: boolean;
+  /** Its model is writing text now, drawn under the turn by StepStream. */
+  writing?: boolean;
 }): JSX.Element {
   const parts: ({ kind: 'work'; steps: Step[] } | { kind: 'reply'; step: Step })[] = [];
   for (const step of steps) {
@@ -318,16 +541,20 @@ function AgentTurn({
             steps={part.steps}
             handedDown={handedDown}
             open={live && index === parts.length - 1}
+            writing={writing && index === parts.length - 1}
             className={index > 0 ? 'mt-6' : undefined}
           >
             {part.steps.map((step) => (
-              <StepBlock
-                key={step.index}
-                step={step}
-                delegated={handedDown.get(step.index) ?? []}
-                names={names}
-                onSelect={onSelect}
-              />
+              // A step that arrives rises in; those already drawn stay still.
+              <div key={step.index} className="motion-safe:animate-rise">
+                <StepBlock
+                  step={step}
+                  delegated={handedDown.get(step.index) ?? []}
+                  names={names}
+                  activity={activity}
+                  onSelect={onSelect}
+                />
+              </div>
             ))}
           </WorkFold>
         ),
@@ -483,6 +710,19 @@ export function ReplyActions({
   );
 }
 
+/**
+ * Delays for items that arrive together, so they come in one after another.
+ * Written out, because Tailwind only knows class names it can read.
+ */
+const STAGGER = [
+  '[animation-delay:0ms]',
+  '[animation-delay:50ms]',
+  '[animation-delay:100ms]',
+  '[animation-delay:150ms]',
+  '[animation-delay:200ms]',
+  '[animation-delay:250ms]',
+];
+
 /** How many sources a search shows before "N more". */
 const SOURCES_SHOWN = 4;
 
@@ -513,17 +753,36 @@ export function SearchSources({
           {shown.map((row, index) => {
             const [id, ...rest] = row.text.split(', ');
             return (
-              <li key={index} className="max-w-full">
-                <a
-                  href={row.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={row.text}
-                  className="flex max-w-[28rem] items-baseline gap-2 border border-rule-minor bg-well px-2 py-1 text-xs hover:border-ink"
-                >
-                  <span className="shrink-0 font-mono text-ink">{id}</span>
-                  <span className="truncate text-ink-2">{rest.join(', ')}</span>
-                </a>
+              // The results come in one after another, as a search's do.
+              <li
+                key={index}
+                className={cn(
+                  'max-w-full motion-safe:animate-rise',
+                  STAGGER[index % STAGGER.length],
+                )}
+              >
+                {row.url ? (
+                  <a
+                    href={row.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={row.text}
+                    className="flex max-w-[28rem] items-baseline gap-2 border border-rule-minor bg-well px-2 py-1 text-xs hover:border-ink"
+                  >
+                    <span className="shrink-0 font-mono text-ink">{id}</span>
+                    <span className="truncate text-ink-2">{rest.join(', ')}</span>
+                  </a>
+                ) : (
+                  // A result with nowhere to open (the demo's): the same
+                  // chip, not a link.
+                  <span
+                    title={row.text}
+                    className="flex max-w-[28rem] items-baseline gap-2 border border-rule-minor bg-well px-2 py-1 text-xs"
+                  >
+                    <span className="shrink-0 font-mono text-ink">{id}</span>
+                    <span className="truncate text-ink-2">{rest.join(', ')}</span>
+                  </span>
+                )}
               </li>
             );
           })}
@@ -546,9 +805,9 @@ export function SearchSources({
 
 // One measure for prose in the conversation, thinking and answers alike, so
 // the column has one text width. Only tables and output run the full width.
-// The column itself is the measure, as in chat products: at 40rem the answer
-// left an empty strip down the right of the conversation.
-const PROSE = 'max-w-[48rem]';
+// The column itself is the measure, as in chat products: capped at 40rem,
+// then 48rem, the answer left an empty strip down the right of it.
+const PROSE = 'w-full';
 
 /** What a tool step took and cost, beside its label. A free step shows no price. */
 export function receiptOf(step: Step): string {
@@ -588,11 +847,13 @@ function StepBlock({
   step,
   delegated,
   names,
+  activity,
   onSelect,
 }: {
   step: Step;
   delegated: readonly Task[];
   names: Map<string, string>;
+  activity?: ReadonlyMap<string, string> | undefined;
   onSelect: (taskId: string) => void;
 }): JSX.Element | null {
   switch (step.kind) {
@@ -623,10 +884,10 @@ function StepBlock({
       // A literature search with links is drawn as its sources, the way chat
       // products show what they read: one line saying what was searched, and
       // the results as links. As a table, nothing could be opened.
-      if (detail?.rows?.some((row) => row.url)) {
+      if (name === 'search' && detail?.rows?.length) {
         return (
           <SearchSources
-            query={step.text.replace(/^search\s+\w+:\s*/u, '')}
+            query={step.text.replace(/^search(?:\s+\w+)?:\s*/u, '')}
             rows={detail.rows}
             receipt={receipt === 'tool call' ? undefined : receipt}
           />
@@ -712,8 +973,21 @@ function StepBlock({
                   <span className={ROW_SOURCE}>{names.get(child.id) ?? child.agent}</span>
                   {/* A lead writes a reader's whole brief into its title; three
                       lines say which task it is, and the reader opens in full. */}
-                  <span className="line-clamp-3 min-w-0 break-words text-ink decoration-[1.5px] underline-offset-[0.15em] group-hover:underline">
-                    {child.title}
+                  <span className="min-w-0">
+                    <span className="line-clamp-3 break-words text-ink decoration-[1.5px] underline-offset-[0.15em] group-hover:underline">
+                      {child.title}
+                    </span>
+                    {/* What this reader is doing now, with the moving light,
+                        so readers in parallel are seen to work at once. Keyed
+                        by its words, so each new activity rises in. */}
+                    {activity?.get(child.id) ? (
+                      <span
+                        key={activity.get(child.id)}
+                        className="mt-1 block shimmer-text text-sm motion-safe:animate-[rise_240ms_cubic-bezier(0.2,0.7,0.2,1)_both,shimmer_2.2s_linear_infinite]"
+                      >
+                        {activity.get(child.id)}
+                      </span>
+                    ) : null}
                   </span>
                   <TaskState status={child.status} />
                 </button>
@@ -969,7 +1243,7 @@ export function Sessions({
                   : 'text-ink-2 hover:text-ink',
               )}
             >
-              <span className="truncate">{item.title}</span>
+              <span className="min-w-0 truncate">{item.title}</span>
               <span className="shrink-0 text-caption font-normal text-ink-2 tabular-nums">
                 {item.status === 'running' || item.status === 'waiting'
                   ? SESSION_WORD[item.status]
@@ -1273,6 +1547,7 @@ export function Composer({
   prefill,
   newSession = false,
   toolbar,
+  onStop,
 }: {
   /** The socket is down or the account is not ready: nothing can be sent. */
   disabled: boolean;
@@ -1298,6 +1573,8 @@ export function Composer({
   prefill?: { readonly text: string; readonly key: number } | undefined;
   /** The field starts a new session in this project instead of replying. */
   newSession?: boolean;
+  /** Given while the run goes: the empty field's send button stops it. */
+  onStop?: (() => void) | undefined;
   /** More controls at the foot of the field (the model for a new session). */
   toolbar?: ReactNode;
 }): JSX.Element {
@@ -1385,6 +1662,7 @@ export function Composer({
       hint={hint}
       {...(onAttach ? { onAttach: attach } : {})}
       toolbar={toolbar}
+      {...(onStop ? { onStop } : {})}
       attachments={attached.map((path) => path.replace(/^\/mnt\/upload\//, ''))}
       onRemoveAttachment={(name) =>
         setAttached((list) => list.filter((path) => !path.endsWith(`/${name}`)))

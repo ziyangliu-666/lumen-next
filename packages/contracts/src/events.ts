@@ -21,6 +21,11 @@ export type ServerEvent =
       text: string;
       detail?: StepDetail;
     }
+  // The text a model has written so far in the call in flight, sent as it
+  // arrives so the page can draw the answer word by word. Not recorded: the
+  // step.appended that follows for the same task replaces it, and a page
+  // that missed a draft only misses the animation.
+  | { type: 'step.draft'; taskId: string; text: string }
   | { type: 'finding.recorded'; taskId: string; findingId: string; text: string }
   // A command this socket sent could not be carried out. Says why in words a
   // user may read; never anything about the server's insides.

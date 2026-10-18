@@ -4,8 +4,10 @@ import { useCurrentAccount } from '@/core/auth';
 import { DevelopmentSignIn } from '@/core/devSignIn';
 import { ModelPicker, useModels } from '@/core/models';
 import { PROJECT_PLACEHOLDER, saveProjectDraft, useNewProject } from '@/core/newProject';
+import { cn } from '@/lib/utils';
 import { Composer } from '@/ui/composer';
 import { Bleed } from '@/ui/surfaces';
+import { Intro, introWanted } from './Intro';
 import { greeting, RecentProjects, Starters, useRecent } from './starts';
 
 /** The upload route's limit, said before sending rather than by the server. */
@@ -36,6 +38,18 @@ export function Landing(): JSX.Element {
   const [files, setFiles] = useState<readonly File[]>([]);
   const [tooLarge, setTooLarge] = useState<string | null>(null);
   const models = useModels(signedIn);
+  // A first visit, signed out, sees what lumen does before the page. Until
+  // the account is known nothing is drawn in the column, or the page would
+  // flash before the intro took its place.
+  const [intro, setIntro] = useState<'wanted' | 'playing' | 'ended' | 'none'>(() =>
+    introWanted() ? 'wanted' : 'none',
+  );
+  if (intro === 'wanted' && auth.status !== 'loading') setIntro(signedOut ? 'playing' : 'none');
+  const ended = intro === 'ended';
+  // After the intro, the page comes in part by part, so it reads as what
+  // the intro led to.
+  const rise = (delay: string): string | undefined =>
+    ended ? cn('motion-safe:animate-rise', delay) : undefined;
   const [model, setModel] = useState<string | undefined>(undefined);
   // The line under the field is for a problem only, printed in ink because it
   // asks the person to act; red stays for work that waits on them in a run.
@@ -97,86 +111,99 @@ export function Landing(): JSX.Element {
           the text starts at 38%. */}
       <div className="grid min-h-0 flex-1 grid-cols-12 content-start gap-x-gutter overflow-y-auto px-margin pt-[calc(38svh-var(--bar-h))] pb-6 roomy:pt-[max(2.5rem,calc(50svh-17rem))] roomy:pb-10">
         <div className="col-span-12 roomy:col-span-6 split:col-span-5">
-          <h1 className="text-[clamp(2.25rem,3.9vw,3.5rem)] leading-[1.02] font-medium tracking-[-0.035em] text-ink">
-            {/* Signed in, the page greets the person, as chat products do;
+          {intro === 'wanted' ? null : intro === 'playing' ? (
+            <Intro onDone={() => setIntro('ended')} />
+          ) : (
+            <>
+              <h1 className="text-[clamp(2.25rem,3.9vw,3.5rem)] leading-[1.02] font-medium tracking-[-0.035em] text-ink">
+                {/* Signed in, the page greets the person, as chat products do;
                 the promise is for a first visit. */}
-            {auth.status === 'ready' ? (
-              <span className="block">{greeting(auth.account.displayName)}</span>
-            ) : (
-              <>
-                <span className="block">Now you can do any frontier work.</span>
-                <span className="block text-ink-2">Just start.</span>
-              </>
-            )}
-          </h1>
-          <Composer
-            className="mt-6 roomy:mt-10"
-            id="research-question"
-            label="What should lumen look into?"
-            value={draft.question}
-            onValueChange={setQuestion}
-            onSubmit={() => {
-              void submit(files, model);
-            }}
-            // Signed out, a file could not wait in the tab through sign-in
-            // the way the question does, so Attach comes with an account.
-            {...(signedIn
-              ? {
-                  onAttach: (file: File) => {
-                    if (file.size > ATTACH_LIMIT) {
-                      setTooLarge(file.name);
-                      return;
+                {auth.status === 'ready' ? (
+                  <span className="block">{greeting(auth.account.displayName)}</span>
+                ) : (
+                  <>
+                    <span className={cn('block', rise('[animation-delay:0ms]'))}>
+                      Now you can do any frontier work.
+                    </span>
+                    <span className={cn('block text-ink-2', rise('[animation-delay:150ms]'))}>
+                      Just start.
+                    </span>
+                  </>
+                )}
+              </h1>
+              <Composer
+                className={cn('mt-6 roomy:mt-10', rise('[animation-delay:300ms]'))}
+                id="research-question"
+                label="What should lumen look into?"
+                value={draft.question}
+                onValueChange={setQuestion}
+                onSubmit={() => {
+                  void submit(files, model);
+                }}
+                // Signed out, a file could not wait in the tab through sign-in
+                // the way the question does, so Attach comes with an account.
+                {...(signedIn
+                  ? {
+                      onAttach: (file: File) => {
+                        if (file.size > ATTACH_LIMIT) {
+                          setTooLarge(file.name);
+                          return;
+                        }
+                        setTooLarge(null);
+                        setFiles((list) => [
+                          ...list.filter((kept) => kept.name !== file.name),
+                          file,
+                        ]);
+                      },
+                      attachments: files.map((file) => file.name),
+                      onRemoveAttachment: (name: string) =>
+                        setFiles((list) => list.filter((file) => file.name !== name)),
                     }
-                    setTooLarge(null);
-                    setFiles((list) => [...list.filter((kept) => kept.name !== file.name), file]);
-                  },
-                  attachments: files.map((file) => file.name),
-                  onRemoveAttachment: (name: string) =>
-                    setFiles((list) => list.filter((file) => file.name !== name)),
-                }
-              : {})}
-            toolbar={<ModelPicker models={models} value={model} onChange={setModel} />}
-            placeholder={PROJECT_PLACEHOLDER}
-            hint={hint}
-            hintTone={asks ? 'ask' : 'quiet'}
-            sendLabel="Start"
-            sendDisabled={pending || uncertain}
-            disabled={pending}
-          />
-          {/* Recents when there are some, starter questions when there are
+                  : {})}
+                toolbar={<ModelPicker models={models} value={model} onChange={setModel} />}
+                placeholder={PROJECT_PLACEHOLDER}
+                hint={hint}
+                hintTone={asks ? 'ask' : 'quiet'}
+                sendLabel="Start"
+                sendDisabled={pending || uncertain}
+                disabled={pending}
+              />
+              {/* Recents when there are some, starter questions when there are
               none. A starter fills the field; the person sends it. */}
-          <div className="mt-6 roomy:mt-8">
-            {recent && recent.length > 0 ? (
-              <RecentProjects items={recent} />
-            ) : signedIn && recent === null ? null : (
-              <Starters
-                onPick={(question) => {
-                  setQuestion(question);
-                  document.getElementById('research-question')?.focus();
-                }}
-              />
-            )}
-          </div>
-          {signedOut && auth.mode === 'stub' ? (
-            // Development only: the stub account stands in for sign-in. It
-            // is folded under the field, small and grey, because the field
-            // is the page: open, the form had the same weight as the
-            // question and read as a second way to start.
-            <details className="group mt-4 text-caption text-ink-2">
-              <summary className="cursor-pointer list-none font-medium hover:text-ink [&::-webkit-details-marker]:hidden">
-                <span aria-hidden="true" className="mr-1 inline-block group-open:rotate-90">
-                  ›
-                </span>
-                Developer sign-in
-              </summary>
-              <DevelopmentSignIn
-                className="mt-3"
-                onSignedIn={() => {
-                  clearError();
-                }}
-              />
-            </details>
-          ) : null}
+              <div className={cn('mt-6 roomy:mt-8', rise('[animation-delay:450ms]'))}>
+                {recent && recent.length > 0 ? (
+                  <RecentProjects items={recent} />
+                ) : signedIn && recent === null ? null : (
+                  <Starters
+                    onPick={(question) => {
+                      setQuestion(question);
+                      document.getElementById('research-question')?.focus();
+                    }}
+                  />
+                )}
+              </div>
+              {signedOut && auth.mode === 'stub' ? (
+                // Development only: the stub account stands in for sign-in. It
+                // is folded under the field, small and grey, because the field
+                // is the page: open, the form had the same weight as the
+                // question and read as a second way to start.
+                <details className="group mt-4 text-caption text-ink-2">
+                  <summary className="cursor-pointer list-none font-medium hover:text-ink [&::-webkit-details-marker]:hidden">
+                    <span aria-hidden="true" className="mr-1 inline-block group-open:rotate-90">
+                      ›
+                    </span>
+                    Developer sign-in
+                  </summary>
+                  <DevelopmentSignIn
+                    className="mt-3"
+                    onSignedIn={() => {
+                      clearError();
+                    }}
+                  />
+                </details>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
     </Bleed>

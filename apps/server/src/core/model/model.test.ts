@@ -152,6 +152,64 @@ describe('core/model: the OpenAI-compatible adapter', () => {
     ]);
   });
 
+  it('streams when asked: text as it grows, then the same completion, tool calls and usage included', async () => {
+    const events = [
+      { model: 'gpt-4.1-nano-2025-04-14', choices: [{ delta: { content: 'Bl' } }] },
+      { choices: [{ delta: { content: 'ue.' } }] },
+      {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                { index: 0, id: 'call_1', function: { name: 'search', arguments: '{"qu' } },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        choices: [
+          {
+            finish_reason: 'tool_calls',
+            delta: { tool_calls: [{ index: 0, function: { arguments: 'ery":"sky"}' } }] },
+          },
+        ],
+      },
+      { choices: [], usage: { prompt_tokens: 20, completion_tokens: 2 } },
+    ];
+    const sse =
+      events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n';
+    // Split mid-line, as a network does.
+    const bytes = new TextEncoder().encode(sse);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, 37));
+        controller.enqueue(bytes.slice(37));
+        controller.close();
+      },
+    });
+    const { provider, calls } = adapter([new Response(body, { status: 200 })]);
+    const seen: string[] = [];
+    const reply = await provider.complete({ ...ask, onText: (text) => seen.push(text) });
+
+    expect(calls[0]!.body['stream']).toBe(true);
+    expect(calls[0]!.body['stream_options']).toEqual({ include_usage: true });
+    expect(seen).toEqual(['Bl', 'Blue.']);
+    expect(reply.text).toBe('Blue.');
+    expect(reply.stopReason).toBe('tool');
+    expect(reply.toolCalls).toEqual([
+      { id: 'call_1', name: 'search', arguments: { query: 'sky' } },
+    ]);
+    expect(reply.usage).toEqual({ inputTokens: 20, outputTokens: 2 });
+    expect(reply.cost.dollars).toBeGreaterThan(0);
+  });
+
+  it('does not stream when nobody listens', async () => {
+    const { provider, calls } = adapter([json(answer())]);
+    await provider.complete(ask);
+    expect(calls[0]!.body['stream']).toBeUndefined();
+  });
+
   it('replays an assistant turn with its tool calls and a tool result in the shape the vendor wants', async () => {
     const { provider, calls } = adapter([json(answer())]);
     await provider.complete({

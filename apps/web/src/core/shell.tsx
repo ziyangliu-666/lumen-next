@@ -8,12 +8,13 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { go } from './router';
 import { useNewVersion } from './version';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
 import { LumenMark } from '@/ui/mark';
 import { mountSpace, type ShotName, type Space } from '@/ui/space';
-import { setThemeTransition, useThemeFollower } from './theme';
+import { setThemeTransition, toggleTheme, useTheme, useThemeFollower } from './theme';
 
 // The frame every page sits in: one bar on top with one rule under it, and
 // the screen below it. The page never scrolls as a whole; a region inside it
@@ -116,6 +117,90 @@ function shotOf(path: string): ShotName {
   return 'quiet';
 }
 
+/**
+ * Every link to a page of this app moves inside the document (router `go`),
+ * so the scene stays mounted and its camera moves to the next shot. A link
+ * that changed the query, such as Sign up (?mode=signup#/signin), loaded the
+ * document again, and the scene started over with no move. A link that opens
+ * elsewhere, in a new tab, or with a modifier key is left to the browser.
+ */
+function useLinksInPage(): void {
+  useEffect(() => {
+    const on = (event: MouseEvent): void => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = (event.target as Element | null)?.closest?.('a[href]');
+      if (!(link instanceof HTMLAnchorElement)) return;
+      if (link.target && link.target !== '_self') return;
+      if (link.hasAttribute('download')) return;
+      const next = new URL(link.href, window.location.href);
+      if (next.origin !== window.location.origin || next.pathname !== window.location.pathname) {
+        return;
+      }
+      // Only links to a page (#/…); a plain anchor on the page stays one.
+      if (!next.hash.startsWith('#/')) return;
+      event.preventDefault();
+      go(next.href);
+    };
+    document.addEventListener('click', on);
+    return () => document.removeEventListener('click', on);
+  }, []);
+}
+
+/**
+ * A file dropped outside the field is not opened by the browser in place of
+ * the app, which lost the page and any draft. The field takes drops itself
+ * (ui/composer) and handles them before this.
+ */
+function useNoStrayDrops(): void {
+  useEffect(() => {
+    const on = (event: DragEvent): void => {
+      if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+    };
+    window.addEventListener('dragover', on);
+    window.addEventListener('drop', on);
+    return () => {
+      window.removeEventListener('dragover', on);
+      window.removeEventListener('drop', on);
+    };
+  }, []);
+}
+
+/**
+ * Light or dark, in the bar on every page. The key D did the same, but no
+ * one could find it. The icon is the theme it changes to, as in most apps.
+ */
+function ThemeButton(): JSX.Element {
+  const theme = useTheme();
+  const next = theme === 'dark' ? 'light' : 'dark';
+  return (
+    <button
+      type="button"
+      aria-label={`Switch to ${next} theme`}
+      title={`Switch to ${next} theme (D)`}
+      onClick={toggleTheme}
+      className="grid size-8 place-items-center text-ink-2 hover:bg-well hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"
+    >
+      <svg viewBox="0 0 20 20" aria-hidden="true" className="size-[18px]">
+        {next === 'light' ? (
+          <g stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none">
+            <circle cx="10" cy="10" r="3.5" />
+            <path d="M10 2.5v1.8M10 15.7v1.8M2.5 10h1.8M15.7 10h1.8M4.7 4.7l1.3 1.3M14 14l1.3 1.3M4.7 15.3 6 14M14 6l1.3-1.3" />
+          </g>
+        ) : (
+          <path
+            d="M15.5 12.5A6.5 6.5 0 0 1 7.5 4.5a6.5 6.5 0 1 0 8 8z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        )}
+      </svg>
+    </button>
+  );
+}
+
 function Scene({ shot }: { shot: ShotName }): JSX.Element {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const veil = useRef<HTMLCanvasElement | null>(null);
@@ -189,6 +274,8 @@ export function AppShell({
   accountActions?: ReactNode;
 }): JSX.Element {
   useThemeFollower();
+  useLinksInPage();
+  useNoStrayDrops();
   const fresh = useNewVersion();
   const [crumb, setCrumb] = useState<HTMLElement | null>(null);
   const [status, setStatus] = useState<HTMLElement | null>(null);
@@ -238,16 +325,15 @@ export function AppShell({
             ref={setActions}
             className="flex shrink-0 items-center gap-4 justify-self-end [grid-area:actions] empty:hidden"
           />
-          {account || fresh ? (
-            <div className="flex shrink-0 items-center gap-4 [grid-area:account]">
-              {fresh ? (
-                <Button size="sm" variant="link" onClick={() => window.location.reload()}>
-                  Reload for the new version
-                </Button>
-              ) : null}
-              {account}
-            </div>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-4 [grid-area:account]">
+            {fresh ? (
+              <Button size="sm" variant="link" onClick={() => window.location.reload()}>
+                Reload for the new version
+              </Button>
+            ) : null}
+            <ThemeButton />
+            {account}
+          </div>
         </header>
         <main
           className={cn(

@@ -41,6 +41,12 @@ export interface ModelRequest {
   /** Hard cap on the answer. Every request has one: an unbounded answer is an unbounded bill. */
   readonly maxTokens: number;
   readonly temperature?: number;
+  /**
+   * Called with the text written so far, as it arrives, when the vendor can
+   * stream. An adapter that cannot stream never calls it; the completion is
+   * the same either way.
+   */
+  readonly onText?: (text: string) => void;
 }
 
 export interface Usage {

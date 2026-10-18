@@ -54,9 +54,7 @@ export function KeyRemoval({
           Remove your OpenAI key
         </h1>
         <p className="text-sm text-ink-2">
-          This deletes only your saved key. It does not sign you in, delete your account or restore
-          a suspended account. Confirm using your account’s existing sign-in method. Calls already
-          sent are not cancelled.
+          Deletes the OpenAI key saved on your account. Confirm it is you; you stay signed out.
         </p>
       </div>
       {message ? (

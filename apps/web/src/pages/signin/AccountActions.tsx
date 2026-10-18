@@ -1,5 +1,6 @@
 // Owner: LU YI. The shell injects these actions; it owns layout and navigation.
 import { Fragment, useRef, useState, type JSX } from 'react';
+import { go } from '@/core/router';
 import { signOutStub } from '@/core/api';
 import { useCurrentAccount, type AuthState } from '@/core/auth';
 import { avatarClassName, initialsOf } from '@/ui/avatar';
@@ -52,7 +53,8 @@ export function AccountActions(): JSX.Element {
   async function signout(session: boolean): Promise<void> {
     if (!session) {
       signOutStub();
-      window.location.assign('#/');
+      // Without the query: the address kept ?session= of the page left.
+      go(`${window.location.pathname}#/`);
       return;
     }
     if (busy.current) return;
@@ -61,7 +63,7 @@ export function AccountActions(): JSX.Element {
     setError('');
     try {
       await accountRequest('/api/auth/signout', 'POST');
-      window.location.assign('#/signin');
+      go(`${window.location.pathname}#/signin`);
     } catch {
       setError('Unable to sign out. Please try again.');
     } finally {

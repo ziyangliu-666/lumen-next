@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { Step, Task } from '@lumen/contracts';
 import {
   CallTree,
+  closeOpen,
   Composer,
   Files,
   Findings,
+  liveLines,
   receiptOf,
   ReplyActions,
   Sessions,
@@ -66,42 +68,29 @@ describe('session page: a tool step', () => {
     ],
   });
 
-  it('shows its name, what it took and what it cost', () => {
+  it('says what it searched, what it took and what it cost, in one line', () => {
     const html = stream([search]);
-
-    expect(html).toContain('>search<');
+    expect(html).toMatch(/Searched arxiv for <span[^>]*>demo, no network<\/span>/);
     expect(html).toContain('6 s, $0.0100');
   });
 
-  it('draws every row: source, query, result', () => {
+  it('draws each result as a chip, and leaves out a row that found nothing', () => {
     const html = stream([search]);
-
-    for (const text of [
-      'arxiv',
-      'permutation statistics',
-      '41 papers',
-      'oeis',
-      'pop-stack preimages',
-    ]) {
-      expect(html).toContain(text);
-    }
-  });
-
-  it('marks the row that found nothing in words and in weight, not by colour alone', () => {
-    const html = stream([search]);
-
-    expect(html).toContain('found nothing: </span>nothing');
-    // Marked by its words, not by weight: a bold "nothing" read as an alert.
-    expect(html).not.toMatch(/font-semibold[^"]*text-ink[^"]*">nothing/);
-    // Red means "waits on you" and nothing else, so an empty row is never red.
+    expect(html).toContain('permutation statistics');
+    expect(html).not.toContain('pop-stack preimages');
+    // Red means "waits on you" and nothing else.
     expect(html).not.toMatch(/text-(signal|decide)/);
   });
 
-  it('shows rows or output in place of the line of text, and the line when there is nothing else', () => {
-    expect(stream([search])).not.toContain('demo, no network');
-    expect(stream([step(0, 'tool', 'search: demo, no network', { tool: 'search' })])).toContain(
-      'demo, no network',
-    );
+  it('says so in words when a search found nothing', () => {
+    const html = stream([
+      step(0, 'tool', 'search oeis: 1, 2, 6, 9, 52', {
+        tool: 'search',
+        rows: [{ source: 'OEIS', text: '1, 2, 6, 9, 52', result: 'No match', empty: true }],
+      }),
+    ]);
+    expect(html).toContain('Searched OEIS for');
+    expect(html).toContain('Nothing found.');
   });
 
   it('puts output in a block that scrolls instead of growing the page, and escapes it', () => {
@@ -172,13 +161,14 @@ describe('session page: the other blocks', () => {
     expect(html).toMatch(/data-step="you" class="[^"]*bg-well[^"]*"[^>]*>.*push it to n = 11/s);
     expect(html).toMatch(/data-step="reply"[^>]*>.*it holds at n = 11/s);
     // Answered: the work is one line that opens, and its steps are not drawn.
-    expect(html).toMatch(/aria-expanded="false"[^>]*>Worked for 34 s/);
+    expect(html).toMatch(/aria-expanded="false"[^>]*>(?:<[^>]+>)*Worked for 34 s/);
     expect(html).not.toContain('that is 40 million permutations');
   });
 
   it('keeps the work of a turn still running open, to watch', () => {
     const html = stream([step(0, 'you', 'go'), step(1, 'thinking', 'counting now')]);
-    expect(html).toMatch(/aria-expanded="true"[^>]*>Working/);
+    // Live: what it is doing now, with the moving light over it.
+    expect(html).toMatch(/aria-expanded="true"[^>]*>.*shimmer-text[^>]*>Thinking</s);
     expect(html).toMatch(/border-l[^>]*>.*data-step="thinking"[^>]*>.*counting now/s);
   });
 
@@ -414,5 +404,73 @@ describe('session page: the project sessions', () => {
     expect(html).toMatch(/newer.*older/s);
     expect(html).toMatch(/aria-current="page"[^>]*>.*older/s);
     expect(html).toContain('Running');
+  });
+});
+
+describe('session page: Stop in the field', () => {
+  it("turns the empty field's send square into Stop while a run goes", () => {
+    const html = renderToStaticMarkup(
+      <Composer
+        disabled={false}
+        running={true}
+        steerable={true}
+        onSay={noop}
+        onSteer={noop}
+        onStop={noop}
+      />,
+    );
+    expect(html).toContain('aria-label="Stop"');
+    expect(html).not.toContain('aria-label="Steer"');
+    const idle = renderToStaticMarkup(
+      <Composer disabled={false} running={false} steerable={false} onSay={noop} onSteer={noop} />,
+    );
+    expect(idle).not.toContain('aria-label="Stop"');
+  });
+});
+
+describe('session parts: work that is seen to go on', () => {
+  it('draws the text a task is writing, and says it is writing', () => {
+    const html = renderToStaticMarkup(
+      <StepStream
+        task={task('lead', null, { status: 'running', endedAt: null })}
+        steps={[]}
+        tasks={[]}
+        draft="The answer is"
+        onSelect={noop}
+      />,
+    );
+    expect(html).toContain('data-step="draft"');
+    expect(html).not.toContain('Thinking');
+  });
+
+  it('closes bold, display math and a code block a draft left open', () => {
+    expect(closeOpen('**Counting by')).toBe('**Counting by**');
+    expect(closeOpen('so $$C_n = ')).toBe('so $$C_n = $$');
+    expect(closeOpen('```py\nprint(1)')).toBe('```py\nprint(1)\n```');
+    expect(closeOpen('**done** and $$x$$')).toBe('**done** and $$x$$');
+  });
+
+  it('says what each running reader is doing, so parallel work shows as parallel', () => {
+    const lead = task('lead', null, { status: 'running', endedAt: null });
+    const searching = task('r1', 'lead', { status: 'running', endedAt: null });
+    const writing = task('r2', 'lead', { status: 'running', endedAt: null });
+    const queued = task('r3', 'lead', { status: 'queued', endedAt: null });
+    const lines = liveLines(
+      [lead, searching, writing, queued],
+      [
+        step(0, 'delegate', 'delegated 3'),
+        {
+          ...step(0, 'tool', 'search: x', {
+            tool: 'search',
+            rows: [{ source: 'OEIS', text: 'A1', result: 'Match' }],
+          }),
+          taskId: 'r1',
+        },
+      ],
+      { r2: 'So far' },
+    );
+    expect(lines.get('r1')).toBe('Searched OEIS, reading the results');
+    expect(lines.get('r2')).toBe('Writing');
+    expect(lines.get('r3')).toBe('Waiting to start');
   });
 });

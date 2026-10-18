@@ -56,6 +56,37 @@ describe('web core: applying events to the session state', () => {
     expect(twice.findings).toEqual([{ id: 'f1', taskId: 'r1', text: 'kept' }]);
   });
 
+  it('holds the text a task is writing until its step lands or the task stops', () => {
+    const drafted = [
+      { type: 'step.draft', taskId: 'lead', text: 'The ans' },
+      { type: 'step.draft', taskId: 'lead', text: 'The answer is' },
+      // A task the page does not know is not drawn.
+      { type: 'step.draft', taskId: 'nobody', text: 'x' },
+    ] as const;
+    const running = apply(state, { type: 'task.status', taskId: 'lead', status: 'running' });
+    const writing = drafted.reduce(apply, running);
+    expect(writing.drafts).toEqual({ lead: 'The answer is' });
+
+    const landed = apply(writing, {
+      type: 'step.appended',
+      taskId: 'lead',
+      index: 0,
+      kind: 'reply',
+      text: 'The answer is 391.',
+    });
+    expect(landed.drafts).toEqual({});
+
+    // Stopped, the text stays as it was, and later frames do not grow it.
+    const stopped = [
+      { type: 'task.status', taskId: 'lead', status: 'stopped' },
+      { type: 'step.draft', taskId: 'lead', text: 'The answer is 391' },
+    ] as const;
+    expect(stopped.reduce(apply, writing).drafts).toEqual({ lead: 'The answer is' });
+
+    const failed = apply(writing, { type: 'task.status', taskId: 'lead', status: 'failed' });
+    expect(failed.drafts).toEqual({});
+  });
+
   it('keeps what a step carried, not only its line of text', () => {
     const detail = {
       tool: 'search',

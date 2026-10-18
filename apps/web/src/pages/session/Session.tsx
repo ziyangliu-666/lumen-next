@@ -11,6 +11,7 @@ import { Button } from '@/ui/button';
 import { ScrollRegion } from '@/ui/scroll-region';
 import { SurfaceMain, Surfaces, SurfaceWell } from '@/ui/surfaces';
 import { rememberReturn, useCurrentAccount } from '@/core/auth';
+import { markBusy } from '@/core/favicon';
 import { ModelPicker, useModels } from '@/core/models';
 import { go } from '@/core/router';
 import { BarActions, BarCrumb, BarStatus } from '@/core/shell';
@@ -271,6 +272,8 @@ export function Session(): JSX.Element {
   const snapshot = state?.snapshot;
   const root = snapshot?.tasks.find((task) => task.parentId === null);
   const running = root !== undefined && root.endedAt === null;
+  // The tab's icon turns while the run goes on (core/favicon).
+  useEffect(() => (running ? markBusy() : undefined), [running]);
   // A run that ends while it is on screen has been seen. The visit was
   // marked when the project opened, before the run ended, so the projects
   // page then called its own end "new activity since your last visit".

@@ -787,14 +787,16 @@ export function ReplyActions({
 /**
  * Delays for items that arrive together, so they come in one after another.
  * Written out, because Tailwind only knows class names it can read.
+ * Important: the animate-* utility is the animation shorthand, which set
+ * the delay back to 0 and every chip came in at once.
  */
 const STAGGER = [
-  '[animation-delay:0ms]',
-  '[animation-delay:50ms]',
-  '[animation-delay:100ms]',
-  '[animation-delay:150ms]',
-  '[animation-delay:200ms]',
-  '[animation-delay:250ms]',
+  '[animation-delay:0ms]!',
+  '[animation-delay:50ms]!',
+  '[animation-delay:100ms]!',
+  '[animation-delay:150ms]!',
+  '[animation-delay:200ms]!',
+  '[animation-delay:250ms]!',
 ];
 
 /** How many sources a search shows before "N more". */

@@ -1,4 +1,3 @@
-// Owner: PENG XUJIAN. Page: Landing.
 import { useState, type JSX, type ReactNode } from 'react';
 import { useCurrentAccount } from '@/core/auth';
 import { DevelopmentSignIn } from '@/core/devSignIn';

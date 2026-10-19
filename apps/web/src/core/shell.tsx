@@ -20,7 +20,7 @@ import { setThemeTransition, toggleTheme, useTheme, useThemeFollower } from './t
 // The frame every page sits in: one bar on top with one rule under it, and
 // the screen below it. The page never scrolls as a whole; a region inside it
 // does. A page renders what goes inside the frame and nothing around it. That
-// is what keeps pages written by five people looking like one product.
+// is what keeps pages written by different hands looking like one product.
 //
 // The bar is the same on every page: the wordmark on the left, then the
 // page's breadcrumb, then the page's status (state, spend, budget), then the

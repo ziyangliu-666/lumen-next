@@ -33,7 +33,7 @@ export interface WorkerReport {
   /**
    * The log for this task run. Its lines already carry sessionId, taskId and
    * accountId. Write what the worker did (a model call, a command, a tool);
-   * never prompt text, file contents or a credential (docs/LOGGING.md).
+   * never prompt text, file contents or a credential.
    */
   readonly log: Log;
   /**

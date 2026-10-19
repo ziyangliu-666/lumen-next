@@ -36,8 +36,8 @@ function toText(raw: unknown): string {
  * the snapshot that answers is how it catches up. There are no sequence
  * numbers: the snapshot is the durable record read back.
  *
- * `?session=<id>` still opens one session at the upgrade, as Sprint 1 did, so
- * that a client written against it keeps working. Remove it in Sprint 3.
+ * `?session=<id>` still opens one session at the upgrade, so that an
+ * older client keeps working.
  */
 export function registerEventStream(
   app: FastifyInstance,

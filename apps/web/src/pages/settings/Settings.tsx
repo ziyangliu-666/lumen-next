@@ -1,4 +1,4 @@
-// Owner: HE RONG. Page: Settings (account, wallet, keys).
+// Settings: account, wallet, keys.
 import { Wallet } from './Wallet';
 import type { JSX, ReactNode } from 'react';
 import { Keys } from './Keys';

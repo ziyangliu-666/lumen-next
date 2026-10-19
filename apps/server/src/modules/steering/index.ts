@@ -1,4 +1,4 @@
-// Public index for the steering slice. Owner: LI ZHUOYANG.
+// Public index for the steering slice.
 // Everything the rest of the monolith may use from here is re-exported from
 // this file and nowhere else.
 import type { FastifyInstance } from 'fastify';
@@ -34,8 +34,7 @@ const noSessionContext: SessionContext = () => Promise.resolve(null);
  * Wire the slice. main.ts calls this once; a test calls it per case, usually
  * against a temp volume. `taskSession`/`sessionContext` come from the session
  * slice's own public index (`session.projects.taskSession`/`context`) — the
- * same trusted, no-principal calls `docs/ARCHITECTURE.md` §6 describes for
- * `projects`, used here instead because a task's ownership runs through its
+ * same trusted, no-principal calls the projects slice uses, used here because a task's ownership runs through its
  * session, not through a project id steering never sees in `task.steer`.
  */
 export function createSteeringSlice(deps: {

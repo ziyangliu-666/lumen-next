@@ -12,7 +12,7 @@ import type {
 // the wire itself.
 
 /**
- * Sprint 1 sign-in. The server trusts `stub <id>:<role>` in this cookie; the
+ * The development sign-in. The server trusts `stub <id>:<role>` in this cookie; the
  * real cookie from the identity slice replaces it and the rest of this file
  * does not change. A cookie rather than a header because the browser's
  * WebSocket API cannot set headers, and the event stream is authenticated

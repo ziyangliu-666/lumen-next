@@ -9,7 +9,7 @@ import type { Page, ProjectCard } from './models.js';
 const origin = 'http://localhost:4000';
 const password = 'correct horse battery 9';
 
-describe.skipIf(!TEST_DATABASE_URL)('projects Sprint 3 composed acceptance', () => {
+describe.skipIf(!TEST_DATABASE_URL)('projects composed acceptance', () => {
   let app: App;
   let db: Db;
   let drop: () => Promise<void>;

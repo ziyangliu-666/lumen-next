@@ -15,8 +15,7 @@ import {
 //
 // `upload` and `output` are per project — a file outlives the session that
 // made it. `workspace` is per session — scratch space, safe to lose on a
-// restart. See docs/ARCHITECTURE.md §1 ("sandbox, one per session" / "project
-// volume"):
+// restart:
 //
 //   <volumeRoot>/<projectId>/upload/
 //   <volumeRoot>/<projectId>/output/
@@ -262,7 +261,7 @@ export class SandboxFs {
 
   /**
    * Total bytes currently stored under one scope. Walks the tree; good enough
-   * for sprint 1 — a durable counter belongs in the database once tasks and
+   * for now; a durable counter belongs in the database once tasks and
    * spend are persisted there too.
    */
   async usageBytes(scope: Scope): Promise<number> {

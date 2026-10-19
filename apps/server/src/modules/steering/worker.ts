@@ -15,7 +15,7 @@ import { search, SEARCH_SOURCES, type SearchSource } from './search.js';
 import type { SteerQueue } from './steerCommand.js';
 import type { SteerRegistry } from './steerRegistry.js';
 
-// The agent loop behind the Worker interface (docs/ARCHITECTURE.md §6). Every
+// The agent loop behind the Worker interface. Every
 // task, lead or reader, is one conversation with the model: ask it, run the
 // tools it called, hand it what they returned, and ask again, until it answers
 // in plain text. What differs between the two agents is only the prompt and

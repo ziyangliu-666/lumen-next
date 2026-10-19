@@ -3,7 +3,7 @@ import { Secrets } from './secrets.js';
 import type { SecretCipher } from './secretCipher.js';
 import type { WithActiveSecretAccount } from './secretLifecycle.js';
 import { keyRoutes } from './keyRoutes.js';
-// Public index for the billing slice. Owner: HE RONG.
+// Public index for the billing slice.
 import type { FastifyInstance } from 'fastify';
 import type { Db, Queryable } from '../../core/db/db.js';
 import { HttpError } from '../../core/http/httpError.js';

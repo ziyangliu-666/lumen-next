@@ -1,4 +1,4 @@
-// Public index for the identity slice. Owner: LU YI.
+// Public index for the identity slice.
 // SQL-backed password authentication is wired; optional providers are explicitly injected.
 // Other slices never import this slice's internal files.
 export {

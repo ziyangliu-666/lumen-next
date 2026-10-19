@@ -3,8 +3,8 @@
 // Server: a slice module may use another slice only through its public barrel
 // (modules/<name>/index.ts), never by reaching into its internals.
 // Web: a page may only build from `src/ui` and `src/core`, using theme tokens.
-// Both exist for the same reason — five people and five agents write here at the
-// same time, and neither collisions nor five private colour schemes are wanted.
+// Both exist for the same reason: many people write here at once, and neither
+// tangled modules nor a colour scheme per page are wanted.
 import js from '@eslint/js';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 import reactHooks from 'eslint-plugin-react-hooks';

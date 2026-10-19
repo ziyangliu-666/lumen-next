@@ -1,4 +1,4 @@
-// Owner: LU YI. Mount through the shell composition, never from another page.
+// Mount through the shell composition, never from another page.
 import { useState, type JSX } from 'react';
 import { useCurrentAccount } from '@/core/auth';
 import { Button } from '@/ui/button';

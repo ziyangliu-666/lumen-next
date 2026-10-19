@@ -3,7 +3,7 @@ import { AuthFailure } from './authFlow.js';
 import { LoginLimited } from './loginGate.js';
 import type { MailEvent } from './mailQueue.js';
 
-// docs/LOGGING.md: warn is refused, dropped or retried; error is somebody has to look.
+// Levels: warn is refused, dropped or retried; error is somebody has to look.
 // A line carries a fixed reason and never a value from the request: no address,
 // password, code, token, cookie or provider text.
 

@@ -19,7 +19,7 @@ import { paceFromEnv } from './modules/session/index.js';
 const DEFAULT_PORT = 4000;
 
 // JSON lines on stdout, where a host collects them; readable lines on a
-// terminal (docs/LOGGING.md).
+// terminal.
 const log = createLog({
   level: process.env['LUMEN_LOG_LEVEL'] ?? 'info',
   pretty: process.stdout.isTTY === true && process.env['NODE_ENV'] !== 'production',
@@ -113,9 +113,8 @@ async function bootstrap(): Promise<void> {
   const db = await database();
   const webRoot = defaultWebRoot();
   const volumeRoot = process.env['LUMEN_VOLUME_ROOT'];
-  // The demo worker stays the default: it is what the whole team's staging
-  // and local runs have shown since Sprint 1, and e2e.test.ts's join-the-
-  // slices test asserts its exact fan-out — that default does not move here.
+  // The demo worker stays the default: it runs with no model key, and
+  // e2e.test.ts's join-the-slices test asserts its exact fan-out.
   const useSteeringWorker = workerChoice() === 'steering';
   const provider = computeProvider();
   // LUMEN_MODEL_PROVIDER: who either worker thinks and replies with. Without

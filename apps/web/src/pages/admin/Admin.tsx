@@ -1,4 +1,3 @@
-// Owner: HE RONG. Page: Admin.
 import { useEffect, useState, type JSX } from 'react';
 import { request, RequestFailure } from '@/core/api';
 import { AdminLedger } from './AdminLedger';

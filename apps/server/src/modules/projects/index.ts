@@ -1,4 +1,4 @@
-// Public index for the projects slice. Owner: PENG XUJIAN.
+// Public index for the projects slice.
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../../core/db/db.js';
 import { nullLog, type Log } from '../../core/log/log.js';

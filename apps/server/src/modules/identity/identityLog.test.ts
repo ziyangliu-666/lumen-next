@@ -6,7 +6,7 @@ import { LoginLimited } from './loginGate.js';
 import type { MailEvent } from './mailQueue.js';
 
 describe('identity: log lines', () => {
-  it('writes each mail event at the level docs/LOGGING.md gives it', () => {
+  it('writes each mail event at the level its kind calls for', () => {
     const { log, lines } = capture();
     const events: MailEvent[] = [
       'admitted',

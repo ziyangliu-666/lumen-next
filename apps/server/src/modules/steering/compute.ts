@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import type { Scope } from './sandboxFs.js';
 
-// The sandbox behind its own interface (Sprint 2's outcome, docs/DOD.md): a
+// The sandbox behind its own interface: a
 // worker asks Compute to run one command and never learns whether that meant
 // a container or nothing at all.
 

@@ -776,6 +776,22 @@ function Stage({
   );
 }
 
+/** A reader's state under its panel: the running ring and a word, as in a session. */
+function Doing({ className, children }: { className: string; children: ReactNode }): JSX.Element {
+  return (
+    <span
+      className={cn(
+        'absolute top-[calc(100%+1rem)] flex -translate-x-1/2 items-center gap-2.5 text-[clamp(1rem,1.4vw,1.25rem)] font-medium whitespace-nowrap text-ink motion-safe:animate-intro-word',
+        delay(1900),
+        className,
+      )}
+    >
+      <RunState state="running">{''}</RunState>
+      <span className="shimmer-text motion-safe:animate-shimmer">{children}</span>
+    </span>
+  );
+}
+
 /**
  * A service's own mark over the drawing, as the service draws it: as dots
  * at this size it could not be told apart. It pops in at `at` ms.
@@ -863,20 +879,15 @@ const SCENES: readonly Scene[] = [
     ms: 6500,
     caption: 'lumen splits the work.',
     draw: (t) => (
-      <div className="grid w-[min(48rem,94vw)] gap-3">
-        <Halftone paint={PAINT.split!} t={t} step={6} className="h-[min(26rem,48vh)] w-full" />
-        {/* One word under each reader's panel: what that work is. */}
-        <div
-          className={cn(
-            'grid grid-cols-3 text-center text-sm text-ink-2 motion-safe:animate-intro-word',
-            delay(1900),
-          )}
-        >
-          <span>reads</span>
-          <span>computes</span>
-          <span>checks</span>
-        </div>
-      </div>
+      <Stage paint={PAINT.split!} t={t}>
+        {/* Under each reader's panel, centred on it (the painter's 18%,
+            50% and 82%), the reader's state as the session page writes
+            it: the turning ring and what it is doing. Laid out as thirds,
+            the words missed the panels. */}
+        <Doing className="left-[18%]">Reading</Doing>
+        <Doing className="left-[50%]">Computing</Doing>
+        <Doing className="left-[82%]">Checking</Doing>
+      </Stage>
     ),
   },
   {

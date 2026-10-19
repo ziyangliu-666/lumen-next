@@ -7,7 +7,7 @@ import { PROJECT_PLACEHOLDER, saveProjectDraft, useNewProject } from '@/core/new
 import { cn } from '@/lib/utils';
 import { Composer } from '@/ui/composer';
 import { Bleed } from '@/ui/surfaces';
-import { Intro, introWanted } from './Intro';
+import { Intro, INTRO_SECONDS, introWanted } from './Intro';
 import { greeting, RecentProjects, Starters, useRecent } from './starts';
 
 /** The upload route's limit, said before sending rather than by the server. */
@@ -21,6 +21,45 @@ const ATTACH_LIMIT = 10 * 1024 * 1024;
 // projects under the field, or starter questions when they have none.
 
 const SIGN_IN_FIRST = 'Sign in to start.';
+
+/**
+ * The way back to the intro: a small tag in the corner of the front page,
+ * with the mark's dots breathing in it, so it reads as a piece of lumen and
+ * not as a banner. It says what it plays and how long.
+ */
+function WatchIntro({ onClick }: { onClick: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group fixed bottom-6 left-margin z-10 flex h-9 items-center gap-2.5 border border-rule-major bg-paper/85 pr-3 pl-2.5 text-sm text-ink-2 backdrop-blur-sm hover:border-ink hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"
+    >
+      <span aria-hidden="true" className="grid grid-cols-3 gap-[3px]">
+        {DOTS.map((at, index) => (
+          <span
+            key={index}
+            className={cn('size-[3px] rounded-full bg-current motion-safe:animate-pulse', at)}
+          />
+        ))}
+      </span>
+      What is lumen?
+      <span className="text-ink-3 group-hover:text-ink-2">{INTRO_SECONDS} s</span>
+    </button>
+  );
+}
+
+/** The tag's nine dots pulse one after another, as the mark's halftone does. */
+const DOTS = [
+  '[animation-delay:0ms]!',
+  '[animation-delay:150ms]!',
+  '[animation-delay:300ms]!',
+  '[animation-delay:150ms]!',
+  '[animation-delay:300ms]!',
+  '[animation-delay:450ms]!',
+  '[animation-delay:300ms]!',
+  '[animation-delay:450ms]!',
+  '[animation-delay:600ms]!',
+];
 
 export function Landing(): JSX.Element {
   // Who is signed in is the shell's answer, not this page's: real sign-in and
@@ -38,9 +77,8 @@ export function Landing(): JSX.Element {
   const [files, setFiles] = useState<readonly File[]>([]);
   const [tooLarge, setTooLarge] = useState<string | null>(null);
   const models = useModels(signedIn);
-  // A first visit, signed out, sees what lumen does before the page. Until
-  // the account is known nothing is drawn in the column, or the page would
-  // flash before the intro took its place.
+  // A first visit, signed out, sees what lumen is before the page, over the
+  // whole screen; anyone can watch it again from the tag in the corner.
   const [intro, setIntro] = useState<'wanted' | 'playing' | 'ended' | 'none'>(() =>
     introWanted() ? 'wanted' : 'none',
   );
@@ -111,9 +149,9 @@ export function Landing(): JSX.Element {
           the text starts at 38%. */}
       <div className="grid min-h-0 flex-1 grid-cols-12 content-start gap-x-gutter overflow-y-auto px-margin pt-[calc(38svh-var(--bar-h))] pb-6 roomy:pt-[max(2.5rem,calc(50svh-17rem))] roomy:pb-10">
         <div className="col-span-12 roomy:col-span-6 split:col-span-5">
-          {intro === 'wanted' ? null : intro === 'playing' ? (
-            <Intro onDone={() => setIntro('ended')} />
-          ) : (
+          {/* The page is drawn under the intro, so it is there when the
+              intro fades; then it comes in part by part. */}
+          {
             <>
               <h1 className="text-[clamp(2.25rem,3.9vw,3.5rem)] leading-[1.02] font-medium tracking-[-0.035em] text-ink">
                 {/* Signed in, the page greets the person, as chat products do;
@@ -203,9 +241,18 @@ export function Landing(): JSX.Element {
                 </details>
               ) : null}
             </>
-          )}
+          }
         </div>
       </div>
+      {/* Until the account is known, a first visit sees the intro's paper,
+          not a flash of the page the intro then covers. */}
+      {intro === 'wanted' ? (
+        <div aria-hidden="true" className="fixed inset-0 z-[80] bg-paper" />
+      ) : null}
+      {intro === 'playing' ? <Intro onDone={() => setIntro('ended')} /> : null}
+      {intro === 'playing' || intro === 'wanted' ? null : (
+        <WatchIntro onClick={() => setIntro('playing')} />
+      )}
     </Bleed>
   );
 }

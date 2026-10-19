@@ -268,6 +268,24 @@
       filter: blur(8px);
     }
   }
+  /* A line that draws itself (an SVG path with pathLength 100), and a
+     piece that pops into place. */
+  --animate-intro-line: intro-line 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  @keyframes intro-line {
+    from {
+      stroke-dashoffset: 100;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  --animate-intro-pop: intro-pop 520ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  @keyframes intro-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
   --animate-intro-fill: intro-fill linear forwards;
   @keyframes intro-fill {
     from {

@@ -1,7 +1,7 @@
 # The staging stack: the image under test and the database it needs, and
 # nothing else. The Deploy workflow starts this on the runner and points DAST
-# at it; `docker compose -f docker-compose.staging.yml up --build` does the
-# same on a laptop. A hosted staging replaces the runner, not this file.
+# at it; `docker compose -f deploy/staging.compose.yml up --build` does the
+# same on a laptop (`-f deploy/staging.compose.yml`). A hosted staging replaces the runner, not this file.
 services:
   db:
     image: postgres:17-alpine
@@ -17,7 +17,9 @@ services:
 
   app:
     image: ${LUMEN_IMAGE:-lumen:staging}
-    build: .
+    # Paths in a compose file are from its own directory: the image is the
+    # repository's Dockerfile, one level up.
+    build: ..
     depends_on:
       db:
         condition: service_healthy

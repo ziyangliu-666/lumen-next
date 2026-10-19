@@ -83,3 +83,8 @@ A module uses another only through its public index (`modules/<name>`).
 Issues and pull requests are welcome. Make `npm run verify` pass, and use
 [Conventional Commits](https://www.conventionalcommits.org). To report a
 security issue, see [SECURITY.md](SECURITY.md).
+
+## License
+
+[AGPL-3.0](LICENSE). If you run a modified version of lumen as a service, you
+must offer its source to the people who use it.

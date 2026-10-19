@@ -67,7 +67,7 @@ export interface ServerDeps {
   readonly strictTransport?: boolean;
 }
 
-/** What each slice's public index exports, per docs/ARCHITECTURE.md §6. */
+/** What each slice's public index exports. */
 export type RegisterRoutes = (app: FastifyInstance) => void | Promise<void>;
 
 export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {

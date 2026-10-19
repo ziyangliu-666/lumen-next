@@ -110,4 +110,3 @@ have ten-second deadlines; an injected client may continue its transport after
 an application timeout. Distributed abuse control and cleanup remain deployment
 requirements. Existing socket-principal revalidation is a shared-core limitation.
 
-See [API](API.md), [local validation](LOCAL_AUTH.md) and [delivery status](DELIVERY.md).

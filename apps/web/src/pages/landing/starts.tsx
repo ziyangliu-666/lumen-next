@@ -1,4 +1,4 @@
-// Owner: PENG XUJIAN. Page: Landing. What sits under the field: the
+// What sits under the field: the
 // person's recent projects when they have some, and starter questions when
 // they have none, as chat products show their recents and their "Try" cards.
 import { useEffect, useState, type JSX } from 'react';

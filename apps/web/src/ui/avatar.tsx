@@ -25,7 +25,7 @@ const avatarClassName =
 
 /**
  * A link when `href` is given, a plain mark otherwise. `label` is what a
- * screen reader hears, for example "Account: Liu Ziyang".
+ * screen reader hears, for example "Account: Ada Lovelace".
  */
 function Avatar({
   name,

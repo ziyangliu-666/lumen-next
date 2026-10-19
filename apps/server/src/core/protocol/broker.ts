@@ -2,7 +2,7 @@ import type { ClientCommand, ServerEvent } from '@lumen/contracts';
 import type { Principal } from '../http/authGuard.js';
 
 // The broker is the only path from the monolith to the browser, in both
-// directions (docs/ARCHITECTURE.md §6).
+// directions.
 //
 // Down: a slice publishes to a session id; the broker fans the event out to the
 // sockets watching that session and to no others. A slice never learns that a
@@ -10,7 +10,7 @@ import type { Principal } from '../http/authGuard.js';
 // Up: a slice claims a command type at startup; the broker routes each frame to
 // the one handler that owns it.
 //
-// Sprint 1: in memory, so it is per-process. A second instance needs a shared
+// In memory, so it is per-process. A second instance needs a shared
 // bus behind the same two methods; nothing above them changes.
 
 export type Listener = (event: ServerEvent) => void;

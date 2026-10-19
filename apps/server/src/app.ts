@@ -57,7 +57,7 @@ export interface AppOptions {
   readonly db: Db | null;
   /**
    * Real sign-in needs a database. With both, the cookie resolver is the only
-   * way in and the stub is refused. Without, the Sprint 1 stub header and
+   * way in and the stub is refused. Without, the development stub header and
    * cookie are accepted, which main.ts never allows in production.
    */
   readonly identity: IdentityConfig | null;

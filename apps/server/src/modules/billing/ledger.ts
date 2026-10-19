@@ -43,7 +43,7 @@ export class Ledger {
     );
   }
 
-  /** Historical port name; Sprint 3 now reports all-time account spend, with no reset. */
+  /** Historical port name; it reports all-time account spend, with no reset. */
   async monthSpend(accountId: string): Promise<WalletSummary> {
     const [row] = await this.db.query<{ spent: number; cap: number }>(ACCOUNT_TOTALS, [accountId]);
     return { spent: { dollars: row!.spent }, cap: { dollars: row!.cap } };

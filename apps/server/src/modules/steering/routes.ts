@@ -3,7 +3,7 @@ import { requireUser, type Principal } from '../../core/http/authGuard.js';
 import { badRequest, HttpError, notFound } from '../../core/http/httpError.js';
 import { SandboxFs, SandboxPathError, SandboxQuotaError, type Scope } from './sandboxFs.js';
 
-// The files panel's two routes, per docs/ARCHITECTURE.md §7. Both are project-
+// The files panel's two routes. Both are project-
 // scoped, not session-scoped: they only ever address `upload` and `output`
 // (SandboxFs.list/readFile refuse `workspace` with no session id — see
 // sandboxFs.ts), because a running sandbox's scratch space is not this

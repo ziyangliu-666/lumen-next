@@ -12,7 +12,7 @@ describe('core: temporary header account', () => {
     expect(principalFromHeader('Bearer token')).toBeNull();
   });
 
-  it('lets any status be read during sprint 1', () => {
+  it('lets any status be read with the development stub', () => {
     expect(canReadStatus('stopped')).toBe(true);
   });
 });

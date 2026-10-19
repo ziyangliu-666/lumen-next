@@ -24,7 +24,7 @@ create table projects (
 );
 
 -- account_id and project_id are text with no foreign key, on purpose and for
--- now. Until identity ships, the principal is the Sprint 1 stub, whose account
+-- now. Until identity ships, the principal is the development stub, whose account
 -- id is whatever the header says; until projects ships, the project id in the
 -- route is taken on trust. A foreign key here would refuse every session the
 -- team can open today. The identity and projects migrations convert these

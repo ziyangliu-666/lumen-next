@@ -1,4 +1,3 @@
-// Owner: PENG XUJIAN. Page: Home.
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';

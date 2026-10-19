@@ -1,4 +1,4 @@
-// Owner: LU YI. Page: Sign in / sign up.
+// Sign in and sign up.
 import { useEffect, useRef, useState, type FormEvent, type JSX, type ReactNode } from 'react';
 import { useCurrentAccount } from '@/core/auth';
 import { DevelopmentSignIn } from '@/core/devSignIn';

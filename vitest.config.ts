@@ -22,7 +22,7 @@ export default defineConfig({
         'apps/server/src/modules/**',
       ],
       exclude: ['**/*.test.ts', '**/index.ts'],
-      // The gate rises each sprint (docs/CODING_STANDARDS.md): 60, 65, 70, 70.
+      // The coverage gate.
       thresholds: { lines: 70 },
       reporter: ['text-summary'],
     },

@@ -1,6 +1,4 @@
-// The pieces of the Session page, after docs/spec, page 04, in the Raster
-// look. Owner: LIU ZIYANG, except
-// Composer and Files, which are LI ZHUOYANG's: the composer says a new turn to
+// The pieces of the Session page, in the Raster look. The composer says a new turn to
 // the lead, or steers the task shown while it runs, and attaches a file; the
 // files panel lists what the person attached and what the agents wrote.
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
@@ -1355,7 +1353,7 @@ export interface ProjectFile {
 }
 
 /**
- * LI ZHUOYANG's. The project's files, in three groups: what the person
+ * The project's files, in three groups: what the person
  * attached (/mnt/upload), the kept results (/mnt/output), and this session's
  * scratch (/mnt/workspace), each newest first. Readers write to the scratch
  * by default, and the lead then called a file saved that the panel did not
@@ -1615,7 +1613,7 @@ export function StopControl({
 export type SteerWhen = Extract<ClientCommand, { type: 'task.steer' }>['when'];
 
 /**
- * LI ZHUOYANG's. The one field at the foot of the conversation (ui/composer):
+ * The one field at the foot of the conversation (ui/composer):
  * it says a new turn to the lead, or, while a run is going, steers the task
  * shown at its next step. Stop is in the bar.
  *

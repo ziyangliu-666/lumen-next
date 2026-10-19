@@ -1,4 +1,4 @@
-// Public index for the session slice. Owner: LIU ZIYANG.
+// Public index for the session slice.
 import type { FastifyInstance } from 'fastify';
 import type { Session } from '@lumen/contracts';
 import type { Log } from '../../core/log/log.js';

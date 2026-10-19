@@ -16,8 +16,8 @@ RUN npm run build --workspace @lumen/contracts \
 RUN npm prune --omit=dev
 
 # The readers' Python packages (deploy/sandbox/requirements.txt), built for
-# the sandbox's Python: python:3.12-slim-bookworm, the LUMEN_SANDBOX_IMAGE in
-# fly.toml. They are mounted read-only into each sandbox, which has no
+# the sandbox's Python: python:3.12-slim-bookworm, the image LUMEN_SANDBOX_IMAGE
+# should name. They are mounted read-only into each sandbox, which has no
 # network to install them.
 FROM python:3.12-slim-bookworm AS sandbox-lib
 COPY deploy/sandbox/requirements.txt /tmp/requirements.txt
@@ -47,7 +47,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && usermod -aG docker node
 COPY --from=sandbox-lib /opt/sandbox-lib /opt/sandbox-lib
-COPY deploy/fly/entrypoint.sh /usr/local/bin/lumen-entrypoint
+COPY deploy/entrypoint.sh /usr/local/bin/lumen-entrypoint
 # No curl in the slim image; Node is there anyway.
 HEALTHCHECK --interval=10s --timeout=3s --retries=6 \
   CMD node -e "fetch('http://127.0.0.1:4000/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"

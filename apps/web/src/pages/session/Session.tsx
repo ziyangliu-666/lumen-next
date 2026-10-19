@@ -1,6 +1,4 @@
-// Page 04, Session. Owners: LIU ZIYANG (the step stream, the call tree) and
-// LI ZHUOYANG (the composer, the files panel). Layout after docs/spec, 04, in
-// the Raster look: two surfaces. On
+// The Session page, in the Raster look: two surfaces. On
 // paper, the conversation, with the composer at its foot. On the well, what
 // the project has produced: findings, the call tree, files. The bar carries
 // where you are and how the run stands, so the page has one header.
@@ -633,7 +631,7 @@ export function Session(): JSX.Element {
         </Button>
       </BarActions>
 
-      {/* LIU ZIYANG: the steps of the task shown. LI ZHUOYANG: the composer at its foot. */}
+      {/* The steps of the task shown, and the composer at its foot. */}
       <SurfaceMain>
         <ScrollRegion
           as="section"

@@ -1,4 +1,4 @@
-// Owner: LU YI. The irreversible part of the Account settings content.
+// The irreversible part of the Account settings content.
 import { useRef, useState, type JSX } from 'react';
 import {
   AlertDialog,

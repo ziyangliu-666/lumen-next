@@ -38,7 +38,7 @@ import { isEnding, type Trace } from './trace.js';
 // A worker may delegate: the kernel opens the child tasks, runs them within
 // the Delegation bounds, and hands them back when they have come to rest. Cost
 // and stop go through the Composite (taskComposite.ts), so nothing here walks
-// parent_id. The BudgetGuard check points from ARCHITECTURE.md §9 arrive with
+// parent_id. The BudgetGuard check points arrive with
 // billing and slot in at start(), say() and delegate().
 /** Saves a finding and returns it as saved. The projects slice supplies the real one. */
 export type FindingSaver = (

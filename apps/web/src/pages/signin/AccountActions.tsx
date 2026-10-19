@@ -1,4 +1,4 @@
-// Owner: LU YI. The shell injects these actions; it owns layout and navigation.
+// The shell injects these actions; it owns layout and navigation.
 import { Fragment, useRef, useState, type JSX } from 'react';
 import { go } from '@/core/router';
 import { signOutStub } from '@/core/api';

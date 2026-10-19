@@ -58,7 +58,7 @@ describe('billing: budget responsibility chain', () => {
     expect(fits).toHaveBeenCalledWith(charge.accountId, charge.estimate);
   });
 
-  it('falls through the cap check to the Sprint 2 denial', async () => {
+  it('falls through the cap check to the denial', async () => {
     const chain = new BudgetChain([
       new AccountHandler(() => Promise.resolve(true)),
       new MonthlyCapHandler(() => Promise.resolve(false)),

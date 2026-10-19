@@ -1,4 +1,4 @@
-// Owner: LU YI. Account content for the shell-owned Settings composition.
+// Account content for the shell-owned Settings composition.
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';

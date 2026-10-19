@@ -42,7 +42,7 @@ policy. OAuth verified emails do not automatically populate verification records
 
 ## Known limits
 
-- Delivery is queued (`MAIL_QUEUE_DESIGN.md`): a public request is one
+- Delivery is queued: a public request is one
   address-independent insert, and MailWorker resolves eligibility, retries up
   to 5 times with backoff, and cleans up. main.ts starts the worker when mail
   is configured.

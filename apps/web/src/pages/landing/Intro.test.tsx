@@ -5,7 +5,7 @@ import { Intro, introWanted } from './Intro';
 describe('landing intro', () => {
   it('says what lumen does in words a screen reader reads, and can be skipped', () => {
     const html = renderToStaticMarkup(<Intro onDone={() => undefined} />);
-    expect(html).toContain('reads the literature');
+    expect(html).toContain('search the');
     expect(html).toContain('Skip');
   });
 

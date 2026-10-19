@@ -11,7 +11,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 // reads its colours from the CSS variables, so it watches that class and
 // redraws.
 //
-// A toggle by the person (the key D, the bar's button) runs through the scene's
+// A toggle by the person (the bar's button) runs through the scene's
 // theme wipe when the shell has mounted one: the new paper grows over the
 // page from the pointer, and the choice is stored and applied when the page
 // is covered. Without a scene (a test, or before the shell mounts) the change
@@ -104,32 +104,19 @@ export function useTheme(): Theme {
 }
 
 /**
- * Keeps the theme in step with other tabs, and lets the key D
- * toggle it, as in the prototype. D never fires while the person types.
- * The shell calls this once.
+ * Keeps the theme in step with other tabs. The shell calls this once. The
+ * key D toggled the theme too, as in the prototype; it is gone, because a
+ * stray key press changed the page, and the bar has a button for it.
  */
 export function useThemeFollower(): void {
   useEffect(() => {
     const onStorage = (event: StorageEvent): void => {
       if (event.key === KEY) apply();
     };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key !== 'd' && event.key !== 'D') return;
-      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
-      const target = event.target;
-      if (
-        target instanceof Element &&
-        target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')
-      )
-        return;
-      toggleTheme();
-    };
     apply();
     window.addEventListener('storage', onStorage);
-    document.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('storage', onStorage);
-      document.removeEventListener('keydown', onKey);
     };
   }, []);
 }

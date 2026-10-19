@@ -168,8 +168,8 @@ function useNoStrayDrops(): void {
 }
 
 /**
- * Light or dark, in the bar on every page. The key D did the same, but no
- * one could find it. The icon is the theme it changes to, as in most apps.
+ * Light or dark, in the bar on every page: the one way to change it. The
+ * icon is the theme it changes to, as in most apps.
  */
 function ThemeButton(): JSX.Element {
   const theme = useTheme();
@@ -178,7 +178,7 @@ function ThemeButton(): JSX.Element {
     <button
       type="button"
       aria-label={`Switch to ${next} theme`}
-      title={`Switch to ${next} theme (D)`}
+      title={`Switch to ${next} theme`}
       onClick={toggleTheme}
       className="grid size-8 place-items-center text-ink-2 hover:bg-well hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"
     >
@@ -214,8 +214,8 @@ function Scene({ shot }: { shot: ShotName }): JSX.Element {
     if (!canvas.current) return;
     const scene = mountSpace(canvas.current, veil.current, initial);
     space.current = scene;
-    // A theme toggle starts the wipe where the pointer last was: the key D
-    // has no point of its own, and the cursor is where the person looks.
+    // A theme toggle starts the wipe where the pointer last was: on the
+    // button, where the person looks.
     const release = setThemeTransition((apply) => {
       const at = scene.pointer();
       scene.wipe(at.x, at.y, apply);

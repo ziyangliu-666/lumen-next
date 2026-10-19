@@ -7,7 +7,7 @@ import { PROJECT_PLACEHOLDER, saveProjectDraft, useNewProject } from '@/core/new
 import { cn } from '@/lib/utils';
 import { Composer } from '@/ui/composer';
 import { Bleed } from '@/ui/surfaces';
-import { Intro, INTRO_SECONDS, introWanted } from './Intro';
+import { Intro, IntroOrb, introWanted } from './Intro';
 import { greeting, RecentProjects, Starters, useRecent } from './starts';
 
 /** The upload route's limit, said before sending rather than by the server. */
@@ -23,43 +23,22 @@ const ATTACH_LIMIT = 10 * 1024 * 1024;
 const SIGN_IN_FIRST = 'Sign in to start.';
 
 /**
- * The way back to the intro: a small tag in the corner of the front page,
- * with the mark's dots breathing in it, so it reads as a piece of lumen and
- * not as a banner. It says what it plays and how long.
+ * The way back to the intro: a tag in the corner of the front page with the
+ * mark in it, live, its light turning. It stands out as a piece of lumen,
+ * lifts and brightens under the pointer, and says only what it plays.
  */
 function WatchIntro({ onClick }: { onClick: () => void }): JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group fixed bottom-6 left-margin z-10 flex h-9 items-center gap-2.5 border border-rule-major bg-paper/85 pr-3 pl-2.5 text-sm text-ink-2 backdrop-blur-sm hover:border-ink hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"
+      className="group fixed bottom-6 left-margin z-10 flex h-11 items-center gap-3 border border-ink bg-paper pr-4 pl-2 text-sm font-medium text-ink transition-[translate,background-color,color] duration-200 ease-out hover:-translate-y-0.5 hover:bg-ink hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
     >
-      <span aria-hidden="true" className="grid grid-cols-3 gap-[3px]">
-        {DOTS.map((at, index) => (
-          <span
-            key={index}
-            className={cn('size-[3px] rounded-full bg-current motion-safe:animate-pulse', at)}
-          />
-        ))}
-      </span>
+      <IntroOrb className="size-7 group-hover:invert" />
       What is lumen?
-      <span className="text-ink-3 group-hover:text-ink-2">{INTRO_SECONDS} s</span>
     </button>
   );
 }
-
-/** The tag's nine dots pulse one after another, as the mark's halftone does. */
-const DOTS = [
-  '[animation-delay:0ms]!',
-  '[animation-delay:150ms]!',
-  '[animation-delay:300ms]!',
-  '[animation-delay:150ms]!',
-  '[animation-delay:300ms]!',
-  '[animation-delay:450ms]!',
-  '[animation-delay:300ms]!',
-  '[animation-delay:450ms]!',
-  '[animation-delay:600ms]!',
-];
 
 export function Landing(): JSX.Element {
   // Who is signed in is the shell's answer, not this page's: real sign-in and

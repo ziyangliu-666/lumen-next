@@ -1,0 +1,60 @@
+# Staging on Fly.io: the image the Deploy workflow builds, on one machine that
+# stops when idle. Postgres is the machine in deploy/fly/postgres.toml.
+#
+#   flyctl deploy --remote-only
+app = "lumen-next-staging"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  LUMEN_PORT = "4000"
+  LUMEN_ORIGIN = "https://lumen-next-staging.fly.dev"
+  LUMEN_LOG_LEVEL = "info"
+  IDENTITY_SESSION_LIFETIME_MS = "86400000"
+  IDENTITY_INSECURE_COOKIES = "false"
+  LUMEN_MODEL_PROVIDER = "openai"
+  # The default model and the others a new session may choose. Each needs a
+  # price row in core/model/pricing.ts. Mini is the default: on nano, the
+  # walkthrough's fixed-points and Catalan runs came back with wrong numbers
+  # it said it had checked (report rows A14, A17); mini got both right.
+  LUMEN_MODEL = "gpt-4.1-mini"
+  # gpt-4.1 for a hard question: on the 1324 literature question mini read
+  # the right abstracts and still gave the older bounds (report row A23).
+  LUMEN_MODELS = "gpt-4.1-mini,gpt-4.1-nano,gpt-4.1"
+  LUMEN_WORKER = "steering"
+  LUMEN_COMPUTE_PROVIDER = "docker"
+  # The sandbox: the same Python as the packages built into the app image
+  # (Dockerfile, sandbox-lib stage), so readers can plot, solve and count.
+  LUMEN_SANDBOX_IMAGE = "python:3.12-slim-bookworm"
+  LUMEN_SANDBOX_LIBS = "/opt/sandbox-lib"
+  LUMEN_VOLUME_ROOT = "/data/projects"
+  LUMEN_DEMO_PACE_MS = "300"
+
+# Project files (uploads, kept results, the sandboxes' scratch) on a volume:
+# the machine's own disk is replaced on every deploy, and every project's
+# files went with it. Created with
+#   flyctl volumes create lumen_data --region sin --size 1
+[mounts]
+  source = "lumen_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # 1 GB: the server, the Docker daemon, and one 512 MB sandbox at a time.
+  memory = "1gb"

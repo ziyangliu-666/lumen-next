@@ -1,0 +1,36 @@
+# The staging stack: the image under test and the database it needs, and
+# nothing else. The Deploy workflow starts this on the runner and points DAST
+# at it; `docker compose -f docker-compose.staging.yml up --build` does the
+# same on a laptop. A hosted staging replaces the runner, not this file.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: lumen
+      POSTGRES_PASSWORD: lumen
+      POSTGRES_DB: lumen
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U lumen']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    image: ${LUMEN_IMAGE:-lumen:staging}
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://lumen:lumen@db:5432/lumen
+      LUMEN_PORT: '4000'
+      LUMEN_ORIGIN: http://localhost:4000
+      IDENTITY_SESSION_LIFETIME_MS: '86400000'
+      IDENTITY_INSECURE_COOKIES: 'true'
+      # A model for the demo lead, from the shell that runs compose. Unset: none.
+      LUMEN_MODEL_PROVIDER: ${LUMEN_MODEL_PROVIDER:-none}
+      LUMEN_MODEL: ${LUMEN_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    ports:
+      - '4000:4000'

@@ -1,0 +1,125 @@
+name: Deploy
+
+# Continuous delivery: build the container, bring it up as staging with a real
+# database, run DAST against it, deploy to staging; production only by hand.
+#
+# DAST runs against a stack on the runner: the image that was just built and a
+# Postgres beside it. After the scan, the same image deploys to Fly.io
+# (fly.toml, https://lumen-next-staging.fly.dev).
+on:
+  push:
+    branches: [main]
+  # So that a change to the image or to this file can be tried before it merges.
+  workflow_dispatch:
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t lumen:staging .
+      - name: Save image for the next job
+        run: docker save lumen:staging | gzip > lumen-image.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumen-image
+          path: lumen-image.tar.gz
+          retention-days: 1
+      # - name: Push (enable once GHCR is set up)
+      #   run: |
+      #     echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      #     docker tag lumen:staging ghcr.io/${{ github.repository }}:${{ github.sha }}
+      #     docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+
+  staging-and-dast:
+    name: Staging, smoke test, DAST
+    needs: container
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: lumen-image
+      - name: Load image
+        run: gunzip -c lumen-image.tar.gz | docker load
+      - name: Start staging (the image and Postgres)
+        run: docker compose -f docker-compose.staging.yml up -d --no-build --wait
+      - name: Smoke test, end to end through the container
+        run: |
+          set -euo pipefail
+          curl -fsS http://localhost:4000/api/health
+          curl -fsS http://localhost:4000/ | grep -qi '<div id="root"'
+          base=http://localhost:4000
+          cookies=$(mktemp)
+          trap 'rm -f "$cookies"' EXIT
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/me")" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/me" \
+            -H 'authorization: stub smoke:staff')" = 401
+          curl -fsS -c "$cookies" -X POST "$base/api/auth/signup" \
+            -H "Origin: $base" -H 'content-type: application/json' \
+            -d '{"email":"smoke@example.test","displayName":"Smoke","password":"staging-test-password"}' | grep -q '"accountId"'
+          curl -fsS -b "$cookies" -X POST "$base/api/auth/signout" -H "Origin: $base"
+          curl -fsS -c "$cookies" -X POST "$base/api/auth/password" \
+            -H "Origin: $base" -H 'content-type: application/json' \
+            -d '{"email":"smoke@example.test","password":"staging-test-password"}' | grep -q '"accountId"'
+          curl -fsS -b "$cookies" "$base/api/me" | grep -q 'smoke@example.test'
+          # The join between the slices, through the container: a project from
+          # a question, the session under it run to the end, its findings on
+          # the card, and what it spent in the wallet of the account that asked.
+          curl -fsS -b "$cookies" -X POST "$base/api/projects" \
+            -H "Origin: $base" -H 'content-type: application/json' \
+            -d '{"question":"smoke test","mode":"explore"}' | grep -q '"sessionId"'
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS -b "$cookies" "$base/api/projects" | grep -q '"label":"Finished"'; then break; fi
+            if [ "$attempt" = 10 ]; then echo 'the session did not finish in 10 s'; exit 1; fi
+            sleep 1
+          done
+          curl -fsS -b "$cookies" "$base/api/projects" | grep -q '"findingsCount":3'
+          curl -fsS -b "$cookies" "$base/api/wallet" | grep -q '"spent":{"dollars":0.03}'
+          curl -fsS -b "$cookies" -X POST "$base/api/auth/signout" -H "Origin: $base"
+          test "$(curl -s -b "$cookies" -o /dev/null -w '%{http_code}' "$base/api/me")" = 401
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: 'http://localhost:4000'
+          allow_issue_writing: false
+          artifact_name: zap-baseline-report
+          # Warnings are reported, not fatal, until the team has triaged the
+          # first report. A FAIL-level rule still fails the job.
+          cmd_options: '-I'
+      - name: Logs, when something went wrong
+        if: failure()
+        run: docker compose -f docker-compose.staging.yml logs --no-color
+      - name: Stop staging
+        if: always()
+        run: docker compose -f docker-compose.staging.yml down -v
+
+  staging-fly:
+    name: Deploy to the hosted staging
+    needs: staging-and-dast
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency: fly-staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - run: curl -fsS --retry 5 --retry-delay 5 https://lumen-next-staging.fly.dev/api/health
+
+  production:
+    needs: staging-and-dast
+    # The gate is the manual run: production only goes out from a
+    # workflow_dispatch, never from a push. (A required-reviewer rule on the
+    # environment needs a paid plan on a private repository.)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: echo "Promote ${{ github.sha }} to production."

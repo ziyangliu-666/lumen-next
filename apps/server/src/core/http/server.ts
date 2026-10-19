@@ -152,7 +152,10 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     // The pages use a hash router, so every route lives after the '#' and never
     // reaches the server; index.html at '/' is all that is needed. A move to
     // path-based routing would want a history fallback here as well.
-    await app.register(staticFiles, { root: resolve(deps.webRoot) });
+    // preCompressed: the build writes a .br and a .gz beside each text
+    // file (apps/web/scripts/compress.mjs), and the one the browser accepts
+    // is sent. The script went out at its full 1 MB before.
+    await app.register(staticFiles, { root: resolve(deps.webRoot), preCompressed: true });
   }
 
   return app;

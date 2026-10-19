@@ -14,6 +14,23 @@ Ask a question. A lead agent plans the work and hands parts of it to readers tha
 run in parallel: they search the literature, run computations in a sandbox and
 record what they find. The answer arrives with its evidence.
 
+<p align="center">
+  <img src="docs/media/session.gif" alt="Two readers work in parallel, findings come in, and the answer streams with its formulas and sources" width="880">
+</p>
+
+## How it works
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/intro-1.gif" alt="A question becomes a project, and lumen splits the work among readers"></td>
+    <td width="50%"><img src="docs/media/intro-2.gif" alt="Papers come in from many sources, jobs run on many machines at once, and every claim is checked"></td>
+  </tr>
+  <tr>
+    <td>A question becomes a project; the lead splits the work among readers.</td>
+    <td>They read papers from every source, run the math in parallel, and check each claim.</td>
+  </tr>
+</table>
+
 ## Features
 
 - **Parallel agents.** A lead splits the work into readers; the call tree, every
@@ -27,6 +44,10 @@ record what they find. The answer arrives with its evidence.
   the model per turn, or bring your own key.
 - **Accounts and spend.** GitHub, Google or email sign-in; a spend cap with
   approvals; Stripe top-ups.
+
+<p align="center">
+  <img src="docs/media/landing.gif" alt="The front page: a halftone sphere that turns with the pointer" width="880">
+</p>
 
 ## Quick start
 

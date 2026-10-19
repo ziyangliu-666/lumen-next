@@ -48,7 +48,7 @@ jobs:
       - name: Load image
         run: gunzip -c lumen-image.tar.gz | docker load
       - name: Start staging (the image and Postgres)
-        run: docker compose -f docker-compose.staging.yml up -d --no-build --wait
+        run: docker compose -f deploy/staging.compose.yml up -d --no-build --wait
       - name: Smoke test, end to end through the container
         run: |
           set -euo pipefail
@@ -94,10 +94,10 @@ jobs:
           cmd_options: '-I'
       - name: Logs, when something went wrong
         if: failure()
-        run: docker compose -f docker-compose.staging.yml logs --no-color
+        run: docker compose -f deploy/staging.compose.yml logs --no-color
       - name: Stop staging
         if: always()
-        run: docker compose -f docker-compose.staging.yml down -v
+        run: docker compose -f deploy/staging.compose.yml down -v
 
   staging-fly:
     name: Deploy to the hosted staging

@@ -31,5 +31,20 @@
     "typescript": "5.7.2",
     "typescript-eslint": "8.18.1",
     "vitest": "2.1.8"
+  },
+  "prettier": {
+    "printWidth": 100,
+    "singleQuote": true,
+    "semi": true,
+    "trailingComma": "all",
+    "arrowParens": "always",
+    "plugins": [
+      "prettier-plugin-tailwindcss"
+    ],
+    "tailwindStylesheet": "./apps/web/src/styles/theme.css",
+    "tailwindFunctions": [
+      "cn",
+      "cva"
+    ]
   }
 }

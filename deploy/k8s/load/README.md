@@ -56,7 +56,7 @@ trailing slash. The identity slice refuses a write from any other origin.
 | Variable | Default | Meaning |
 |---|---|---|
 | `LUMEN_URL` | none | The origin to test. Required. |
-| `PROFILE` | `full` | `full`: 1 to 30 VUs over 2 min, hold 3 min, down over 1 min. `short`: 1 to 10 VUs over 30 s, hold 1 min, down over 20 s. `demo.sh` uses `short`. |
+| `PROFILE` | `full` | `full`: 1 to 30 VUs over 2 min, hold 3 min, down over 1 min. `short`: 1 to 10 VUs over 30 s, hold 1 min, down over 20 s. `smoke`: 2 VUs for 30 s. `demo.sh` uses `short`; the deploy pipeline runs `smoke` after each deploy. |
 | `POOL` | `60` | The number of accounts that `setup()` creates. |
 | `SUMMARY` | `summary.json` | The file for the JSON summary. |
 

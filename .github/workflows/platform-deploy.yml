@@ -5,6 +5,12 @@ name: Platform deploy
 #
 # There is no registry. The runner builds the image, copies it to the host
 # over SSH and imports it into k3s containerd. The chart never pulls it.
+#
+# The DevSecOps stages, in order:
+#   verify, sca, sast   in parallel; all three gate the deploy
+#   deploy              build, Trivy image scan, copy, helm upgrade, health
+#   dast, smoke-load    in parallel, against the public URL the deploy made
+#   summary             one line per stage in the run summary
 on:
   push:
     branches: [ass/platform]
@@ -69,9 +75,52 @@ jobs:
       - name: Test with coverage
         run: npm run test:cov
 
-  deploy:
-    needs: verify
+  sca:
+    name: SCA - dependency audit
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Only what ships in the image: a dev-only advisory does not reach the host.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  sast:
+    name: SAST - CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # a private repository needs this for the upload step
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+      # As in security.yml: code scanning upload needs GitHub Code Security,
+      # which a private repository does not have. The SARIF is an artifact.
+      - uses: github/codeql-action/analyze@v3
+        with:
+          upload: never
+          output: sarif-results
+      - name: Keep the SARIF report
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: sarif-results
+
+  deploy:
+    needs: [verify, sca, sast]
+    runs-on: ubuntu-latest
+    # dast and smoke-load test the release this job made, at this address.
+    outputs:
+      host: ${{ steps.host.outputs.name }}
+      worker: ${{ steps.worker.outputs.mode }}
+      image_scan: ${{ steps.trivy-gate.outcome }}
     env:
       SHA: ${{ github.sha }}
       SSH_HOST: ${{ secrets.PLATFORM_SSH_HOST }}
@@ -83,6 +132,51 @@ jobs:
       - name: Build image
         run: docker build -t "lumen-next:$SHA" .
 
+      # The scan runs before the copy, so a vulnerable image never reaches
+      # the host. Two passes: the first reports, the second gates.
+      - name: Image scan report (HIGH, CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: lumen-next:${{ github.sha }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          format: table
+          output: trivy-image.txt
+          exit-code: '0'
+
+      - name: Image scan in the summary
+        if: always()
+        run: |
+          {
+            echo '### Image scan (Trivy, HIGH and CRITICAL)'
+            echo
+            echo '```'
+            cat trivy-image.txt 2>/dev/null || echo 'no report'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the image scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-report
+          path: trivy-image.txt
+          if-no-files-found: ignore
+
+      # Fail only on what the team can fix now: a CRITICAL with no fixed
+      # version would block every deploy and give nothing to do.
+      - name: Image scan gate (CRITICAL with a fix)
+        id: trivy-gate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: lumen-next:${{ github.sha }}
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: '1'
+          skip-setup-trivy: true
+
       - name: Save image
         run: docker save "lumen-next:$SHA" | gzip > lumen-next.tar.gz
 
@@ -91,6 +185,24 @@ jobs:
         # sslip.io resolves lumen.1-2-3-4.sslip.io to 1.2.3.4: a stable name
         # without buying a domain.
         run: echo "name=lumen.${SSH_HOST//./-}.sslip.io" >> "$GITHUB_OUTPUT"
+
+      - name: Effective worker mode
+        id: worker
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          WORKER_MODE: ${{ inputs.worker }}
+        # The same choice the chart makes (see Helm upgrade): auto means
+        # steering when a model key is set. smoke-load runs only in demo mode,
+        # because a steering worker calls a paid model.
+        run: |
+          if [ -n "$WORKER_MODE" ] && [ "$WORKER_MODE" != auto ]; then
+            mode="$WORKER_MODE"
+          elif [ -n "$OPENAI_API_KEY" ]; then
+            mode=steering
+          else
+            mode=demo
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
 
       - name: SSH key and host key
         env:
@@ -185,18 +297,86 @@ jobs:
           ssh -i "$SSH_KEY_FILE" "ubuntu@$SSH_HOST" \
             "sudo k3s kubectl get pods,svc,ingress,certificate -n lumen; sudo k3s kubectl get events -n lumen --sort-by=.lastTimestamp | tail -30" || true
 
-      - name: Summary
-        if: success()
+      - name: Remove the SSH key
+        if: always()
+        run: rm -f "$SSH_KEY_FILE"
+
+  dast:
+    name: DAST - ZAP baseline
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      # The passive baseline only: it spiders the public site and reads the
+      # answers, so it does not change data on the shared host.
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: https://${{ needs.deploy.outputs.host }}
+          allow_issue_writing: false
+          artifact_name: zap-baseline-report
+          # -I: a WARN is reported, not fatal, as in deploy.yml (the app has
+          # 3 known warnings). fail_action: a FAIL-level rule fails the job.
+          cmd_options: '-I'
+          fail_action: true
+
+  smoke-load:
+    name: Smoke load - k6
+    needs: deploy
+    # Demo workers call no model, so the test costs no money.
+    if: needs.deploy.outputs.worker == 'demo'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1.2.2
+      # 2 VUs for 30 s: proof that the release answers under load, not the
+      # scaling test (PROFILE=full). Four accounts hold about 130 questions.
+      - name: Run the smoke profile
         env:
-          HOST_NAME: ${{ steps.host.outputs.name }}
+          LUMEN_URL: https://${{ needs.deploy.outputs.host }}
+        run: |
+          k6 run -e LUMEN_URL="$LUMEN_URL" -e PROFILE=smoke -e POOL=4 \
+            -e SUMMARY=k6-summary.json deploy/k8s/load/ask.js
+      - name: Keep the k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-smoke-summary
+          path: k6-summary.json
+          if-no-files-found: ignore
+
+  summary:
+    needs: [sca, sast, deploy, dast, smoke-load]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run summary
+        env:
+          HOST_NAME: ${{ needs.deploy.outputs.host }}
+          SHA: ${{ github.sha }}
+          SCA: ${{ needs.sca.result }}
+          SAST: ${{ needs.sast.result }}
+          # Empty when the deploy stopped before the scan ran.
+          IMAGE_SCAN: ${{ needs.deploy.outputs.image_scan || 'skipped' }}
+          DEPLOY: ${{ needs.deploy.result }}
+          DAST: ${{ needs.dast.result }}
+          SMOKE: ${{ needs.smoke-load.result }}
         run: |
           {
             echo '### Platform deploy'
             echo
-            echo "- Public URL: https://$HOST_NAME"
+            if [ -n "$HOST_NAME" ]; then
+              echo "- Public URL: https://$HOST_NAME"
+            else
+              echo '- Public URL: none (the deploy did not run)'
+            fi
             echo "- Image: \`lumen-next:$SHA\`"
+            echo
+            echo '| Stage | Result |'
+            echo '|---|---|'
+            echo "| SCA (npm audit) | $SCA |"
+            echo "| SAST (CodeQL) | $SAST |"
+            echo "| Image scan (Trivy) | $IMAGE_SCAN |"
+            echo "| Deploy | $DEPLOY |"
+            echo "| DAST (ZAP baseline) | $DAST |"
+            echo "| Smoke load (k6) | $SMOKE |"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Remove the SSH key
-        if: always()
-        run: rm -f "$SSH_KEY_FILE"

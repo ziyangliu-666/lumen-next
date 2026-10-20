@@ -91,6 +91,42 @@ adds later. node-pg-migrate runs here with `checkOrder: false`.
   agent_id uuid references platform_agents(id), question text not null,
   session_id uuid unique, created_at timestamptz not null default now())`.
 
+## As built
+
+The code is in `apps/server/src/services/platform/`. Where the table above
+leaves a detail open, the code decides it as follows.
+
+- Every time is an ISO 8601 string (`createdAt`, `startedAt`, `endedAt`).
+- `owner` on an agent is the owner's display name.
+- The key guard checks a request with `Authorization: Bearer lmn_...` in this
+  order: path (403 off `/api/v1`), key (401), rate (429), scope (403). The
+  `/api/v1/keys` routes refuse every key with 403: one key never makes another.
+  A v1 route that the guard does not list is refused to keys, so a new route
+  is closed until it gets a scope.
+- A request with a key is never resolved by its cookie. A bad key with a good
+  cookie gets 401.
+- The `x-lumen-internal` header with the shared key lets a key reach a path
+  off `/api/v1`. Only `POST /api/v1/questions` sends it, in its inject to
+  `POST /api/projects`. That inject does not take a second token.
+- `POST /api/v1/agents` answers 409 when the slug is taken, also by a
+  withdrawn agent. `name` is at most 100 characters and `description` at most
+  500. A withdrawn agent answers 404 on `GET` and `DELETE`.
+- `POST /api/v1/questions` answers 400 for an agent that is not published. When
+  the project is not created, it deletes the intent and passes on the status
+  of `POST /api/projects`.
+- `GET /api/v1/questions/:sessionId` uses the kernel's own read rule: the
+  owner, or staff. Any other caller gets 404.
+- `asConsumer` is `{sessions, cost, medianSecondsToRest}` over every session of
+  the account, from the web app or the API. Each `asProducer` row counts the
+  sessions that ran the agent, withdrawn agents included. `all` adds `owner`.
+- `cost` is the sum of `tasks.own_cost` for the session's tasks: the same sum
+  as the session snapshot's `spend`. `medianSecondsToRest` is the median of
+  the root task's `ended_at - started_at`, over sessions whose root ended.
+- The worker claims the intent on every root turn, so a later message in the
+  same session also runs with the agent's instructions.
+- `withApiKeys` and `keyGuard` run in all five services, so a key on any
+  path outside `/api/v1` gets 403 everywhere. The key routes run in identity.
+
 ## Ownership
 
 | Part | Member |

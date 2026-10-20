@@ -1,0 +1,138 @@
+{{- /*
+The gateway: Traefik routes each path to the service whose slice registers
+it. The paths come from the route registrations in
+apps/server/src/modules/<slice>/ and apps/server/src/core/http/.
+/internal/* is never routed: no rule below matches it, and the catch-all
+excludes it. Services reach it only by their Service names.
+Priorities: Traefik tries the higher number first, so the per-project paths
+of worker and session win over the /api/projects prefix.
+*/ -}}
+{{- define "lumen.routes" -}}
+{{- $host := printf "Host(`%s`)" .Values.ingress.host -}}
+# steering slice: /api/projects/:id/files, /files/*, /upload/:name
+- match: {{ $host }} && PathRegexp(`^/api/projects/[^/]+/(files|upload)(/|$)`)
+  kind: Rule
+  priority: 100
+  services:
+    - { name: worker, port: http }
+# session slice: GET and POST /api/projects/:id/sessions
+- match: {{ $host }} && PathRegexp(`^/api/projects/[^/]+/sessions/?$`)
+  kind: Rule
+  priority: 100
+  services:
+    - { name: session, port: http }
+# projects slice, including /api/projects/:id/stop, /visit and /findings
+- match: {{ $host }} && (Path(`/api/projects`) || PathPrefix(`/api/projects/`))
+  kind: Rule
+  priority: 50
+  services:
+    - { name: project, port: http }
+# identity slice: sign-in is the target of password guessing, so it is rate limited.
+- match: {{ $host }} && PathPrefix(`/api/auth`)
+  kind: Rule
+  priority: 50
+  middlewares:
+    - name: auth-rate-limit
+  services:
+    - { name: identity, port: http }
+# identity slice: the account. /api/local/* has no route today; the contract
+# gives it to identity, so it goes there and not to the web app.
+- match: {{ $host }} && (Path(`/api/me`) || PathPrefix(`/api/me/`) || PathPrefix(`/api/local/`))
+  kind: Rule
+  priority: 50
+  services:
+    - { name: identity, port: http }
+# billing slice
+- match: {{ $host }} && (Path(`/api/wallet`) || PathPrefix(`/api/wallet/`) || Path(`/api/keys`) || PathPrefix(`/api/keys/`) || PathPrefix(`/api/billing/`) || PathPrefix(`/api/admin/`))
+  kind: Rule
+  priority: 50
+  services:
+    - { name: billing, port: http }
+# session slice and the event socket (core/http/wsBridge.ts)
+- match: {{ $host }} && (PathPrefix(`/api/sessions/`) || Path(`/api/models`) || Path(`/ws`))
+  kind: Rule
+  priority: 50
+  services:
+    - { name: session, port: http }
+# Everything else is the web app, which session serves. Never /internal.
+- match: {{ $host }} && PathPrefix(`/`) && !PathPrefix(`/internal`)
+  kind: Rule
+  priority: 1
+  services:
+    - { name: session, port: http }
+{{- end -}}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: auth-rate-limit
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+spec:
+  rateLimit:
+    average: 10
+    burst: 20
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lumen
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - {{ ternary "websecure" "web" .Values.tls.enabled }}
+  routes:
+    {{- include "lumen.routes" . | nindent 4 }}
+  {{- if .Values.tls.enabled }}
+  tls:
+    secretName: lumen-tls
+  {{- end }}
+{{- if .Values.tls.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+# Port 80 only redirects. The ACME HTTP-01 challenge must still reach
+# cert-manager's solver on port 80, so its path is excluded here; the
+# solver's own Ingress then answers it.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lumen-redirect
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ .Values.ingress.host }}`) && !PathPrefix(`/.well-known/acme-challenge/`)
+      kind: Rule
+      priority: 1
+      middlewares:
+        - name: redirect-https
+      services:
+        # Never reached: the middleware answers first. Traefik needs a service.
+        - { name: session, port: http }
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: lumen-tls
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+spec:
+  secretName: lumen-tls
+  dnsNames:
+    - {{ .Values.ingress.host | quote }}
+  issuerRef:
+    kind: ClusterIssuer
+    name: {{ .Values.tls.clusterIssuer }}
+{{- end }}

@@ -19,6 +19,8 @@ import { createIdentitySlice, LoginGate } from '../modules/identity/index.js';
 import { createProjectsSlice } from '../modules/projects/index.js';
 import { demoWorker, paceFromEnv } from '../modules/session/index.js';
 import { createSteeringSlice } from '../modules/steering/index.js';
+import { IntentStore } from './platform/registry.js';
+import { rootTurnInput } from './platform/rootTurn.js';
 import { remoteSessionDirectory } from './shared/directory.js';
 import {
   database,
@@ -34,6 +36,8 @@ import type { TurnOutcome } from './shared/queueWorker.js';
 import { connectRabbit, type TurnMessage } from './shared/rabbit.js';
 import { RemoteReport } from './shared/remoteReport.js';
 import { run, serve } from './shared/serve.js';
+import { PgApiKeyStore, withApiKeys } from './platform/apiKeys.js';
+import { registerKeyGuard } from './platform/keyGuard.js';
 
 const log = serviceLog('worker');
 
@@ -90,6 +94,14 @@ run(log, async () => {
     await steers.dispatch(command, principal);
   });
 
+  // A root turn asked through the API may name an agent (docs/platform/public-api.md).
+  const intents = new IntentStore(db);
+  const inputFor = rootTurnInput({
+    context: (sessionId) => sessions.context(sessionId),
+    claim: (sessionId, accountId, question) => intents.claim(sessionId, accountId, question),
+    log,
+  });
+
   const inHand = new Set<Promise<void>>();
   const runTurn = async (turn: TurnMessage): Promise<void> => {
     const turnLog = log.child({
@@ -100,7 +112,7 @@ run(log, async () => {
     const report = new RemoteReport(call, turn.turnId, turnLog);
     let outcome: TurnOutcome;
     try {
-      await worker.run(turn.task, turn.input, report);
+      await worker.run(turn.task, await inputFor(turn.task, turn.input), report);
       outcome = { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -126,14 +138,17 @@ run(log, async () => {
     return work.finally(() => inHand.delete(work));
   }, slots());
 
+  // An API key is refused here with 403, as on every path outside /api/v1.
+  const resolver = withApiKeys(identity.principalResolver, new PgApiKeyStore(db), log);
   const server = await buildServer({
     broker: new Broker(),
-    resolver: identity.principalResolver,
+    resolver,
     // The live stream belongs to session. Nobody watches a session here.
     access: { canWatch: () => Promise.resolve(false) },
     ...(strictTransport() ? { strictTransport: true } : {}),
     log,
   });
+  registerKeyGuard(server, { resolver, internalKey: key });
   server.get('/api/health', () => ({
     status: 'ok',
     service: 'worker',

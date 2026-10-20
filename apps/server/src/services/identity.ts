@@ -11,7 +11,16 @@ import type { SessionAccess } from '../core/http/authGuard.js';
 import { Broker } from '../core/protocol/broker.js';
 import { eraseAccountSecrets, removeOwnOpenAiKey } from '../modules/billing/index.js';
 import { createIdentitySlice, LoginGate } from '../modules/identity/index.js';
-import { database, identityConfig, serviceLog, strictTransport } from './shared/env.js';
+import { PgApiKeyStore, withApiKeys } from './platform/apiKeys.js';
+import { registerKeyGuard } from './platform/keyGuard.js';
+import { registerKeyRoutes } from './platform/keyRoutes.js';
+import {
+  database,
+  identityConfig,
+  internalKey,
+  serviceLog,
+  strictTransport,
+} from './shared/env.js';
 import { run, serve } from './shared/serve.js';
 
 const log = serviceLog('identity');
@@ -23,6 +32,7 @@ const noSessions: SessionAccess = { canWatch: () => Promise.resolve(false) };
 
 async function start(): Promise<void> {
   const config = identityConfig();
+  const key = internalKey();
   const db = await database(log);
   const identity = createIdentitySlice({
     database: db,
@@ -37,19 +47,24 @@ async function start(): Promise<void> {
     ...(config.secureCookies === undefined ? {} : { secureCookies: config.secureCookies }),
   });
 
+  // API keys (docs/platform/public-api.md): created here, accepted on /api/v1 only.
+  const apiKeys = new PgApiKeyStore(db);
+  const resolver = withApiKeys(identity.principalResolver, apiKeys, log);
   const server = await buildServer({
     broker: new Broker(),
-    resolver: identity.principalResolver,
+    resolver,
     access: noSessions,
     ...(strictTransport() ? { strictTransport: true } : {}),
     log,
   });
+  registerKeyGuard(server, { resolver, internalKey: key });
   server.get('/api/health', () => ({
     status: 'ok',
     service: 'identity',
     uptimeSeconds: Math.round(process.uptime()),
   }));
   await server.register(identity.registerRoutes);
+  registerKeyRoutes(server, { store: apiKeys, resolver });
 
   const { mailWorker } = identity;
   await serve(server, log, [() => mailWorker?.stop(), () => db.close()]);

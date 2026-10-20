@@ -20,7 +20,7 @@ You need Docker, `k3d`, `kubectl` and `helm`.
 2. Build the image from the repository root:
 
    ```sh
-   docker build -t lumen-next:dev .
+   docker build -f deploy/k8s/Dockerfile -t lumen-next:dev .
    ```
 
 3. Import the image into the cluster. There is no registry, and the chart

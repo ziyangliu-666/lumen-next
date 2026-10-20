@@ -25,6 +25,10 @@ import { createIdentitySlice, LoginGate } from '../modules/identity/index.js';
 import { createProjectsSlice, type ProjectsSlice } from '../modules/projects/index.js';
 import { createSessionSlice } from '../modules/session/index.js';
 import { modelChoicesFromEnv } from '../core/model/index.js';
+import { registerAnswerRoutes } from './platform/answerRoutes.js';
+import { PgApiKeyStore, withApiKeys } from './platform/apiKeys.js';
+import { registerKeyGuard } from './platform/keyGuard.js';
+import { IntentStore } from './platform/registry.js';
 import { registerDirectoryRoutes } from './shared/directory.js';
 import {
   database,
@@ -92,14 +96,16 @@ run(log, async () => {
   if (orphans > 0) log.info(`stopped ${orphans} task(s) left open by the last process`);
 
   const webRoot = defaultWebRoot();
+  const resolver = withApiKeys(identity.principalResolver, new PgApiKeyStore(db), log);
   const server = await buildServer({
     broker,
-    resolver: identity.principalResolver,
+    resolver,
     access: session.access,
     ...(webRoot ? { webRoot } : {}),
     ...(strictTransport() ? { strictTransport: true } : {}),
     log,
   });
+  registerKeyGuard(server, { resolver, internalKey: key });
   server.get('/api/health', () => ({
     status: 'ok',
     service: 'session',
@@ -110,6 +116,12 @@ run(log, async () => {
   }));
 
   await server.register(session.registerRoutes);
+  const intents = new IntentStore(db);
+  registerAnswerRoutes(server, {
+    snapshot: (sessionId, principal) => session.kernel.snapshot(sessionId, principal),
+    findings: (sessionId) => projects.listFindings(sessionId),
+    agentOfSession: (sessionId) => intents.agentOfSession(sessionId),
+  });
   session.registerCommands(broker);
   broker.onCommand('task.steer', (command, principal) => bus.publishSteer({ command, principal }));
 

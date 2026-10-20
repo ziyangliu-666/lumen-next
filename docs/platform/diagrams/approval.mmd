@@ -1,0 +1,26 @@
+sequenceDiagram
+  autonumber
+  participant W as worker pod
+  participant S as session (kernel + billing slice in-process)
+  participant DB as PostgreSQL
+  participant B as Browser (Wallet page)
+  participant BI as billing service
+  W->>S: POST /internal/turns/:id/delegate [readers]
+  S->>S: BudgetChain.check(charge at fan-out): account may spend? fits the cap?
+  S->>DB: insert billing_approvals (pending, attempt id)
+  S->>DB: tasks.pending = {attemptId, approvalId, work}, status waiting
+  S-->>B: task.status waiting on /ws
+  S-->>W: error: waiting for approval
+  W->>S: POST /internal/turns/:id/done {ok:false, waiting:true}
+  W->>W: ack the turn (the task keeps waiting, no slot held)
+  B->>BI: POST /api/wallet/approvals/:id/grant (cookie, Origin check)
+  BI->>DB: approval status consumed, resume_pending = true
+  loop deliver loop (lease 30 s, FOR UPDATE SKIP LOCKED)
+    BI->>DB: claim rows with resume_pending
+    BI->>S: POST /internal/approvals/resume {accountId, approvalId}
+  end
+  S->>DB: find task by approvalId, check owner
+  S->>S: ask the guard again with the same attempt id: allow
+  S->>DB: open the child tasks, clear pending
+  S->>S: children run as turns on lumen.turns.1, then the parent gets one more turn
+  BI->>DB: resume_pending = false

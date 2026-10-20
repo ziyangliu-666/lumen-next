@@ -1,0 +1,20 @@
+# The project files the worker's tools write. ReadWriteOnce on local-path
+# still lets every worker replica mount it, because there is one node and
+# ReadWriteOnce limits nodes, not pods. A second node would need RWX (EFS).
+# local-path creates the directory with mode 0777, so user 1000 can write
+# there; it does not apply fsGroup to its hostPath volumes.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: worker-projects
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+  annotations:
+    # Project files outlive a helm uninstall, like the database that names them.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.worker.volumeSize }}

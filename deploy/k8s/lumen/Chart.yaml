@@ -1,0 +1,9 @@
+apiVersion: v2
+name: lumen
+description: >-
+  lumen-next as five services (identity, project, session, worker, billing)
+  with PostgreSQL and RabbitMQ, for one k3s or k3d node.
+  See docs/platform/contract.md.
+type: application
+version: 0.1.0
+appVersion: 'platform'

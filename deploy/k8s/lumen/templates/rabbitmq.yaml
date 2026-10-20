@@ -1,0 +1,82 @@
+# The turn queues between session and the workers. The management port is
+# for KEDA and for the SSH tunnel; the Ingress never routes it.
+# Headless Service: one pod, and a StatefulSet needs a governing Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+    app.kubernetes.io/name: rabbitmq
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+    - name: management
+      port: 15672
+      targetPort: management
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+    app.kubernetes.io/name: rabbitmq
+spec:
+  serviceName: rabbitmq
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  template:
+    metadata:
+      labels:
+        {{- include "lumen.labels" . | nindent 8 }}
+        app.kubernetes.io/name: rabbitmq
+    spec:
+      enableServiceLinks: false
+      # The node name (rabbit@rabbitmq-0) is stable in a StatefulSet, so the
+      # durable queues on the volume belong to the same node after a restart.
+      containers:
+        - name: rabbitmq
+          image: {{ .Values.rabbitmq.image }}
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: management
+              containerPort: 15672
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: lumen
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef: { name: lumen-core, key: RABBITMQ_PASSWORD }
+          resources:
+            {{- toYaml .Values.resources.rabbitmq | nindent 12 }}
+          readinessProbe:
+            exec: { command: [rabbitmq-diagnostics, -q, check_port_connectivity] }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            exec: { command: [rabbitmq-diagnostics, -q, status] }
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 15
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.rabbitmq.volumeSize }}

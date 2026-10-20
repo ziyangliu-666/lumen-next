@@ -1,0 +1,82 @@
+# One shared database for every service (docs/platform/contract.md, "Data").
+# Headless Service: one pod, and a StatefulSet needs a governing Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+    app.kubernetes.io/name: postgres
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+    app.kubernetes.io/name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "lumen.labels" . | nindent 8 }}
+        app.kubernetes.io/name: postgres
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: lumen
+            - name: POSTGRES_DB
+              value: lumen
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: lumen-core, key: POSTGRES_PASSWORD }
+            # A subdirectory: initdb refuses a mount point that holds lost+found.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          args:
+            # Small on purpose: the node has 4 GB for everything.
+            - -c
+            - shared_buffers=64MB
+            - -c
+            - max_connections=100
+          resources:
+            {{- toYaml .Values.resources.postgres | nindent 12 }}
+          readinessProbe:
+            exec: { command: [pg_isready, -U, lumen, -d, lumen] }
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: [pg_isready, -U, lumen, -d, lumen] }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.volumeSize }}

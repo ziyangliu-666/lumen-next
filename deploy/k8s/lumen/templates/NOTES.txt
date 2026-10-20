@@ -1,0 +1,9 @@
+lumen is installing in namespace {{ .Release.Namespace }}.
+
+Open {{ include "lumen.origin" . }} once every pod is ready:
+  kubectl -n {{ .Release.Namespace }} get pods -w
+
+Worker mode: {{ include "lumen.workerMode" . }}
+{{- if .Values.tls.enabled }}
+Certificate: kubectl -n {{ .Release.Namespace }} get certificate lumen-tls
+{{- end }}

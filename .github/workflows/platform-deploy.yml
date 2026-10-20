@@ -130,7 +130,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build image
-        run: docker build -t "lumen-next:$SHA" .
+        run: docker build -f deploy/k8s/Dockerfile -t "lumen-next:$SHA" .
 
       # The scan runs before the copy, so a vulnerable image never reaches
       # the host. Two passes: the first reports, the second gates.

@@ -1,0 +1,202 @@
+name: Platform deploy
+
+# The ASS demonstration (docs/platform/contract.md, "Public deployment"):
+# every push to ass/platform is a deployment to the k3s host in AWS.
+#
+# There is no registry. The runner builds the image, copies it to the host
+# over SSH and imports it into k3s containerd. The chart never pulls it.
+on:
+  push:
+    branches: [ass/platform]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'deploy/k8s/**'
+      - 'Dockerfile'
+      - 'package-lock.json'
+      - '.github/workflows/platform-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      worker:
+        description: 'Worker mode: auto lets the chart choose (steering if a model key is set)'
+        required: false
+        default: auto
+        type: choice
+        options: [auto, demo, steering]
+
+# One host, one release: a second deploy waits for the first, and a deploy in
+# progress is never cancelled half-way through a helm upgrade.
+concurrency:
+  group: platform-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    # The same gate as ci.yml: the database tests skip without DATABASE_URL.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: lumen
+          POSTGRES_PASSWORD: lumen
+          POSTGRES_DB: lumen
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lumen"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://lumen:lumen@localhost:5432/lumen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Format
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test with coverage
+        run: npm run test:cov
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      SHA: ${{ github.sha }}
+      SSH_HOST: ${{ secrets.PLATFORM_SSH_HOST }}
+      SSH_KEY_FILE: ${{ github.workspace }}/../platform-ssh-key
+      REMOTE_DIR: lumen-deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t "lumen-next:$SHA" .
+
+      - name: Save image
+        run: docker save "lumen-next:$SHA" | gzip > lumen-next.tar.gz
+
+      - name: Public host name
+        id: host
+        # sslip.io resolves lumen.1-2-3-4.sslip.io to 1.2.3.4: a stable name
+        # without buying a domain.
+        run: echo "name=lumen.${SSH_HOST//./-}.sslip.io" >> "$GITHUB_OUTPUT"
+
+      - name: SSH key and host key
+        env:
+          SSH_KEY: ${{ secrets.PLATFORM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null "$SSH_KEY_FILE"
+          printf '%s\n' "$SSH_KEY" > "$SSH_KEY_FILE"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # The host may still be booting after a stop and start: try a few times.
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 15 -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then break; fi
+            if [ "$attempt" = 5 ]; then echo 'ssh-keyscan failed'; exit 1; fi
+            sleep 10
+          done
+
+      - name: Copy the image and the chart
+        run: |
+          set -euo pipefail
+          ssh -i "$SSH_KEY_FILE" "ubuntu@$SSH_HOST" "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR/deploy"
+          scp -i "$SSH_KEY_FILE" lumen-next.tar.gz "ubuntu@$SSH_HOST:$REMOTE_DIR/"
+          scp -i "$SSH_KEY_FILE" -r deploy/k8s "ubuntu@$SSH_HOST:$REMOTE_DIR/deploy/"
+
+      - name: Import the image into k3s
+        run: |
+          ssh -i "$SSH_KEY_FILE" "ubuntu@$SSH_HOST" \
+            "set -euo pipefail; gunzip -c $REMOTE_DIR/lumen-next.tar.gz | sudo k3s ctr images import -; rm -f $REMOTE_DIR/lumen-next.tar.gz"
+
+      - name: Helm upgrade
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          WORKER_MODE: ${{ inputs.worker }}
+          HOST_NAME: ${{ steps.host.outputs.name }}
+        # The command goes to the host on stdin, not on the ssh command line,
+        # so the optional key never appears in this log or in the runner's
+        # process list. printf %q quotes each value for the remote shell.
+        run: |
+          set -euo pipefail
+          args=(--set "ingress.host=$HOST_NAME" --set "image.tag=$SHA")
+          if [ -n "$OPENAI_API_KEY" ]; then
+            args+=(--set-string "extraSecrets.OPENAI_API_KEY=$OPENAI_API_KEY")
+            args+=(--set-string "extraSecrets.LUMEN_MODEL_PROVIDER=openai")
+          fi
+          # config.worker "" lets the chart choose: steering when a model key
+          # is set, demo otherwise. Force demo for a load test that costs nothing.
+          # A push has no inputs: WORKER_MODE is empty, the same as auto.
+          if [ -n "$WORKER_MODE" ] && [ "$WORKER_MODE" != auto ]; then
+            args+=(--set-string "config.worker=$WORKER_MODE")
+          fi
+          {
+            echo 'set -euo pipefail'
+            echo "cd $REMOTE_DIR"
+            echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml'
+            printf 'helm upgrade --install lumen deploy/k8s/lumen -n lumen --create-namespace'
+            printf ' -f deploy/k8s/aws/values-aws.yaml --wait --timeout 10m'
+            printf ' %q' "${args[@]}"
+            echo
+          } | ssh -i "$SSH_KEY_FILE" "ubuntu@$SSH_HOST" bash -s
+
+      - name: Prune old images on the host
+        # Keep the disk (20 GB) from filling with one image per commit.
+        run: |
+          ssh -i "$SSH_KEY_FILE" "ubuntu@$SSH_HOST" \
+            "sudo k3s ctr images ls -q | grep '/lumen-next:' | grep -v ':$SHA\$' | xargs -r sudo k3s ctr images rm"
+
+      - name: Wait for the public address
+        env:
+          HOST_NAME: ${{ steps.host.outputs.name }}
+        # cert-manager can take a minute to get the first certificate. While
+        # it does, the HTTP answer shows that the Ingress is up; only an HTTPS
+        # 200 with a valid certificate counts as success.
+        run: |
+          set -uo pipefail
+          deadline=$((SECONDS + 180))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "https://$HOST_NAME/api/health" || true)
+            if [ "$code" = 200 ]; then
+              echo "https://$HOST_NAME/api/health answered 200"
+              exit 0
+            fi
+            plain=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "http://$HOST_NAME/api/health" || true)
+            echo "https: ${code:-none}, http: ${plain:-none}; waiting"
+            sleep 10
+          done
+          echo "https://$HOST_NAME/api/health did not answer 200 in 3 minutes"
+          exit 1
+
+      - name: Cluster state, when something went wrong
+        if: failure()
+        run: |
+          ssh -i "$SSH_KEY_FILE" "ubuntu@$SSH_HOST" \
+            "sudo k3s kubectl get pods,svc,ingress,certificate -n lumen; sudo k3s kubectl get events -n lumen --sort-by=.lastTimestamp | tail -30" || true
+
+      - name: Summary
+        if: success()
+        env:
+          HOST_NAME: ${{ steps.host.outputs.name }}
+        run: |
+          {
+            echo '### Platform deploy'
+            echo
+            echo "- Public URL: https://$HOST_NAME"
+            echo "- Image: \`lumen-next:$SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the SSH key
+        if: always()
+        run: rm -f "$SSH_KEY_FILE"

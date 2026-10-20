@@ -62,8 +62,9 @@ to split, and the reason the proposal named a `stream` service.
 ## Data: one shared database
 
 Every service connects to the same PostgreSQL database with the same
-`DATABASE_URL`. Only `session` runs the migrations, at startup, as the monolith
-does today. The other services wait for `session` to be ready.
+`DATABASE_URL`. Every service runs the migrations at startup, as the monolith
+does today. node-pg-migrate takes an advisory lock and waits for it, so pods
+that start together migrate one after another, never at once.
 
 So a port that only reads or writes the database can stay in-process: build
 the other slice inside your service. Example: `worker` needs
@@ -80,7 +81,7 @@ gives it a `QueueWorker` in place of the in-process worker. The kernel does not
 change.
 
 1. `QueueWorker.run(task, input, report)` publishes a message to the durable
-   queue `lumen.turns`:
+   queue for the task's depth, `lumen.turns.<depth>` (see below):
    `{ "turnId": "<uuid>", "task": <Task>, "input": "<string>" }`.
 2. It keeps `report` in a map under `turnId`, and waits.
 3. A `worker` pod takes the message and calls `steering.worker.run(task, input,
@@ -91,7 +92,15 @@ change.
 5. `QueueWorker.run` resolves or throws, and the kernel carries on.
 
 A worker that dies before the acknowledgement leaves the turn on the queue, and
-another worker takes it. KEDA scales `worker` on the length of `lumen.turns`.
+another worker takes it.
+
+There is one queue per depth: `lumen.turns.0` (root turns), `lumen.turns.1` and
+`lumen.turns.2` (depth 2 and deeper). A parent turn keeps its worker slot while
+`delegate` waits for its children. With one queue, waiting parents could fill
+every slot, and their children would never start. Each depth has its own slots
+(`LUMEN_WORKER_SLOTS` per pod, default 4), and the deepest level never waits,
+so the work always drains. KEDA scales `worker` on the three queues and takes
+the largest demand.
 
 ### 2. The report: worker to session, over HTTP
 
@@ -123,16 +132,21 @@ When the owner approves an over-cap step on the Wallet page, billing calls
 in the `billing` service that port is an HTTP call:
 `POST /internal/approvals/resume` with `{ "accountId", "approvalId" }`.
 
-### 4. Steering's reads: worker to session, over HTTP
+### 4. The session directory: project and worker to session, over HTTP
 
-Steering needs `taskSession` and `sessionContext` from session's
-`SessionDirectory`. The worker gets them from session:
+The projects slice and steering take session's `SessionDirectory` as a port.
+Its `start` and `stop` reach the running kernel, so the project and worker
+services use `remoteSessionDirectory`, which calls session for all five
+members: `POST /internal/directory/start`, `list`, `stop`, `context` and
+`task-session`. A 4xx from session arrives as an `HttpError` with the same
+status.
 
-- `GET /internal/tasks/:taskId/session`
-- `GET /internal/sessions/:sessionId/context`
+### 5. Steers: session to worker, through RabbitMQ
 
-LIU ZIYANG writes the session side. If either one only reads the database, the
-worker may build it in-process instead, and this section says so.
+A `task.steer` from the browser arrives at session over `/ws`. The turn it
+steers runs in a worker pod, so session publishes it on the `lumen.steers`
+fanout exchange. Every worker pod dispatches it into a local broker, where
+steering claims it exactly as in the monolith.
 
 ## Internal calls
 
@@ -140,9 +154,10 @@ worker may build it in-process instead, and this section says so.
   the secret `LUMEN_INTERNAL_KEY`. A request without it gets `401`.
 - The Ingress never routes `/internal/*`. Services call each other by their
   Kubernetes Service name, for example `http://session:4000/internal/...`.
-- The adapters live in `apps/server/src/services/shared/`: `queueWorker.ts`,
-  `remoteReport.ts`, `internalAuth.ts`, `rabbit.ts`. LIU ZIYANG writes them first,
-  on 21 October, so that the worker and billing can use them.
+- The adapters live in `apps/server/src/services/shared/`: `internal.ts`
+  (the key check and the caller), `rabbit.ts`, `queueWorker.ts`,
+  `turnRoutes.ts`, `remoteReport.ts`, `directory.ts`, `env.ts` and `serve.ts`.
+  `turn.test.ts` tests the whole turn protocol without a network.
 
 ## Sign-in
 
@@ -163,8 +178,8 @@ test; the cluster in AWS runs the same chart.
 | Kubernetes | k3s, one node | The same Traefik, local-path storage and metrics-server as k3d, so the chart does not change. The worker's shared volume works on one node. |
 | Address | An Elastic IP, and the host name `lumen.<ip-with-dashes>.sslip.io` | A stable public name without buying a domain. |
 | HTTPS | cert-manager with a Let's Encrypt `ClusterIssuer`, HTTP-01 through Traefik | A real certificate, so the browser shows the lock. |
-| Images | GitHub Container Registry, `ghcr.io/ziyangliu-666/lumen-next`, tagged with the commit SHA | Built by the workflow. The package is public, as the repository is, so the cluster pulls without a secret. |
-| Deploy | `.github/workflows/platform-deploy.yml`: on every push to `ass/platform`, build and push the image, then `ssh` to the host and run `helm upgrade --install` with the new tag | A merge is a deployment. This is the DevOps part of the demonstration. |
+| Images | No registry. The workflow builds `lumen-next:<commit sha>`, copies it to the host with `scp`, and imports it with `k3s ctr images import`. | Nothing to pay for, and no registry credential to keep. |
+| Deploy | `.github/workflows/platform-deploy.yml`: on every push to `ass/platform`, run `npm run verify`, build the image, copy it and the chart to the host, and run `helm upgrade --install --wait`. Then poll `https://<host>/api/health`. A manual run can choose the worker mode (`auto`, `demo`, `steering`). | A merge is a deployment. This is the DevOps part of the demonstration. |
 | Access | Security group: 80 and 443 open; 22 only with the deploy key; 6443 closed. `kubectl` from a laptop goes through `ssh -L 6443:localhost:6443`. | The Kubernetes API is never public. |
 | Cost | About USD 1.3 per day while it runs, plus about USD 0.12 per day for the Elastic IP and USD 0.06 per day for the disk. Stop the instance at night with `aws ec2 stop-instances`. Delete everything after the grades are out. | About USD 10 for the project. |
 
@@ -172,8 +187,11 @@ Rules for the public host:
 
 - The model key on the host is a key with a low spending limit at the
   provider. Every account also starts with the USD 1 cap that billing enforces.
-- `LUMEN_INTERNAL_KEY`, the database password and the model key are GitHub
-  Actions secrets. They never appear in the repository or in a log.
+- The chart generates the database password, the RabbitMQ password and
+  `LUMEN_INTERNAL_KEY` inside the cluster on the first install, and keeps them
+  on upgrade. They never leave the cluster. The only GitHub Actions secrets are
+  `PLATFORM_SSH_KEY`, `PLATFORM_SSH_HOST` and the optional model key. None of
+  them appears in the repository or in a log.
 - The RabbitMQ management page is not public. Reach it through the SSH tunnel.
 
 EKS is the next step after the demonstration: the same chart, plus node

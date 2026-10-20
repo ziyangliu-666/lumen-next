@@ -20,6 +20,6 @@ it('renders the deleted owner label beside the retained account ID and amount', 
   );
   expect(html).toContain('Deleted account');
   expect(html).toContain('original-owner');
-  expect(html).toContain('$0.1235');
+  expect(html).toContain('$0.123456');
   expect(html).not.toContain('<a');
 });

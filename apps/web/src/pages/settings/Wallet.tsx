@@ -1,3 +1,4 @@
+import { formatMoney } from '@/core/formatMoney';
 import { useEffect, useState, type FormEvent, type JSX } from 'react';
 import { Topups } from './Topups';
 import { Approvals } from './Approvals';
@@ -25,7 +26,7 @@ interface Page {
   entries: Entry[];
   nextCursor: string | null;
 }
-const dollars = (value: Money): string => `$${value.dollars.toFixed(4)}`;
+const dollars = (value: Money): string => `$${formatMoney(value)}`;
 /**
  * What a failed wallet request means to the reader, in a sentence. The
  * server's own words ("wallet requires a database") are for logs; shown raw
@@ -58,6 +59,7 @@ export function Wallet(): JSX.Element {
   const [refreshes, setRefreshes] = useState(0);
   const [cap, setCap] = useState('');
   const [saved, setSaved] = useState(false);
+  const [capError, setCapError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -87,6 +89,8 @@ export function Wallet(): JSX.Element {
 
   function load(next: string | null): void {
     setLoading(true);
+    setSaved(false);
+    setCapError(null);
     setError(null);
     setCursor(next);
     setRevision((value) => value + 1);
@@ -97,14 +101,14 @@ export function Wallet(): JSX.Element {
   }
   async function save(event: FormEvent): Promise<void> {
     event.preventDefault();
+    setSaved(false);
+    setCapError(null);
     const value = cap.trim();
     if (!/^\d+(\.\d{1,6})?$/.test(value) || Number(value) > 999999.999999) {
-      setError('Enter a non-negative dollar amount below 1000000 with at most six decimals.');
+      setCapError('Enter a non-negative dollar amount below 1000000 with at most six decimals.');
       return;
     }
     setSaving(true);
-    setError(null);
-    setSaved(false);
     try {
       const wallet = await request<Summary>('/api/wallet/cap', {
         method: 'PATCH',
@@ -113,7 +117,11 @@ export function Wallet(): JSX.Element {
       setSummary(wallet);
       setSaved(true);
     } catch (failure) {
-      setError(message(failure));
+      setCapError(
+        failure instanceof RequestFailure && failure.status === 401
+          ? 'Please sign in again to save your cap.'
+          : 'The cap change could not be confirmed. Refresh to check the saved cap before retrying.',
+      );
     } finally {
       setSaving(false);
     }
@@ -220,7 +228,10 @@ export function Wallet(): JSX.Element {
                   onChange={(event) => {
                     setCap(event.target.value);
                     setSaved(false);
+                    setCapError(null);
                   }}
+                  aria-invalid={capError ? true : undefined}
+                  aria-describedby={capError ? 'wallet-cap-error' : undefined}
                   inputMode="decimal"
                   className="max-w-xs font-mono tabular-nums"
                   disabled={saving || loading}
@@ -234,6 +245,11 @@ export function Wallet(): JSX.Element {
                 New work past the cap waits for your approval below. Work already running can go
                 past it.
               </p>
+              {capError && (
+                <p id="wallet-cap-error" role="alert" className="text-sm text-ink">
+                  {capError}
+                </p>
+              )}
               {saved && (
                 <p role="status" className="text-sm text-ink">
                   Account cap saved.

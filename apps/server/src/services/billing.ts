@@ -30,6 +30,8 @@ import {
 } from './shared/env.js';
 import { internalCaller } from './shared/internal.js';
 import { run, serve } from './shared/serve.js';
+import { PgApiKeyStore, withApiKeys } from './platform/apiKeys.js';
+import { registerKeyGuard } from './platform/keyGuard.js';
 
 const log = serviceLog('billing');
 
@@ -85,13 +87,16 @@ async function start(): Promise<void> {
     },
   });
 
+  // An API key is refused here with 403, as on every path outside /api/v1.
+  const resolver = withApiKeys(identity.principalResolver, new PgApiKeyStore(db), log);
   const server = await buildServer({
     broker: new Broker(),
-    resolver: identity.principalResolver,
+    resolver,
     access: noSessions,
     ...(strictTransport() ? { strictTransport: true } : {}),
     log,
   });
+  registerKeyGuard(server, { resolver, internalKey: internalKey() });
   server.get('/api/health', () => ({
     status: 'ok',
     service: 'billing',

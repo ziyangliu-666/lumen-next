@@ -1,0 +1,77 @@
+# Defaults for local k3d: plain HTTP on http://lumen.localhost.
+# The public host overrides these with deploy/k8s/aws/values-aws.yaml.
+
+image:
+  # No registry: the image is imported into the node's containerd
+  # (k3d image import, or k3s ctr images import), so never pull it.
+  repository: lumen-next
+  tag: latest
+  pullPolicy: IfNotPresent
+
+ingress:
+  # *.localhost resolves to 127.0.0.1 in browsers and curl, so no hosts file.
+  host: lumen.localhost
+
+tls:
+  # On: a cert-manager Certificate, HTTPS on websecure, and a redirect on web.
+  # Needs cert-manager and the ClusterIssuer in deploy/k8s/aws/cluster-issuer.yaml.
+  enabled: false
+  clusterIssuer: letsencrypt
+
+keda:
+  # Off: the worker runs one fixed replica and needs no KEDA CRDs.
+  enabled: true
+
+config:
+  logLevel: info
+  sessionLifetimeMs: '604800000'
+  demoPaceMs: '1500'
+  # "" picks the worker on its own: steering when extraSecrets holds a model
+  # key (OPENAI_API_KEY or DEEPSEEK_API_KEY), demo otherwise.
+  # Set "demo" or "steering" to force one.
+  worker: ''
+
+# Optional keys for every app container, through Secret lumen-extra.
+# Pass them at install time, never in a committed file, for example:
+#   --set-string extraSecrets.OPENAI_API_KEY=sk-...
+#   --set-string extraSecrets.LUMEN_MODEL_PROVIDER=openai
+extraSecrets: {}
+
+# Small on purpose: everything shares one 4 GB node.
+resources:
+  app:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+  postgres:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 384Mi }
+  rabbitmq:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { memory: 512Mi }
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 3
+  cpuPercent: 70
+
+worker:
+  minReplicas: 1
+  maxReplicas: 4
+  # One queue per task depth: a parent turn holds a worker slot while it
+  # waits for its children, and one shared queue could then deadlock.
+  # KEDA scales on the longest of them.
+  queues: [lumen.turns.0, lumen.turns.1, lumen.turns.2]
+  queueLength: 5
+  # Long enough to finish the turn in hand after SIGTERM.
+  terminationGracePeriodSeconds: 120
+  volumeSize: 2Gi
+
+postgres:
+  image: postgres:16-alpine
+  volumeSize: 2Gi
+
+rabbitmq:
+  image: rabbitmq:3.13-management
+  volumeSize: 1Gi
+
+storageClass: local-path

@@ -1,0 +1,17 @@
+# The public host: one k3s node on EC2, behind HTTPS.
+# Set the host name at deploy time; it is never committed:
+#   helm upgrade --install lumen deploy/k8s/lumen -n lumen --create-namespace \
+#     -f deploy/k8s/aws/values-aws.yaml \
+#     --set ingress.host=lumen.<elastic-ip-with-dashes>.sslip.io \
+#     --set image.tag=<commit-sha>
+# The model key, if any, comes from a GitHub Actions secret the same way:
+#   --set-string extraSecrets.OPENAI_API_KEY=... (LUMEN_WORKER then becomes steering)
+
+ingress:
+  # Placeholder. Deploy with --set ingress.host=...; see above.
+  host: lumen.example.sslip.io
+
+tls:
+  enabled: true
+  # Applied once per cluster from deploy/k8s/aws/cluster-issuer.yaml.
+  clusterIssuer: letsencrypt

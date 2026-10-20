@@ -3,3 +3,5 @@ coverage
 node_modules
 *.md
 package-lock.json
+# Helm templates are Go templates, not YAML, until helm renders them.
+deploy/k8s/lumen/templates

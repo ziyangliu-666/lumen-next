@@ -1,0 +1,7 @@
+[
+  {
+    "topic": "retrieval-augmented generation for scientific literature",
+    "agent": "literature-scout"
+  },
+  { "topic": "pattern avoidance in permutations", "agent": "literature-scout" }
+]

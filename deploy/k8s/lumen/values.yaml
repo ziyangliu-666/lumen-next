@@ -75,3 +75,24 @@ rabbitmq:
   volumeSize: 1Gi
 
 storageClass: local-path
+
+# The literature watch (apps/watch): a second app on the platform, which uses
+# only the public API with an API key. Off by default: it needs a key and a
+# published agent first. The program comes from ConfigMap watch-app, made
+# outside the chart from apps/watch/watch.mjs (see deploy/k8s/README.md), so
+# the repository keeps one copy of it.
+watch:
+  enabled: false
+  schedule: '0 8 * * *'
+  image: node:22-alpine
+  # "" uses the public origin of this release (see lumen.origin).
+  lumenUrl: ''
+  # The Secret holds the key; make it with kubectl, never in a values file.
+  apiKeySecret:
+    name: watch-api-key
+    key: LUMEN_API_KEY
+  topics:
+    - topic: retrieval-augmented generation for scientific literature
+      agent: literature-scout
+    - topic: pattern avoidance in permutations
+      agent: literature-scout

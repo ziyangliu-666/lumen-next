@@ -1,0 +1,88 @@
+{{- /*
+The literature watch (apps/watch): a CronJob that asks the public API one
+question per topic and prints a Markdown digest to its log. It mounts the
+program from ConfigMap watch-app, which is made outside the chart:
+  kubectl create configmap watch-app -n lumen --from-file=apps/watch/watch.mjs \
+    --dry-run=client -o yaml | kubectl apply -f -
+Helm can read only files inside the chart, and a second copy of the program
+there would drift from apps/watch.
+*/ -}}
+{{- if .Values.watch.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: watch-topics
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+    app.kubernetes.io/name: watch
+data:
+  watches.json: |
+    {{- toPrettyJson .Values.watch.topics | nindent 4 }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: watch
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+    app.kubernetes.io/name: watch
+spec:
+  schedule: {{ .Values.watch.schedule | quote }}
+  # A slow run must not overlap the next one: both would ask the same questions.
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      # One retry for a bad night; exit 2 (a wrong key) fails the same way twice.
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            {{- include "lumen.labels" . | nindent 12 }}
+            app.kubernetes.io/name: watch
+        spec:
+          restartPolicy: Never
+          # The watch talks to the public API only, never to Kubernetes.
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            # The node user of the node image.
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+          containers:
+            - name: watch
+              image: {{ .Values.watch.image }}
+              command: [node, /app/watch.mjs]
+              env:
+                - name: LUMEN_URL
+                  value: {{ .Values.watch.lumenUrl | default (include "lumen.origin" .) | quote }}
+                - name: LUMEN_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.watch.apiKeySecret.name }}
+                      key: {{ .Values.watch.apiKeySecret.key }}
+                - name: WATCH_FILE
+                  value: /config/watches.json
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { memory: 128Mi }
+              volumeMounts:
+                - name: app
+                  mountPath: /app
+                  readOnly: true
+                - name: topics
+                  mountPath: /config
+                  readOnly: true
+          volumes:
+            - name: app
+              configMap:
+                name: watch-app
+            - name: topics
+              configMap:
+                name: watch-topics
+{{- end }}

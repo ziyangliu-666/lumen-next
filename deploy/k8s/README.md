@@ -100,6 +100,28 @@ kubectl delete namespace lumen
 k3d cluster delete lumen
 ```
 
+## The literature watch (optional)
+
+The CronJob `watch` runs the literature watch (`apps/watch`), a second app
+that uses only the public API with an API key. It is off by default. It needs
+a key, a published agent, and ConfigMap `watch-app`, which the chart does not
+make: Helm reads only files inside the chart, and the program stays in
+`apps/watch`. Make the ConfigMap and the key's Secret, then turn it on:
+
+```sh
+kubectl create configmap watch-app -n lumen --from-file=apps/watch/watch.mjs \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic watch-api-key -n lumen \
+  --from-literal=LUMEN_API_KEY="$LUMEN_API_KEY"
+helm upgrade --install lumen deploy/k8s/lumen -n lumen --reuse-values \
+  --set watch.enabled=true
+```
+
+To make the key and publish the agent, see [apps/watch/README.md](../../apps/watch/README.md).
+By default the job calls the public origin. On local k3d, `lumen.localhost`
+does not reach Traefik from inside a pod, so set `watch.lumenUrl` to an
+address that does.
+
 ## The public host: k3s on AWS
 
 The demonstration runs the same chart on one EC2 instance with k3s, behind

@@ -20,6 +20,8 @@ export default tseslint.config(
       // Plain Node build scripts, outside every tsconfig.
       'apps/server/scripts/**',
       'apps/web/scripts/**',
+      // The k6 load test runs in k6's own JavaScript runtime, not in Node.
+      'deploy/k8s/load/**',
       // The status board: one static page and its data, read by a browser as they are.
       'docs/status/**',
       // Files the web server sends to the browser byte for byte (theme-init.js

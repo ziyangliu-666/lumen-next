@@ -26,8 +26,9 @@ Open one pull request from ass/session into ass/platform. Merge
 origin/ass/platform into your branch every day.
 
 Rules:
-- Add files only, under apps/server/src/services/ and deploy/k8s/. Do not
-  change main.ts, app.ts or anything under apps/server/src/modules/.
+- Add files only, under apps/server/src/services/, deploy/k8s/ and
+  .github/workflows/platform-*.yml. Do not change main.ts, app.ts or anything
+  under apps/server/src/modules/.
 - npm run verify must stay green.
 - English only in code, comments, commits and the pull request.
 
@@ -65,12 +66,14 @@ Part 2: apps/server/src/services/session.ts, the session service.
 - Listen on LUMEN_PORT (default 4000). Shut down cleanly on SIGTERM.
 
 Part 3, on 24 and 25 October: deploy/k8s/demo.sh, the command-line
-demonstration in the contract section "The demonstration". It prints each
-command before it runs it and stops on the first error. Test it end to end on
-k3d with the chart from ass/deploy.
+demonstration in the contract section "The demonstration". It reads the
+address from LUMEN_URL and opens the SSH tunnel for kubectl when LUMEN_SSH_HOST
+is set, so the same script runs against local k3d and against the public host.
+It prints each command before it runs it and stops on the first error. Test it
+on k3d first, then on the public host.
 
-Done when: a question asked through the Ingress with curl shows steps that a
-worker pod wrote, and demo.sh runs from start to end.
+Done when: a question asked with curl on the public HTTPS address shows steps
+that a worker pod wrote, and demo.sh runs from start to end against it.
 ```
 
 ---
@@ -91,8 +94,9 @@ origin/ass/platform into your branch every day. LIU ZIYANG's shared adapters
 not write your own copies.
 
 Rules:
-- Add files only, under apps/server/src/services/ and deploy/k8s/. Do not
-  change main.ts, app.ts or anything under apps/server/src/modules/.
+- Add files only, under apps/server/src/services/, deploy/k8s/ and
+  .github/workflows/platform-*.yml. Do not change main.ts, app.ts or anything
+  under apps/server/src/modules/.
 - npm run verify must stay green.
 - English only in code, comments, commits and the pull request.
 
@@ -139,8 +143,9 @@ Open one pull request from ass/identity into ass/platform. Merge
 origin/ass/platform into your branch every day.
 
 Rules:
-- Add files only, under apps/server/src/services/ and deploy/k8s/. Do not
-  change main.ts, app.ts or anything under apps/server/src/modules/.
+- Add files only, under apps/server/src/services/, deploy/k8s/ and
+  .github/workflows/platform-*.yml. Do not change main.ts, app.ts or anything
+  under apps/server/src/modules/.
 - npm run verify must stay green.
 - English only in code, comments, commits and the pull request.
 
@@ -160,6 +165,15 @@ it merges).
   as the contract's service table says. More specific paths first.
 - Never route /internal/*. Add a test in demo terms: curl /internal/... through
   the Ingress returns 404.
+- HTTPS on the public host (contract section "Public deployment"): the host
+  name comes from values.yaml (ingress.host); a cert-manager annotation asks
+  the ClusterIssuer that HE RONG installs for a Let's Encrypt certificate; a
+  Traefik middleware redirects HTTP to HTTPS. Local k3d keeps plain HTTP, set
+  by a value.
+- Sign-in on the public host: the identity origin is https://<ingress.host>.
+  Add https://<ingress.host>/api/auth/github/callback and the Google one to the
+  OAuth apps (or make second OAuth apps for the platform), and put their
+  client ids and secrets in the GitHub Actions secrets that HE RONG lists.
 - A Traefik rate-limit middleware on /api/auth/*. Show that the 11th sign-in
   attempt in one second gets 429.
 
@@ -168,8 +182,8 @@ Create, list and revoke a key on /api/auth/keys; store only a hash; accept
 Authorization: Bearer <key> in the resolver. Write the design decision into
 the contract's "Sign-in" section.
 
-Done when: on k3d, sign-up, sign-in and the GitHub sign-in redirect work
-through the Ingress, and the rate limit returns 429.
+Done when: on the public HTTPS address, sign-up, sign-in and GitHub sign-in
+work, the browser shows a valid certificate, and the rate limit returns 429.
 ```
 
 ---
@@ -188,8 +202,9 @@ Open one pull request from ass/project into ass/platform. Merge
 origin/ass/platform into your branch every day.
 
 Rules:
-- Add files only, under apps/server/src/services/ and deploy/k8s/. Do not
-  change main.ts, app.ts or anything under apps/server/src/modules/.
+- Add files only, under apps/server/src/services/, deploy/k8s/ and
+  .github/workflows/platform-*.yml. Do not change main.ts, app.ts or anything
+  under apps/server/src/modules/.
 - npm run verify must stay green.
 - English only in code, comments, commits and the pull request.
 
@@ -210,15 +225,16 @@ Part 2: the load test, deploy/k8s/load/ask.js, for k6.
 - Each iteration: ask a question, then poll /api/sessions/:id until the root
   task is at rest. Measure the time to rest as a custom trend.
 - Stages: ramp from 1 to 50 virtual users over 2 minutes, hold 3 minutes,
-  ramp down over 1 minute. Read the target URL from an environment variable.
+  ramp down over 1 minute. Read the target URL from LUMEN_URL, so it runs
+  against local k3d and against the public HTTPS address.
 - Thresholds: under 1 percent failed requests; report the 95th percentile of
   the time to rest.
 - The workers run with LUMEN_WORKER=demo, so the test costs no money.
 - A short deploy/k8s/load/README.md: how to run it, and what to watch at the
   same time (kubectl get scaledobject,hpa,pods -w).
 
-Done when: k6 runs against k3d, the worker pods scale up during the hold and
-down after it, and the k6 summary is saved for the report.
+Done when: k6 runs against the public address, the worker pods scale up
+during the hold and down after it, and the k6 summary is saved for the report.
 ```
 
 ---
@@ -238,8 +254,9 @@ origin/ass/platform into your branch every day. Merge the chart skeleton
 (Part 2) early, by 22 October, because everyone tests on it.
 
 Rules:
-- Add files only, under apps/server/src/services/ and deploy/k8s/. Do not
-  change main.ts, app.ts or anything under apps/server/src/modules/.
+- Add files only, under apps/server/src/services/, deploy/k8s/ and
+  .github/workflows/platform-*.yml. Do not change main.ts, app.ts or anything
+  under apps/server/src/modules/.
 - npm run verify must stay green.
 - English only in code, comments, commits and the pull request.
 
@@ -278,6 +295,31 @@ Part 3: scaling.
   1 to 8 replicas, a target of 5 messages per replica.
 - Check with PENG XUJIAN's k6 test that workers scale up and down.
 
+Part 4: the public host and the deploy workflow. Read the contract section
+"Public deployment" and follow its table.
+- deploy/k8s/aws/README.md: the exact steps a person runs once, with the AWS
+  CLI: a key pair, a security group (80 and 443 open, 22 open, 6443 closed), a
+  t3.xlarge Ubuntu 24.04 instance in ap-southeast-1 with 50 GB gp3, an Elastic
+  IP. Then on the host: install k3s, install KEDA and cert-manager with Helm,
+  and apply a Let's Encrypt ClusterIssuer (deploy/k8s/aws/cluster-issuer.yaml).
+  Also how to stop and start the instance, and how to delete everything. Do
+  not put credentials, IPs or keys in the repository.
+- deploy/k8s/aws/values-aws.yaml: the values for the public host: the image
+  from ghcr.io/ziyangliu-666/lumen-next, ingress.host, HTTPS on.
+- .github/workflows/platform-deploy.yml, triggered on push to ass/platform
+  and by hand (workflow_dispatch), never on main:
+  1. Build the image from the Dockerfile and push it to GHCR, tagged with the
+     commit SHA (use the built-in GITHUB_TOKEN with packages: write).
+  2. Copy the chart to the host with ssh and run helm upgrade --install with
+     values-aws.yaml and --set image.tag=<sha>, and --wait.
+  3. curl https://<host>/api/health until it answers, or fail the job.
+  Secrets: PLATFORM_SSH_KEY, PLATFORM_SSH_HOST, and the application secrets
+  (database password, LUMEN_INTERNAL_KEY, model key, OAuth ids and secrets),
+  passed to helm as --set values from GitHub secrets, never echoed.
+- The model key on the host must have a low spending limit at the provider.
+
 Done when: helm lint passes, helm install on a fresh k3d cluster brings every
-pod to ready, and the worker ScaledObject scales during the load test.
+pod to ready, a push to ass/platform deploys to the public HTTPS address
+without anyone logging in to the host, and the worker ScaledObject scales on
+the public host during the load test.
 ```

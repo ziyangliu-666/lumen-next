@@ -2,8 +2,9 @@
 
 This is the contract for the ASS practice project (Architecting Scalable
 Systems, Team 15). The goal is a minimal demonstration on 26 October 2026: the
-slices that already work on `main` run as separate services on Kubernetes, one
-question runs end to end, and the team shows it from the command line. The
+slices that already work on `main` run as separate services on Kubernetes in
+AWS, behind a public HTTPS address, one question runs end to end, and the team
+shows it from the command line. The
 report is due on 16 November 2026.
 
 Reuse before rewrite. A service is the existing slice, built by a new entry
@@ -19,14 +20,15 @@ point. Write new code only where two processes must now talk.
 |---|---|---|
 | LIU ZIYANG | `ass/session` | `session`, the shared adapters, integration, the demo script |
 | LI ZHUOYANG | `ass/worker` | `worker` |
-| LU YI | `ass/identity` | `identity`, the gateway (Ingress) |
+| LU YI | `ass/identity` | `identity`, the gateway (Ingress), HTTPS |
 | PENG XUJIAN | `ass/project` | `project`, the k6 load test |
-| HE RONG | `ass/deploy` | `billing`, the Helm chart, KEDA |
+| HE RONG | `ass/deploy` | `billing`, the Helm chart, KEDA, the AWS host, the deploy workflow |
 
 ## Rules
 
 1. **Add files. Do not change slice internals.** New code goes under
-   `apps/server/src/services/` and `deploy/k8s/`. `main.ts`, `app.ts` and
+   `apps/server/src/services/`, `deploy/k8s/` and
+   `.github/workflows/platform-*.yml`. `main.ts`, `app.ts` and
    `apps/server/src/modules/` do not change on this branch.
 2. **A slice change goes to `main` first**, as a normal pull request. Then
    merge `main` into `ass/platform`.
@@ -50,7 +52,7 @@ same image with a different command:
 Plus PostgreSQL and RabbitMQ, each a StatefulSet.
 
 There is no gateway service. The gateway is a Kubernetes Ingress on Traefik,
-which k3d ships. It routes by path prefix, as the table says, and it never
+which k3s and k3d both ship. It routes by path prefix, as the table says, and it never
 routes `/internal/*`.
 
 `session` has one replica. The kernel holds running tasks in memory, so a
@@ -149,13 +151,44 @@ the shared database, so the auth cookie works on every path. The public API
 (UC2, UC3) uses `Authorization: Bearer <api key>`. LU YI decides where the keys
 are stored.
 
+## Public deployment: k3s on AWS
+
+The demonstration runs on a public HTTPS address that the lecturer can open
+during the presentation and after it. Local k3d stays the place to develop and
+test; the cluster in AWS runs the same chart.
+
+| Part | Choice | Why |
+|---|---|---|
+| Host | One EC2 instance, `t3.xlarge` (4 vCPU, 16 GB), region `ap-southeast-1` (Singapore), Ubuntu 24.04, 50 GB gp3 | Enough for every service and 8 workers. Close to the audience. |
+| Kubernetes | k3s, one node | The same Traefik, local-path storage and metrics-server as k3d, so the chart does not change. The worker's shared volume works on one node. |
+| Address | An Elastic IP, and the host name `lumen.<ip-with-dashes>.sslip.io` | A stable public name without buying a domain. |
+| HTTPS | cert-manager with a Let's Encrypt `ClusterIssuer`, HTTP-01 through Traefik | A real certificate, so the browser shows the lock. |
+| Images | GitHub Container Registry, `ghcr.io/ziyangliu-666/lumen-next`, tagged with the commit SHA | Built by the workflow. The package is public, as the repository is, so the cluster pulls without a secret. |
+| Deploy | `.github/workflows/platform-deploy.yml`: on every push to `ass/platform`, build and push the image, then `ssh` to the host and run `helm upgrade --install` with the new tag | A merge is a deployment. This is the DevOps part of the demonstration. |
+| Access | Security group: 80 and 443 open; 22 only with the deploy key; 6443 closed. `kubectl` from a laptop goes through `ssh -L 6443:localhost:6443`. | The Kubernetes API is never public. |
+| Cost | About USD 5 per day. Stop the instance at night with `aws ec2 stop-instances`. Delete everything after the grades are out. | Under USD 50 in total. |
+
+Rules for the public host:
+
+- The model key on the host is a key with a low spending limit at the
+  provider. Every account also starts with the USD 1 cap that billing enforces.
+- `LUMEN_INTERNAL_KEY`, the database password and the model key are GitHub
+  Actions secrets. They never appear in the repository or in a log.
+- The RabbitMQ management page is not public. Reach it through the SSH tunnel.
+
+EKS is the next step after the demonstration: the same chart, plus node
+autoscaling and EFS for the shared volume. The report says so.
+
 ## The demonstration, from the command line
 
-`deploy/k8s/demo.sh` runs the whole demonstration. LIU ZIYANG writes it on
-24–25 October. It does these steps, and prints each command before it runs it:
+`deploy/k8s/demo.sh` runs the whole demonstration against the public host.
+LIU ZIYANG writes it on 24–25 October. It reads the address from `LUMEN_URL`,
+so the same script also runs against local k3d. It prints each command before
+it runs it:
 
-1. `k3d cluster create`, `docker build`, `k3d image import`, `helm install`.
-2. `kubectl get pods`: every service is ready.
+1. Open `https://lumen.<ip>.sslip.io` in the browser: the lock, the landing
+   page. Show the last run of the deploy workflow on GitHub.
+2. `kubectl get pods` through the SSH tunnel: every service is ready.
 3. `curl`: sign up, sign in, create a project, ask a question.
 4. Watch the session: the steps arrive through the socket (`websocat`), or
    `curl /api/sessions/:id`.
@@ -176,12 +209,15 @@ are stored.
 |---|---|---|
 | 20 Oct | This contract and the prompts. | Every member has read them. |
 | 21 Oct | LIU ZIYANG: the shared adapters on `ass/platform`. | Merged, so the others can import them. |
+| 21 Oct | HE RONG: the EC2 host with k3s, the Elastic IP and the security group. | `kubectl get nodes` works through the tunnel. |
 | 21–23 Oct | Every member: their service, on their branch. | The service starts on k3d and answers `/api/health`. |
-| 24 Oct | Integration on k3d. | Step 3 of the demonstration works. |
+| 23 Oct | HE RONG and LU YI: the deploy workflow and HTTPS. | A push to `ass/platform` reaches the public address with a valid certificate. |
+| 24 Oct | Integration, on k3d first, then on the public host. | Step 3 of the demonstration works on the public address. |
 | 25 Oct | Load test, demonstration script, slides, rehearsal. | `demo.sh` runs from start to end. A recording exists, in case the live run fails. |
 | 26 Oct | Presentation at 11:25. | |
 
-Not in the demonstration, stated as future work in the report: EKS, a separate
+Not in the demonstration, stated as future work in the report: EKS with node
+autoscaling, a separate
 `stream` service, one database per service, the model gateway, the agent
 registry beyond a list, UC6 (the literature watch), OpenTelemetry and network
 policies.

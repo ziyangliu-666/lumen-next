@@ -1,0 +1,16 @@
+flowchart LR
+  PUSH["git push to ass/platform<br/>or manual run (worker: auto, demo, steering)"] --> V & SCA & SAST
+  V["verify<br/>format, lint, typecheck,<br/>tests with coverage"]
+  SCA["SCA<br/>npm audit --omit=dev<br/>--audit-level=high"]
+  SAST["SAST<br/>CodeQL javascript-typescript"]
+  V & SCA & SAST --> D
+  subgraph D["deploy"]
+    direction TB
+    D1["docker build<br/>lumen-next:commit-sha"] --> D2["Trivy image scan<br/>report HIGH, CRITICAL<br/>gate: CRITICAL with a fix"]
+    D2 --> D3["docker save, scp to host<br/>k3s ctr images import"]
+    D3 --> D4["helm upgrade --install --wait"]
+    D4 --> D5["poll https://host/api/health"]
+  end
+  D --> DAST["DAST<br/>OWASP ZAP baseline<br/>on the public URL"]
+  D --> SMOKE["Smoke load<br/>k6 PROFILE=smoke<br/>(demo worker only)"]
+  DAST & SMOKE --> SUM["summary<br/>one row per stage"]

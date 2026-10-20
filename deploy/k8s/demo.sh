@@ -272,6 +272,24 @@ tail -5 "$WORK/k6.log"
 kc get scaledobject,hpa,pods -n "$NS"
 pause
 
+step 'A second app on the platform: the literature watch'
+# The watch uses only the public API and a key (apps/watch/README.md), so it
+# needs a key made beforehand and the agent literature-scout published.
+WATCH_APP="$SCRIPT_DIR/../../apps/watch/watch.mjs"
+if [ -z "${LUMEN_API_KEY:-}" ]; then
+  echo '   Skipped: set LUMEN_API_KEY to a key with questions:read and questions:write'
+  echo '   (apps/watch/README.md says how to make one), then run the demo again.'
+elif ! command -v node >/dev/null 2>&1; then
+  echo '   Skipped: node is not installed (brew install node@22).'
+else
+  # One topic, so the step takes a minute or two and not one per topic.
+  echo '[{"topic": "pattern avoidance in permutations", "agent": "literature-scout"}]' >"$WORK/watches.json"
+  show "LUMEN_URL=$BASE LUMEN_API_KEY=\$LUMEN_API_KEY WATCH_FILE=$WORK/watches.json node apps/watch/watch.mjs"
+  LUMEN_URL=$BASE WATCH_FILE="$WORK/watches.json" node "$WATCH_APP" ||
+    echo "   the watch exited with code $? (1: a topic did not end, 2: the key or the URL)"
+fi
+pause
+
 step 'The wallet: what the questions of the demo account cost'
 WALLET=$(api_shown GET /api/wallet)
 jq . <<<"$WALLET"

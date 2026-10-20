@@ -292,15 +292,20 @@ Part 3: scaling.
 - HPA on CPU for identity, project and billing: 1 to 4 replicas, 70 percent.
   Set CPU requests, or the HPA has nothing to measure.
 - KEDA ScaledObject for worker on the RabbitMQ queue length of lumen.turns:
-  1 to 8 replicas, a target of 5 messages per replica.
+  1 to 4 replicas, a target of 5 messages per replica. The host has 4 GB,
+  so give every container a memory request of 128 MiB and a limit of 256 MiB.
 - Check with PENG XUJIAN's k6 test that workers scale up and down.
 
 Part 4: the public host and the deploy workflow. Read the contract section
 "Public deployment" and follow its table.
+- The host already exists (created on 20 October): t3.medium in
+  ap-southeast-1 with an Elastic IP, the security group, 2 GB swap, k3s and
+  Helm. LIU ZIYANG gives you its address and adds your SSH public key to it.
+  What is left on the host: KEDA, cert-manager and the ClusterIssuer.
 - deploy/k8s/aws/README.md: the exact steps a person runs once, with the AWS
   CLI: a key pair, a security group (80 and 443 open, 22 open, 6443 closed), a
-  t3.xlarge Ubuntu 24.04 instance in ap-southeast-1 with 50 GB gp3, an Elastic
-  IP. Then on the host: install k3s, install KEDA and cert-manager with Helm,
+  t3.medium Ubuntu 24.04 instance in ap-southeast-1 with 20 GB gp3 and 2 GB
+  swap, an Elastic IP. Then on the host: install k3s, install KEDA and cert-manager with Helm,
   and apply a Let's Encrypt ClusterIssuer (deploy/k8s/aws/cluster-issuer.yaml).
   Also how to stop and start the instance, and how to delete everything. Do
   not put credentials, IPs or keys in the repository.

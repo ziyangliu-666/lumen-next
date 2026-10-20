@@ -159,14 +159,14 @@ test; the cluster in AWS runs the same chart.
 
 | Part | Choice | Why |
 |---|---|---|
-| Host | One EC2 instance, `t3.xlarge` (4 vCPU, 16 GB), region `ap-southeast-1` (Singapore), Ubuntu 24.04, 50 GB gp3 | Enough for every service and 8 workers. Close to the audience. |
+| Host | One EC2 instance, `t3.medium` (2 vCPU, 4 GB, plus 2 GB swap), region `ap-southeast-1` (Singapore), Ubuntu 24.04, 20 GB gp3 | The cheapest size that holds every service and 4 workers. Set small memory requests (128 MiB per service). Close to the audience. |
 | Kubernetes | k3s, one node | The same Traefik, local-path storage and metrics-server as k3d, so the chart does not change. The worker's shared volume works on one node. |
 | Address | An Elastic IP, and the host name `lumen.<ip-with-dashes>.sslip.io` | A stable public name without buying a domain. |
 | HTTPS | cert-manager with a Let's Encrypt `ClusterIssuer`, HTTP-01 through Traefik | A real certificate, so the browser shows the lock. |
 | Images | GitHub Container Registry, `ghcr.io/ziyangliu-666/lumen-next`, tagged with the commit SHA | Built by the workflow. The package is public, as the repository is, so the cluster pulls without a secret. |
 | Deploy | `.github/workflows/platform-deploy.yml`: on every push to `ass/platform`, build and push the image, then `ssh` to the host and run `helm upgrade --install` with the new tag | A merge is a deployment. This is the DevOps part of the demonstration. |
 | Access | Security group: 80 and 443 open; 22 only with the deploy key; 6443 closed. `kubectl` from a laptop goes through `ssh -L 6443:localhost:6443`. | The Kubernetes API is never public. |
-| Cost | About USD 5 per day. Stop the instance at night with `aws ec2 stop-instances`. Delete everything after the grades are out. | Under USD 50 in total. |
+| Cost | About USD 1.3 per day while it runs, plus about USD 0.12 per day for the Elastic IP and USD 0.06 per day for the disk. Stop the instance at night with `aws ec2 stop-instances`. Delete everything after the grades are out. | About USD 10 for the project. |
 
 Rules for the public host:
 

@@ -12,6 +12,12 @@ import type { SessionAccess } from '../core/http/authGuard.js';
 import { Broker } from '../core/protocol/broker.js';
 import { createIdentitySlice, LoginGate } from '../modules/identity/index.js';
 import { createProjectsSlice } from '../modules/projects/index.js';
+import { registerAgentRoutes, registerUsageRoutes } from './platform/agentRoutes.js';
+import { PgApiKeyStore, withApiKeys } from './platform/apiKeys.js';
+import { registerAskRoutes } from './platform/askRoutes.js';
+import { registerKeyGuard } from './platform/keyGuard.js';
+import { registerOpenApiRoute } from './platform/openapi.js';
+import { AgentStore, IntentStore, UsageStore } from './platform/registry.js';
 import { remoteSessionDirectory } from './shared/directory.js';
 import {
   database,
@@ -33,7 +39,8 @@ async function start(): Promise<void> {
   const config = identityConfig();
   // Read before the database opens: a missing key should fail fast, not after
   // a migration wait.
-  const call = internalCaller(sessionUrl(), internalKey());
+  const key = internalKey();
+  const call = internalCaller(sessionUrl(), key);
   const db = await database(log);
   // Mail and OAuth are left out: they only serve identity's own routes.
   const identity = createIdentitySlice({
@@ -46,19 +53,27 @@ async function start(): Promise<void> {
   });
   const projects = createProjectsSlice({ sessions: remoteSessionDirectory(call), db, log });
 
+  const resolver = withApiKeys(identity.principalResolver, new PgApiKeyStore(db), log);
   const server = await buildServer({
     broker: new Broker(),
-    resolver: identity.principalResolver,
+    resolver,
     access: noSessions,
     ...(strictTransport() ? { strictTransport: true } : {}),
     log,
   });
+  registerKeyGuard(server, { resolver, internalKey: key });
   server.get('/api/health', () => ({
     status: 'ok',
     service: 'project',
     uptimeSeconds: Math.round(process.uptime()),
   }));
   await server.register(projects.registerRoutes);
+  // The public API v1 (docs/platform/public-api.md): the registry, asking, usage.
+  const agents = new AgentStore(db);
+  registerAgentRoutes(server, { agents });
+  registerAskRoutes(server, { agents, intents: new IntentStore(db), internalKey: key });
+  registerUsageRoutes(server, { usage: new UsageStore(db) });
+  registerOpenApiRoute(server);
 
   await serve(server, log, [() => db.close()]);
 }

@@ -54,6 +54,26 @@ of worker and session win over the /api/projects prefix.
   priority: 50
   services:
     - { name: session, port: http }
+# Public API v1 (docs/platform/public-api.md). Reading one question is a read
+# of the kernel's snapshot, so GET /api/v1/questions/<id> goes to session; the
+# POST that asks one creates a project, so it goes to project with the rest.
+- match: {{ $host }} && Method(`GET`) && PathRegexp(`^/api/v1/questions/[^/]+/?$`)
+  kind: Rule
+  priority: 100
+  services:
+    - { name: session, port: http }
+# Public API v1: the keys are identity's.
+- match: {{ $host }} && (Path(`/api/v1/keys`) || PathPrefix(`/api/v1/keys/`))
+  kind: Rule
+  priority: 60
+  services:
+    - { name: identity, port: http }
+# Public API v1: the agent registry, asking, usage and the OpenAPI document.
+- match: {{ $host }} && (Path(`/api/v1`) || PathPrefix(`/api/v1/`))
+  kind: Rule
+  priority: 50
+  services:
+    - { name: project, port: http }
 # Everything else is the web app, which session serves. Never /internal.
 - match: {{ $host }} && PathPrefix(`/`) && !PathPrefix(`/internal`)
   kind: Rule

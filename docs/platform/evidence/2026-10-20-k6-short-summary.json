@@ -2,14 +2,7 @@
   "options": {
     "summaryTimeUnit": "",
     "noColor": false,
-    "summaryTrendStats": [
-      "avg",
-      "min",
-      "med",
-      "max",
-      "p(90)",
-      "p(95)"
-    ]
+    "summaryTrendStats": ["avg", "min", "med", "max", "p(90)", "p(95)"]
   },
   "state": {
     "isStdOutTTY": false,
@@ -537,13 +530,13 @@
     "id": "d41d8cd98f00b204e9800998ecf8427e",
     "groups": [],
     "checks": [
-        {
-          "name": "project 201",
-          "path": "::project 201",
-          "id": "0f860335d99d0a67cbf23354576e5303",
-          "passes": 135,
-          "fails": 0
-        }
-      ]
+      {
+        "name": "project 201",
+        "path": "::project 201",
+        "id": "0f860335d99d0a67cbf23354576e5303",
+        "passes": 135,
+        "fails": 0
+      }
+    ]
   }
 }

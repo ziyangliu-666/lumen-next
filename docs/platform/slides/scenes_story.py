@@ -3,12 +3,13 @@ bounded contexts and the API key. Each scene paints its whole picture from its s
 frame (README.md, "The look", has the rules; scenes_core.py sets the pattern).
 
 Every number on these pictures comes from docs/platform/evidence/ or the public API contract:
-the tree is one demo-mode run on 20 October ("How many primes are below 100?": a lead and three
+the tree is one recorded run on 20 October ("How many primes are below 100?": a lead and three
 readers, USD 0.03, 3 findings, under the USD 1 cap); the literature watch app is about 210 lines; a key may make 20 requests at once and 60
 a minute.
 """
 from draw import (BLACK, INK, INK2, INK3, RULE, RULE2, RAISED, S, X2, FPS, Scene, along, ease, font,
                   lerp, mix)
+from icons import icon
 
 BRIGHT, DIM = 1.0, 0.42                         # an agent at work, and an agent at rest
 
@@ -33,6 +34,44 @@ def glide(sc, seconds, fn):
         fn(i / n)
         sc._add(sc._draw(), round(1000 / FPS))
     sc.moving = []
+
+
+def fly(sc, seconds, items, each=None):
+    """Business objects move along their connectors. An item is (kind, pts, size) or
+    (kind, pts, size, t0, t1): it travels in the part t0..t1 of the time, for staggered starts.
+    each() runs once a frame, so a gear can turn while the work moves."""
+    st = sc.st
+    n = max(1, round(seconds * FPS))
+    for i in range(n + 1):
+        t = i / n
+        objs = []
+        for it in items:
+            kind, pts, s = it[:3]
+            t0, t1 = it[3:5] if len(it) > 3 else (0.0, 1.0)
+            if t0 <= t <= t1 + 1e-9:
+                objs.append((kind, *along(pts, ease((t - t0) / (t1 - t0))), s))
+        st["fly"] = objs
+        if each:
+            each()
+        sc._add(sc._draw(), round(1000 / FPS))
+    st["fly"] = []
+
+
+def busy(sc, seconds, each):
+    """Frames where nothing moves but a worker turns its gear: 12.5 a second keeps the GIF small."""
+    for _ in range(max(1, round(seconds * 12.5))):
+        each()
+        sc._add(sc._draw(), 80)
+
+
+def draw_flying(c, st):
+    """The moving objects, drawn last and lit. A turn in a queue keeps its square; a recorded step
+    keeps its bar; everything else is the icon of its business object."""
+    for kind, x, y, s in st.get("fly", ()):
+        if kind in ("lead", "reader", "step"):
+            c.job(x, y, kind)
+        else:
+            icon(c, kind, x, y, s, lit=True)
 
 
 # ============================================================ 1. the problem: one chat, then Lumen
@@ -128,172 +167,174 @@ def problem():
 
 # ============================================================ 2. one real question becomes a tree
 def tree():
-    Q = (0.3, 2.3, 2.3, 1.2)
-    LEAD, LR = (3.65, 2.9), 0.55
-    RX, RR = 6.0, 0.3
-    RY = [1.7, 2.9, 4.1]
-    BUS = 4.9                                   # where the lead's connector splits to the readers
-    SX = 6.62                                   # the first recorded step beside a reader
-    FX, FW = 7.95, 1.3                          # the findings
-    A = (9.6, 2.45, 2.23, 1.0)                  # the answer
-    FAN = 9.42                                  # where the findings join on the way to the answer
+    PER = (0.9, 2.9)                            # you
+    LEAD, LR = (3.9, 2.9), 0.55
+    BUS, RX, RR = 5.6, 7.0, 0.3                 # the lead's connector splits at BUS to the readers
+    RY = [1.9, 2.9, 3.9]
+    CB, RAIL = 8.1, 1.35                        # the readers' coin line, and the rail to the wallet
+    WAL = (10.2, 2.85)                          # the wallet: the cost counter
+    REST = (1.78, LEAD[1])                      # where the question waits, and the answer lands
+    QL = [(PER[0] + 0.45, LEAD[1]), (LEAD[0] - LR - 0.06, LEAD[1])]
+    PAPERS = [(LEAD[0] - 0.42 + k * 0.42, 4.25) for k in range(3)]  # the findings, back at the lead
 
-    def reader_path(i):
-        return [(LEAD[0] + LR, LEAD[1]), (BUS, LEAD[1]), (BUS, RY[i]), (RX - RR - 0.04, RY[i])]
+    def out_path(i):
+        return [(LEAD[0] + LR + 0.04, LEAD[1]), (BUS, LEAD[1]), (BUS, RY[i]), (RX - RR - 0.04, RY[i])]
+
+    LEAD_COIN = [(LEAD[0], LEAD[1] - LR - 0.04), (LEAD[0], RAIL), (WAL[0], RAIL), (WAL[0], WAL[1] - 0.44)]
+
+    def coin_path(i):
+        return [(RX + RR + 0.04, RY[i]), (CB, RY[i]), (CB, RAIL), (WAL[0], RAIL), (WAL[0], WAL[1] - 0.44)]
 
     def paint(c, st):
-        # the question, with its real text
-        c.text(Q[0], Q[1] - 0.4, Q[2], 0.32, "question", 14, "Medium", INK2, "left")
-        c.box(*Q, "", "active" if st["q"] else "idle")
-        c.text(Q[0] + 0.16, Q[1], Q[2] - 0.2, Q[3], "How many primes\nare below 100?", 15, "Medium",
-               INK if st["q"] else INK2, "left")
-        c.arrow([(Q[0] + Q[2], LEAD[1]), (LEAD[0] - LR - 0.08, LEAD[1])], st["q"])
-        # the lead and its connectors to the readers
+        q = st["q"]
+        # you, the question, and the line to the lead
+        c.line(QL, q)
+        c.text(QL[0][0] + 0.05, 1.95, 2.2, 0.62, "How many primes\nare below 100?", 14, "Medium",
+               INK if q else INK2, "left")
+        icon(c, "person", *PER, 0.75, lit=q, label="you")
+        # the lead, its readers, and the coin lines to the wallet
         for i in range(3):
-            c.arrow(reader_path(i), st["sent"])
+            c.line(out_path(i), st["sent"])
+            c.line(coin_path(i)[:3], st["paying"] == "readers")
+        c.line(LEAD_COIN[:2], st["paying"] == "lead")
+        c.arrow(LEAD_COIN[1:], bool(st["paying"]))
         c.sphere(*LEAD, LR, st["lead"])
         c.text(LEAD[0] - 1, LEAD[1] + LR + 0.06, 2, 0.32, st["lead_label"], 14, "Medium",
                INK if st["lead"] == BRIGHT else INK2)
-        for j in range(st["lead_steps"]):
-            c.job(LEAD[0] - 0.16 + j * 0.32, LEAD[1] + LR + 0.6, "step", color=INK2)
-        # the column heads
-        c.text(RX - 0.6, 1.02, 1.2, 0.3, "readers", 14, "Medium", INK2)
-        c.text(SX - 0.12, 1.02, 0.88, 0.3, "steps", 14, "Medium", INK2)
-        c.text(FX, 1.02, FW, 0.3, "findings", 14, "Medium", INK2, "left")
         for i, y in enumerate(RY):
             c.sphere(RX, y, RR, st["readers"][i])
-            for j in range(st["steps"][i]):
-                c.job(SX + j * 0.32, y, "step", color=INK if st["readers"][i] == BRIGHT else INK2)
-            if st["found"] > i:
-                c.box(FX, y - 0.25, FW, 0.5, "finding %d" % (i + 1), "idle", size=14)
-                c.line([(FX + FW, y), (FAN, y), (FAN, A[1] + A[3] / 2)], st["answer"])
-        if st["found"]:
-            c.arrow([(FAN, A[1] + A[3] / 2), (A[0], A[1] + A[3] / 2)], st["answer"])
-        # the cost counter, against the cap
-        c.number(A[0], 1.0, A[2], st["cost"], "cost so far", 32)
-        c.text(A[0], 1.88, A[2], 0.3, "of a $1.00 cap", 14, "Medium", INK2, "left")
-        # the answer
-        c.text(A[0], A[1] + A[3] + 0.08, A[2], 0.3, "answer", 14, "Medium", INK2, "left")
-        if st["answer"]:
-            c.bar(A[0], A[1], A[2], A[3], INK)
-            c.text(A[0] + 0.16, A[1], A[2] - 0.2, A[3], "answered,\nwith 3 findings", 15,
-                   "Semibold", BLACK, "left")
-        else:
-            c.box(*A, "", "idle")
+        c.text(RX - 0.8, RY[2] + RR + 0.06, 1.6, 0.3, "readers", 14, "Medium", INK2)
+        for k in range(st["found"]):
+            icon(c, "paper", *PAPERS[k], 0.38, lit=st["answer"] is None)
+        # the wallet counts the cost against the cap
+        icon(c, "wallet", *WAL, 0.8, lit=bool(st["paying"]))
+        c.text(WAL[0] - 1.3, WAL[1] + 0.48, 2.6, 0.55, st["cost"], 32, "Semibold", INK)
+        c.text(WAL[0] - 1.3, WAL[1] + 1.03, 2.6, 0.3, "of a $1.00 cap", 14, "Medium", INK2)
+        # the question waits by you; the answer lands in the same place
+        if st["ask"]:
+            icon(c, "question", *REST, 0.42, lit=True)
+        if st["answer"] == "here":
+            icon(c, "paper", *REST, 0.5, lit=True)
+            c.invert(0.35, 3.8, "answer, with 3 findings", 15, h=0.45)
+        draw_flying(c, st)
 
-    st = dict(q=True, lead=DIM, lead_label="lead", lead_steps=0, sent=False, readers=[DIM] * 3,
-              steps=[0, 0, 0], found=0, answer=False, cost="$0.00")
+    st = dict(q=True, ask=True, lead=DIM, lead_label="lead", sent=False, readers=[DIM] * 3, found=0,
+              answer=None, cost="$0.00", paying=None, fly=[])
     sc = Scene("tree.gif", paint, st)
 
-    sc.step("1. You ask a question", 0.8)
-    sc.hop("lead", [(Q[0] + Q[2], LEAD[1]), (LEAD[0] - LR, LEAD[1])], 0.7)
+    sc.step("1. You ask a question", 1.0)
+    sc.set(ask=False)
+    fly(sc, 0.8, [("question", [REST, QL[1]], 0.42)])
     sc.set(lead=BRIGHT)
     sc.hold(2.2)
-    sc.step("2. A lead agent plans the work", 0.6, q=False)
-    sc.set(lead_steps=1, cost="$0.01")
+    sc.step("2. A lead agent plans the work", 0.6, q=False, paying="lead")
+    fly(sc, 1.0, [("coin", LEAD_COIN, 0.32)])
+    sc.set(paying=None, cost="$0.01")
     sc.hold(2.4)
     sc.step("3. Three readers work in parallel", 0.4, sent=True)
-    sc.hop("reader", reader_path(0), 0.75, also=[("reader", reader_path(1)), ("reader", reader_path(2))])
+    fly(sc, 0.75, [("paper", out_path(i), 0.3) for i in range(3)])
     sc.set(readers=[BRIGHT] * 3, lead=DIM, lead_label="lead: waiting")
     sc.hold(2.4)
     sc.step("4. Every step is recorded with its cost: $0.02 of a $1.00 cap", 0.4)
     for j in range(1, 4):
-        sc.set(steps=[j] * 3)
+        sc.set(paying="readers")
+        fly(sc, 1.1, [("coin", coin_path(i), 0.32, i * 0.12, i * 0.12 + 0.76) for i in range(3)])
+        sc.set(paying=None)
         if j == 2:
             sc.set(cost="$0.02")
-        sc.hold(0.55)
-    sc.hold(1.8)
-    sc.step("5. Three findings and one answer come back: $0.03 total", 0.3,
-            readers=[DIM] * 3, found=3, cost="$0.03")
-    sc.hold(0.6)
-    sc.set(lead=BRIGHT, lead_label="lead", answer=True)
+        sc.hold(0.35)
+    sc.hold(1.6)
+    sc.step("5. Three findings and one answer come back: $0.03 total", 0.3)
+    fly(sc, 0.8, [("paper", out_path(i)[::-1], 0.38) for i in range(3)])
+    sc.set(readers=[DIM] * 3, found=3, cost="$0.03", lead=BRIGHT, lead_label="lead", sent=False)
+    sc.hold(0.8)
+    sc.set(answer="moving", q=True)
+    fly(sc, 0.8, [("paper", [QL[1], REST], 0.5)])
+    sc.set(answer="here", lead=DIM)
     sc.hold(3.0)
     sc.save()
 
 
 # ============================================================ 3. producers, the platform, consumers
 def platform():
-    AUTH = (0.3, 1.6, 2.4, 0.75)
-    WELL = (4.3, 1.35, 3.6, 2.7)
-    REG = (4.55, 1.55, 3.1, 0.95)
-    ENG = (4.55, 2.85, 3.1, 0.95)
-    WEB = (8.9, 1.6, 2.93, 0.75)
-    APP = (8.9, 2.95, 2.93, 0.75)
-    YR, YE = REG[1] + REG[3] / 2, ENG[1] + ENG[3] / 2
-    GATE = (8.17, YE - 0.27, 0.2, 0.54)
-    GX = GATE[0] + GATE[2] / 2
+    ROW1, ROW2 = 1.95, 3.45                     # publish on the top row, ask on the bottom row
+    AUTH = (1.3, ROW1)
+    FR = (3.3, 1.18, 5.0, 3.66)                 # the platform's frame
+    REG, GEAR = (5.9, ROW1), (5.9, ROW2)
+    STEPS, WAL = (4.3, 2.98), (4.3, 4.12)
+    WEB, APP = (10.6, ROW1), (10.6, ROW2)
+    KEY = (FR[0] + FR[2] - 0.6, ROW2)           # the API key sits just inside, where the app enters
+    S2, BX = 0.6, 5.0                           # icon size; where the engine's records split
+    TO_REG = [(AUTH[0] + 0.45, ROW1), (REG[0] - 0.36, ROW1)]
+    TO_KEY = [(APP[0] - 0.42, ROW2), (KEY[0] + 0.3, ROW2)]
+    TO_GEAR = [(KEY[0] - 0.3, ROW2), (GEAR[0] + 0.36, ROW2)]
+    PICK = [(REG[0], 2.62), (REG[0], ROW2 - 0.36)]
+    TO_STEPS = [(GEAR[0] - 0.36, ROW2), (BX, ROW2), (BX, STEPS[1]), (STEPS[0] + 0.34, STEPS[1])]
+    TO_WAL = [(GEAR[0] - 0.36, ROW2), (BX, ROW2), (BX, WAL[1]), (WAL[0] + 0.34, WAL[1])]
+    BACK = [(GEAR[0] + 0.36, ROW2), (APP[0] - 0.42, ROW2)]
 
     def paint(c, st):
         on = st["on"]
-        c.text(AUTH[0], 1.02, 2.4, 0.3, "producers", 14, "Medium", INK2, "left")
-        c.text(WEB[0], 1.02, 2.4, 0.3, "consumers", 14, "Medium", INK2, "left")
-        c.box(*AUTH, "agent author", "active" if "author" in on else "idle", 15)
-        # the platform: the registry and the run engine
-        c.box(*WELL, state="well")
-        c.text(WELL[0] + 0.25, 1.02, 3.0, 0.3, "platform", 14, "Medium", INK2, "left")
-        reg_on = "registry" in on
-        c.box(*REG, "", "active" if reg_on else "idle")
-        c.text(REG[0], REG[1] + 0.08, REG[2], 0.4, "agent registry", 15, "Medium", INK if reg_on else INK2)
+        c.text(AUTH[0] - 1.0, 1.02, 2.0, 0.3, "producers", 14, "Medium", INK2)
+        c.text(WEB[0] - 1.0, 1.02, 2.0, 0.3, "consumers", 14, "Medium", INK2)
+        c.d.rectangle([c._p(FR[0]), c._p(FR[1]), c._p(FR[0] + FR[2]), c._p(FR[1] + FR[3])], outline=RULE2,
+                      width=c._lw(1.5))
+        c.text(FR[0] + 0.14, FR[1] + 0.06, 1.6, 0.3, "platform", 14, "Medium", INK2, "left")
+        # the connectors
+        c.arrow(TO_REG, "author" in on)
+        c.arrow([(WEB[0] - 0.42, ROW1), (REG[0] + 0.36, ROW1)])
+        c.arrow([TO_KEY[0], TO_GEAR[1]], "ask" in on)
+        c.arrow(PICK, "pick" in on)
+        # The two record lines share their first part: draw the quiet one first, so the lit one stays whole.
+        for pts, key in sorted([(TO_STEPS, "steps"), (TO_WAL, "bill")], key=lambda a: a[1] in on):
+            c.arrow(pts, key in on)
+        # the parts
+        icon(c, "person", *AUTH, 0.7, lit="author" in on, label="agent author")
+        icon(c, "registry", *REG, S2, lit="registry" in on, label="agent registry")
         if st["entry"]:
             hot = "entry" in on
-            c.text(REG[0], REG[1] + 0.48, REG[2], 0.36, "literature-scout", 14, "Regular",
-                   INK if hot else INK2, mono=True)
-            if hot:
-                ew = width("literature-scout", 14, mono=True)
-                x0 = REG[0] + (REG[2] - ew) / 2
-                c.line([(x0, REG[1] + 0.86), (x0 + ew, REG[1] + 0.86)], color=INK)
-        eng_on = "engine" in on
-        c.box(*ENG, "", "active" if eng_on else "idle")
-        c.text(ENG[0], ENG[1] + 0.08, ENG[2], 0.4, "run engine", 15, "Medium", INK if eng_on else INK2)
-        for j in range(st["steps"]):
-            c.job(ENG[0] + 0.85 + j * 0.34, ENG[1] + 0.68, "step", color=INK if eng_on else INK2)
-        if st["cost"]:
-            c.text(ENG[0] + 1.95, ENG[1] + 0.52, 1.0, 0.32, st["cost"], 14, "Medium", INK if eng_on else INK2,
-                   "left")
-        # the two arrows: the producer publishes into it, the consumers ask it
-        c.arrow([(AUTH[0] + AUTH[2], YR), (REG[0], YR)], "author" in on)
-        c.arrow([(WEB[0], YR), (REG[0] + REG[2], YR)])
-        c.arrow([(APP[0], YE), (ENG[0] + ENG[2], YE)], "app" in on)
-        # the API key: a gate on the consumer's arrow
-        gate_on = "gate" in on
-        c.d.rectangle([c._p(GATE[0]), c._p(GATE[1]), c._p(GATE[0] + GATE[2]), c._p(GATE[1] + GATE[3])],
-                      fill=RAISED if gate_on else BLACK, outline=INK if gate_on else INK2,
-                      width=c._lw(2 if gate_on else 1.5))
-        c.text(GX - 0.7, GATE[1] - 0.36, 1.4, 0.3, "API key", 14, "Medium", INK if gate_on else INK2)
-        c.box(*WEB, "web app", "idle", 15)
-        app_on = "app" in on
-        c.box(*APP, "", "active" if app_on else "idle")
-        c.text(APP[0] + 0.22, APP[1], APP[2], APP[3], "literature watch app", 15, "Medium",
-               INK if app_on else INK2, "left")
+            c.text(REG[0] - 1.2, 1.3, 2.4, 0.3, "literature-scout", 14, "Regular", INK if hot else INK2,
+                   mono=True)
+        icon(c, "gear", *GEAR, S2, lit="engine" in on, label="run engine", turn=st["turn"])
+        icon(c, "stream", *STEPS, 0.55, lit="steps" in on, label="steps")
+        icon(c, "wallet", *WAL, 0.55, lit="bill" in on, label=st["cost"] or "billing")
+        icon(c, "key", *KEY, 0.5, lit="key" in on, label="API key")
+        icon(c, "browser", *WEB, S2, label="web app")
+        icon(c, "app", *APP, S2, lit="app" in on, label="literature watch")
         if st["answered"]:
-            c.check(APP[0] + APP[2] - 0.42, APP[1] + 0.24, 0.26)
+            c.check(APP[0] + 0.42, ROW2 - 0.42, 0.26)
         if st["lines"]:
-            text = "literature watch app: about 210 lines"
-            w = width(text, 16, "Semibold") + 0.32
-            c.invert(APP[0] + APP[2] - w, 3.98, text, 16)
-            c.text(APP[0] + APP[2] - 4, 4.5, 4, 0.3, "no database · no model · no billing", 14, "Medium", INK2,
+            c.invert(APP[0], 4.1, "about 210 lines", 16, h=0.44, align="center")
+            c.text(APP[0] + 1.25 - 4, 4.58, 4, 0.3, "no database · no model · no billing", 14, "Medium", INK2,
                    "right")
+        draw_flying(c, st)
 
-    st = dict(on=set(), entry=False, steps=0, cost="", answered=False, lines=False)
+    st = dict(on=set(), entry=False, cost="", answered=False, lines=False, turn=0.0, fly=[])
     sc = Scene("platform.gif", paint, st)
 
-    sc.step("1. A producer publishes an agent: instructions for one kind of question", 0.5, on={"author"})
-    sc.hop("lead", [(AUTH[0] + AUTH[2], YR), (REG[0] + 0.3, YR)], 0.75)
+    def turning():
+        st["turn"] += 0.04
+
+    sc.step("1. A producer publishes an agent: instructions for one kind of question", 0.6, on={"author"})
+    fly(sc, 0.8, [("paper", TO_REG, 0.34)])
     sc.set(on={"registry"}, entry=True)
     sc.hold(2.4)
-    sc.step("2. A consumer app gets an API key and picks an agent", 0.5, on={"app"})
-    sc.hop("lead", [(APP[0], YE), (GX + 0.3, YE)], 0.6)
-    sc.set(on={"app", "gate", "entry"})
+    sc.step("2. A consumer app gets an API key and picks an agent", 0.5, on={"app", "ask"})
+    fly(sc, 0.6, [("question", TO_KEY, 0.34)])
+    sc.set(on={"key", "entry", "ask"})
     sc.hold(2.4)
-    sc.step("3. The platform runs it, records each step and bills it", 0.3, on={"gate"})
-    sc.hop("lead", [(GX, YE), (ENG[0] + ENG[2], YE)], 0.5)
-    sc.set(on={"engine"})
-    for j in range(1, 4):
-        sc.set(steps=j)
-        sc.hold(0.4)
+    sc.step("3. The platform runs it, records each step and bills it", 0.3, on={"key", "ask", "pick", "entry"})
+    fly(sc, 0.6, [("question", TO_GEAR, 0.34), ("paper", PICK, 0.34)])
+    sc.set(on={"engine", "steps"})
+    for _ in range(3):
+        fly(sc, 0.5, [("step", TO_STEPS, 0)], each=turning)
+        busy(sc, 0.25, turning)
+    sc.set(on={"engine", "bill"})
+    fly(sc, 0.55, [("coin", TO_WAL, 0.32)], each=turning)
     sc.set(cost="USD 0.01")
-    sc.hold(0.8)
-    sc.hop("lead", [(ENG[0] + ENG[2], YE), (APP[0], YE)], 0.75)
+    busy(sc, 0.4, turning)
+    sc.set(on={"app", "ask"})
+    fly(sc, 0.75, [("paper", BACK, 0.34)])
     sc.set(on={"app"}, answered=True)
     sc.hold(2.4)
     sc.step("4. The app only asks; the platform does the rest", 0.3, on=set(), lines=True)
@@ -303,52 +344,48 @@ def platform():
 
 # ============================================================ 4. the bounded contexts and their events
 def contexts():
-    BOX = dict(projects=(0.3, 1.3, 2.35, 1.3), session=(4.75, 1.3, 2.6, 1.3), execution=(9.48, 1.3, 2.35, 1.3),
-               identity=(0.3, 3.3, 2.35, 1.35), billing=(4.75, 3.3, 2.6, 1.35))
+    POS = dict(projects=(1.4, 2.0), session=(6.0, 2.0), execution=(10.6, 2.0), identity=(1.4, 4.0),
+               billing=(6.0, 4.0))
     NAME = dict(projects="Projects", session="Session", execution="Execution", identity="Identity",
                 billing="Billing")
-    AGG = dict(projects=["Project", "Agent registry"], session=["Session", "Task tree"],
-               execution=["worker turns"], identity=["Account", "ApiKey"],
-               billing=["Wallet", "Ledger", "Approval"])
-    UP, LOW = 1.75, 2.17                        # the two arrows in each gap of the middle row
-    L1, L2 = 2.65, 4.75                         # the gap between Projects and Session
-    R1, R2 = 7.35, 9.48                         # the gap between Session and Execution
-    DX, UX = 5.45, 6.65                         # the two arrows between Session and Billing
-    V1, V2 = 2.6, 3.3
-    # each event: its arrow, and where its name sits
+    KIND = dict(projects="folder", session="stream", execution="gear", identity="key", billing="wallet")
+    SZ = 0.75
+    UP, LOW = 1.82, 2.18                        # the two arrows in each gap of the top row
+    L1, L2 = 1.4 + 0.5, 6.0 - 0.5               # the gap between Projects and Session
+    R1, R2 = 6.0 + 0.5, 10.6 - 0.5              # the gap between Session and Execution
+    DX, UX = 5.7, 6.3                           # the two arrows between Session and Billing
+    V1, V2 = 2.82, 3.58
+    # each event: its key, its name, from, to, its arrow, the object that moves, where its name sits
     EV = [
-        ("asked", "question asked", "projects", "session", [(L1, UP), (L2, UP)], (L1, UP - 0.36, L2 - L1, "center")),
-        ("queued", "turn queued", "session", "execution", [(R1, UP), (R2, UP)], (R1, UP - 0.36, R2 - R1, "center")),
-        ("step", "step recorded", "execution", "session", [(R2, LOW), (R1, LOW)], (R1, LOW + 0.06, R2 - R1, "center")),
-        ("spend", "spend recorded", "session", "billing", [(DX, V1), (DX, V2)], (DX - 2.5, 2.8, 2.38, "right")),
-        ("cap", "over cap: approval needed", "billing", "session", [(UX, V2), (UX, V1)],
-         (UX + 0.14, 2.8, 2.8, "left")),
-        ("finding", "finding recorded", "session", "projects", [(L2, LOW), (L1, LOW)],
-         (L1, LOW + 0.06, L2 - L1, "center")),
+        ("asked", "question asked", "projects", "session", [(L1, UP), (L2, UP)], "question",
+         (L1, UP - 0.38, L2 - L1, "center")),
+        ("queued", "turn queued", "session", "execution", [(R1, UP), (R2, UP)], "lead",
+         (R1, UP - 0.38, R2 - R1, "center")),
+        ("step", "step recorded", "execution", "session", [(R2, LOW), (R1, LOW)], "step",
+         (R1, LOW + 0.08, R2 - R1, "center")),
+        ("spend", "spend recorded", "session", "billing", [(DX, V1), (DX, V2)], "coin",
+         (DX - 2.55, 3.05, 2.4, "right")),
+        ("cap", "over cap: approval needed", "billing", "session", [(UX, V2), (UX, V1)], "lock",
+         (UX + 0.15, 3.05, 3.0, "left")),
+        ("finding", "finding recorded", "session", "projects", [(L2, LOW), (L1, LOW)], "paper",
+         (L1, LOW + 0.08, L2 - L1, "center")),
     ]
 
     def paint(c, st):
         on, seen, now = st["on"], st["seen"], st["now"]
-        for key, (x, y, w, h) in BOX.items():
-            hot = key in on
-            c.box(x, y, w, h, "", "active" if hot else "idle")
-            c.text(x, y + 0.1, w, 0.4, NAME[key], 16, "Medium", INK if hot else INK2)
-            for j, a in enumerate(AGG[key]):
-                c.text(x, y + 0.52 + j * 0.27, w, 0.27, a, 13, "Regular", INK2 if hot else INK3)
-        for key, name, a, b, pts, (lx, ly, lw, align) in EV:
-            if key not in seen and key != now:
+        for key, name, a, b, pts, obj, (lx, ly, lw, align) in EV:
+            active = key == now
+            if key not in seen and not active:
                 c.arrow(pts, color=RULE2)
                 continue
-            active = key == now
             c.arrow(pts, active)
-            if active or key in seen:
-                c.text(lx, ly, lw, 0.3, name, 14, "Medium", INK if active else INK3, align)
-        if st["legend"]:
-            lx = 7.95
-            for j, line in enumerate(("box = bounded context", "grey = aggregates", "arrow = domain event")):
-                c.text(lx, 3.45 + j * 0.36, 3.88, 0.32, line, 14, "Medium", INK2, "left")
+            c.text(lx, ly, lw, 0.3, name, 14, "Medium", INK if active else INK3, align)
+        for key, (x, y) in POS.items():
+            opts = dict(turn=st["turn"]) if key == "execution" else {}
+            icon(c, KIND[key], x, y, SZ, lit=key in on, label=NAME[key], size=16, **opts)
+        draw_flying(c, st)
 
-    st = dict(on=set(), seen=set(), now=None, legend=False)
+    st = dict(on=set(), seen=set(), now=None, turn=0.0, fly=[])
     sc = Scene("contexts.gif", paint, st)
     titles = dict(asked="2. A question is asked in Projects; Session takes it",
                   queued="3. Session queues a turn for Execution",
@@ -357,14 +394,21 @@ def contexts():
                   cap="6. If a step would pass the cap, Billing asks for approval",
                   finding="7. The finding goes back to the project")
 
+    def turning():
+        # Execution works from the moment its turn arrives until its step is back.
+        if st["now"] in ("queued", "step") or "execution" in st["on"]:
+            st["turn"] += 0.04
+
     sc.step("1. The platform splits into five bounded contexts", 2.8)
-    for key, name, a, b, pts, _ in EV:
+    for key, name, a, b, pts, obj, _ in EV:
         sc.step(titles[key], 0.4, on={a}, now=None)
         sc.set(now=key)
-        sc.hop("lead", pts, 0.75)
+        fly(sc, 0.8, [(obj, pts, 0.3)], each=turning)
         sc.set(on={b}, seen=st["seen"] | {key})
+        if b == "execution":
+            busy(sc, 0.8, turning)
         sc.hold(2.2)
-    sc.step("8. One question: six events across five contexts", 3.0, on=set(), now=None, legend=True)
+    sc.step("8. One question: six events across five contexts", 3.0, on=set(), now=None)
     sc.save()
 
 

@@ -1,10 +1,8 @@
 // The ASS presentation deck (docs/platform/slides/README.md has the rules).
-// lumen's dark look (theme.css): black page, white ink, grey secondary text, thin grey
-// rules, zero radius, Switzer, no red. The order follows the course's presentation
-// outline (reviews/2026-10-21-audience-clarity.md): overview, project conduct, logical
-// architecture, physical architecture, DevOps, then the demo, where each animation is
-// followed by the real recording of the same thing on the public server.
-// Switzer must be installed where the deck is shown (see the README).
+// Redesigned on 21 October 2026: one slide answers one item of the course's presentation
+// outline, and the item's number stands at its top left so the lecturer can tick it off.
+// The pictures use standard notation (UML, ER, a context map, a flowchart) with real names
+// in words; only flows are animated. Slide 2 is a real run of lumen.
 //
 //   node docs/platform/slides/build.js
 //
@@ -16,16 +14,12 @@ const pptxgen = require('pptxgenjs');
 const PAPER = '000000',
   INK = 'FFFFFF',
   GRAY = '9A9DA3',
-  SOFT = '7C8086',
-  RULE = '45484C',
-  WELL = '1A1B1E';
+  RULE = '45484C';
 const SANS = 'Switzer',
   TITLE = 'Switzer Medium',
-  BOLD = 'Switzer Semibold',
   MONO = 'JetBrains Mono';
 const OUT = path.join(__dirname, 'out');
 const URL = 'lumen.54-179-112-87.sslip.io';
-const gif = (n) => path.join(OUT, n + '.gif');
 
 const pres = new pptxgen();
 pres.layout = 'LAYOUT_WIDE'; // 13.333 x 7.5 inches
@@ -34,10 +28,10 @@ pres.title = 'Lumen Platform';
 
 const spec = [];
 let cur = null;
-const newSlide = (backdrop) => {
+const newSlide = () => {
   const s = pres.addSlide();
-  s.background = backdrop ? { path: path.join(OUT, backdrop) } : { color: PAPER };
-  cur = { bg: PAPER, backdrop: backdrop ? path.join(OUT, backdrop) : null, items: [] };
+  s.background = { color: PAPER };
+  cur = { bg: PAPER, backdrop: null, items: [] };
   spec.push(cur);
   return s;
 };
@@ -57,21 +51,16 @@ const rect = (s, x, y, w, h, fill, line) => {
   });
   cur.items.push({ kind: 'rect', x, y, w, h, fill, line });
 };
-const picture = (s, file, x, y, w, h) => {
-  s.addImage({ path: file, x, y, w, h });
-  cur.items.push({ kind: 'image', file, x, y, w, h });
-};
 
-// Where the talk is: thin segments at the foot of every slide, as at the foot of
-// lumen's intro; the current part is white.
+// Where the talk is: thin segments at the foot of every slide; the current part is white.
 const PARTS = ['Overview', 'Conduct', 'Logical', 'Physical', 'DevOps', 'Demo'];
 function progress(s, part) {
   const n = PARTS.indexOf(part);
   const pw = (12.13 - 0.15 * (PARTS.length - 1)) / PARTS.length;
   PARTS.forEach((p, i) => rect(s, 0.6 + i * (pw + 0.15), 7.1, pw, 0.03, i === n ? INK : RULE));
 }
-function head(s, part, kicker, title) {
-  txt(s, `${part}  ·  ${kicker}`, { x: 0.6, y: 0.42, w: 12, h: 0.32, fontSize: 14, color: GRAY });
+function head(s, part, item, title) {
+  txt(s, item, { x: 0.6, y: 0.42, w: 12, h: 0.32, fontSize: 14, color: GRAY });
   txt(s, title, {
     x: 0.6,
     y: 0.78,
@@ -83,203 +72,206 @@ function head(s, part, kicker, title) {
   });
   progress(s, part);
 }
-// One slide, one picture: an animation, or a recording of the real thing.
-function shown(part, kicker, title, name, notes) {
+// One slide, one picture. A picture that is not drawn yet shows as an empty frame.
+function shown(part, item, title, file, notes) {
   const s = newSlide();
-  head(s, part, kicker, title);
-  picture(s, gif(name), 0.6, 1.85, 12.13, 5.0);
+  head(s, part, item, title);
+  const f = path.join(OUT, file);
+  if (fs.existsSync(f)) {
+    s.addImage({ path: f, x: 0.6, y: 1.85, w: 12.13, h: 5.0 });
+    cur.items.push({ kind: 'image', file: f, x: 0.6, y: 1.85, w: 12.13, h: 5.0 });
+  } else {
+    rect(s, 0.6, 1.85, 12.13, 5.0, null, RULE);
+    txt(s, file + ': not drawn yet', {
+      x: 0.6,
+      y: 4.1,
+      w: 12.13,
+      h: 0.5,
+      fontSize: 18,
+      color: GRAY,
+      align: 'center',
+    });
+  }
   s.addNotes(notes);
 }
 
 // ------------------------------------------------------------------ title
 {
-  const s = newSlide('title.png');
+  const s = newSlide();
   txt(s, 'Architecting Scalable Systems  ·  Team 15', {
     x: 0.8,
-    y: 1.9,
-    w: 7,
+    y: 2.0,
+    w: 11,
     h: 0.4,
     fontSize: 18,
     color: GRAY,
   });
   txt(s, 'Lumen Platform', {
     x: 0.8,
-    y: 2.4,
-    w: 8,
+    y: 2.5,
+    w: 11,
     h: 1.3,
     fontSize: 64,
     fontFace: TITLE,
     valign: 'middle',
   });
-  txt(s, 'An AI for research,\nbuilt as a platform', {
+  txt(s, 'An AI that does research, built as a scalable platform', {
     x: 0.8,
-    y: 3.75,
-    w: 7,
-    h: 1.1,
+    y: 3.85,
+    w: 11,
+    h: 0.6,
     fontSize: 26,
     color: GRAY,
   });
   txt(s, 'He Rong  ·  Li Zhuoyang  ·  Liu Ziyang  ·  Lu Yi  ·  Peng Xujian', {
     x: 0.8,
     y: 5.7,
-    w: 8,
+    w: 11,
     h: 0.4,
     fontSize: 16,
   });
-  txt(s, URL, { x: 0.8, y: 6.15, w: 8, h: 0.4, fontSize: 15, fontFace: MONO, color: GRAY });
+  txt(s, URL, { x: 0.8, y: 6.15, w: 11, h: 0.4, fontSize: 15, fontFace: MONO, color: GRAY });
   s.addNotes(
-    'Good morning. We are Team 15. Lumen Platform is a platform on which teams of AI agents do research work. ' +
-      'Everything we show runs on a public server; the address is on the slide. ' +
-      'Every animation explains one part, and after it we show the real recording of the same thing.',
+    'Good morning. We are Team 15. We present Lumen Platform, following the order of the presentation outline.',
   );
 }
 
-// ------------------------------------------------------------------ overview
+// ------------------------------------------------------------------ 1 overview
 shown(
   'Overview',
-  'What Lumen is',
-  'Lumen is an AI for research',
-  'tree',
-  'Lumen is an AI for research. You ask one question; a lead agent plans the work and three readers work on it in parallel. ' +
-    'Every step is recorded with its cost, under a cap of one dollar per account. Three findings and one answer come back.',
+  '1a  ·  Context and business problem',
+  'Lumen is an AI that does research',
+  'lumen-at-work.gif',
+  'Lumen is an AI that does research. This is a real run, recorded today. You ask a research question; the lead agent, called lumen, ' +
+    'searches arXiv and hands parts of the work to reader agents. On the right, the call tree grows as each reader starts and finishes, ' +
+    'with what each one cost. Every step is visible while it happens.',
 );
 shown(
   'Overview',
-  'Platform thinking',
+  '1b  ·  Platform thinking',
   'Producers, consumers, one platform',
-  'platform',
-  'Lumen is a platform. The seed is the engine every question needs: the tree of agents, the record of every step, and the cost cap. ' +
-    'A producer publishes an agent. A consumer app gets an API key and asks with that agent. ' +
-    'The scope is the six use cases of our proposal, all running on the public server; the literature watch app is about 210 lines, because the platform does the rest.',
+  'platform.png',
+  "Lumen is a platform with two sides. Producers are agent authors: they publish an agent in the registry. Consumers ask questions, either from an app with an API key, like our literature watch, or as people in the web app. The seed is the run engine. It runs every question as a task tree, records each step with its cost, and stops at the account's budget cap. The consumer gets back the answer, the findings and the cost.",
+);
+shown(
+  'Overview',
+  '1c  ·  Scope',
+  'Six use cases, all running',
+  'usecases.png',
+  'This is our scope: the six use cases of the proposal, all built and running on the public server. A producer publishes an agent and reads its usage. An app asks questions with a chosen agent, and the literature watch asks saved questions on a schedule. The account owner manages API keys and approves any step that would pass the cap. The operator reads usage for every account and agent.',
 );
 
-// ------------------------------------------------------------------ project conduct
+// ------------------------------------------------------------------ 2 project conduct
 shown(
   'Conduct',
-  'Milestones and effort',
+  '2a  ·  2b  ·  Status, milestones and effort',
   "We worked to the proposal's plan",
-  'milestones',
+  'milestones.gif',
   'This is the plan from our proposal: ten person-days for each member, from 8 to 21 October. ' +
     'Architecture and the service contracts first, then each service, then autoscaling, the public API and the pipeline. ' +
     'Every part is built and runs on AWS. [TEAM TO FILL: the actual effort of each member, from the report section 2.3.]',
 );
 
-// ------------------------------------------------------------------ logical architecture
+// ------------------------------------------------------------------ 3 logical architecture
 shown(
   'Logical',
-  'Domain-driven design',
-  'How we found the contexts',
-  'derive',
-  'How we derived the bounded contexts. We took the words our users say in the six use cases, and grouped the words that belong together: ' +
-    'a context ends where a word changes its meaning. Inside each context, the aggregate is what one transaction must keep consistent: ' +
-    'a task tree rolls up its cost; a wallet never passes its cap without an approval. Each context became one service.',
+  '3a  ·  Key architectural decisions',
+  'Three decisions shape the services',
+  'decisions.png',
+  'Three decisions shaped the logical design. First, we cut the five services along the slices that already existed, so each slice kept its ports and its tests. Second, a turn goes from session to the workers on a durable RabbitMQ queue, not a direct call. A slow model call never holds a web request, and if a worker dies, its turn stays on the queue for another worker. Third, only session writes the trace: workers report each step over /internal, so a worker that dies loses no step.',
 );
 shown(
   'Logical',
-  'Domain-driven design',
-  'Five contexts, joined by events',
-  'contexts',
-  'One question crosses the contexts as domain events: question asked, turn queued, step recorded, spend recorded, ' +
-    "approval needed when a step would pass the cap, and finding recorded. The contexts talk through ports, never through each other's code.",
+  '3b  ·  Logical architecture',
+  'Five services behind one gateway',
+  'logical.gif',
+  'The logical architecture has four tiers. Clients: the web app and the literature watch app. The edge: Traefik as the API gateway. ' +
+    'Five services: identity, project, session, worker and billing. The data: PostgreSQL and RabbitMQ. ' +
+    'Follow one question: the app calls the gateway, project opens a session, session puts a turn on a durable queue, ' +
+    'any free worker takes it and runs the agent against the LLM, every step goes back to session and into PostgreSQL, and the app reads the answer.',
 );
 shown(
   'Logical',
-  'Logical architecture',
-  'Five services, one queue of work',
-  'services',
-  'Five services: identity, project, session, worker and billing; Traefik is the gateway. ' +
-    'Key decision: a turn goes to a worker on a durable RabbitMQ queue, not on a direct call. A slow model call never holds a web request, ' +
-    'any worker can take any turn, and the autoscaler can watch the queue. Every step is saved in PostgreSQL and streamed to the screen.',
+  '3c  ·  Domain-driven design',
+  'Five bounded contexts',
+  'contextmap.png',
+  'We found the contexts from the use cases. We took the nouns our users say, grouped the ones that belong together, and each group became a bounded context with its aggregates. Session is the core domain: it owns the task tree and every step. The contexts talk through domain events: a question asked starts a session, a turn queued goes to execution, and every step recorded comes back to session. Spend recorded and approval needed go to billing, and finding recorded goes back to the project.',
 );
 shown(
   'Logical',
-  'Key decision',
-  'One queue for each level of the tree',
-  'depth',
-  'A lead waits for its readers, and a waiting lead keeps its worker. With one shared queue, two leads can take both workers, ' +
-    'and their readers never start: a deadlock. So every worker has a slot for each level, fed by its own queue: lumen.turns.0, 1 and 2. ' +
-    'The deepest level waits for nothing, so every question finishes.',
+  '3c  ·  Producers and consumers',
+  'How apps use the platform',
+  'interaction.gif',
+  "This is the whole platform contract, seven calls on the public API. A producer creates a key and publishes an agent. A consumer app lists the agents and asks a question with the one it chose, and gets a session id at once. The platform runs the question with the agent's instructions in front, and the app reads the answer, the findings and the cost. Producers and the operator read usage from the same API: sessions, cost, and the median time to rest per agent.",
+);
+shown(
+  'Logical',
+  '3a  ·  Key architectural decision',
+  'One queue for each level of the task tree',
+  'queues.gif',
+  'A lead turn keeps its worker slot while its readers run. With one shared queue, two questions are enough to fill both slots with waiting leads. Their readers then sit in the queue, and no worker is free to take them: that is a deadlock. So we gave each level of the task tree its own queue and its own slots on every worker; in the real system each worker has four slots per level. The leads wait in the level-0 slots, the readers run in the level-1 slots, and every question finishes.',
 );
 
-// ------------------------------------------------------------------ physical architecture
+// ------------------------------------------------------------------ 4 physical architecture
 shown(
   'Physical',
-  'Nodes and network',
-  'One public server on AWS',
-  'hosting',
-  'k3s on one t3.medium in AWS Singapore, about 1.3 dollars a day. Only ports 22, 80 and 443 are open; the Kubernetes API is closed. ' +
-    "Traefik is the gateway: it serves HTTPS with a Let's Encrypt certificate and routes each path to its service. " +
-    'Services call each other on /internal with a secret header, and /internal has no route from outside. ' +
-    'Key decisions: k3s rather than EKS, so the same Helm chart runs on a laptop and on AWS; and HPA on CPU for the web services, KEDA on queue length for the workers.',
+  '4a  ·  4b  ·  Physical architecture',
+  'One AWS node, one k3s cluster',
+  'deployment.png',
+  'The physical architecture as a UML deployment diagram. One EC2 t3.medium in Singapore runs k3s; we chose k3s over EKS, so the same Helm chart runs on a laptop and on AWS. ' +
+    'The security group opens 22, 80 and 443 only. Traefik ends HTTPS and routes to five service deployments; ' +
+    'identity, project and billing scale on CPU with HPA, the worker scales on queue length with KEDA, and session runs one copy. ' +
+    'PostgreSQL and RabbitMQ are StatefulSets with volumes. GitHub Actions deploys over SSH, and the worker calls the OpenAI API over HTTPS.',
 );
 shown(
   'Physical',
-  'Persistence',
+  '4c  ·  Persistence',
   'The schema, by context',
-  'schema',
-  'One PostgreSQL database; each context owns its tables, and the migration prefix shows the owner. ' +
-    'An API key is stored only as its SHA-256 hash. A task points to its parent, so the tree and its cost roll-up are SQL. ' +
-    'Money is numeric(12,6), and every total is a SUM in SQL. An approval is decided under SELECT FOR UPDATE, so a grant is used once. ' +
-    'Turns in flight are in three durable RabbitMQ queues, and project files are on a volume.',
+  'er.png',
+  "All persistent data is in one PostgreSQL 16 database, and each context owns its own tables: the frames show the owner. Inside a context we use real foreign keys. Across contexts, a service keeps only the other context's id, so it does not depend on another team's schema. The task tree is one table with a parent link, so the cost roll-up and the usage queries are plain SQL. Money is numeric(12,6). Turns in flight are in RabbitMQ, not in the database, and the agents' files are on a 2Gi volume.",
 );
 shown(
   'Physical',
-  'Detailed design',
+  '4d  ·  Detailed design',
   'Asking a question with a chosen agent',
-  'sequence',
-  'The representative use case: the literature watch app asks a question with its API key and a chosen agent. ' +
-    'The project service checks the key and its scope, writes the choice, and asks session to start. ' +
-    "Session puts the first turn on lumen.turns.0. A worker takes it, puts the agent's instructions in front of the question, calls the model, " +
-    'and reports each step back to session over /internal. The kernel did not change: its Worker port got a queue adapter. Then the app reads the answer.',
+  'sequence.gif',
+  'This is use case A: a consumer asks a question with an agent that a producer published. The request comes through Traefik to the project service. The key guard checks the key, its rate and its scope, and then project asks session to open the session. Session puts the root turn on lumen.turns.0, and the client gets 201 at once. Any worker takes the turn. For each step it calls the model and posts the step to session, which writes it to PostgreSQL. The client then reads the answer with a GET. On the public host this took 4.9 seconds and cost one cent.',
 );
 
-// ------------------------------------------------------------------ DevOps
+// ------------------------------------------------------------------ 5 DevOps
 shown(
   'DevOps',
-  'Source and artifacts',
+  '5a  ·  Source and artifacts',
   'From a branch to a running image',
-  'source',
-  'One monorepo. Each member merges a branch into ass/platform. A push builds one image tagged with the commit SHA. ' +
-    'The image goes to the server over SSH, k3s imports it, and helm upgrade replaces the pods.',
+  'branches.png',
+  'We use one repository. main holds Lumen, and ass/platform is our integration branch. Each member works on one branch and merges it back through a pull request. Every push to ass/platform builds one image, tagged with the commit SHA, from deploy/k8s/Dockerfile. The pipeline copies that image to the EC2 host over SSH, imports it into k3s, and deploys it with helm upgrade, so there is no registry to run.',
 );
 shown(
   'DevOps',
-  'Pipeline',
+  '5b  ·  DevOps pipeline',
   'Six checks around one deploy',
-  'pipeline',
-  'Every push runs the tests, npm audit, CodeQL, a Trivy scan of the image, the Helm deploy, an OWASP ZAP scan of the live server, and a small k6 load. ' +
-    'The image scan is a gate: in the first run it found five critical issues and stopped the deploy, so a vulnerable image never reached the server. ' +
-    'We built a smaller platform image, and the next run went live in 12.5 minutes.',
+  'pipeline.gif',
+  'Every push to ass/platform runs this pipeline. Tests, a dependency audit and CodeQL run in parallel. Only then does the deploy job build the image and scan it with Trivy. In our first run the gate found five critical CVEs and stopped the deploy, so the image never reached the host. That is the pipeline doing its job. We built a smaller platform image without Docker inside, and the next run passed every stage and was live in 12 minutes 30 seconds.',
 );
 shown(
   'DevOps',
-  'Recorded on GitHub',
-  'The real runs',
-  'rec-pipeline',
-  'The real pipeline runs, from the GitHub command line: every job of one run, with its result.',
+  '5c  ·  Technical findings',
+  'What we found, and what we changed',
+  'findings.png',
+  "Three findings changed the design. First, one queue for all turns can deadlock, because parents hold every worker slot while their children wait behind them, so we gave each depth of the task tree its own queue. Second, the image scan stopped an image that carried Docker for Lumen's sandbox, and the platform does not need Docker, so we built a smaller platform image, patched at build. Third, KEDA's autoscaler waits five minutes before it scales down by default, and we set it to one minute, so the workers return to one soon after the load.",
 );
 
-// ------------------------------------------------------------------ demo
+// ------------------------------------------------------------------ 6 demo
 shown(
   'Demo',
-  'Scalability',
-  'Load grows, workers follow',
-  'scale',
-  'From our load test. Ten users ask without pause; one worker falls behind and the queue grows. ' +
-    'Above five waiting jobs per worker, KEDA adds one: one to four workers in 49 seconds. ' +
-    '135 questions, median 6.1 seconds, none of the 1,040 requests failed. We run it live next.',
-);
-shown(
-  'Demo',
-  'Availability',
-  'A worker dies; the question still ends',
-  'kill',
-  'A job leaves the queue only when its worker says done. We force-delete a worker mid-question; ' +
-    'its jobs go back to the queue, a new worker takes them, and the question ends.',
+  '6b  ·  Scalability',
+  'KEDA adds workers as the queue grows',
+  'scaling.gif',
+  "This is a real load test on the public host: ten users ask questions without pause. The bars are the jobs waiting in the queues, and the dashed line is KEDA's target of five jobs per worker. When the queue passes that line, KEDA adds a worker pod, and it went from one to four in 49 seconds. After the load stops, the queue empties, and a minute later KEDA scales back to one worker. All 135 questions finished with a median of 6.1 seconds, and none of the 1,040 requests failed.",
 );
 {
   const s = newSlide();
-  head(s, 'Demo', 'Live', 'Now, on the public server');
+  head(s, 'Demo', '6a  ·  6b  ·  Live demo', 'Now, on the public server');
   rect(s, 0.6, 1.9, 12.13, 0.95, null, RULE);
   txt(s, 'https://' + URL, {
     x: 0.6,
@@ -292,48 +284,39 @@ shown(
     valign: 'middle',
   });
   const steps = [
-    'Ask a question in the browser',
-    'Watch the tree grow, with its cost',
-    'Run the load test; watch the workers',
-    'The literature watch app asks through the API',
-    'Open the last pipeline run on GitHub',
+    ['Use case', 'ask a question in the browser; watch the call tree grow'],
+    ['Use case', 'the literature watch app asks through the API'],
+    ['Scalability', 'run the k6 load test; watch KEDA add workers'],
+    ['Availability', 'delete a worker during a question; it still ends'],
+    ['Maintainability', 'open the last pipeline run on GitHub'],
   ];
-  steps.forEach((t, i) => {
+  steps.forEach(([k, t], i) => {
     const y = 3.2 + i * 0.72;
-    txt(s, String(i + 1), {
-      x: 0.6,
-      y,
-      w: 0.6,
-      h: 0.56,
-      fontSize: 22,
-      fontFace: TITLE,
-      color: GRAY,
-      valign: 'middle',
-    });
-    txt(s, t, { x: 1.3, y, w: 11, h: 0.56, fontSize: 24, valign: 'middle' });
+    txt(s, k, { x: 0.6, y, w: 2.6, h: 0.56, fontSize: 18, color: GRAY, valign: 'middle' });
+    txt(s, t, { x: 3.3, y, w: 9.4, h: 0.56, fontSize: 22, valign: 'middle' });
   });
   s.addNotes(
     'Live demo, about eight minutes, with deploy/k8s/demo.sh and LUMEN_URL set to the address on the slide. ' +
-      'Before the load test, switch the workers to demo mode (gh workflow run platform-deploy.yml -f worker=demo), so the load costs nothing; switch back afterwards. ' +
-      'If the network fails, the recordings on the previous slides show the same runs.',
+      'Before the load test, switch the workers to the paced worker (gh workflow run platform-deploy.yml -f worker=demo), so the load costs nothing; switch back afterwards. ' +
+      'If the network fails, the backup slides at the end show the same runs, recorded.',
   );
 }
 {
-  const s = newSlide('title.png');
+  const s = newSlide();
   txt(s, 'Thank you', {
     x: 0.8,
-    y: 2.4,
-    w: 8,
+    y: 2.5,
+    w: 11,
     h: 1.3,
     fontSize: 64,
     fontFace: TITLE,
     valign: 'middle',
   });
-  txt(s, 'Questions?', { x: 0.8, y: 3.8, w: 8, h: 0.6, fontSize: 28, color: GRAY });
+  txt(s, 'Questions?', { x: 0.8, y: 3.9, w: 11, h: 0.6, fontSize: 28, color: GRAY });
   txt(s, 'https://' + URL, {
     x: 0.8,
-    y: 4.7,
-    w: 8,
+    y: 4.8,
+    w: 11,
     h: 0.5,
     fontSize: 18,
     fontFace: MONO,
@@ -342,34 +325,34 @@ shown(
   s.addNotes('Thank you. We are happy to take questions.');
 }
 
-// ------------------------------------------------------------------ backup: the recordings, if the network fails
+// ------------------------------------------------------------------ backup: recordings, if the network fails
 shown(
-  'Backup',
-  'Recorded through the API',
+  'Demo',
+  'Backup  ·  recorded through the API',
   'A real question, a real answer',
-  'rec-ask',
-  'A real question through the public API, with an API key, answered by gpt-4.1-nano in under two seconds.',
+  'rec-ask.gif',
+  'A real question through the public API, with an API key, answered by gpt-4.1-nano.',
 );
 shown(
-  'Backup',
-  'Recorded on the server',
+  'Demo',
+  'Backup  ·  recorded on the server',
   'KEDA adds workers',
-  'rec-scale',
-  'The real-model load test: the queue reached 10 jobs per worker against the target of five, so KEDA added a worker, and removed it after the load.',
+  'rec-scale.gif',
+  'The load test on the public server: the queue passes five jobs per worker, so KEDA adds a worker, and removes it after the load.',
 );
 shown(
-  'Backup',
-  'Recorded on the server',
-  'Killed for real',
-  'rec-kill',
-  'A question starts, we force-delete the worker, and the question still ends.',
+  'Demo',
+  'Backup  ·  recorded on the server',
+  'A deleted worker; the question still ends',
+  'rec-kill.gif',
+  'A question starts, we force-delete the worker, another worker takes its turns, and the question ends.',
 );
 shown(
-  'Backup',
-  'Recorded on the server',
-  'Every service is running',
-  'rec-pods',
-  'Five services, PostgreSQL and RabbitMQ, and the autoscalers, from kubectl on the server.',
+  'DevOps',
+  'Backup  ·  recorded on GitHub',
+  'The real pipeline runs',
+  'rec-pipeline.gif',
+  'The real pipeline runs, from the GitHub command line: every job of one run, with its result.',
 );
 
 fs.mkdirSync(OUT, { recursive: true });

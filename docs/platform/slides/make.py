@@ -6,7 +6,7 @@
 import importlib
 import sys
 
-MODULES = ["scenes_core", "scenes_story", "scenes_physical", "scenes_proof", "scenes_lean"]
+MODULES = ["scenes_core", "scenes_story", "scenes_physical", "scenes_proof", "scenes_lean", "scenes_std", "scenes_std_devops", "scenes_std_overview", "scenes_std_design"]
 
 ALL = {}
 for name in MODULES:

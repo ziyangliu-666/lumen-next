@@ -4,8 +4,9 @@ from the deploy workflow's two real runs."""
 import os
 import re
 
-from draw import (BLACK, EVIDENCE, INK, INK2, INK3, RAISED, RULE, RULE2, S, X2, Canvas, Scene,
-                  font, lerp)
+from draw import BLACK, EVIDENCE, INK, INK2, INK3, RULE, RULE2, S, X2, font, lerp
+from icons import icon
+from scenes_core import Live, carry, gear
 
 
 # ============================================================ small helpers this file needs
@@ -74,7 +75,8 @@ def scale():
     YB, YT, JMAX = 3.2, 1.6, 30             # the jobs plot: baseline, top, top value
     WB, WH = 4.18, 0.17                     # the worker strip: its bottom, one worker's height
     BW = 0.28                               # a bar's width
-    RX = 9.25                               # the right panel
+    RX = 9.3                                # the right panel
+    LOAD = 125                              # the users stop asking; after this no worker is busy
 
     def tx(t):
         return X0 + t / T1 * (X1 - X0)
@@ -124,20 +126,23 @@ def scale():
         for s in (0, 60, 120, 180):
             c.line([(tx(s), WB + 0.02), (tx(s), WB + 0.1)], pt=1, color=RULE)
             c.text(tx(s) - 0.5, WB + 0.12, 1.0, 0.3, "%d s" % s, 13, "Regular", INK3)
-        # the two counters, in sync with the cursor
+        # beside the chart: one gear for each worker that runs now, and the jobs that wait
         w_now, j_now = (seen[-1][1], seen[-1][2]) if seen else (1, 0)
-        c.number(RX, 1.15, 2.5, str(w_now), "workers (max 4)", 32)
-        c.number(RX, 2.1, 2.5, str(j_now), "jobs waiting", 32)
+        c.text(RX, 1.15, 2.6, 0.3, "workers", 13, "Medium", INK2, "left")
+        for k in range(w_now):
+            gear(c, RX + 0.3 + k * 0.66, 1.85, 0.52, busy=t < LOAD, turn=st["turn"] + k * 0.3)
+        c.number(RX, 2.45, 2.5, str(j_now), "jobs waiting", 32)
         if st["result"]:
-            _invert_lines(c, RX, 3.2, ["135 questions", "median 6.1 s", "0 of 1,040 failed"])
+            _invert_lines(c, RX, 3.45, ["135 questions", "median 6.1 s", "0 of 1,040 failed"])
 
-    sc = Scene("scale.gif", paint, dict(t=0.0, result=False))
+    sc = Live("scale.gif", paint, dict(t=0.0, result=False))
 
     def sweep(t_end, rate=26.0):
         t_start = sc.st["t"]
         n = max(1, round((t_end - t_start) / rate * 25))
         for i in range(1, n + 1):
             sc.st["t"] = lerp(t_start, t_end, i / n)
+            sc.st["busy"] = {0} if sc.st["t"] < LOAD else set()
             sc._add(sc._draw(), 40)
 
     sc.step("1. Ten users ask questions without pause", 0.5)
@@ -149,7 +154,7 @@ def scale():
     sc.step("3. Above 5 waiting jobs per worker, KEDA adds one: 1 to 4 in 49 s", 0.3)
     sweep(79, 18)
     sc.hold(2.6)
-    sc.step("4. At the limit of 4 workers, the queue stops growing", 0.3)
+    sc.step("4. With 4 workers, the queue stops growing", 0.3)
     sweep(115)
     sc.hold(2.4)
     sc.step("5. The load stops, the queue empties, and a minute later: 1 worker", 0.3)
@@ -161,211 +166,226 @@ def scale():
 
 # ============================================================ kill: a worker dies with jobs in hand
 def kill():
-    QB = dict(x=0.3, y=2.3, w=1.45, h=0.9)
-    QX, QY, CELL, N = 2.2, 2.53, 0.44, 4
     KINDS = ["lead", "reader", "reader"]    # the evidence: one lead turn, two reader turns
-    A, B = (5.6, 1.3), (5.6, 3.2)
-    WW, WHT = 2.3, 1.0
-    BUS = 5.2
-    CY = QY + CELL / 2
-    RX = 8.45
+    CY = 2.85                                # the question and the queue
+    QX, CELL, N = 2.05, 0.44, 4
+    QI = (0.85, CY)                          # the question icon
+    A, B = (6.2, 1.75), (6.2, 3.95)          # the two gears
+    GS = 0.62
+    BUS = 5.0
+    HX = 9.0                                 # Kubernetes, beside the two workers
+    OUT_X = 8.55                             # where B's finished papers land
 
     def cell(i):
         return QX + (i + 0.5) * CELL, CY
 
-    def slot(w, i):
-        return w[0] + 0.25 + i * 0.64 + 0.25, w[1] + 0.63
+    def hand(w, i):
+        """The job worker w holds, to the right of its gear."""
+        return w[0] + 0.62 + i * 0.36, w[1]
 
-    def worker(c, xy, label, state, jobs, marks):
-        x, y = xy
-        c.box(x, y, WW, WHT, "", state)
-        color = INK if state == "active" else (RULE if state == "faint" else INK2)
-        c.text(x, y + 0.04, WW, 0.3, label, 15, "Medium", color)
-        for i in range(3):
-            sx = x + 0.25 + i * 0.64
-            c.box(sx, y + 0.38, 0.5, 0.5, "", "faint" if state == "faint" else "idle")
-            if jobs[i]:
-                c.job(sx + 0.25, y + 0.63, KINDS[i])
-            if marks[i]:
-                c.check(sx + 0.12, y + 0.5, 0.26)
+    def to(w, i):
+        return [cell(i), (QX + N * CELL, CY), (BUS, CY), (BUS, w[1]), (w[0] - GS / 2 - 0.08, w[1]), hand(w, i)]
 
     def paint(c, st):
         on = st["on"]
-        c.box(*QB.values(), "question", "active" if "q" in on else "idle", 15, sub=st["status"])
-        c.arrow([(QB["x"] + QB["w"], CY), (QX, CY)], "q" in on and "queue" in on)
-        c.queue(QX, QY, N, (), "RabbitMQ queue", "queue" in on, CELL)
+        icon(c, "question", *QI, GS, "q" in on, "question")
+        c.text(QI[0] - 0.7, CY + GS / 2 + 0.36, 1.4, 0.3, st["status"], 13, "Regular",
+               INK if st["status"] == "ended" else INK3)
+        c.arrow([(QI[0] + GS / 2 + 0.05, CY), (QX, CY)], "q" in on and "queue" in on)
+        c.queue(QX, CY - CELL / 2, N, (), "", "queue" in on, CELL)
+        c.text(QX, CY + CELL / 2 + 0.06, N * CELL, 0.3, "RabbitMQ", 14, "Medium",
+               INK if "queue" in on else INK2, "left")
+        c.text(QX, CY + CELL / 2 + 0.4, 3, 0.3, "hollow: taken, not acknowledged", 13, "Regular", INK3, "left")
         for i, s in enumerate(st["cells"]):
             if s:
                 x, y = cell(i)
                 c.job(x, y, KINDS[i], hollow=(s == "taken"), s=0.24)
-        c.text(QX, QY + CELL + 0.12, 3, 0.3, "hollow: taken, not acknowledged", 13, "Medium", INK2, "left")
-        c.text(QX, QY + CELL + 0.42, 3, 0.3, "a job leaves only when", 13, "Regular", INK3, "left")
-        c.text(QX, QY + CELL + 0.7, 3, 0.3, "its worker says done", 13, "Regular", INK3, "left")
         c.line([(QX + N * CELL, CY), (BUS, CY)], "a" in on or "b" in on)
-        c.arrow([(BUS, CY), (BUS, A[1] + 0.5), (A[0], A[1] + 0.5)], "a" in on)
-        c.arrow([(BUS, CY), (BUS, B[1] + 0.5), (B[0], B[1] + 0.5)], "b" in on)
-        worker(c, A, "worker A", st["a"], st["ajobs"], [0, 0, 0])
-        if st["a"] == "dead":
-            c.cross(A[0] + 0.1, A[1] + 0.1, WW - 0.2, WHT - 0.2)
-        worker(c, B, "worker B", st["b"], st["bjobs"], st["bmarks"])
+        c.arrow([(BUS, CY), (BUS, A[1]), (A[0] - GS / 2 - 0.08, A[1])], "a" in on)
+        if st["b"] != "none":
+            c.arrow([(BUS, CY), (BUS, B[1]), (B[0] - GS / 2 - 0.08, B[1])], "b" in on)
+        # worker A: it turns while it holds the jobs; deleted, it stops and gets a cross
+        dead = st["a"] == "dead"
+        gear(c, *A, GS, "worker A", busy=st["a"] == "busy", turn=st["turn"], faint=dead)
+        if dead:
+            c.cross(A[0] - GS / 2, A[1] - GS / 2, GS, GS)
+        for i in range(3):
+            if st["ajobs"][i]:
+                c.job(*hand(A, i), KINDS[i], s=0.2)
+        # Kubernetes starts worker B
+        icon(c, "helm", HX, A[1], 0.56, "k8s" in on, "Kubernetes")
+        if st["b"] != "none":
+            gear(c, *B, GS, "worker B", busy=st["b"] == "busy", turn=st["turn"] + 0.4)
+            for i in range(3):
+                if st["bjobs"][i]:
+                    c.job(*hand(B, i), KINDS[i], s=0.2)
+            c.arrow([(hand(B, 2)[0] + 0.22, B[1]), (OUT_X - 0.26, B[1])], "out" in on)
+        # the finished work: one paper with a check for each job
+        for i in range(st["papers"]):
+            carry(c, OUT_X + i * 0.55, B[1], "done", 0.36)
         if st["result"]:
-            _invert_lines(c, RX, 2.05, ["the question ended", "in 12.6 s"])
+            _invert_lines(c, 9.55, 2.6, ["the question ended", "in 12.6 s"])
 
-    st = dict(on={"q"}, status="running", cells=[None] * 3, a="idle", ajobs=[0, 0, 0], b="faint",
-              bjobs=[0, 0, 0], bmarks=[0, 0, 0], result=False)
-    sc = Scene("kill.gif", paint, st)
+    st = dict(on={"q"}, status="running", cells=[None] * 3, a="idle", ajobs=[0, 0, 0], b="none",
+              bjobs=[0, 0, 0], papers=0, result=False)
+    sc = Live("kill.gif", paint, st)
     sc.step("1. Worker A holds three jobs; they stay in the queue until A says done", 0.6)
     sc.set(on={"q", "queue"})
     for i in range(3):
-        sc.hop(KINDS[i], [(QB["x"] + QB["w"], CY), cell(i)], 0.5)
+        sc.hop(KINDS[i], [(QI[0] + GS / 2 + 0.05, CY), cell(i)], 0.5)
         sc.st["cells"][i] = "ready"
     sc.hold(0.5)
     sc.set(on={"queue", "a"}, cells=["taken"] * 3)
-    sc.hop(KINDS[0], [cell(0), (BUS, CY), (BUS, A[1] + 0.5), slot(A, 0)], 0.8,
-           also=[(KINDS[i], [cell(i), (BUS, CY), (BUS, A[1] + 0.5), slot(A, i)]) for i in (1, 2)])
-    sc.set(on={"a"}, a="active", ajobs=[1, 1, 1])
-    sc.hold(2.8)
-    sc.step("2. We force-delete worker A", 0.3, on=set(), a="dead", ajobs=[0, 0, 0])
-    sc.hold(2.4)
-    sc.step("3. Nobody said done, so the three jobs return to the queue", 0.4, on={"queue"})
-    sc.hop(KINDS[0], [slot(A, 0), (BUS, A[1] + 0.5), (BUS, CY), cell(0)], 0.8,
-           also=[(KINDS[i], [slot(A, i), (BUS, A[1] + 0.5), (BUS, CY), cell(i)]) for i in (1, 2)])
+    sc.hop(KINDS[0], to(A, 0), 0.9, also=[(KINDS[i], to(A, i)) for i in (1, 2)])
+    sc.set(on={"a"}, a="busy", ajobs=[1, 1, 1], busy={0})
+    sc.hold(2.6)
+    sc.step("2. We force-delete worker A", 0.3, on=set(), a="dead", busy=set())
+    sc.hold(2.2)
+    sc.step("3. Nobody said done, so the three jobs return to the queue", 0.4, on={"queue"}, ajobs=[0, 0, 0])
+    sc.hop(KINDS[0], to(A, 0)[::-1], 0.9, also=[(KINDS[i], to(A, i)[::-1]) for i in (1, 2)])
     sc.set(cells=["ready"] * 3)
-    sc.hold(2.6)
-    sc.step("4. Kubernetes starts worker B, and B takes them", 0.4, b="idle")
-    sc.hold(0.4)
-    sc.set(on={"queue", "b"}, cells=["taken"] * 3)
-    sc.hop(KINDS[0], [cell(0), (BUS, CY), (BUS, B[1] + 0.5), slot(B, 0)], 0.8,
-           also=[(KINDS[i], [cell(i), (BUS, CY), (BUS, B[1] + 0.5), slot(B, i)]) for i in (1, 2)])
-    sc.set(on={"b"}, b="active", bjobs=[1, 1, 1])
-    sc.hold(2.6)
-    sc.step("5. B says done for each job, and each job leaves the queue", 0.5)
+    sc.hold(2.4)
+    sc.step("4. Kubernetes starts worker B, and B takes them", 0.6, on={"k8s"}, b="idle")
+    sc.set(on={"queue", "b", "k8s"}, cells=["taken"] * 3)
+    sc.hop(KINDS[0], to(B, 0), 0.9, also=[(KINDS[i], to(B, i)) for i in (1, 2)])
+    sc.set(on={"b", "k8s"}, b="busy", bjobs=[1, 1, 1], busy={0})
+    sc.hold(2.2)
+    sc.step("5. B says done for each job, and each job leaves the queue", 0.4, on={"b", "out"})
     for i in (2, 1, 0):
         sc.st["bjobs"][i] = 0
-        sc.st["bmarks"][i] = 1
         sc.st["cells"][i] = None
-        sc.hold(0.6)
-    sc.set(on={"q"}, status="ended", b="idle")
-    sc.hold(2.4)
+        sc.hop("done", [(hand(B, 2)[0] + 0.22, B[1]), (OUT_X + (2 - i) * 0.55, B[1])], 0.5)
+        sc.st["papers"] += 1
+        sc.hold(0.3)
+    sc.set(on={"q"}, status="ended", b="idle", busy=set())
+    sc.hold(2.2)
     sc.step("6. Worker B finishes the work, and the question ends", 3.4, result=True)
     sc.save()
 
 
 # ============================================================ pipeline: every push, two real runs
 def pipeline():
-    BW, BH = 1.9, 0.78
-    CY = 2.73
-    C1, C2, C3, C4 = 1.55, 4.3, 6.95, 9.6
-    BOX = dict(verify=(C1, 1.3), sca=(C1, CY - BH / 2), sast=(C1, 4.16 - BH),
-               scan=(C2, CY - BH / 2), deploy=(C3, CY - BH / 2),
-               dast=(C4, CY - 0.55 - BH / 2), load=(C4, CY + 0.55 - BH / 2))
-    NAME = dict(verify="verify", sca="SCA", sast="SAST", scan="image scan", deploy="deploy",
-                dast="DAST", load="smoke load")
-    TOOL = dict(verify="tests", sca="npm audit", sast="CodeQL", scan="Trivy", deploy="Helm on k3s",
+    CY = 2.7
+    GS = 0.52
+    POS = dict(push=(0.75, CY), verify=(2.55, 1.45), sca=(2.55, CY), sast=(2.55, 3.95),
+               scan=(4.75, CY), deploy=(6.95, CY), dast=(9.15, 2.0), load=(9.15, 3.4))
+    KIND = dict(push="branch", verify="test", sca="shield", sast="shield", scan="image", deploy="helm",
+                dast="shield", load="gauge")
+    TOOL = dict(push="push", verify="tests", sca="npm audit", sast="CodeQL", scan="Trivy", deploy="Helm",
                 dast="OWASP ZAP", load="k6")
-    PX = 0.3                                    # where a push starts
+    KIND2 = dict(sca="SCA", sast="SAST", scan="image scan", deploy="k3s", dast="DAST", load="smoke")
+    B1, B2, B3 = 1.65, 3.55, 8.15           # the three buses
 
-    def mid(k, side):
-        x, y = BOX[k]
-        return (x if side == "l" else x + BW), y + BH / 2
+    def l(k):
+        return POS[k][0] - GS / 2 - 0.06, POS[k][1]
 
-    B1, B2, B3 = C1 - 0.2, C1 + BW + 0.42, C4 - 0.4    # the three buses
+    def r(k):
+        return POS[k][0] + GS / 2 + 0.06, POS[k][1]
 
     def to(k, bus, start):
-        return [start, (bus, start[1]), (bus, mid(k, "l")[1]), mid(k, "l")]
+        return [start, (bus, start[1]), (bus, l(k)[1]), l(k)]
 
     paths = dict(
-        verify=to("verify", B1, (PX + 0.95, CY)), sca=to("sca", B1, (PX + 0.95, CY)),
-        sast=to("sast", B1, (PX + 0.95, CY)),
-        scan=[(B2, CY), mid("scan", "l")], deploy=[mid("scan", "r"), mid("deploy", "l")],
-        dast=to("dast", B3, mid("deploy", "r")), load=to("load", B3, mid("deploy", "r")))
+        verify=to("verify", B1, r("push")), sca=to("sca", B1, r("push")), sast=to("sast", B1, r("push")),
+        scan=[(B2, CY), l("scan")], deploy=[r("scan"), l("deploy")],
+        dast=to("dast", B3, r("deploy")), load=to("load", B3, r("deploy")))
+
+    def to_scan(k):
+        return [r(k), (B2, POS[k][1]), (B2, CY), l("scan")]
 
     def stage(c, k, state, mark):
-        x, y = BOX[k]
-        if state == "active":
-            c.box(x, y, BW, BH, "", "active")
-        else:
-            c.box(x, y, BW, BH, "", "faint" if state == "faint" else "idle")
-        name_col = INK if state in ("active", "pass", "fail") else (RULE if state == "faint" else INK2)
-        tool_col = INK2 if state in ("active", "pass", "fail") else (RULE if state == "faint" else INK3)
-        c.text(x + 0.18, y + 0.1, BW, 0.32, NAME[k], 15, "Medium", name_col, "left")
-        c.text(x + 0.18, y + 0.4, BW, 0.28, TOOL[k], 13, "Regular", tool_col, "left")
+        x, y = POS[k]
+        icon(c, KIND[k], x, y, GS, state in ("active", "pass", "fail", "lit"), TOOL[k], faint=state == "faint")
+        if k in KIND2:
+            c.text(x - 0.8, y + GS / 2 + 0.36, 1.6, 0.28, KIND2[k], 13, "Regular", INK3)
         if mark == "pass":
-            c.check(x + BW - 0.42, y + BH / 2 - 0.13, 0.26)
+            c.check(x + GS / 2 + 0.06, y - GS / 2 - 0.12, 0.22)
         elif mark == "fail":
-            _xmark(c, x + BW - 0.4, y + BH / 2 - 0.11, 0.22)
+            _xmark(c, x + GS / 2 + 0.07, y - GS / 2 - 0.1, 0.2)
 
     def paint(c, st):
         s, m, lit = st["state"], st["mark"], st["lit"]
-        c.text(PX, CY - 0.18, 1.0, 0.36, "push", 15, "Medium", INK if "push" in lit else INK2, "left",
-               mono=True)
         for k in ("verify", "sca", "sast"):
             c.arrow(paths[k], k in lit)
-        for k in ("verify", "sca", "sast"):
-            c.line([mid(k, "r"), (B2, mid(k, "r")[1]), (B2, CY)], "scan" in lit)
+            c.line(to_scan(k)[:3], "scan" in lit)
         c.arrow(paths["scan"], "scan" in lit)
         c.arrow(paths["deploy"], "deploy" in lit)
         for k in ("dast", "load"):
             c.arrow(paths[k], k in lit)
-        for k in BOX:
-            stage(c, k, s[k], m.get(k))
+        stage(c, "push", "lit" if "push" in lit else "idle", None)
+        for k in POS:
+            if k != "push":
+                stage(c, k, s[k], m.get(k))
+        # Trivy looks through the image: a line that sweeps down over its icon
+        if st["sweep"] is not None:
+            x, y = POS["scan"]
+            yy = y - GS / 2 + st["sweep"] * GS
+            c.line([(x - GS / 2 - 0.06, yy), (x + GS / 2 + 0.06, yy)], pt=2, color=INK)
+        # the image that Trivy stopped at its gate
+        if st["parked"]:
+            x, y = l("scan")
+            px = x - 0.4
+            carry(c, px, y, "image", 0.34)
+            c.cross(px - 0.2, y - 0.2, 0.4, 0.4)
         if st["stopped"]:
-            c.invert(C2, 3.45, "5 critical: deploy stopped", 16)
+            c.invert(POS["scan"][0] - 0.75, 3.75, "5 critical: deploy stopped", 16)
         if st["fix"]:
-            x, y = C2, 3.4
-            c.well(x, y, 2.9, 0.82)
-            c.text(x + 0.16, y + 0.1, 2.8, 0.3, "perl-base: patched at build", 13, "Medium", INK, "left")
-            c.text(x + 0.16, y + 0.42, 2.8, 0.3, "docker.io: removed", 13, "Medium", INK, "left")
+            x, y = POS["scan"][0], 4.15
+            icon(c, "image", x, y, 0.46, True)
+            c.text(x + 0.4, y - 0.3, 3, 0.3, "docker.io: removed", 13, "Medium", INK, "left")
+            c.text(x + 0.4, y + 0.0, 3, 0.3, "perl-base: patched at build", 13, "Medium", INK, "left")
         if st["live"]:
-            c.invert(C3 + BW / 2, 3.45, "live in 12.5 min", 16, align="center")
+            c.invert(POS["deploy"][0], 3.75, "live in 12.5 min", 16, align="center")
 
     def fresh():
-        return dict(state={k: "idle" for k in BOX}, mark={}, lit=set(), stopped=False, fix=False,
-                    live=False)
+        return dict(state={k: "idle" for k in POS if k != "push"}, mark={}, lit=set(), stopped=False,
+                    fix=False, live=False, sweep=None, parked=False)
 
-    sc = Scene("pipeline.gif", paint, fresh())
+    sc = Live("pipeline.gif", paint, fresh())
     st = sc.st
 
-    def run_through(keys, seconds=0.75, after=None):
-        """The push job goes into the stages in keys, at once, and each one passes."""
-        for k in keys:
-            st["lit"].add(k)
-        sc.hop("lead", paths[keys[0]], seconds, also=[("lead", paths[k]) for k in keys[1:]])
+    def run_through(keys, seconds=0.75):
+        """The image goes into the stages in keys, at once, and each one passes."""
+        st["lit"] |= set(keys)
+        sc.hop("image", paths[keys[0]], seconds, also=[("image", paths[k]) for k in keys[1:]])
         for k in keys:
             st["state"][k] = "active"
         sc.hold(0.5)
         for k in keys:
-            if after != "fail":
-                st["state"][k], st["mark"][k] = "pass", "pass"
+            st["state"][k], st["mark"][k] = "pass", "pass"
         st["lit"] -= set(keys)
 
-    def to_scan():
+    def into_scan(stop):
+        """The checked image goes to Trivy, which sweeps it. stop: Trivy finds critical issues."""
         st["lit"] |= {"scan"}
-        sc.hop("lead", [mid("verify", "r"), (B2, mid("verify", "r")[1]), (B2, CY), mid("scan", "l")], 0.8,
-               also=[("lead", [mid(k, "r"), (B2, mid(k, "r")[1]), (B2, CY), mid("scan", "l")])
-                     for k in ("sca", "sast")])
+        end = (l("scan")[0] - 0.4, CY) if stop else l("scan")
+        sc.hop("image", to_scan("verify")[:-1] + [end], 0.8,
+               also=[("image", to_scan(k)[:-1] + [end]) for k in ("sca", "sast")])
+        if stop:
+            st["parked"] = True
         st["state"]["scan"] = "active"
-        sc.hold(0.6)
+        sc.tween(1.0, lambda u: st.update(sweep=u))
+        st["sweep"] = None
 
     sc.step("1. Every push runs six checks around one deploy", 0.6, lit={"push"})
     run_through(["verify", "sca", "sast"])
-    sc.hold(2.2)
-    sc.step("2. Run 1: Trivy finds 5 critical issues, so the deploy stops", 0.3)
-    to_scan()
+    sc.hold(2.0)
+    sc.step("2. Run 1: Trivy finds 5 critical issues, so the deploy stops", 0.2)
+    into_scan(stop=True)
     st["lit"] = set()
     st["state"]["scan"], st["mark"]["scan"] = "fail", "fail"
     for k in ("deploy", "dast", "load"):
         st["state"][k] = "faint"
-    sc.hold(0.5)
+    sc.hold(0.4)
     sc.set(stopped=True)
     sc.hold(2.8)
     sc.step("3. The fix: a platform image without Docker, patched at build", 3.0, **dict(fresh(), fix=True))
     sc.step("4. Run 2: every check passes, and the deploy goes live", 0.4, fix=False, lit={"push"})
     run_through(["verify", "sca", "sast"], 0.7)
-    to_scan()
+    into_scan(stop=False)
     st["state"]["scan"], st["mark"]["scan"] = "pass", "pass"
     st["lit"] = {"deploy"}
-    sc.hop("lead", paths["deploy"], 0.6)
+    sc.hop("image", paths["deploy"], 0.6)
     st["state"]["deploy"] = "active"
     sc.hold(0.6)
     st["state"]["deploy"], st["mark"]["deploy"] = "pass", "pass"

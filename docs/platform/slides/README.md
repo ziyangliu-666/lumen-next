@@ -49,6 +49,14 @@ version drew everything as halftone dots and blurred every edge.
 Connectors are solid 1.5 pt lines with a 6 pt arrowhead. A queue is a crisp
 rectangle of square cells. Chart bars are solid fills. All words are crisp.
 
+**Icons, not boxes of words.** Every part is a line icon from `icons.py`
+with one or two words under it: a person, a browser, a gateway, a database, a
+gear for a worker, a key, a wallet. The work that moves is the business
+object: a question bubble, a paper for a finding or an answer, a coin for
+spend. A busy worker's gear turns. `python3 icons.py` draws them all into
+`out/icons.png`. Settled on 21 October 2026, after the user found the boxes
+of words hard to read at a glance.
+
 **Halftone, rarely.** Only the agents (spheres, as on lumen's landing page) and
 the title and end slides are halftone. At most one halftone group per slide:
 the agents of one question count as one group.

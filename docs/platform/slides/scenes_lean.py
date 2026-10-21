@@ -3,6 +3,7 @@ project's milestones. Each one replaces a slide of words or a table with a pictu
 import random
 
 from draw import INK, INK2, INK3, RULE2, W, Scene, lerp
+from icons import icon
 
 COLS = [0.15 + i * 2.4 for i in range(5)]      # five columns, 2.2 wide, 0.2 apart
 CW = 2.2
@@ -10,38 +11,41 @@ CW = 2.2
 
 # ============================================================ how the contexts were found
 def derive():
-    CTX = [  # name, the words its users say, the aggregate, the service it became
-        ("Identity", ["account", "key", "scope"], "Account", "identity"),
-        ("Projects", ["project", "agent", "finding"], "Project", "project"),
-        ("Session", ["session", "task", "step"], "Task tree", "session"),
-        ("Execution", ["reader", "tool", "sandbox"], "no state", "worker"),
-        ("Billing", ["cap", "spend", "approval"], "Wallet", "billing"),
+    CTX = [  # name, the words its users say, the aggregate, the service it became, its icon
+        ("Identity", ["account", "key", "scope"], "Account", "identity", "key"),
+        ("Projects", ["project", "agent", "finding"], "Project", "project", "folder"),
+        ("Session", ["session", "task", "step"], "Task tree", "session", "stream"),
+        ("Execution", ["reader", "tool", "sandbox"], "no state", "worker", "gear"),
+        ("Billing", ["cap", "spend", "approval"], "Wallet", "billing", "wallet"),
     ]
-    BY, BH = 1.35, 2.75                         # the context boxes
+    BY, BH = 1.3, 2.4                           # the context frames
+    IY = 4.22                                   # the service icons, under the frames
     rnd = random.Random(4)
     spots = [(0.5 + (k % 5) * 2.3 + rnd.uniform(0, 0.5), 1.4 + (k // 5) * 0.95 + rnd.uniform(0, 0.3))
              for k in range(15)]
     rnd.shuffle(spots)
     words = []                                  # (word, scattered position, place in its group)
-    for i, (_, ws, _, _) in enumerate(CTX):
+    for i, (_, ws, _, _, _) in enumerate(CTX):
         for j, w in enumerate(ws):
-            words.append((w, spots.pop(), (COLS[i], BY + 0.6 + j * 0.38)))
+            words.append((w, spots.pop(), (COLS[i], BY + 0.5 + j * 0.36)))
 
     def paint(c, st):
         u = st["u"]
-        for i, (name, _, agg, svc) in enumerate(CTX):
+        for i, (name, _, agg, svc, kind) in enumerate(CTX):
             x = COLS[i]
             if st["boxes"]:
                 c.box(x, BY, CW, BH, "", "idle")
-                c.text(x, BY + 0.1, CW, 0.38, name, 17, "Medium", INK)
+                c.text(x, BY + 0.08, CW, 0.38, name, 17, "Medium", INK)
             if st["agg"]:
                 if agg == "no state":
-                    c.text(x, BY + 1.85, CW, 0.5, agg, 15, "Regular", INK3)
+                    c.text(x, BY + 1.72, CW, 0.46, agg, 15, "Regular", INK3)
                 else:
-                    c.invert(x + CW / 2, BY + 1.85, agg, 15, h=0.5, align="center")
+                    c.invert(x + CW / 2, BY + 1.72, agg, 15, h=0.46, align="center")
             if st["svc"]:
-                c.arrow([(x + CW / 2, BY + BH), (x + CW / 2, BY + BH + 0.38)], True)
-                c.box(x + 0.25, BY + BH + 0.4, CW - 0.5, 0.5, svc, "active", 14)
+                # The context became a service: its icon, and the service's name under it.
+                c.arrow([(x + CW / 2, BY + BH), (x + CW / 2, IY - 0.3)], True)
+                icon(c, kind, x + CW / 2, IY, 0.5, lit=True)
+                c.text(x, IY + 0.31, CW, 0.32, svc, 14, "Regular", INK, mono=True)
         for w, (sx, sy), (gx, gy) in words:
             x, y = lerp(sx, gx, u), lerp(sy, gy, u)
             c.text(x, y, CW, 0.34, w, 15, "Regular", INK if u < 1 else INK2)

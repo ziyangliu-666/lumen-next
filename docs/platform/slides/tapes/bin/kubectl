@@ -1,0 +1,3 @@
+#!/bin/sh
+# kubectl on the platform's server, over SSH: the Kubernetes API is not public.
+exec ssh -i "$HOME/.ssh/lumen-platform" -o BatchMode=yes -o LogLevel=ERROR -t ubuntu@"${LUMEN_HOST:-54.179.112.87}" sudo k3s kubectl "$@"

@@ -4,12 +4,28 @@ The deck for the ASS presentation on 26 October 2026. The pictures do the
 explaining; the words on a slide only name what the picture shows.
 
 ```sh
-python3 docs/platform/slides/gifs.py          # draw every GIF into out/
+python3 docs/platform/slides/make.py          # draw every animation into out/
+python3 docs/platform/slides/make.py depth    # or only the scenes you name
 node docs/platform/slides/build.js            # write out/Team15-Lumen-Platform.pptx
+python3 docs/platform/slides/preview.py       # draw every slide into out/preview/
 ```
 
 `build.js` needs `pptxgenjs` (`npm install --prefix docs/platform/slides`).
-`gifs.py` needs Pillow and NumPy.
+`make.py` and `preview.py` need Pillow and NumPy.
+
+The `rec-*` GIFs are real terminal recordings of the public server. Record them
+one at a time with asciinema, then render them with agg:
+
+```sh
+docs/platform/slides/tapes/record.sh pods     # writes out/casts/pods.cast
+docs/platform/slides/tapes/render.sh pods     # writes out/rec-pods.gif
+```
+
+The order of the slides follows the course outline: overview (problem,
+platform thinking, scope), project conduct, logical architecture (decisions,
+how the contexts were found, the contexts, the services), physical
+architecture (decisions, hosting, persistence, schema, one use case in
+detail), DevOps (source, pipeline, findings), and the demo.
 
 The slides name Switzer (Regular, Medium, Semibold) and JetBrains Mono. The computer
 that shows the deck needs them installed, or PowerPoint falls back to another sans.
@@ -24,29 +40,43 @@ python3 -m venv /tmp/fontvenv && /tmp/fontvenv/bin/pip install fonttools brotli
 Do the same for `wght=400` and `wght=600`, rename each family to "Switzer",
 "Switzer Medium" and "Switzer Semibold", and copy the files to `~/Library/Fonts`.
 
-## The look: Lumen's own
+## The look
 
-The deck is drawn the way the web app is drawn (`apps/web/src/styles/theme.css`,
-`apps/web/src/ui/space.ts`, `apps/web/src/pages/landing/Intro.tsx`), in its dark
-theme:
+Settled on 21 October 2026 from two reviews (`reviews/`), after a first dark
+version drew everything as halftone dots and blurred every edge.
 
-- **Black ground, white ink.** `#000000` and `#ffffff`. Secondary text is
-  `#9a9da3`. Rules are `#45484c`. Nothing else, except one red.
-- **Red means "waits on you", and nothing else.** `#ff3b30`. The deck has no
-  red at all, because nothing on it waits on the listener.
-- **Every picture is halftone dots on one fixed grid.** A shape is painted
-  first and then printed as white dots: a dot is as large as the paint is
-  strong. Agents are spheres, as on the landing page. What acts now is
-  printed bright; what waits is printed dim. Moving work prints as it crosses
-  the grid, the way the site's stars do.
-- **A faint dot field behind everything**, fading from the middle out, as
-  behind the intro.
-- **Type is Switzer** for everything, medium weight and tight for titles, and
-  JetBrains Mono for anything typed. Labels are crisp text over the dots,
-  never dots themselves.
-- **Zero radius, no shadows, thin grey borders.** A number that matters is
-  inverted: black text on a white block, like the site's "Sign up".
-- **Progress is a row of thin segments**, as at the bottom of the intro.
+**Crisp, always.** Boxes have a 1.5 pt solid border in `#45484c`, radius 0.
+Connectors are solid 1.5 pt lines with a 6 pt arrowhead. A queue is a crisp
+rectangle of square cells. Chart bars are solid fills. All words are crisp.
+
+**Halftone, rarely.** Only the agents (spheres, as on lumen's landing page) and
+the title and end slides are halftone. At most one halftone group per slide:
+the agents of one question count as one group.
+No dot field inside a GIF.
+
+**Colour.** Black page, white ink, `#9a9da3` secondary, `#7c8086` hints, rules
+`#45484c` and `#36393d`, well `#1a1b1e`, raised `#2a2b2f`. No hue: red means
+"waits on you" on the site, and nothing on a slide waits on the listener. The
+accent is brightness: the active path and the moving work are pure white on a
+dark-grey diagram. A result that matters is inverted, black on a white block,
+once per step.
+
+**States.** Acting now: white 2 pt border, raised fill, white label. Idle: grey
+border, grey label. Waiting: the word "waiting" and a hollow job. Done: a check
+mark. Failed: a crisp cross.
+
+**Work.** A lead's job is a solid white square, a reader's job a solid white
+circle, both about 14 pt. A job travels along a drawn connector, eased, 0.6 to
+0.8 s per hop, at 25 frames a second. After each step the picture holds 2.5 to
+3 s.
+
+**Type.** Switzer. The GIF's step title is Medium 23 pt, top left; there is no
+sub line under it. Box labels are 15 to 16 pt. Captions are 13 pt at least.
+Numbers are 28 to 36 pt Semibold. Addresses and commands are JetBrains Mono.
+
+**Layout.** At most six boxes and one counter on screen. Every part keeps one
+place for the whole loop, and the flow runs left to right. A loop starts on
+step 1 and ends on its last step.
 
 ## Rules for every slide
 
@@ -57,11 +87,11 @@ large animation, and the detail in the speaker notes.
    animation shows it. Nothing else is on the slide.
 2. **The animation tells its own story.** A title line at the top of the GIF
    changes at each step: "1. You ask a question", "2. A lead agent splits it".
-   The listener can follow it without the speaker.
+   It never repeats the slide's own title.
 3. **Nothing jumps around.** Every part has one fixed place for the whole
    animation. Only small plain squares move. A square is a piece of work.
-4. **Brightness means one thing.** Bright dots are the part that acts now.
-   Dim dots are everything else. Work that moves is a small bright block.
+4. **Brightness means one thing.** White is the part that acts now and the
+   work that moves. Grey is everything else.
 5. **A number appears once, when it matters,** as a white block with black
    text, and it is a real measurement from `docs/platform/evidence/`. No
    number is invented.

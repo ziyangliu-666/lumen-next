@@ -9,6 +9,13 @@ describe('landing intro', () => {
     expect(html).toContain('Skip');
   });
 
+  it('offers a button to each scene', () => {
+    const html = renderToStaticMarkup(<Intro onDone={() => undefined} />);
+    expect(html).toContain('aria-label="Scene 1 of 7"');
+    expect(html).toContain('aria-label="Scene 7 of 7"');
+    expect(html).toContain('aria-current="step"');
+  });
+
   it('does not play where nothing can be kept or asked (no browser)', () => {
     expect(introWanted()).toBe(false);
   });

@@ -19,7 +19,8 @@ import { LOGOS } from './logos';
 //
 // The numbers are real: the bars are a row of the Narayana numbers, which
 // count Dyck paths by peaks. About 33 seconds; Skip, Escape or Enter ends
-// it. With reduced motion it is not played on its own.
+// it. A step of the progress, or an arrow key, goes to a scene. With reduced
+// motion it is not played on its own.
 
 const SEEN_KEY = 'lumen.intro';
 
@@ -1030,14 +1031,26 @@ export function Intro({ onDone }: { onDone: () => void }): JSX.Element {
   const [now, setNow] = useState(0);
   // Leaving: the screen fades to the page under it, then onDone.
   const [leaving, setLeaving] = useState(false);
+  // When the clock read 0. A jump moves it, so the clock then reads the
+  // start of the chosen scene, and the intro plays on from there.
+  const start = useRef<number | null>(null);
+  // One more for each jump: a jump to the scene that shows draws it fresh.
+  const [jumps, setJumps] = useState(0);
   useEffect(() => {
-    const start = performance.now();
     let frame = requestAnimationFrame(function tick(at) {
-      setNow(at - start);
+      start.current ??= at;
+      setNow(at - start.current);
       frame = requestAnimationFrame(tick);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
+  const jump = (index: number): void => {
+    const to = Math.max(0, Math.min(SCENES.length - 1, index));
+    const offset = SCENES.slice(0, to).reduce((sum, step) => sum + step.ms, 0);
+    start.current = performance.now() - offset;
+    setNow(offset);
+    setJumps((count) => count + 1);
+  };
   const leave = (): void => {
     remember();
     setLeaving(true);
@@ -1055,6 +1068,8 @@ export function Intro({ onDone }: { onDone: () => void }): JSX.Element {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape' || event.key === 'Enter') leave();
+      else if (event.key === 'ArrowRight') jump(sceneAt(now) + 1);
+      else if (event.key === 'ArrowLeft') jump(sceneAt(now) - 1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1083,7 +1098,7 @@ export function Intro({ onDone }: { onDone: () => void }): JSX.Element {
       {/* Keyed by the scene: each comes up fresh, and goes on its own
           clock just before the next. */}
       <div
-        key={at}
+        key={`${at}:${jumps}`}
         aria-hidden="true"
         className={cn(
           'relative flex h-full flex-col items-center justify-center gap-10 px-6',
@@ -1099,21 +1114,32 @@ export function Intro({ onDone }: { onDone: () => void }): JSX.Element {
         {scene.draw(into)}
       </div>
       <div className="absolute inset-x-0 bottom-8 flex items-center justify-center gap-6 px-6">
-        <div aria-hidden="true" className="flex w-[min(20rem,60vw)] gap-1.5">
+        {/* Each step of the progress is a button to its scene. The button
+            is taller than the line it draws, so it is easy to hit. */}
+        <div className="flex w-[min(20rem,60vw)] gap-1.5">
           {SCENES.map((step, index) => (
-            <span key={index} className="h-0.5 flex-1 overflow-hidden bg-rule-minor">
-              {index < at ? (
-                <span className="block h-full bg-ink" />
-              ) : index === at ? (
-                <span
-                  key={at}
-                  className={cn(
-                    'block h-full origin-left bg-ink motion-safe:animate-intro-fill',
-                    FILL[index],
-                  )}
-                />
-              ) : null}
-            </span>
+            <button
+              key={index}
+              type="button"
+              aria-label={`Scene ${index + 1} of ${SCENES.length}`}
+              aria-current={index === at ? 'step' : undefined}
+              onClick={() => jump(index)}
+              className="group flex-1 cursor-pointer py-3"
+            >
+              <span className="block h-0.5 overflow-hidden bg-rule-minor transition-[height] group-hover:h-1">
+                {index < at ? (
+                  <span className="block h-full bg-ink" />
+                ) : index === at ? (
+                  <span
+                    key={`${at}:${jumps}`}
+                    className={cn(
+                      'block h-full origin-left bg-ink motion-safe:animate-intro-fill',
+                      FILL[index],
+                    )}
+                  />
+                ) : null}
+              </span>
+            </button>
           ))}
         </div>
         <button

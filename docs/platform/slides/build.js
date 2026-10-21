@@ -1,23 +1,29 @@
 // The ASS presentation deck (docs/platform/slides/README.md has the rules).
-// Layout and colours follow the interview deck (~/Projects/interview-deck/deck/build.js):
-// a red label, one short title, one large animation; dark section slides with a tracker.
+// Drawn in lumen's own dark theme (apps/web/src/styles/theme.css): black ground, white
+// ink, grey secondary text, thin grey rules, zero radius, Switzer, and no red: red means
+// "waits on you", and nothing on a slide does. The telling keeps the interview deck's
+// way: a small label, one short title, one large animation, the rest in the notes.
+// Switzer must be installed where the deck is shown (see the README).
 //
 //   node docs/platform/slides/build.js
 //
 // It writes out/Team15-Lumen-Platform.pptx and out/slides.json, a plain description of
-// every slide that preview.py draws, so the layout can be checked without PowerPoint.
+// every slide that preview.py draws, so the layout is checked without PowerPoint.
 const path = require('path');
 const fs = require('fs');
 const pptxgen = require('pptxgenjs');
 
-const INK = '1A1D23',
-  RED = 'C8102E',
-  GRAY = '5F6670',
-  EDGE = '9AA0A8',
-  LIGHT = 'F2F3F5',
-  WHITE = 'FFFFFF',
-  SOFT = 'A3A9B1';
-const FONT = 'Arial';
+// theme.css, .dark: paper, ink, ink-2, ink-3, rule-major, well.
+const PAPER = '000000',
+  INK = 'FFFFFF',
+  GRAY = '9A9DA3',
+  SOFT = '7C8086',
+  RULE = '45484C',
+  WELL = '1A1B1E';
+const SANS = 'Switzer',
+  TITLE = 'Switzer Medium',
+  BOLD = 'Switzer Semibold',
+  MONO = 'JetBrains Mono';
 const OUT = path.join(__dirname, 'out');
 const URL = 'lumen.54-179-112-87.sslip.io';
 const gif = (n) => path.join(OUT, n + '.gif');
@@ -29,20 +35,17 @@ pres.title = 'Lumen Platform';
 
 const spec = []; // what preview.py draws
 let cur = null;
-const newSlide = (bg) => {
+const newSlide = (backdrop) => {
   const s = pres.addSlide();
-  if (bg) s.background = { color: bg };
-  cur = { bg: bg || WHITE, items: [] };
+  s.background = backdrop ? { path: path.join(OUT, backdrop) } : { color: PAPER };
+  cur = { bg: PAPER, backdrop: backdrop ? path.join(OUT, backdrop) : null, items: [] };
   spec.push(cur);
   return s;
 };
 const txt = (s, text, o) => {
-  s.addText(text, { fontFace: FONT, isTextBox: true, margin: 0, valign: 'top', color: INK, ...o });
-  cur.items.push({
-    kind: 'text',
-    text: typeof text === 'string' ? text : text.map((r) => r.text).join(''),
-    ...o,
-  });
+  const opts = { fontFace: SANS, isTextBox: true, margin: 0, valign: 'top', color: INK, ...o };
+  s.addText(text, opts);
+  cur.items.push({ kind: 'text', text, ...opts });
 };
 const rect = (s, x, y, w, h, fill, line) => {
   s.addShape(pres.shapes.RECTANGLE, {
@@ -50,122 +53,101 @@ const rect = (s, x, y, w, h, fill, line) => {
     y,
     w,
     h,
-    fill: { color: fill },
-    line: { color: line || fill, width: 1.25 },
+    fill: fill ? { color: fill } : { type: 'none' },
+    line: line ? { color: line, width: 1 } : { type: 'none' },
   });
-  cur.items.push({ kind: 'rect', x, y, w, h, fill, line: line || fill });
+  cur.items.push({ kind: 'rect', x, y, w, h, fill, line });
 };
 const picture = (s, file, x, y, w, h) => {
   s.addImage({ path: file, x, y, w, h });
   cur.items.push({ kind: 'image', file, x, y, w, h });
 };
+const label = (s, t) => txt(s, t, { x: 0.6, y: 0.42, w: 12, h: 0.32, fontSize: 14, color: GRAY });
+const heading = (s, t) =>
+  txt(s, t, { x: 0.6, y: 0.78, w: 12.1, h: 0.8, fontSize: 34, fontFace: TITLE, valign: 'middle' });
 
+// The progress, as at the bottom of lumen's intro: a row of thin segments, the current
+// one white, with each part's name under it.
 const PARTS = ['Overview', 'Architecture', 'Scale', 'Delivery'];
-function tracker(s, n, y, dark) {
-  const pw = (11.93 - 0.3 * (PARTS.length - 1)) / PARTS.length;
+function progress(s, n, y) {
+  const pw = 2.7;
   PARTS.forEach((p, i) => {
-    const x = 0.7 + i * (pw + 0.3),
+    const x = 0.8 + i * (pw + 0.25),
       on = i + 1 === n;
-    rect(s, x, y, pw, 0.7, on ? RED : dark ? INK : WHITE, on ? RED : dark ? GRAY : EDGE);
-    txt(s, `${i + 1}  ${p}`, {
-      x,
-      y,
-      w: pw,
-      h: 0.7,
-      fontSize: 16,
-      bold: on,
-      color: on ? WHITE : dark ? SOFT : GRAY,
-      align: 'center',
-      valign: 'middle',
-    });
+    rect(s, x, y, pw, 0.04, on ? INK : RULE);
+    txt(s, p, { x, y: y + 0.14, w: pw, h: 0.35, fontSize: 14, color: on ? INK : SOFT });
   });
 }
 
 function section(n, title, sub, notes) {
-  const s = newSlide(INK);
-  txt(s, `PART ${n} OF ${PARTS.length}`, {
+  const s = newSlide('field.png');
+  txt(s, `Part ${n} of ${PARTS.length}`, {
     x: 0.8,
     y: 2.0,
     w: 11,
     h: 0.45,
-    fontSize: 20,
-    bold: true,
-    color: RED,
-    charSpacing: 3,
+    fontSize: 18,
+    color: GRAY,
   });
   txt(s, title, {
     x: 0.8,
-    y: 2.55,
+    y: 2.5,
     w: 11.7,
-    h: 1.2,
-    fontSize: 54,
-    bold: true,
-    color: WHITE,
+    h: 1.3,
+    fontSize: 60,
+    fontFace: TITLE,
     valign: 'middle',
   });
-  txt(s, sub, { x: 0.8, y: 3.85, w: 11.7, h: 0.5, fontSize: 22, color: SOFT });
-  tracker(s, n, 5.85, true);
+  txt(s, sub, { x: 0.8, y: 3.85, w: 11.7, h: 0.5, fontSize: 24, color: GRAY });
+  progress(s, n, 6.2);
   s.addNotes(notes);
 }
 
-// A slide with one animation: a red label, a title of a few words, the GIF under it.
-function shown(label, title, name, notes) {
+// A slide with one animation: a label, a title of a few words, the GIF under it.
+function shown(kicker, title, name, notes) {
   const s = newSlide();
-  txt(s, label, {
-    x: 0.6,
-    y: 0.4,
-    w: 12,
-    h: 0.3,
-    fontSize: 13,
-    bold: true,
-    color: RED,
-    charSpacing: 2,
-  });
-  txt(s, title, { x: 0.6, y: 0.72, w: 12.1, h: 0.75, fontSize: 32, bold: true, valign: 'middle' });
+  label(s, kicker);
+  heading(s, title);
   picture(s, gif(name), 0.6, 1.9, 12.13, 5.0);
   s.addNotes(notes);
 }
 
 // ------------------------------------------------------------------ 1. title
 {
-  const s = newSlide(INK);
-  txt(s, 'ARCHITECTING SCALABLE SYSTEMS · TEAM 15', {
+  const s = newSlide('title.png');
+  txt(s, 'Architecting Scalable Systems  ·  Team 15', {
     x: 0.8,
     y: 1.9,
-    w: 11.7,
-    h: 0.45,
+    w: 7,
+    h: 0.4,
     fontSize: 18,
-    bold: true,
-    color: RED,
-    charSpacing: 3,
+    color: GRAY,
   });
   txt(s, 'Lumen Platform', {
     x: 0.8,
-    y: 2.45,
-    w: 11.7,
+    y: 2.4,
+    w: 8,
     h: 1.3,
-    fontSize: 60,
-    bold: true,
-    color: WHITE,
+    fontSize: 64,
+    fontFace: TITLE,
     valign: 'middle',
   });
-  txt(s, 'A platform for teams of AI research agents', {
+  txt(s, 'A platform for teams of\nAI research agents', {
     x: 0.8,
-    y: 3.8,
-    w: 11.7,
-    h: 0.6,
+    y: 3.75,
+    w: 7,
+    h: 1.1,
     fontSize: 26,
-    color: SOFT,
+    color: GRAY,
   });
   txt(s, 'He Rong  ·  Li Zhuoyang  ·  Liu Ziyang  ·  Lu Yi  ·  Peng Xujian', {
     x: 0.8,
-    y: 5.6,
-    w: 11.7,
-    h: 0.45,
-    fontSize: 18,
-    color: WHITE,
+    y: 5.7,
+    w: 8,
+    h: 0.4,
+    fontSize: 16,
   });
-  txt(s, URL, { x: 0.8, y: 6.15, w: 11.7, h: 0.4, fontSize: 16, color: SOFT });
+  txt(s, URL, { x: 0.8, y: 6.15, w: 8, h: 0.4, fontSize: 15, fontFace: MONO, color: GRAY });
   s.addNotes(
     'Good morning. We are Team 15. Our project is Lumen Platform: a platform on which teams of AI agents do research work. ' +
       'Everything we show today runs on a public server; the address is on the slide, and you can open it now.',
@@ -181,7 +163,7 @@ section(
 );
 
 shown(
-  'OVERVIEW · THE PROBLEM',
+  'Overview  ·  The problem',
   'One chat window is not enough',
   'problem',
   'A researcher who uses an AI model today works in one chat window. Three problems. ' +
@@ -192,17 +174,17 @@ shown(
 );
 
 shown(
-  'OVERVIEW · WHAT LUMEN DOES',
+  'Overview  ·  What Lumen does',
   'A team of agents for each question',
   'tree',
   'This is one question in Lumen. You ask it. A lead agent plans and splits the work. Three readers work in parallel. ' +
-    'Every small square is a step an agent took, and every step is recorded with its cost. ' +
+    'Every sphere is an agent, and every small block is a step it took; every step is recorded with its cost. ' +
     'The cost adds up against a cap on the account: one US dollar by default. The findings and the answer come back to you. ' +
-    'Numbers on this picture are from a real question on our server: 3 cents, 3 findings.',
+    'The numbers are from a real question on our server: 3 cents, 3 findings.',
 );
 
 shown(
-  'OVERVIEW · THE PLATFORM',
+  'Overview  ·  The platform',
   'Producers, consumers, one platform',
   'platform',
   'Lumen is a platform, not only an app. Producers publish agents: an agent is a set of instructions for the lead, for one kind of question. ' +
@@ -214,25 +196,8 @@ shown(
 
 {
   const s = newSlide();
-  txt(s, 'OVERVIEW · PROJECT CONDUCT', {
-    x: 0.6,
-    y: 0.4,
-    w: 12,
-    h: 0.3,
-    fontSize: 13,
-    bold: true,
-    color: RED,
-    charSpacing: 2,
-  });
-  txt(s, 'Five people, one part each', {
-    x: 0.6,
-    y: 0.72,
-    w: 12.1,
-    h: 0.75,
-    fontSize: 32,
-    bold: true,
-    valign: 'middle',
-  });
+  label(s, 'Overview  ·  Project conduct');
+  heading(s, 'Five people, one part each');
   const team = [
     ['Liu Ziyang', 'session service, the queue protocol, integration'],
     ['Li Zhuoyang', 'workers'],
@@ -241,20 +206,10 @@ shown(
     ['He Rong', 'billing, Kubernetes, the pipeline'],
   ];
   team.forEach(([who, what], i) => {
-    const y = 1.95 + i * 0.95;
-    rect(s, 0.6, y, 3.4, 0.75, INK);
-    txt(s, who, {
-      x: 0.6,
-      y,
-      w: 3.4,
-      h: 0.75,
-      fontSize: 18,
-      bold: true,
-      color: WHITE,
-      align: 'center',
-      valign: 'middle',
-    });
-    txt(s, what, { x: 4.3, y, w: 8.4, h: 0.75, fontSize: 18, color: INK, valign: 'middle' });
+    const y = 2.05 + i * 0.95;
+    rect(s, 0.6, y - 0.12, 12.13, 0.01, RULE);
+    txt(s, who, { x: 0.6, y, w: 3.4, h: 0.6, fontSize: 22, fontFace: BOLD, valign: 'middle' });
+    txt(s, what, { x: 4.3, y, w: 8.4, h: 0.6, fontSize: 20, color: GRAY, valign: 'middle' });
   });
   s.addNotes(
     'Each of us owns one part from design to deployment. Status today: everything you will see is built and running on the public server. ' +
@@ -271,7 +226,7 @@ section(
 );
 
 shown(
-  'ARCHITECTURE · SERVICES',
+  'Architecture  ·  Services',
   'Five services, one queue of work',
   'services',
   'Five services sit behind one gateway, and each can run as many copies as it needs. ' +
@@ -282,7 +237,7 @@ shown(
 );
 
 shown(
-  'ARCHITECTURE · ONE DECISION',
+  'Architecture  ·  One decision',
   'One queue per level of the tree',
   'depth',
   'One design decision that matters. A lead waits for its readers, and while it waits it keeps its worker busy. ' +
@@ -292,7 +247,7 @@ shown(
 );
 
 shown(
-  'ARCHITECTURE · WHERE IT RUNS',
+  'Architecture  ·  Where it runs',
   'One public server on AWS',
   'hosting',
   'It runs on one small server in AWS, in Singapore: a t3.medium, about 1.3 US dollars a day. ' +
@@ -303,7 +258,7 @@ shown(
 );
 
 shown(
-  'ARCHITECTURE · SECURITY',
+  'Architecture  ·  Security',
   'What an API key may do',
   'keys',
   'Apps get a key, not a password. The key carries scopes, and it is stored only as a hash, so we cannot read it back. ' +
@@ -321,17 +276,17 @@ section(
 );
 
 shown(
-  'SCALE · LOAD TEST',
+  'Scale  ·  Load test',
   'Load grows, workers follow',
   'scale',
   'This is a recording of a real load test on our public server, on 20 October. Ten users ask questions as fast as they can. ' +
-    'The blue bars are the jobs waiting in the queue. One worker cannot keep up, so the queue grows. ' +
+    'The bars are the jobs waiting in the queue. One worker cannot keep up, so the queue grows. ' +
     'KEDA watches the queue and starts more copies of the worker: one, two, three, four, in about 50 seconds. ' +
     'When the load ends, it goes back to one. Result: 135 questions, all answered, median 6.1 seconds, none of the 1,040 requests failed.',
 );
 
 shown(
-  'SCALE · FAILURE',
+  'Scale  ·  Failure',
   'A worker dies; the question still ends',
   'kill',
   'What if a worker dies in the middle of a question? We killed one on purpose, with no time to finish. ' +
@@ -349,7 +304,7 @@ section(
 );
 
 shown(
-  'DELIVERY · PIPELINE',
+  'Delivery  ·  Pipeline',
   'Seven checks on every push',
   'pipeline',
   'Every push goes through seven checks: the tests, a check of the libraries we use, a scan of our code, a scan of the built image, ' +
@@ -361,34 +316,16 @@ shown(
 
 {
   const s = newSlide();
-  txt(s, 'DELIVERY · LIVE DEMO', {
-    x: 0.6,
-    y: 0.4,
-    w: 12,
-    h: 0.3,
-    fontSize: 13,
-    bold: true,
-    color: RED,
-    charSpacing: 2,
-  });
-  txt(s, 'Now, on the public server', {
-    x: 0.6,
-    y: 0.72,
-    w: 12.1,
-    h: 0.75,
-    fontSize: 32,
-    bold: true,
-    valign: 'middle',
-  });
-  rect(s, 0.6, 1.85, 12.13, 0.95, LIGHT);
+  label(s, 'Delivery  ·  Live demo');
+  heading(s, 'Now, on the public server');
+  rect(s, 0.6, 1.9, 12.13, 0.95, null, RULE);
   txt(s, 'https://' + URL, {
     x: 0.6,
-    y: 1.85,
+    y: 1.9,
     w: 12.13,
     h: 0.95,
-    fontSize: 30,
-    bold: true,
-    color: RED,
+    fontSize: 28,
+    fontFace: MONO,
     align: 'center',
     valign: 'middle',
   });
@@ -399,25 +336,23 @@ shown(
     'The second app asks through the API',
   ];
   steps.forEach((t, i) => {
-    const y = 3.25 + i * 0.85;
-    rect(s, 0.6, y, 0.62, 0.62, RED);
+    const y = 3.3 + i * 0.85;
     txt(s, String(i + 1), {
       x: 0.6,
       y,
-      w: 0.62,
+      w: 0.6,
       h: 0.62,
-      fontSize: 20,
-      bold: true,
-      color: WHITE,
-      align: 'center',
+      fontSize: 24,
+      fontFace: TITLE,
+      color: GRAY,
       valign: 'middle',
     });
-    txt(s, t, { x: 1.45, y, w: 11, h: 0.62, fontSize: 24, valign: 'middle' });
+    txt(s, t, { x: 1.3, y, w: 11, h: 0.62, fontSize: 26, valign: 'middle' });
   });
   s.addNotes(
     'Live demo, about eight minutes. Run deploy/k8s/demo.sh with LUMEN_URL set to the address on the slide. ' +
       'One: ask a question in the browser. Two: watch the tree grow, step by step, with its cost. ' +
-      'Three: start the load test and show the workers going from 1 to 4 (kubectl get pods), then back. ' +
+      'Three: switch the workers to demo mode first (gh workflow run platform-deploy.yml -f worker=demo), start the load test and show the workers going from 1 to 4, then back. ' +
       'Four: run the literature watch, which asks through the public API with an API key. ' +
       'If the network fails, play the animations on the previous slides; they show the same runs.',
   );
@@ -425,46 +360,28 @@ shown(
 
 {
   const s = newSlide();
-  txt(s, 'WHAT IS NEXT', {
-    x: 0.6,
-    y: 0.4,
-    w: 12,
-    h: 0.3,
-    fontSize: 13,
-    bold: true,
-    color: RED,
-    charSpacing: 2,
-  });
-  txt(s, 'Three limits, and what we do next', {
-    x: 0.6,
-    y: 0.72,
-    w: 12.1,
-    h: 0.75,
-    fontSize: 32,
-    bold: true,
-    valign: 'middle',
-  });
+  label(s, 'What is next');
+  heading(s, 'Three limits, and what we do next');
   const rows = [
     ['One copy of the session service', 'Keep live work in the database, then run many copies'],
     ['One database for every service', 'One database for each service'],
     ["A killed worker's jobs run twice", 'Make every job safe to repeat'],
   ];
   rows.forEach(([limit, next], i) => {
-    const y = 2.05 + i * 1.45;
-    rect(s, 0.6, y, 5.6, 1.05, LIGHT);
-    txt(s, limit, { x: 0.85, y, w: 5.2, h: 1.05, fontSize: 20, bold: true, valign: 'middle' });
+    const y = 2.1 + i * 1.45;
+    rect(s, 0.6, y, 5.6, 1.05, WELL);
+    txt(s, limit, { x: 0.85, y, w: 5.2, h: 1.05, fontSize: 20, fontFace: BOLD, valign: 'middle' });
     txt(s, '→', {
       x: 6.3,
       y,
       w: 0.6,
       h: 1.05,
       fontSize: 28,
-      bold: true,
-      color: RED,
+      color: GRAY,
       align: 'center',
       valign: 'middle',
     });
-    rect(s, 7.0, y, 5.73, 1.05, WHITE, EDGE);
+    rect(s, 7.0, y, 5.73, 1.05, null, RULE);
     txt(s, next, { x: 7.25, y, w: 5.3, h: 1.05, fontSize: 20, valign: 'middle' });
   });
   s.addNotes(
@@ -475,19 +392,26 @@ shown(
 }
 
 {
-  const s = newSlide(INK);
+  const s = newSlide('title.png');
   txt(s, 'Thank you', {
     x: 0.8,
     y: 2.4,
-    w: 11.7,
+    w: 8,
     h: 1.3,
-    fontSize: 60,
-    bold: true,
-    color: WHITE,
+    fontSize: 64,
+    fontFace: TITLE,
     valign: 'middle',
   });
-  txt(s, 'https://' + URL, { x: 0.8, y: 3.85, w: 11.7, h: 0.6, fontSize: 26, color: SOFT });
-  txt(s, 'Questions?', { x: 0.8, y: 4.7, w: 11.7, h: 0.6, fontSize: 26, color: RED, bold: true });
+  txt(s, 'Questions?', { x: 0.8, y: 3.8, w: 8, h: 0.6, fontSize: 28, color: GRAY });
+  txt(s, 'https://' + URL, {
+    x: 0.8,
+    y: 4.7,
+    w: 8,
+    h: 0.5,
+    fontSize: 18,
+    fontFace: MONO,
+    color: GRAY,
+  });
   s.addNotes('Thank you. We are happy to take questions.');
 }
 

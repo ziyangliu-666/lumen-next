@@ -209,8 +209,7 @@ def kill():
             c.cross(A[0] + 0.1, A[1] + 0.1, WW - 0.2, WHT - 0.2)
         worker(c, B, "worker B", st["b"], st["bjobs"], st["bmarks"])
         if st["result"]:
-            _invert_lines(c, RX, 2.05, ["ended in 12.6 s (median 6.1 s)", "cost 8¢ instead of 3¢:",
-                                        "the jobs ran twice"])
+            _invert_lines(c, RX, 2.05, ["the question ended", "in 12.6 s"])
 
     st = dict(on={"q"}, status="running", cells=[None] * 3, a="idle", ajobs=[0, 0, 0], b="faint",
               bjobs=[0, 0, 0], bmarks=[0, 0, 0], result=False)
@@ -248,7 +247,7 @@ def kill():
         sc.hold(0.6)
     sc.set(on={"q"}, status="ended", b="idle")
     sc.hold(2.4)
-    sc.step("6. The question still ends, later and at a higher cost", 3.4, result=True)
+    sc.step("6. Worker B finishes the work, and the question ends", 3.4, result=True)
     sc.save()
 
 

@@ -216,7 +216,7 @@ def persistence():
         for ctx in ("projects", "billing"):
             c.arrow([(BUS, RC[ctx]), (PG[0] + PG[2], RC[ctx])], ctx in on)
         if st["last"]:
-            c.text(0.3, 4.22, 11.53, 0.4, "one database, tables split by context  ·  next: one database per service",
+            c.text(0.3, 4.22, 11.53, 0.4, "one database; each context owns its tables",
                    15, "Medium", INK2, "left")
 
     st = dict(on={"pg"}, lit=set(), written=set(), queue=[], ack=False, hash=False, last=False)
@@ -263,7 +263,7 @@ def persistence():
     sc.hop("lead", [q_in, (QX + 4 * CELL - CELL / 2, q_in[1])], 0.6)
     sc.set(ack=True)
     sc.hold(2.4)
-    sc.step("8. Today one database for all; next, one per service", 3.2, on=set(), ack=False, last=True)
+    sc.step("8. Every step is saved; a turn leaves the queue only when it is done", 3.2, on=set(), ack=False, last=True)
     sc.save()
 
 
@@ -383,7 +383,7 @@ def source():
         br = "branches" in on
         c.text(0.45, MAIN_Y - 0.17, 1.6, 0.32, "main", 15, "Regular", INK if br else INK2, "left", mono=True)
         c.line([(LX0, MAIN_Y), (LX1, MAIN_Y)], br)
-        c.text(LX0 + 0.75, MAIN_Y - 0.36, 4, 0.3, "the monolith, graded by another course", 13, "Regular",
+        c.text(LX0 + 0.75, MAIN_Y - 0.36, 4, 0.3, "Lumen, the product", 13, "Regular",
                INK2 if br else INK3, "left")
         c.text(0.45, PLAT_Y - 0.17, 1.7, 0.32, "ass/platform", 15, "Regular", INK if br or "plat" in on else INK2,
                "left", mono=True)
@@ -418,7 +418,7 @@ def source():
     sc = Scene("source.gif", paint, st)
     x0, xm = MERGES[2]
     sc.step("1. One monorepo holds the server, both apps and the chart", 2.8)
-    sc.step("2. main is the monolith; ass/platform is this platform", 2.8, on={"branches"})
+    sc.step("2. main is Lumen; ass/platform splits it into services", 2.8, on={"branches"})
     sc.step("3. Each member works on a branch and merges it into ass/platform", 0.3, on={"mem"})
     sc.hop("lead", [(x0, MEM_Y), (xm - 0.35, MEM_Y), (xm, PLAT_Y)], 0.8)
     sc.set(on={"mem", "plat"})

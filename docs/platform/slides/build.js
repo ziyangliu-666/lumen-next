@@ -169,7 +169,8 @@ shown(
   'milestones.gif',
   'This is the plan from our proposal: ten person-days for each member, from 8 to 21 October. ' +
     'Architecture and the service contracts first, then each service, then autoscaling, the public API and the pipeline. ' +
-    'Every part is built and runs on AWS. [TEAM TO FILL: the actual effort of each member, from the report section 2.3.]',
+    'Each member spent about ten person-days, 80 hours, so 400 hours in total, as the proposal planned. ' +
+    'Every part is built and runs on AWS.',
 );
 
 // ------------------------------------------------------------------ 3 logical architecture

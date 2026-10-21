@@ -10,7 +10,7 @@ import { ScrollRegion } from '@/ui/scroll-region';
 import { SurfaceMain, Surfaces, SurfaceWell } from '@/ui/surfaces';
 import { rememberReturn, useCurrentAccount } from '@/core/auth';
 import { markBusy } from '@/core/favicon';
-import { ModelPicker, useModels } from '@/core/models';
+import { ModelPicker, modelLabel, useModels } from '@/core/models';
 import { go } from '@/core/router';
 import { BarActions, BarCrumb, BarStatus } from '@/core/shell';
 import {
@@ -610,7 +610,7 @@ export function Session(): JSX.Element {
         ) : null}
         {/* The model this session chose, on a server that offers a choice. */}
         {models.length > 1 ? (
-          <span className="text-ink-2 max-split:hidden">{sessionModel}</span>
+          <span className="text-ink-2 max-split:hidden">{modelLabel(models, sessionModel)}</span>
         ) : null}
       </BarStatus>
 

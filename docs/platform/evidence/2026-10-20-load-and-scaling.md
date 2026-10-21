@@ -13,7 +13,7 @@ http requests 1040, failed 0.00 %
 
 ## Worker replicas and queue depth, every 10 s
 
-Columns: time (UTC), ready/desired worker pods, then per queue name:ready messages:unacknowledged messages.
+Columns: time (UTC), ready/desired worker pods, then per queue name:messages in the queue (ready and unacknowledged together):of those, unacknowledged.
 
 ```
 14:19:13 workers=1/1 queues=lumen.turns.2:0:0 lumen.turns.1:0:0 lumen.turns.0:0:0 

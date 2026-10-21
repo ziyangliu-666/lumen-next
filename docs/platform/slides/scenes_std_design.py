@@ -6,9 +6,7 @@
 
 Every part is a plain box with its real name. A thing that moves is a word on a white tag.
 """
-import os
-
-from draw import BLACK, INK, INK2, INK3, RAISED, RULE, RULE2, Canvas, Scene, font, S, X2  # noqa: F401
+from draw import BLACK, INK, INK2, INK3, RAISED, RULE, RULE2, W, Canvas, Scene, font, S, X2  # noqa: F401
 
 import draw
 from scenes_std import tag
@@ -43,7 +41,7 @@ def head(c, x, y, ux, uy, color, pt=1.5):
 
 
 # ---------------------------------------------------------------- slide 4c: the ER diagram
-ROW, HEAD_H, PAD = 0.21, 0.3, 0.06           # a column row, the table name row, the bottom pad
+ROW, HEAD_H, PAD = 0.2, 0.28, 0.06           # a column row, the table name row, the bottom pad
 
 
 class Table:
@@ -68,18 +66,20 @@ class Table:
     def b(self):
         return self.y + self.h
 
-    def draw(self, c):
+    def draw(self, c, lit=False):
         x, y, w, h = self.x, self.y, self.w, self.h
-        c.d.rectangle([c._p(x), c._p(y), c._p(x + w), c._p(y + h)], fill=BLACK, outline=INK2, width=c._lw(1.5))
-        c.d.rectangle([c._p(x), c._p(y), c._p(x + w), c._p(y + HEAD_H)], fill=RAISED, outline=INK2,
-                      width=c._lw(1.5))
+        edge = INK if lit else INK2
+        lw = c._lw(2 if lit else 1.5)
+        c.d.rectangle([c._p(x), c._p(y), c._p(x + w), c._p(y + h)], fill=RAISED if lit else BLACK, outline=edge,
+                      width=lw)
+        c.d.rectangle([c._p(x), c._p(y), c._p(x + w), c._p(y + HEAD_H)], fill=RAISED, outline=edge, width=lw)
         c.text(x + 0.11, y, w - 0.2, HEAD_H, self.name, 14, "Semibold", INK, "left")
         for i, (m, n) in enumerate(self.cols):
-            ry = y + HEAD_H + i * ROW + 0.02
+            ry = y + HEAD_H + i * ROW + 0.01
             if m:
                 c.text(x + 0.11, ry, self.mark, ROW, m, 13, "Medium", INK3, "left")
-            c.text(x + 0.11 + self.mark, ry, w - self.mark - 0.2, ROW, n, 13, "Regular", INK if "PK" in m else INK2,
-                   "left")
+            c.text(x + 0.11 + self.mark, ry, w - self.mark - 0.2, ROW, n, 13, "Regular",
+                   INK if ("PK" in m or lit) else INK2, "left")
 
 
 def crow(c, pts, dashed_line=False, color=INK2):
@@ -105,19 +105,32 @@ def crow(c, pts, dashed_line=False, color=INK2):
                  width=c._lw(1.5))
 
 
-def frame(c, x, y, w, h, name):
-    c.d.rectangle([c._p(x), c._p(y), c._p(x + w), c._p(y + h)], outline=RULE, width=c._lw(1))
-    c.text(x + 0.1, y + 0.02, 3, 0.26, name, 13, "Medium", INK3, "left")
+def frame(c, x, y, w, h, name, lit=False):
+    c.d.rectangle([c._p(x), c._p(y), c._p(x + w), c._p(y + h)], outline=INK2 if lit else RULE, width=c._lw(1))
+    c.text(x + 0.1, y + 0.01, 3, 0.25, name, 13, "Medium", INK if lit else INK3, "left")
+
+
+class HighScene(Scene):
+    """A scene whose step title sits higher than draw.Scene's, for a picture that needs the
+    whole height (the ER diagram)."""
+
+    def _draw(self):
+        draw.NOW = self.t
+        c = Canvas()
+        c.text(0.3, 0.02, W - 0.6, 0.44, self.title, 23, "Medium", INK, "left")
+        self.paint(c, self.st)
+        return c.frame()
 
 
 def er():
-    c = Canvas()
-    T0 = 0.48                                  # the top of the tables in both top frames
+    LINE_Y = 0.5                               # the connector that runs over the top frames
+    F0 = 0.58                                  # the top of the top frames
+    T0 = F0 + 0.26                             # the top of the tables in the top frames
     GAP = 0.42
     # identity, on the left, for both rows
     accounts = Table("accounts", [("PK", "id"), ("", "email"), ("", "display_name"), ("", "role")], 0.18, T0, 1.85)
     keys = Table("platform_api_keys", [("PK", "id"), ("FK", "account_id"), ("", "prefix"), ("", "key_hash"),
-                                       ("", "scopes"), ("", "revoked_at")], 0.18, 1.98, 1.85)
+                                       ("", "scopes"), ("", "revoked_at")], 0.18, accounts.b + 0.3, 1.85)
     # project, the top row
     px = 2.38
     projects = Table("projects", [("PK", "id"), ("", "account_id"), ("", "title"), ("", "mode")], px, T0)
@@ -127,8 +140,10 @@ def er():
                                        ("", "withdrawn_at")], 0, T0)
     intents = Table("platform_question_intents", [("PK", "id"), ("", "account_id"), ("FK", "agent_id"),
                                                   ("", "question"), ("", "session_id")], 0, T0)
+    top_b = max(t.b for t in (projects, findings, agents, intents)) + 0.06
+    F1 = top_b + 0.16                          # the top of the bottom frames
+    B0 = F1 + 0.26
     # session and billing, the bottom row
-    B0 = 2.45
     sessions = Table("sessions", [("PK", "id"), ("", "project_id"), ("", "account_id")], px, B0)
     tasks = Table("tasks", [("PK", "id"), ("FK", "session_id"), ("FK", "parent_id"), ("", "agent"), ("", "depth"),
                             ("", "status"), ("", "own_cost"), ("", "pending")], 0, B0)
@@ -148,56 +163,107 @@ def er():
     bx = steps.r + 0.1 + 0.15 + 0.1
     wallets.x = ledger.x = bx
     wallets.w = ledger.w = max(wallets.w, ledger.w)
-    ledger.y = wallets.b + 0.16
+    ledger.y = wallets.b + 0.12
     approvals.x = ledger.r + GAP
+    low_b = max(tasks.b, ledger.b, approvals.b) + 0.05
+    CAP_Y = low_b + 0.04
 
-    # the frames, one per owning context
-    frame(c, 0.08, 0.2, 2.05, keys.b + 0.1 - 0.2, "identity")
-    top_b = max(t.b for t in (projects, findings, agents, intents)) + 0.08
-    frame(c, 2.28, 0.2, intents.r + 0.1 - 2.28, top_b - 0.2, "project")
-    low_b = max(tasks.b, ledger.b, approvals.b) + 0.08
-    frame(c, 2.28, B0 - 0.28, steps.r + 0.1 - 2.28, low_b - B0 + 0.28, "session")
-    frame(c, bx - 0.1, B0 - 0.28, approvals.r + 0.1 - (bx - 0.1), low_b - B0 + 0.28, "billing")
+    T = dict(accounts=accounts, keys=keys, projects=projects, findings=findings, agents=agents, intents=intents,
+             sessions=sessions, tasks=tasks, steps=steps, wallets=wallets, ledger=ledger, approvals=approvals)
+    CONTEXTS = [("identity", (0.08, F0, 2.05, keys.b + 0.08 - F0), ["accounts", "keys"]),
+                ("project", (2.28, F0, intents.r + 0.1 - 2.28, top_b - F0),
+                 ["projects", "findings", "agents", "intents"]),
+                ("session", (2.28, F1, steps.r + 0.1 - 2.28, low_b - F1), ["sessions", "tasks", "steps"]),
+                ("billing", (bx - 0.1, F1, approvals.r + 0.1 - (bx - 0.1), low_b - F1),
+                 ["wallets", "ledger", "approvals"])]
 
-    # relationships: solid is a foreign key, dashed an id from another context
-    crow(c, [(1.1, accounts.b), (1.1, keys.y)])
-    y = projects.row_y("account_id")
-    crow(c, [(accounts.r, y), (projects.x, y)], dashed_line=True)
-    crow(c, [(1.75, accounts.y), (1.75, 0.1), (agents.x + 0.5, 0.1), (agents.x + 0.5, agents.y)])
-    y = intents.row_y("agent_id")
-    crow(c, [(agents.r, y), (intents.x, y)])
-    y = findings.row_y("project_id")
-    crow(c, [(projects.r, y), (findings.x, y)])
-    crow(c, [(projects.x + 0.95, projects.b), (sessions.x + 0.95, sessions.y)], dashed_line=True)
-    mid = (top_b + B0 - 0.28) / 2
-    crow(c, [(sessions.r - 0.15, sessions.y), (sessions.r - 0.15, mid), (findings.x + 0.3, mid),
-             (findings.x + 0.3, findings.b)])
-    y = tasks.row_y("session_id")
-    crow(c, [(sessions.r, y), (tasks.x, y)])
-    crow(c, [(tasks.x + 0.95, tasks.y), (tasks.x + 0.95, findings.b)])
-    y = steps.row_y("task_id")
-    crow(c, [(tasks.r, y), (steps.x, y)])
-    # parent_id: a task has many child tasks; the loop runs in the space under sessions
+    # relationships, each from its one side to its many side; solid is a foreign key,
+    # dashed an id from another context
+    mid = (top_b + F1) / 2
     ly1, ly2 = tasks.row_y("pending") - 0.42, tasks.row_y("pending")
-    crow(c, [(tasks.x, ly1), (tasks.x - 0.22, ly1), (tasks.x - 0.22, ly2), (tasks.x, ly2)])
-    yl = ledger.row_y("task_id")
-    crow(c, [(tasks.r, yl), (ledger.x, yl)])
+    L = dict(
+        keys=[(1.1, accounts.b), (1.1, keys.y)],
+        acc_proj=[(accounts.r, projects.row_y("account_id")), (projects.x, projects.row_y("account_id"))],
+        acc_agents=[(1.75, accounts.y), (1.75, LINE_Y), (agents.x + 0.5, LINE_Y), (agents.x + 0.5, agents.y)],
+        intents=[(agents.r, intents.row_y("agent_id")), (intents.x, intents.row_y("agent_id"))],
+        proj_find=[(projects.r, findings.row_y("project_id")), (findings.x, findings.row_y("project_id"))],
+        proj_sess=[(projects.x + 0.95, projects.b), (sessions.x + 0.95, sessions.y)],
+        sess_find=[(sessions.r - 0.15, sessions.y), (sessions.r - 0.15, mid), (findings.x + 0.3, mid),
+                   (findings.x + 0.3, findings.b)],
+        sess_tasks=[(sessions.r, tasks.row_y("session_id")), (tasks.x, tasks.row_y("session_id"))],
+        task_find=[(tasks.x + 0.95, tasks.y), (tasks.x + 0.95, findings.b)],
+        task_steps=[(tasks.r, steps.row_y("task_id")), (steps.x, steps.row_y("task_id"))],
+        task_self=[(tasks.x, ly1), (tasks.x - 0.22, ly1), (tasks.x - 0.22, ly2), (tasks.x, ly2)],
+        task_ledger=[(tasks.r, ledger.row_y("task_id")), (ledger.x, ledger.row_y("task_id"))],
+    )
+    DASHED = {"acc_proj", "proj_sess"}
 
-    for t in (accounts, keys, projects, findings, agents, intents, sessions, tasks, steps, wallets, ledger, approvals):
-        t.draw(c)
+    def paint(c, st):
+        for name, box, tables in CONTEXTS:
+            if name in st["ctx"]:
+                frame(c, *box, name)
+        if st["links"]:
+            for k, pts in L.items():
+                crow(c, pts, k in DASHED, INK if k == st["now"] else INK2)
+        for k in st["tables"]:
+            T[k].draw(c, lit=k in st["lit"])
+        if st["links"]:
+            ky = keys.b + 0.3
+            c.line([(0.18, ky + 0.13), (0.55, ky + 0.13)], color=INK2)
+            c.text(0.66, ky, 1.5, 0.26, "foreign key", 13, "Regular", INK2, "left")
+            dashed(c, [(0.18, ky + 0.47), (0.55, ky + 0.47)])
+            c.text(0.66, ky + 0.34, 1.5, 0.26, "id, no foreign key", 13, "Regular", INK2, "left")
+        if st["caption"]:
+            c.text(0.1, CAP_Y, 11.93, 0.24, "PostgreSQL 16  ·  money as numeric(12,6)  ·  RabbitMQ keeps turns in "
+                   "flight  ·  files on a 2Gi volume", 13, "Regular", INK2, "left")
+        for x, y, word in st["tags"]:
+            tag(c, x, y, word)
 
-    # the key to the lines, under identity
-    ky = keys.b + 0.32
-    c.line([(0.18, ky + 0.13), (0.55, ky + 0.13)], color=INK2)
-    c.text(0.66, ky, 1.5, 0.26, "foreign key", 13, "Regular", INK2, "left")
-    dashed(c, [(0.18, ky + 0.47), (0.55, ky + 0.47)])
-    c.text(0.66, ky + 0.34, 1.5, 0.26, "id, no foreign key", 13, "Regular", INK2, "left")
+    st = dict(ctx=set(), tables=[], links=False, caption=False, lit=set(), now=None, tags=[])
+    sc = HighScene("er.gif", paint, st)
 
-    c.text(0.1, 4.68, 11.93, 0.28,
-           "PostgreSQL 16  ·  money as numeric(12,6)  ·  RabbitMQ keeps turns in flight  ·  files on a 2Gi volume",
-           13, "Regular", INK2, "left")
-    c.frame().save(os.path.join(draw.OUT, "er.png"))
-    print("er.png")
+    # 1. build: one context at a time, then the relationships
+    TITLES = dict(identity="identity: accounts and their API keys",
+                  project="project: projects, findings, the agent registry",
+                  session="session: the trace of each question",
+                  billing="billing: wallet, ledger, approvals")
+    for name, box, tables in CONTEXTS:
+        sc.step(TITLES[name], 0.35, ctx=st["ctx"] | {name})
+        for k in tables:
+            sc.set(tables=st["tables"] + [k])
+            sc.hold(0.35)
+        sc.hold(0.5)
+    sc.step("Relationships: foreign keys, and ids from other contexts", 2.0, links=True)
+    sc.set(caption=True)
+    sc.hold(1.0)
+
+    # 2. flow: one question writes its rows
+    def insert(key, table, seconds=0.8, hold=0.6):
+        pts = L[key]
+        sc.set(now=key)
+        sc.tween(seconds, lambda u: st.update(tags=[(*draw.along(pts, u), "INSERT")]))
+        sc.set(tags=[], lit={table})
+        sc.hold(hold)
+
+    sc.title = "One question: the intent row comes first"
+    insert("intents", "intents")
+    sc.title = "Then the project row, for the caller's account"
+    insert("acc_proj", "projects")
+    sc.title = "The session opens, with its root task at depth 0"
+    insert("proj_sess", "sessions")
+    insert("sess_tasks", "tasks")
+    sc.title = "Each step of the lead is a row in steps"
+    insert("task_steps", "steps")
+    sc.title = "delegate: a child task points to its parent_id"
+    insert("task_self", "tasks", 1.0)
+    sc.title = "A reader records a finding"
+    insert("task_find", "findings")
+    sc.title = "Each model call adds its cost to the ledger"
+    insert("task_ledger", "ledger", 0.9, 0.9)
+
+    # 3. hold: the whole diagram, nothing lit
+    sc.step("Four contexts, each owns its tables, in one PostgreSQL 16", 3.6, lit=set(), now=None)
+    sc.save()
 
 
 # ---------------------------------------------------------------- slide 4d: the sequence of use case A

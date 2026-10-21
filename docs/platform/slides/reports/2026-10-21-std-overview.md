@@ -120,3 +120,62 @@ Facts used and their source:
 - `evidence/2026-10-20-public-api-flow.md`: `POST /api/v1/keys` returns the key, and the agent and question routes return 201.
 
 Speaker notes: "This is the whole platform contract, seven calls on the public API. A producer creates a key and publishes an agent. A consumer app lists the agents and asks a question with the one it chose, and gets a session id at once. The platform runs the question with the agent's instructions in front, and the app reads the answer, the findings and the cost. Producers and the operator read usage from the same API: sessions, cost, and the median time to rest per agent."
+
+# Animations of the four static pictures
+
+The four static pictures are now GIFs. Each one has three phases: a build, one real flow, and a calm hold of at least 3.6 s with nothing lit. The scene keys are the same as before. The `.png` of each scene is now the GIF's first frame.
+
+- The diagrams now start under the step-title band, at y = 1.0 in. For this reason, each layout has less height than in the static version. The names, the notation and the facts do not change.
+- A connector at rest is grey. While something moves on it, the connector is white and flows, and the parts that act now are lit (white border, raised fill).
+- A tag that travels stops short of both ends of its connector, so it never covers the words in a box.
+- Labels beside a connector stand 0.4 in off the line, so the tag does not cover them.
+- In the context map, an event's label appears only after its tag arrives.
+- I checked 12 frames spread over each loop, plus zoomed crops at the tight places. In the final renders, no text touches a line, a box edge or other text.
+
+## out/platform.gif (slide 1b), 22.4 s
+1. Build: "The platform: an agent registry and the run engine". The Lumen platform boundary appears, with the Agent registry and "Run engine: the seed" (task tree, steps and cost, budget cap).
+2. Build: "Producers publish agents to it". The Producer actor and the "publish an agent" connector appear.
+3. Build: "Consumers ask: an app with an API key, or people". The Literature watch app, the Web app, People and their four connectors appear.
+4. Flow 1: "A producer publishes an agent". The tag "agent" goes from the producer to the registry, and the registry lights.
+5. Flow 2: "The literature watch asks, with its API key". The tag "question" goes from the watch app to the run engine.
+6. Flow 3: "The run engine takes the agent's instructions". The tag "agent" goes down from the registry to the engine.
+7. Flow 4: "The seed runs it under the account's cap". The task tree, then steps and cost, then budget cap light in turn.
+8. Flow 5: "The answer, its findings and its cost come back". The tag "answer" goes to the watch app.
+9. Hold: "Producers publish, consumers ask, the seed runs it".
+
+## out/usecases.gif (slide 1c), 19.4 s
+1. Build: "Four actors use the platform". The four stick figures appear.
+2. Build: "The system boundary: Lumen platform".
+3. Build: each use case appears lit, with its links, one at a time:
+   - "UC1 Publish an agent: the producer"
+   - "UC2 Ask a question: an app"
+   - "UC6 Watch the literature: an app, on a schedule"
+   - "UC3 Manage API keys: the account owner"
+   - "UC4 Approve spend over cap: the account owner"
+   - "UC5 Read usage: the producer and the operator"
+4. Flow: "Flow: the consumer app asks a question (UC2)". UC2 and its link light, and the tag "question" travels from the Consumer app to UC2.
+5. Flow: "The answer returns: ended in 4.9 s, cost USD 0.01". The tag "answer" travels back. The numbers come from evidence/2026-10-20-public-api-flow.md.
+6. Hold: "Six use cases, four actors, all built".
+
+## out/decisions.gif (slide 3a), 22.1 s
+1. AD-01: "each existing slice becomes a service". The five slices on main appear. Then each slice gets its arrow and its service, one at a time: identity, project, session, worker (from steering), billing. Then the caption "Five services, cut along the slices" appears.
+2. AD-02: "a turn waits on a durable queue", then "any free worker takes the next turn".
+   - Three "turn" tags go one after another from session into the RabbitMQ queue. Each waits there, then goes to a different worker, and that worker lights.
+   - The crossed-out "direct HTTP call" stays dim the whole time.
+   - Then the caption "A durable queue, not a direct call" appears.
+3. AD-04: "the worker reports each step to session". A "step" tag goes down the POST /internal/turns/:id/step connector. Then "session alone writes it to the trace": the tag goes down the SQL connector to the trace, and the trace lights. Then the caption "Session is the only writer of the trace" appears.
+4. Hold: "Three key decisions of the logical design".
+
+## out/contextmap.gif (slide 3c, DDD), 26.4 s
+1. Build: "How we found the contexts". The four strip boxes appear one at a time: use cases UC1 to UC6, then the nouns users say, then 5 bounded contexts, then their aggregates.
+2. Build: "Five bounded contexts; Session is the core domain". The five context boxes appear.
+3. Build: "Each context keeps its own aggregates". The aggregate lines appear.
+4. Build: "They talk only through domain events". The six event connectors and the Identity upstream link appear, with no event labels yet.
+5. Flow: the events of one question, in order. Each tag travels while the two contexts light, and then the event's label appears:
+   1. "A question asked in a project opens a session": the tag "question", label "question asked".
+   2. "Session queues a turn for execution": the tag "turn", label "turn queued".
+   3. "Execution reports each step back to session": the tag "step", label "step recorded".
+   4. "Session records the spend in billing": the tag "spend", label "spend recorded".
+   5. "A step over the cap needs an approval": the tag "approval", label "approval needed".
+   6. "A finding goes back to the project": the tag "finding", label "finding recorded".
+6. Hold: "Five contexts, one core domain, six domain events".

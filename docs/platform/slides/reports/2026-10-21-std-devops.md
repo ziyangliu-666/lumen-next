@@ -91,3 +91,44 @@ Facts used:
 - The threshold of 5 comes from the chart's queueLength.
 
 Speaker notes: "This is a real load test on the public host: ten users ask questions without pause. The bars are the jobs waiting in the queues, and the dashed line is KEDA's target of five jobs per worker. When the queue passes that line, KEDA adds a worker pod, and it went from one to four in 49 seconds. After the load stops, the queue empties, and a minute later KEDA scales back to one worker. All 135 questions finished with a median of 6.1 seconds, and none of the 1,040 requests failed."
+
+## Animations (second pass)
+
+`branches()` and `findings()` now write GIFs. Each scene still writes its first frame as a PNG. `pipeline.gif` and `scaling.gif` are not changed. Each picture moved down below the title band, so the step title has room. I checked 12 or more frames of each GIF, and zoomed crops of the artifact column and the solution row. No text touches a line or an edge when it is at rest. The moving tags pass over lines and boxes while they travel, as in `logical()`.
+
+### branches.gif (slide 5a), 27.7 s, 302 frames
+
+Build:
+1. "main holds Lumen". The main line grows from the left, and its commits appear as the line reaches them.
+2. "ass/platform starts from main: the integration branch". The white branch goes down from main and to the right.
+3. One step for each member, in WBS order. The title is "<member> works on <branch> and merges it through a PR". The order is Liu Ziyang ass/session, Lu Yi ass/identity, Peng Xujian ass/project, Li Zhuoyang ass/worker, He Rong ass/deploy. The member's name appears. A "commit" tag leaves ass/platform and draws the branch behind it. Its two commits appear as the tag passes them. The tag goes back up through the arrow labelled "PR". The current branch is white, and the earlier branches are grey.
+4. "A change to Lumen goes to main first, then merges in". A "merge" tag goes from main down to ass/platform. The "merge main" arrow stays.
+5. "Every push to ass/platform builds one image and deploys it". The artifact column appears: the image box, the EC2 node and "Lumen platform, live", with their connectors.
+
+Flow:
+1. "1. A push builds lumen-next:<commit sha>". A "push" tag goes to the image box, which lights up.
+2. "2. The image goes over SSH to the EC2 host and into k3s". A "lumen-next:<commit sha>" tag goes down the scp connector, and the EC2 node lights up.
+3. "3. helm upgrade --install --wait puts it live". The tag goes on to "Lumen platform, live", which lights up.
+
+Hold: "Five member branches into ass/platform; one image per commit". The full diagram stays for 3.6 s, with nothing lit.
+
+Sources: report 2.1 (the WBS), 5.1 (branches, image tag) and 5.3 (deploy steps).
+
+### findings.gif (slide 5c), 27.6 s, 206 frames
+
+The three columns appear one at a time. Each column shows its problem, then the arrow down to its solution.
+
+1. Per-depth queues:
+   - "1. One queue for all turns: parents fill every worker slot". Two "parent" tags go from "one queue" to "worker slots". The note changes to "held by a parent", then to "all held by parents". The queue's note becomes "children wait".
+   - "1. Their children wait in the same queue: a deadlock". The problem words appear.
+   - "1. One queue per depth: children always run". The three queues (depth 0, 1, 2) appear. Two "child" tags drain from depth 1 and depth 2 into the worker slots, and the note becomes "children always run". The solution words appear.
+2. Trivy gate:
+   - "2. The Lumen image carries Docker: the gate stops it". An "image" tag goes from "Lumen image, with Docker" into the gate diamond, the gate lights up, and a cross appears. The words "5 critical CVEs ... The gate stopped the deploy" appear.
+   - "2. A smaller platform image without Docker passes". An "image" tag goes from "platform image, no Docker" through the gate, and a check appears. The words "deploy/k8s/Dockerfile ... (2b5e460). The next run passed" appear.
+3. KEDA scale-down:
+   - "3. By default, KEDA waits 300 s before it removes a worker". The 300 s bar fills from "load ends" over 2.4 s. Then "300 s" and "scale-down" appear.
+   - "3. The chart sets 60 s: back to 1 worker a minute after the load". The 60 s bar, to the same scale, fills in 1 s.
+
+Hold: "Three technical findings and how the team fixed them". All three columns stay for 3.6 s, with nothing lit.
+
+Sources: report 6.1, `deploy/k8s/lumen/templates/autoscaling.yaml`, `deploy/k8s/Dockerfile`.

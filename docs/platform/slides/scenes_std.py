@@ -197,45 +197,110 @@ def logical():
 
 # ---------------------------------------------------------------- slide 11: the deployment diagram
 def deployment():
-    import os
-
-    c = Canvas()
-
-    def wire(pts, lit=True):
-        c.arrow(pts, color=INK if lit else INK2)
-
-    # No title in the picture: the slide's own title says it.
-    # outside the server
-    node(c, 0.15, 1.35, 1.35, 0.8, "Browser", "device")
-    node(c, 0.15, 2.55, 1.35, 0.8, "Watch app", "client")
-    node(c, 0.15, 3.7, 1.35, 1.0, "GitHub\nActions", "CI/CD")
-    node(c, 10.35, 0.35, 1.5, 0.45, "OpenAI API")
-    # the AWS node, the cluster inside it, and the pods inside that
-    node(c, 2.75, 1.05, 9.05, 3.75, "EC2 t3.medium  ·  ap-southeast-1", "AWS", depth=0.18)
-    c.text(2.85, 4.48, 3.5, 0.28, "security group: 22, 80, 443 open", 13, "Regular", INK2, "left")
-    node(c, 3.05, 1.85, 8.45, 2.55, "k3s cluster", "Kubernetes", depth=0.12)
-    c.text(5.15, 1.95, 4, 0.28, "namespace lumen", 13, "Regular", INK2, "left")
-    comp(c, 3.25, 2.6, 1.55, 1.55, "Traefik", "ingress,\nHTTPS,\nrate limit", mark=False)
-    pods = [("identity", "1–3  HPA"), ("project", "1–3  HPA"), ("session", "1"), ("worker", "1–4  KEDA"),
+    """The UML deployment diagram, built part by part, then three real flows and the
+    worker pods that KEDA scales from 1 to 4."""
+    PODS = [("identity", "1–3  HPA"), ("project", "1–3  HPA"), ("session", "1"), ("worker", "1–4  KEDA"),
             ("billing", "1–3  HPA")]
-    for i, (n, rep) in enumerate(pods):
-        x = 5.15 + i * 1.25
-        comp(c, x, 2.6, 1.12, 0.72, n, rep, mark=False, size=14)
-        c.line([(x + 0.56, 2.42), (x + 0.56, 2.6)], color=INK2)
-    c.line([(4.02, 2.6), (4.02, 2.42), (5.15 + 4 * 1.25 + 0.56, 2.42)], color=INK2)
-    comp(c, 5.15, 3.5, 2.4, 0.66, "PostgreSQL", "StatefulSet + 2Gi volume", mark=False, size=14)
-    comp(c, 7.65, 3.5, 2.4, 0.66, "RabbitMQ", "StatefulSet", mark=False, size=14)
-    comp(c, 10.15, 3.5, 1.2, 0.66, "KEDA", "autoscaler", mark=False, size=14)
-    # connectors, each with its protocol and port
-    wire([(1.68, 1.75), (2.6, 1.75), (2.6, 3.0), (3.25, 3.0)])
-    wire([(1.68, 2.95), (2.6, 2.95)])
-    c.text(1.72, 1.42, 1.0, 0.28, "HTTPS 443", 13, "Regular", INK, "left")
-    wire([(1.68, 4.25), (3.25, 4.25), (3.25, 4.4)], lit=False)
-    c.text(1.72, 3.92, 1.0, 0.28, "SSH 22", 13, "Regular", INK2, "left")
-    wire([(9.46, 2.6), (9.46, 1.5), (11.1, 1.5), (11.1, 0.8)], lit=False)
-    c.text(9.56, 1.2, 1.0, 0.28, "HTTPS", 13, "Regular", INK2, "left")
-    c.frame().save(os.path.join(draw.OUT, "deployment.png"))
-    print("deployment.png")
+    PX = [5.15 + i * 1.25 for i in range(5)]
+    BUS_Y = 2.42
+    # the connectors, each with its protocol and port
+    WIRES = dict(browser=[(1.68, 1.75), (2.6, 1.75), (2.6, 3.0), (3.25, 3.0)],
+                 watch=[(1.68, 2.95), (2.6, 2.95)],
+                 ssh=[(1.68, 4.25), (3.25, 4.25), (3.25, 4.4)],
+                 openai=[(9.46, 2.6), (9.46, 1.5), (11.1, 1.5), (11.1, 0.8)])
+    BUS = [(4.02, 2.6), (4.02, BUS_Y), (PX[4] + 0.56, BUS_Y)]
+    # where a tag runs: through the ingress to the project pod
+    TO_PROJECT = [(4.02, 2.6), (4.02, BUS_Y), (PX[1] + 0.56, BUS_Y), (PX[1] + 0.56, 2.6)]
+
+    def lit_node(c, x, y, w, h, on):
+        if on:
+            c.d.rectangle([c._p(x), c._p(y), c._p(x + w), c._p(y + h)], fill=RAISED)
+
+    def paint(c, st):
+        on, seen = st["on"], st["seen"]
+        if "outside" in seen:
+            for key, args in (("browser", (0.15, 1.35, 1.35, 0.8, "Browser", "device")),
+                              ("watch", (0.15, 2.55, 1.35, 0.8, "Watch app", "client")),
+                              ("gha", (0.15, 3.7, 1.35, 1.0, "GitHub\nActions", "CI/CD")),
+                              ("openai", (10.35, 0.35, 1.5, 0.45, "OpenAI API", ""))):
+                lit_node(c, *args[:4], key in on)
+                node(c, *args, lit=key in on)
+        if "aws" in seen:
+            node(c, 2.75, 1.05, 9.05, 3.75, "EC2 t3.medium  ·  ap-southeast-1", "AWS", depth=0.18)
+            c.text(2.85, 4.48, 3.5, 0.28, "security group: 22, 80, 443 open", 13, "Regular", INK2, "left")
+        if "k3s" in seen:
+            node(c, 3.05, 1.85, 8.45, 2.55, "k3s cluster", "Kubernetes", depth=0.12, lit="k3s" in on)
+            c.text(5.15, 1.95, 4, 0.28, "namespace lumen", 13, "Regular", INK2, "left")
+        if "traefik" in seen:
+            comp(c, 3.25, 2.6, 1.55, 1.55, "Traefik", "ingress,\nHTTPS,\nrate limit", mark=False,
+                 lit="traefik" in on)
+        for i, (n, rep) in enumerate(PODS[:st["pods"]]):
+            if n == "worker" and st["workers"]:
+                rep = "1 pod" if st["workers"] == 1 else "%d pods" % st["workers"]
+            comp(c, PX[i], 2.6, 1.12, 0.72, n, rep, mark=False, size=14, lit=n in on)
+            if st["wires"]:
+                c.line([(PX[i] + 0.56, BUS_Y), (PX[i] + 0.56, 2.6)], color=INK2)
+        if st["wires"]:
+            c.line(BUS, color=INK2)
+        if "data" in seen:
+            comp(c, 5.15, 3.5, 2.4, 0.66, "PostgreSQL", "StatefulSet + 2Gi volume", mark=False, size=14)
+            comp(c, 7.65, 3.5, 2.4, 0.66, "RabbitMQ", "StatefulSet", mark=False, size=14)
+            comp(c, 10.15, 3.5, 1.2, 0.66, "KEDA", "autoscaler", mark=False, size=14, lit="keda" in on)
+        if st["wires"]:
+            now = st["now"]
+            c.arrow(WIRES["browser"], color=INK if now == "browser" else INK2)
+            c.arrow(WIRES["watch"], color=INK2)
+            c.text(1.72, 1.42, 1.0, 0.28, "HTTPS 443", 13, "Regular", INK if now == "browser" else INK2, "left")
+            c.arrow(WIRES["ssh"], color=INK if now == "ssh" else RULE)
+            c.text(1.72, 3.92, 1.0, 0.28, "SSH 22", 13, "Regular", INK if now == "ssh" else INK2, "left")
+            c.arrow(WIRES["openai"], color=INK if now == "openai" else RULE)
+            c.text(9.56, 1.2, 1.0, 0.28, "HTTPS", 13, "Regular", INK if now == "openai" else INK2, "left")
+        for x, y, word in st["tags"]:
+            tag(c, x, y, word)
+
+    st = dict(seen=set(), on=set(), pods=0, wires=False, now=None, tags=[], workers=0)
+    sc = Scene("deployment.gif", paint, st)
+
+    def run(pts, word, seconds=1.0):
+        sc.tween(seconds, lambda u: st.update(tags=[(*draw.along(pts, u), word)]))
+        sc.set(tags=[])
+
+    # 1. build
+    sc.step("Outside the server: browser, watch app, CI/CD, the model API", 1.6, seen={"outside"})
+    sc.step("One AWS node: an EC2 t3.medium in Singapore", 1.6, seen=st["seen"] | {"aws"})
+    sc.step("k3s runs on it, with the namespace lumen", 1.4, seen=st["seen"] | {"k3s"})
+    sc.step("Traefik, then the five service pods", 0.5, seen=st["seen"] | {"traefik"})
+    for k in range(1, 6):
+        sc.set(pods=k)
+        sc.hold(0.35)
+    sc.hold(0.5)
+    sc.step("PostgreSQL and RabbitMQ as StatefulSets, and KEDA", 1.4, seen=st["seen"] | {"data"})
+    sc.step("The connectors, each with its protocol and port", 1.8, wires=True)
+
+    # 2. flow
+    sc.step("A request: HTTPS on 443 to Traefik, then the project pod", 0.3, on={"browser"}, now="browser")
+    run([(2.15, 1.75), (2.6, 1.75), (2.6, 3.0), (2.85, 3.0)], "request", 1.0)
+    sc.set(on={"traefik"}, now=None)
+    run(TO_PROJECT, "request", 0.9)
+    sc.set(on={"project"})
+    sc.hold(0.8)
+    sc.step("The worker pod calls the OpenAI API over HTTPS", 0.3, on={"worker"}, now="openai")
+    run(WIRES["openai"][:-1] + [(11.1, 1.02)], "chat completion", 1.1)   # it stops below the node's name
+    sc.set(on={"openai"})
+    sc.hold(0.8)
+    sc.step("A deploy: GitHub Actions over SSH 22 into k3s", 0.3, on={"gha"}, now="ssh")
+    run([(2.15, 4.25), (2.95, 4.25)], "deploy", 0.8)
+    sc.set(on={"k3s"}, now=None)
+    sc.hold(1.0)
+    sc.step("KEDA scales the worker pods with the queue", 0.4, on={"keda", "worker"}, workers=1)
+    for n in (2, 3, 4):
+        sc.set(workers=n)
+        sc.hold(0.7)
+    sc.hold(0.6)
+
+    # 3. hold
+    sc.step("One EC2 node runs the whole platform in k3s", 3.6, on=set(), now=None, workers=0)
+    sc.save()
 
 
 SCENES = dict(logical=logical, deployment=deployment)

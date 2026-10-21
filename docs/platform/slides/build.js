@@ -150,14 +150,14 @@ shown(
   'Overview',
   '1b  ·  Platform thinking',
   'Producers, consumers, one platform',
-  'platform.png',
+  'platform.gif',
   "Lumen is a platform with two sides. Producers are agent authors: they publish an agent in the registry. Consumers ask questions, either from an app with an API key, like our literature watch, or as people in the web app. The seed is the run engine. It runs every question as a task tree, records each step with its cost, and stops at the account's budget cap. The consumer gets back the answer, the findings and the cost.",
 );
 shown(
   'Overview',
   '1c  ·  Scope',
   'Six use cases, all running',
-  'usecases.png',
+  'usecases.gif',
   'This is our scope: the six use cases of the proposal, all built and running on the public server. A producer publishes an agent and reads its usage. An app asks questions with a chosen agent, and the literature watch asks saved questions on a schedule. The account owner manages API keys and approves any step that would pass the cap. The operator reads usage for every account and agent.',
 );
 
@@ -178,7 +178,7 @@ shown(
   'Logical',
   '3a  ·  Key architectural decisions',
   'Three decisions shape the services',
-  'decisions.png',
+  'decisions.gif',
   'Three decisions shaped the logical design. First, we cut the five services along the slices that already existed, so each slice kept its ports and its tests. Second, a turn goes from session to the workers on a durable RabbitMQ queue, not a direct call. A slow model call never holds a web request, and if a worker dies, its turn stays on the queue for another worker. Third, only session writes the trace: workers report each step over /internal, so a worker that dies loses no step.',
 );
 shown(
@@ -195,7 +195,7 @@ shown(
   'Logical',
   '3c  ·  Domain-driven design',
   'Five bounded contexts',
-  'contextmap.png',
+  'contextmap.gif',
   'We found the contexts from the use cases. We took the nouns our users say, grouped the ones that belong together, and each group became a bounded context with its aggregates. Session is the core domain: it owns the task tree and every step. The contexts talk through domain events: a question asked starts a session, a turn queued goes to execution, and every step recorded comes back to session. Spend recorded and approval needed go to billing, and finding recorded goes back to the project.',
 );
 shown(
@@ -211,7 +211,7 @@ shown(
   'Physical',
   '4a  ·  4b  ·  Physical architecture',
   'One AWS node, one k3s cluster',
-  'deployment.png',
+  'deployment.gif',
   'The physical architecture as a UML deployment diagram. One EC2 t3.medium in Singapore runs k3s; we chose k3s over EKS, so the same Helm chart runs on a laptop and on AWS. ' +
     'The security group opens 22, 80 and 443 only. Traefik ends HTTPS and routes to five service deployments; ' +
     'identity, project and billing scale on CPU with HPA, the worker scales on queue length with KEDA, and session runs one copy. ' +
@@ -250,7 +250,7 @@ shown(
   'Physical',
   '4c  ·  Persistence',
   'The schema, by context',
-  'er.png',
+  'er.gif',
   "All persistent data is in one PostgreSQL 16 database, and each context owns its own tables: the frames show the owner. Inside a context we use real foreign keys. Across contexts, a service keeps only the other context's id, so it does not depend on another team's schema. The task tree is one table with a parent link, so the cost roll-up and the usage queries are plain SQL. Money is numeric(12,6). Turns in flight are in RabbitMQ, not in the database, and the agents' files are on a 2Gi volume.",
 );
 
@@ -259,7 +259,7 @@ shown(
   'DevOps',
   '5a  ·  Source and artifacts',
   'From a branch to a running image',
-  'branches.png',
+  'branches.gif',
   'We use one repository. main holds Lumen, and ass/platform is our integration branch. Each member works on one branch and merges it back through a pull request. Every push to ass/platform builds one image, tagged with the commit SHA, from deploy/k8s/Dockerfile. The pipeline copies that image to the EC2 host over SSH, imports it into k3s, and deploys it with helm upgrade, so there is no registry to run.',
 );
 shown(
@@ -280,7 +280,7 @@ shown(
   'DevOps',
   '5c  ·  Technical findings',
   'What we found, and what we changed',
-  'findings.png',
+  'findings.gif',
   "Three findings changed the design. First, one queue for all turns can deadlock, because parents hold every worker slot while their children wait behind them, so we gave each depth of the task tree its own queue. Second, the image scan stopped an image that carried Docker for Lumen's sandbox, and the platform does not need Docker, so we built a smaller platform image, patched at build. Third, KEDA's autoscaler waits five minutes before it scales down by default, and we set it to one minute, so the workers return to one soon after the load.",
 );
 

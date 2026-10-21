@@ -39,57 +39,164 @@ def _diamond(c, cx, cy, w, h, name, lit=False):
     c.text(cx - w / 2, cy - h / 2, w, h, name, 14, "Semibold", INK)
 
 
+# ---------------------------------------------------------------- shared motion
+def _length(pts):
+    return sum(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5 for a, b in zip(pts, pts[1:]))
+
+
+def _part(pts, u):
+    """The first fraction u of a polyline, so a line can grow."""
+    if u >= 1:
+        return list(pts)
+    left = u * _length(pts)
+    out = [pts[0]]
+    for a, b in zip(pts, pts[1:]):
+        seg = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+        if left <= seg:
+            f = 0 if seg == 0 else left / seg
+            out.append((lerp(a[0], b[0], f), lerp(a[1], b[1], f)))
+            return out
+        out.append(b)
+        left -= seg
+    return out
+
+
 # ---------------------------------------------------------------- 5a: source and artifacts
 def branches():
-    c = Canvas()
     X0 = 2.75                                   # where the branch lines start
-    MAIN, PLAT = 0.55, 1.6                      # the two long-lived branches
+    MAIN, PLAT = 1.25, 2.0                      # the two long-lived branches
     END = 7.55                                  # where ass/platform hands over to the pipeline
     # Each member's branch, from the WBS (report 2.1) and the branch list (report 5.1).
     MEMBERS = [("Liu Ziyang", "ass/session"), ("Lu Yi", "ass/identity"), ("Peng Xujian", "ass/project"),
                ("Li Zhuoyang", "ass/worker"), ("He Rong", "ass/deploy")]
-    LANES = [2.45 + k * 0.55 for k in range(5)]
+    LANES = [2.6 + k * 0.53 for k in range(5)]
+    MX = 5.0                                    # where main merges into ass/platform
+    AX, AW = 8.25, 3.65                         # the artifact column
+    IMG, NODE, LIVE = (1.6, 0.8), (3.05, 0.72), (4.26, 0.58)
+    AL = AX + 0.45                              # the artifact column's connectors
 
-    # The two long-lived branches: their names at the left, then the line and its commits.
-    c.text(0.2, MAIN - 0.17, 2.4, 0.34, "main: Lumen", 15, "Semibold", INK2, "left")
-    c.text(0.2, PLAT - 0.17, 2.4, 0.34, "ass/platform", 15, "Semibold", INK, "left")
-    c.line([(X0, MAIN), (END, MAIN)], pt=2, color=INK2)
-    c.line([(X0, MAIN), (X0, PLAT), (END, PLAT)], pt=2.5, color=INK)
-    for x in (X0, 3.7, 5.0, 6.4):
-        _dot(c, x, MAIN)
-    # A change to a slice goes to main first; then main is merged into ass/platform.
-    c.arrow([(5.0, MAIN), (5.0, PLAT - 0.09)], color=INK2)
-    c.text(5.1, (MAIN + PLAT) / 2 - 0.14, 1.0, 0.28, "merge main", 13, "Regular", INK2, "left")
-
-    # The member branches nest: the lowest starts first and merges last, so no line crosses.
-    for k, ((who, br), y) in enumerate(zip(MEMBERS, LANES)):
+    def lane(k):
+        # The member branches nest: the lowest starts first and merges last, so no line crosses.
         start, end = 2.95 + (4 - k) * 0.36, 5.5 + k * 0.42
-        c.text(0.2, y - 0.17, 1.35, 0.34, who, 15, "Semibold", INK, "left")
-        c.text(1.62, y - 0.15, 1.2, 0.3, br, 13, "Regular", INK2, "left")
-        c.line([(start, PLAT), (start, y), (end, y)], pt=1.5, color=INK2)
-        c.arrow([(end, y), (end, PLAT + 0.09)], color=INK2)
-        for x in (start + 0.3, lerp(start + 0.3, end, 0.55)):
-            _dot(c, x, y)
-        # "PR" sits right of the merge, between this lane and the one above.
-        c.text(end + 0.07, y - 0.42, 0.4, 0.26, "PR", 13, "Regular", INK2, "left")
-    for x in (X0, END - 0.12):
-        _dot(c, x, PLAT, INK)
+        y = LANES[k]
+        return [(start, PLAT), (start, y), (end, y), (end, PLAT + 0.09)]
 
-    # The artifact: one image per commit, copied to the host, imported, deployed.
-    AX, AW = 8.25, 3.65
-    c.arrow([(END, PLAT), (AX, PLAT)], active=False, color=INK)
-    c.text(END - 0.05, PLAT - 0.4, AX - END + 0.1, 0.28, "push", 13, "Regular", INK2)
-    comp(c, AX, 1.15, AW, 0.9, "lumen-next:<commit sha>", "image, built from deploy/k8s/Dockerfile", lit=True,
-         mark=False)
-    c.arrow([(AX + 0.45, 2.05), (AX + 0.45, 2.72)], color=INK)
-    c.text(AX + 0.58, 2.24, 3, 0.28, "copy over SSH (scp)", 13, "Regular", INK2, "left")
-    node(c, AX, 2.86, AW - 0.14, 0.86, "EC2 host", "AWS")
-    c.text(AX + 1.45, 3.2, 2.0, 0.3, "k3s ctr images import", 13, "Regular", INK2, "left")
-    c.arrow([(AX + 0.45, 3.72), (AX + 0.45, 4.12)], color=INK)
-    c.text(AX + 0.58, 3.78, 3, 0.28, "helm upgrade --install --wait", 13, "Regular", INK2, "left")
-    comp(c, AX, 4.12, AW, 0.72, "Lumen platform, live", "", mark=False)
-    c.frame().save(os.path.join(draw.OUT, "branches.png"))
-    print("branches.png")
+    P = dict(main=[(X0, MAIN), (END, MAIN)], plat=[(X0, MAIN), (X0, PLAT), (END, PLAT)],
+             merge=[(MX, MAIN), (MX, PLAT - 0.09)], push=[(END, PLAT), (AX, PLAT)],
+             ssh=[(AL, IMG[0] + IMG[1]), (AL, NODE[0])], helm=[(AL, NODE[0] + NODE[1]), (AL, LIVE[0])])
+
+    def paint(c, st):
+        on = st["on"]
+        g = st["grow"]
+        if g.get("main"):
+            c.text(0.2, MAIN - 0.17, 2.4, 0.34, "main: Lumen", 15, "Semibold", INK2, "left")
+            c.line(_part(P["main"], g["main"]), pt=2, color=INK if "main" in on else INK2)
+            for x in (X0, 3.7, MX, 6.4):
+                if X0 + g["main"] * (END - X0) >= x - 1e-6:
+                    _dot(c, x, MAIN)
+        if g.get("plat"):
+            c.text(0.2, PLAT - 0.17, 2.4, 0.34, "ass/platform", 15, "Semibold", INK, "left")
+            c.line(_part(P["plat"], g["plat"]), pt=2.5, color=INK)
+            _dot(c, X0, PLAT, INK)
+            if g["plat"] >= 1:
+                _dot(c, END - 0.12, PLAT, INK)
+        if g.get("merge"):
+            pts = _part(P["merge"], g["merge"])
+            if g["merge"] >= 1:
+                c.arrow(pts, color=INK if "merge" in on else INK2)
+                c.text(MX + 0.1, (MAIN + PLAT) / 2 - 0.14, 1.0, 0.28, "merge main", 13, "Regular", INK2, "left")
+            else:
+                c.line(pts, color=INK)
+        for k, (who, br) in enumerate(MEMBERS):
+            u = g.get(k, 0)
+            if not u:
+                continue
+            lit = k in on
+            col = INK if lit else INK2
+            y = LANES[k]
+            c.text(0.2, y - 0.17, 1.35, 0.34, who, 15, "Semibold", INK, "left")
+            c.text(1.62, y - 0.15, 1.2, 0.3, br, 13, "Regular", INK2, "left")
+            pts = lane(k)
+            if u >= 1:
+                c.line(pts[:3], color=col, active=lit)
+                c.arrow(pts[2:], color=col)
+                c.text(pts[2][0] + 0.07, y - 0.42, 0.4, 0.26, "PR", 13, "Regular", col, "left")
+            else:
+                c.line(_part(pts, u), color=col, active=lit)
+            # the commits appear as the tag passes them
+            total = _length(pts)
+            start, end = pts[0][0], pts[2][0]
+            for x in (start + 0.3, lerp(start + 0.3, end, 0.55)):
+                if u * total >= (y - PLAT) + (x - start):
+                    _dot(c, x, y, col)
+        if st["art"]:
+            c.arrow(P["push"], color=INK if "push" in on else INK2)
+            c.text(END - 0.05, PLAT - 0.4, AX - END + 0.1, 0.28, "push", 13, "Regular", INK2)
+            comp(c, AX, IMG[0], AW, IMG[1], "lumen-next:<commit sha>", "image, built from deploy/k8s/Dockerfile",
+                 lit="image" in on, mark=False)
+            c.arrow(P["ssh"], color=INK if "ssh" in on else INK2)
+            c.text(AL + 0.13, IMG[0] + IMG[1] + 0.1, 3, 0.28, "copy over SSH (scp)", 13, "Regular", INK2, "left")
+            node(c, AX, NODE[0], AW - 0.14, NODE[1], "EC2 host", "AWS", lit="node" in on)
+            c.text(AX + 1.45, NODE[0] + 0.33, 2.0, 0.3, "k3s ctr images import", 13, "Regular", INK2, "left")
+            c.arrow(P["helm"], color=INK if "helm" in on else INK2)
+            c.text(AL + 0.13, NODE[0] + NODE[1] + 0.08, 3, 0.28, "helm upgrade --install --wait", 13, "Regular",
+                   INK2, "left")
+            comp(c, AX, LIVE[0], AW, LIVE[1], "Lumen platform, live", "", lit="live" in on, mark=False)
+        for x, y, word in st["tags"]:
+            tag(c, x, y, word)
+
+    st = dict(on=set(), grow={}, art=False, tags=[])
+    sc = Scene("branches.gif", paint, st)
+
+    def grow(key, seconds, word=None, lit=()):
+        pts = lane(key) if isinstance(key, int) else P[key]
+        sc.set(on=set(lit))
+
+        def f(u):
+            st["grow"][key] = max(u, 1e-3)
+            st["tags"] = [(*draw.along(pts, u), word)] if word else []
+        sc.tween(seconds, f)
+        sc.set(tags=[])
+
+    def move(key, word, seconds=0.9):
+        sc.tween(seconds, lambda u: st.update(tags=[(*draw.along(P[key], u), word)]))
+        sc.set(tags=[])
+
+    # Build: the two long-lived branches, then each member's branch in turn.
+    sc.step("main holds Lumen", 0.3)
+    grow("main", 1.0, lit={"main"})
+    sc.hold(0.9)
+    sc.title = "ass/platform starts from main: the integration branch"
+    grow("plat", 1.0)
+    sc.hold(1.0)
+    for k, (who, br) in enumerate(MEMBERS):
+        sc.title = "%s works on %s and merges it through a PR" % (who, br)
+        grow(k, 1.3, "commit", lit={k})
+        sc.hold(0.6)
+    sc.title = "A change to Lumen goes to main first, then merges in"
+    sc.set(on={"merge"})
+    move("merge", "merge", 0.7)
+    grow("merge", 0.01, lit={"merge"})
+    sc.hold(1.0)
+    sc.step("Every push to ass/platform builds one image and deploys it", 1.8, on=set(), art=True)
+    # Flow: one push becomes one image, and the image goes live.
+    sc.title = "1. A push builds lumen-next:<commit sha>"
+    sc.set(on={"push"})
+    move("push", "push", 0.7)
+    sc.set(on={"image"})
+    sc.hold(1.2)
+    sc.title = "2. The image goes over SSH to the EC2 host and into k3s"
+    sc.set(on={"ssh"})
+    move("ssh", "lumen-next:<commit sha>", 1.0)
+    sc.set(on={"node"})
+    sc.hold(1.2)
+    sc.title = "3. helm upgrade --install --wait puts it live"
+    sc.set(on={"helm"})
+    move("helm", "lumen-next:<commit sha>", 0.8)
+    sc.set(on={"live"})
+    sc.hold(1.4)
+    sc.step("Five member branches into ass/platform; one image per commit", 3.6, on=set())
+    sc.save()
 
 
 # ---------------------------------------------------------------- 5b: the CI/CD pipeline
@@ -244,71 +351,171 @@ def cicd():
 
 # ---------------------------------------------------------------- 5c: technical findings
 def findings():
-    c = Canvas()
     CW, GAP = 3.75, 0.27
     XS = [0.18 + i * (CW + GAP) for i in range(3)]
-    PY, SY = 0.62, 2.88                         # the problem row and the solution row
-
-    def label(x, y, word):
-        c.text(x, y, 2, 0.28, word, 13, "Medium", INK3, "left")
-
-    def words(x, y, text, ink=INK2):
-        c.text(x, y, CW, 0.27 * (text.count("\n") + 1), text, 13, "Regular", ink, "left")
-
-    heads = [("Per-depth queues", "found in design"), ("Trivy gate", "run 39439752963"),
+    HY = 1.0                                    # the column heads
+    PY, SY = 1.45, 3.32                         # the top of the problem and the solution diagrams
+    PW, SW = 2.3, 4.26                         # the top of their words
+    HEADS = [("Per-depth queues", "found in design"), ("Trivy gate", "run 39439752963"),
              ("KEDA scale-down", "load test")]
-    for x, (h, sub) in zip(XS, heads):
-        c.text(x, 0.12, CW, 0.34, h, 16, "Semibold", INK, "left")
-        c.text(x + _tw(h, 16, "Semibold") + 0.2, 0.15, CW, 0.3, sub, 13, "Regular", INK3, "left")
-        label(x, PY - 0.04, "problem")
-        label(x, SY - 0.04, "solution")
-        c.arrow([(x + 0.3, 2.42), (x + 0.3, 2.78)], color=INK2)
+    WORDS = [("Parents wait for children that wait\nin the same queue: a deadlock.",
+              "One queue per level of the task tree\n(AD-03)."),
+             ("5 critical CVEs, most in the docker.io\npackage. The gate stopped the deploy.",
+              "deploy/k8s/Dockerfile: smaller, patched\nat build (2b5e460). The next run passed."),
+             ("KEDA's HPA waits 300 s by default\nbefore it removes a worker.",
+              "The chart sets 60 s, so the workers\ngo back to 1 a minute after the load.")]
+    DEPTHS = [SY - 0.03 + i * 0.3 for i in range(3)]   # the three queues, top edges
+    DH = 0.27
 
-    # 1. one queue for all turns can deadlock; one queue per depth cannot
-    x = XS[0]
-    comp(c, x, 0.98, 1.45, 0.72, "one queue", "all turns", mark=False)
-    c.arrow([(x + 1.45, 1.34), (x + 1.85, 1.34)], color=INK2)
-    comp(c, x + 1.85, 0.98, 1.9, 0.72, "worker slots", "all held by parents", mark=False)
-    words(x, 1.82, "Parents wait for children that wait\nin the same queue: a deadlock.")
-    for i, d in enumerate(("depth 0", "depth 1", "depth 2")):
-        y = 3.22 + i * 0.36
-        c.d.rectangle([c._p(x), c._p(y), c._p(x + 1.45), c._p(y + 0.3)], outline=INK, width=c._lw(1.5))
-        c.text(x, y, 1.45, 0.3, d, 13, "Medium", INK)
-        c.line([(x + 1.45, y + 0.15), (x + 1.65, y + 0.15)], color=INK2)
-    c.line([(x + 1.65, 3.37), (x + 1.65, 4.09)], color=INK2)
-    c.arrow([(x + 1.65, 3.73), (x + 1.85, 3.73)], color=INK2)
-    comp(c, x + 1.85, 3.37, 1.9, 0.72, "worker slots", "children always run", lit=True, mark=False)
-    words(x, 4.3, "One queue per level of the task tree\n(AD-03).", INK)
+    # the connectors the tags travel along
+    x0, x1, x2 = XS
+    PM, SM = PY + 0.36, SY + 0.36               # the middle line of each diagram
+    P = dict(
+        parent=[(x0 + 1.45, PM), (x0 + 1.85 + 0.6, PM)],
+        d0=[(x0 + 1.45, DEPTHS[0] + DH / 2), (x0 + 1.65, DEPTHS[0] + DH / 2), (x0 + 1.65, SM),
+            (x0 + 1.85 + 0.6, SM)],
+        d1=[(x0 + 1.45, DEPTHS[1] + DH / 2), (x0 + 1.65, DEPTHS[1] + DH / 2), (x0 + 1.65, SM),
+            (x0 + 1.85 + 0.6, SM)],
+        d2=[(x0 + 1.45, DEPTHS[2] + DH / 2), (x0 + 1.65, DEPTHS[2] + DH / 2), (x0 + 1.65, SM),
+            (x0 + 1.85 + 0.6, SM)],
+        bad=[(x1 + 1.3, PM), (x1 + 2.6, PM)],
+        good=[(x1 + 1.3, SM), (x1 + 2.6, SM), (x1 + 3.2, SM)],
+    )
 
-    # 2. the Lumen image carried Docker; the platform image has none
-    x = XS[1]
-    for y, name, note, lit in ((1.34, "Lumen image", "with Docker", False), (3.73, "platform image", "no Docker", True)):
-        comp(c, x, y - 0.36, 1.85, 0.72, name, note, lit=lit, mark=False)
-        c.arrow([(x + 1.85, y), (x + 2.1, y)], color=INK2)
-        _diamond(c, x + 2.6, y, 1.0, 0.62, "gate")
-        c.arrow([(x + 3.1, y), (x + 3.35, y)], color=INK2)
-        (c.check if lit else (lambda a, b, s: c.cross(a, b, s, s)))(x + 3.43, y - 0.12, 0.24)
-    words(x, 1.82, "5 critical CVEs, most in the docker.io\npackage. The gate stopped the deploy.")
-    words(x, 4.3, "deploy/k8s/Dockerfile: smaller, patched\nat build (2b5e460). The next run passed.", INK)
+    def paint(c, st):
+        on, seen = st["on"], st["seen"]
 
-    # 3. the HPA's scale-down window: 300 s by default, 60 s in the chart
-    x = XS[2]
+        def words(i, row):
+            text = WORDS[i][row]
+            c.text(XS[i], PW if row == 0 else SW, CW, 0.54, text, 13, "Regular", INK2 if row == 0 else INK, "left")
 
-    def window(y, secs, lit):
-        """A time line from the end of the load to the scale-down, to scale."""
-        L = 2.45 * secs / 300
-        c.text(x, y - 0.38, 1.6, 0.28, "load ends", 13, "Regular", INK2, "left")
-        c.line([(x + 0.05, y - 0.08), (x + 0.05, y + 0.36)], color=INK2)
-        c.bar(x + 0.05, y, L, 0.28, INK if lit else INK3)
-        c.text(x + 0.05, y, L, 0.28, "%d s" % secs, 13, "Semibold", BLACK)
-        c.text(x + L + 0.17, y - 0.01, 1.2, 0.3, "scale-down", 13, "Regular", INK2, "left")
+        for i, (h, sub) in enumerate(HEADS):
+            if ("p", i) not in seen:
+                continue
+            x = XS[i]
+            c.text(x, HY, CW, 0.34, h, 16, "Semibold", INK, "left")
+            c.text(x + _tw(h, 16, "Semibold") + 0.2, HY + 0.03, CW, 0.3, sub, 13, "Regular", INK3, "left")
+            if ("pw", i) in seen:
+                words(i, 0)
+            if ("s", i) in seen:
+                c.arrow([(x + 0.3, 2.9), (x + 0.3, 3.18)], color=INK2)
+                c.text(x + 0.45, 2.9, 1.5, 0.28, "solution", 13, "Medium", INK3, "left")
+            if ("sw", i) in seen:
+                words(i, 1)
 
-    window(1.36, 300, False)
-    words(x, 1.82, "KEDA's HPA waits 300 s by default\nbefore it removes a worker.")
-    window(3.75, 60, True)
-    words(x, 4.3, "The chart sets 60 s, so the workers\ngo back to 1 a minute after the load.", INK)
-    c.frame().save(os.path.join(draw.OUT, "findings.png"))
-    print("findings.png")
+        # 1. one queue for all turns can deadlock; one queue per depth cannot
+        if ("p", 0) in seen:
+            x = x0
+            comp(c, x, PY, 1.45, 0.72, "one queue", st["q_note"], lit="queue" in on, mark=False)
+            c.arrow([(x + 1.45, PM), (x + 1.85, PM)], color=INK2)
+            comp(c, x + 1.85, PY, 1.9, 0.72, "worker slots", st["slot_note"], lit="slots" in on, mark=False)
+        if ("s", 0) in seen:
+            x = x0
+            for i, d in enumerate(("depth 0", "depth 1", "depth 2")):
+                y = DEPTHS[i]
+                lit = ("d%d" % i) in on
+                c.d.rectangle([c._p(x), c._p(y), c._p(x + 1.45), c._p(y + DH)], fill=RAISED if lit else BLACK,
+                              outline=INK if lit else INK2, width=c._lw(1.5))
+                c.text(x, y, 1.45, DH, d, 13, "Medium", INK)
+                c.line([(x + 1.45, y + DH / 2), (x + 1.65, y + DH / 2)], color=INK2)
+            c.line([(x + 1.65, DEPTHS[0] + DH / 2), (x + 1.65, DEPTHS[2] + DH / 2)], color=INK2)
+            c.arrow([(x + 1.65, SM), (x + 1.85, SM)], color=INK2)
+            comp(c, x + 1.85, SY, 1.9, 0.72, "worker slots", st["slot2_note"], lit="slots2" in on, mark=False)
+
+        # 2. the Lumen image carried Docker; the platform image has none
+        for row, (y, name, note, ok) in enumerate(((PM, "Lumen image", "with Docker", False),
+                                                    (SM, "platform image", "no Docker", True))):
+            if ((("p", 1) if row == 0 else ("s", 1))) not in seen:
+                continue
+            x = x1
+            key = "img%d" % row
+            comp(c, x, y - 0.36, 1.85, 0.72, name, note, lit=key in on, mark=False)
+            c.arrow([(x + 1.85, y), (x + 2.1, y)], color=INK2)
+            _diamond(c, x + 2.6, y, 1.0, 0.62, "gate", lit=("gate%d" % row) in on)
+            c.arrow([(x + 3.1, y), (x + 3.35, y)], color=INK2)
+            if ("end", row) in seen:
+                if ok:
+                    c.check(x + 3.43, y - 0.12, 0.24)
+                else:
+                    c.cross(x + 3.43, y - 0.12, 0.24, 0.24)
+
+        # 3. the HPA's scale-down window, to scale: 300 s by default, 60 s in the chart
+        for row, (y, secs, lit) in enumerate(((PY + 0.4, 300, False), (SY + 0.4, 60, True))):
+            if ((("p", 2) if row == 0 else ("s", 2))) not in seen:
+                continue
+            x = x2
+            u = st["fill"][row]
+            L = 2.45 * secs / 300
+            c.text(x, y - 0.38, 1.6, 0.28, "load ends", 13, "Regular", INK2, "left")
+            c.line([(x + 0.05, y - 0.08), (x + 0.05, y + 0.36)], color=INK2)
+            c.d.rectangle([c._p(x + 0.05), c._p(y), c._p(x + 0.05 + L), c._p(y + 0.28)], outline=RULE,
+                          width=c._lw(1))
+            if u > 0:
+                c.bar(x + 0.05, y, L * u, 0.28, INK if lit else INK3)
+            if u >= 1:
+                c.text(x + 0.05, y, L, 0.28, "%d s" % secs, 13, "Semibold", BLACK)
+                c.text(x + L + 0.17, y - 0.01, 1.2, 0.3, "scale-down", 13, "Regular", INK2, "left")
+
+        for x, y, word in st["tags"]:
+            tag(c, x, y, word)
+
+    st = dict(on=set(), seen=set(), tags=[], fill=[0.0, 0.0], q_note="all turns", slot_note="",
+              slot2_note="", )
+    sc = Scene("findings.gif", paint, st)
+
+    def move(key, word, seconds=0.7):
+        sc.tween(seconds, lambda u: st.update(tags=[(*draw.along(P[key], u), word)]))
+        sc.set(tags=[])
+
+    def show(*keys):
+        sc.set(seen=st["seen"] | set(keys))
+
+    # 1. per-depth queues
+    sc.step("1. One queue for all turns: parents fill every worker slot", 0.6, seen={("p", 0)}, on={"queue"})
+    for n in range(2):
+        move("parent", "parent", 0.6)
+        sc.set(on={"slots"}, slot_note="held by a parent")
+        sc.hold(0.3)
+    sc.set(slot_note="all held by parents", q_note="children wait", on={"queue", "slots"})
+    sc.hold(0.6)
+    sc.title = "1. Their children wait in the same queue: a deadlock"
+    show(("pw", 0))
+    sc.hold(2.0)
+    sc.step("1. One queue per depth: children always run", 0.4, on={"d1", "d2"})
+    show(("s", 0))
+    sc.hold(0.4)
+    move("d1", "child", 0.6)
+    sc.set(on={"d2", "slots2"}, slot2_note="children always run")
+    move("d2", "child", 0.6)
+    sc.set(on={"slots2"})
+    show(("sw", 0))
+    sc.hold(1.8)
+    # 2. the Trivy gate
+    sc.step("2. The Lumen image carries Docker: the gate stops it", 0.4, on={"img0"})
+    show(("p", 1))
+    move("bad", "image", 0.8)
+    sc.set(on={"gate0"})
+    show(("end", 0), ("pw", 1))
+    sc.hold(2.2)
+    sc.step("2. A smaller platform image without Docker passes", 0.4, on={"img1"})
+    show(("s", 1))
+    move("good", "image", 1.0)
+    sc.set(on={"gate1"})
+    show(("end", 1), ("sw", 1))
+    sc.hold(2.0)
+    # 3. the KEDA scale-down window
+    sc.step("3. By default, KEDA waits 300 s before it removes a worker", 0.4, on=set())
+    show(("p", 2))
+    sc.tween(2.4, lambda u: st["fill"].__setitem__(0, u))
+    show(("pw", 2))
+    sc.hold(1.8)
+    sc.step("3. The chart sets 60 s: back to 1 worker a minute after the load", 0.4)
+    show(("s", 2))
+    sc.tween(1.0, lambda u: st["fill"].__setitem__(1, u))
+    show(("sw", 2))
+    sc.hold(2.0)
+    sc.step("Three technical findings and how the team fixed them", 3.6, on=set())
+    sc.save()
 
 
 # ---------------------------------------------------------------- 6b: scalability

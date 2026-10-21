@@ -109,3 +109,71 @@ the root turn on lumen.turns.0 and the client gets 201 at once. Any worker takes
 For each step it calls the model and posts the step to session, which writes it to
 PostgreSQL. The client then reads the answer with a GET. On the public host this took 4.9
 seconds and cost one cent."
+
+## Animated: er.gif and deployment.gif
+
+Both scenes now render as GIFs. Each scene also writes its first frame as a PNG, so
+`out/er.png` and `out/deployment.png` now show only the opening frame (the first build
+step, not the full diagram). Each loop has three phases: build, flow, then a calm hold of
+3.6 s with nothing lit. I rendered each scene alone and checked 12 frames spread over each
+loop, zoomed.
+
+### out/er.gif (slide 4c), 26.0 s
+
+- **Code:** `er()` in `scenes_std_design.py`.
+- **Title band:** the diagram needs almost the full height. `HighScene` therefore draws the
+  23 pt step title at y = 0.02 in, not at 0.18 in.
+- **Space:** to fit under the title, the rows are 0.20 in, the table name rows 0.28 in, and
+  the gaps are smaller. The layout, the tables, the columns and the lines are the same as
+  in er.png.
+
+Build:
+1. "identity: accounts and their API keys". The frame appears, then `accounts`, then `platform_api_keys`.
+2. "project: projects, findings, the agent registry". The frame appears, then the four tables one by one.
+3. "session: the trace of each question". The frame appears, then `sessions`, `tasks`, `steps`.
+4. "billing: wallet, ledger, approvals". The frame appears, then the three tables.
+5. "Relationships: foreign keys, and ids from other contexts". All crow's-foot lines and the key appear. Then the line "PostgreSQL 16 · money as numeric(12,6) · RabbitMQ keeps turns in flight · files on a 2Gi volume" appears.
+
+Flow: an "INSERT" tag runs along each relationship line. The line is white while the tag
+runs on it. The table that receives the row then lights (white border, raised fill).
+1. "One question: the intent row comes first". The tag runs from `platform_agents` to `platform_question_intents` (askRoutes writes the intent before the project).
+2. "Then the project row, for the caller's account". The tag runs from `accounts` to `projects`.
+3. "The session opens, with its root task at depth 0". The tag runs from `projects` to `sessions`, then from `sessions` to `tasks`.
+4. "Each step of the lead is a row in steps". The tag runs from `tasks` to `steps`.
+5. "delegate: a child task points to its parent_id". The tag runs round the `tasks.parent_id` self loop.
+6. "A reader records a finding". The tag runs from `tasks` to `findings`.
+7. "Each model call adds its cost to the ledger". The tag runs from `tasks` to `ledger_entries`.
+
+Hold: "Four contexts, each owns its tables, in one PostgreSQL 16". The full diagram stays with nothing lit.
+
+The write order follows report 3.2.4, use case A:
+- step 3: the intent row, then the project;
+- steps 5 to 8: the session, the root task, and the steps through the report calls;
+- step 9: `delegate` opens the child tasks;
+- the report calls `recordFinding` and `addSpend` write the findings and the ledger entries.
+
+### out/deployment.gif (slide 11), 24.7 s
+
+- **Code:** `deployment()` in `scenes_std.py`. The helpers `comp`, `node`, `tag`,
+  `label_on` and `typing` did not change.
+- **Layout:** the positions are the same as in the static diagram.
+
+Build:
+1. "Outside the server: browser, watch app, CI/CD, the model API". The four outside nodes appear.
+2. "One AWS node: an EC2 t3.medium in Singapore". The AWS node appears with "security group: 22, 80, 443 open".
+3. "k3s runs on it, with the namespace lumen". The cluster node appears.
+4. "Traefik, then the five service pods". Traefik appears, then identity, project, session, worker and billing, one by one.
+5. "PostgreSQL and RabbitMQ as StatefulSets, and KEDA".
+6. "The connectors, each with its protocol and port". The wires appear with HTTPS 443, SSH 22 and HTTPS.
+
+Flow:
+1. "A request: HTTPS on 443 to Traefik, then the project pod". The Browser lights. A "request" tag runs along the HTTPS 443 wire to Traefik, which lights. Then it runs along the pod bus to the project pod, which lights.
+2. "The worker pod calls the OpenAI API over HTTPS". The worker lights. A "chat completion" tag runs up the HTTPS wire and stops under the OpenAI API node, which lights.
+3. "A deploy: GitHub Actions over SSH 22 into k3s". GitHub Actions lights. A "deploy" tag runs along the SSH 22 wire, and then the k3s cluster lights.
+4. "KEDA scales the worker pods with the queue". KEDA and the worker light. The worker's label counts "1 pod", "2 pods", "3 pods", "4 pods".
+
+Hold: "One EC2 node runs the whole platform in k3s". The full diagram stays with nothing lit.
+
+Facts: the node, region, security group, replica ranges (worker 1 to 4 with KEDA) and
+the protocols are the ones in the static diagram and in report 3.2. Section 4.1 of the
+report shows four worker pods under load.

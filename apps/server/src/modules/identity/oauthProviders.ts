@@ -34,6 +34,15 @@ function record(value: unknown): Record<string, unknown> {
     throw new AuthFailure('invalid_credentials');
   return value as Record<string, unknown>;
 }
+/**
+ * Asks the provider to show its account picker every time. Without it, a
+ * person who is still signed in to the provider is signed in to lumen at once
+ * by one click, with no chance to see or change the account.
+ */
+function withAccountPicker(url: URL): URL {
+  url.searchParams.set('prompt', 'select_account');
+  return url;
+}
 async function profileJSON(fetcher: Fetch, url: string, token: string): Promise<unknown> {
   const response = await fetcher(url, {
     headers: {
@@ -51,7 +60,8 @@ async function profileJSON(fetcher: Fetch, url: string, token: string): Promise<
 export function githubProvider(client: GitHubOAuthClient, fetcher: Fetch = fetch): OAuthProvider {
   return {
     kind: 'github',
-    authorizationURL: (state) => client.createAuthorizationURL(state, ['read:user', 'user:email']),
+    authorizationURL: (state) =>
+      withAccountPicker(client.createAuthorizationURL(state, ['read:user', 'user:email'])),
     async profile(code): Promise<OAuthProfile> {
       try {
         const token = (
@@ -88,7 +98,9 @@ export function googleProvider(client: GoogleOAuthClient, fetcher: Fetch = fetch
   return {
     kind: 'google',
     authorizationURL: (state, verifier) =>
-      client.createAuthorizationURL(state, verifier, ['openid', 'email', 'profile']),
+      withAccountPicker(
+        client.createAuthorizationURL(state, verifier, ['openid', 'email', 'profile']),
+      ),
     async profile(code, verifier): Promise<OAuthProfile> {
       try {
         const token = (

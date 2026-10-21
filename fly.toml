@@ -15,14 +15,11 @@ primary_region = "sin"
   IDENTITY_SESSION_LIFETIME_MS = "86400000"
   IDENTITY_INSECURE_COOKIES = "false"
   LUMEN_MODEL_PROVIDER = "openai"
-  # The default model and the others a new session may choose. Each needs a
-  # price row in core/model/pricing.ts. Mini is the default: on nano, the
-  # walkthrough's fixed-points and Catalan runs came back with wrong numbers
-  # it said it had checked (report rows A14, A17); mini got both right.
-  LUMEN_MODEL = "gpt-4.1-mini"
-  # gpt-4.1 for a hard question: on the 1324 literature question mini read
-  # the right abstracts and still gave the older bounds (report row A23).
-  LUMEN_MODELS = "gpt-4.1-mini,gpt-4.1-nano,gpt-4.1"
+  # One model, the cheapest, so the field shows "Auto" and no choice. Nano
+  # gave wrong numbers on some computing questions that mini got right; put
+  # gpt-4.1-mini here when the answers matter more than the cost.
+  LUMEN_MODEL = "gpt-4.1-nano"
+  LUMEN_MODELS = "gpt-4.1-nano"
   LUMEN_WORKER = "steering"
   LUMEN_COMPUTE_PROVIDER = "docker"
   # The sandbox: the same Python as the packages built into the app image

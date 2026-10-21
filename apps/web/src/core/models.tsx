@@ -4,7 +4,9 @@ import { request } from './api';
 
 // The models a new session may think with, as the server allows them
 // (GET /api/models), the default first. The field shows a picker only when
-// there are two or more; with one there is nothing to choose.
+// there are two or more. With one there is nothing to choose, so the field
+// says "Auto" and the server runs that model: a demo can then run its
+// cheapest model without a name that a visitor has to judge.
 
 /** The allowed models; empty until read, and when signed out or on failure. */
 export function useModels(enabled: boolean): readonly string[] {
@@ -33,7 +35,8 @@ export function ModelPicker({
   value: string | undefined;
   onChange: (model: string) => void;
 }): JSX.Element | null {
-  if (models.length < 2) return null;
+  if (models.length === 0) return null;
+  if (models.length === 1) return <span className="px-2 text-sm text-ink-2">Auto</span>;
   return (
     <Select value={value ?? models[0] ?? ''} onValueChange={onChange}>
       <SelectTrigger

@@ -485,19 +485,62 @@ describe.skipIf(!TEST_DATABASE_URL)('identity: OAuth and mail SQL/HTTP workflows
     expect(await db.query('select id from auth_sessions', [])).toHaveLength(0);
   });
 
-  it('never automatically links an existing email or creates a second provider credential on it', async () => {
-    await db.query(
-      "insert into accounts (email, display_name) values ('github@example.test', 'Password User')",
+  it('links a provider to the account with its verified email, and drops an unproven password', async () => {
+    const owner = await db.query<{ id: string }>(
+      "insert into accounts (email, display_name) values ('google@example.test', 'Password User') returning id",
       [],
     );
-    const attempt = await begin('github');
+    const accountId = owner[0]!.id;
+    await db.query(
+      "insert into credentials (account_id, kind, password_hash) values ($1, 'password', 'squatter-hash')",
+      [accountId],
+    );
+    await db.query(
+      "insert into auth_sessions (account_id, token_hash, expires_at) values ($1, $2, now() + interval '1 hour')",
+      [accountId, 'a'.repeat(64)],
+    );
+    const linked = await complete('google');
+    expect(linked.accountId).toBe(accountId);
+    expect(
+      await db.query('select kind from credentials where account_id = $1', [accountId]),
+    ).toEqual([{ kind: 'google' }]);
+    expect(
+      await db.query('select id from auth_sessions where token_hash = $1', ['a'.repeat(64)]),
+    ).toHaveLength(0);
+    expect(
+      (await app.inject({ url: '/api/me/email-status', cookies: linked.cookies })).json(),
+    ).toEqual({ verified: true });
+  });
+
+  it('keeps a proven password when it links, and refuses a second identity of one provider', async () => {
+    const github = await complete('github');
+    const second = await begin('github');
+    profile.mockResolvedValueOnce({
+      subject: 'another-github-subject',
+      email: 'github@example.test',
+      displayName: 'Provider User',
+    });
     const response = await app.inject({
-      url: `/api/auth/github/callback?state=${attempt.state}&code=code`,
-      cookies: attempt.cookies,
+      url: `/api/auth/github/callback?state=${second.state}&code=code`,
+      cookies: second.cookies,
     });
     expect(response.headers.location).toContain('oauth_email_conflict');
     expect(response.cookies.some((cookie) => cookie.name === 'lumen_session')).toBe(false);
-    expect(await db.query('select id from credentials', [])).toHaveLength(0);
+    await db.query(
+      "insert into credentials (account_id, kind, password_hash) values ($1, 'password', 'own-hash')",
+      [github.accountId],
+    );
+    profile.mockResolvedValueOnce({
+      subject: 'google-subject',
+      email: 'github@example.test',
+      displayName: 'Provider User',
+    });
+    expect((await complete('google')).accountId).toBe(github.accountId);
+    expect(
+      await db.query('select kind from credentials where account_id = $1 order by kind', [
+        github.accountId,
+      ]),
+    ).toEqual([{ kind: 'github' }, { kind: 'google' }, { kind: 'password' }]);
   });
 
   it('uses current staff role and rejects suspended provider accounts', async () => {

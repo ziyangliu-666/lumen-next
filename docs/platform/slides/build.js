@@ -200,17 +200,17 @@ shown(
 );
 shown(
   'Logical',
-  '3c  ·  Producers and consumers',
-  'How apps use the platform',
-  'interaction.gif',
-  "This is the whole platform contract, seven calls on the public API. A producer creates a key and publishes an agent. A consumer app lists the agents and asks a question with the one it chose, and gets a session id at once. The platform runs the question with the agent's instructions in front, and the app reads the answer, the findings and the cost. Producers and the operator read usage from the same API: sessions, cost, and the median time to rest per agent.",
-);
-shown(
-  'Logical',
   '3a  ·  Key architectural decision',
   'One queue for each level of the task tree',
   'queues.gif',
   'A lead turn keeps its worker slot while its readers run. With one shared queue, two questions are enough to fill both slots with waiting leads. Their readers then sit in the queue, and no worker is free to take them: that is a deadlock. So we gave each level of the task tree its own queue and its own slots on every worker; in the real system each worker has four slots per level. The leads wait in the level-0 slots, the readers run in the level-1 slots, and every question finishes.',
+);
+shown(
+  'Logical',
+  '3c  ·  Producers and consumers',
+  'How apps use the platform',
+  'interaction.gif',
+  "This is the whole platform contract, seven calls on the public API. A producer creates a key and publishes an agent. A consumer app lists the agents and asks a question with the one it chose, and gets a session id at once. The platform runs the question with the agent's instructions in front, and the app reads the answer, the findings and the cost. Producers and the operator read usage from the same API: sessions, cost, and the median time to rest per agent.",
 );
 
 // ------------------------------------------------------------------ 4 physical architecture

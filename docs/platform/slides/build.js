@@ -226,6 +226,14 @@ shown(
 );
 shown(
   'Physical',
+  '4b  ·  Recorded on the server',
+  'Every service is running',
+  'rec-pods.gif',
+  'This is a recording of the real server. kubectl runs on the server over SSH, because the Kubernetes API is not public. ' +
+    'Five services, PostgreSQL and RabbitMQ, and the autoscalers: HPA on CPU for identity, project and billing, and KEDA on queue length for the worker.',
+);
+shown(
+  'Physical',
   '4c  ·  Persistence',
   'The schema, by context',
   'er.png',
@@ -237,6 +245,13 @@ shown(
   'Asking a question with a chosen agent',
   'sequence.gif',
   'This is use case A: a consumer asks a question with an agent that a producer published. The request comes through Traefik to the project service. The key guard checks the key, its rate and its scope, and then project asks session to open the session. Session puts the root turn on lumen.turns.0, and the client gets 201 at once. Any worker takes the turn. For each step it calls the model and posts the step to session, which writes it to PostgreSQL. The client then reads the answer with a GET. On the public host this took 4.9 seconds and cost one cent.',
+);
+shown(
+  'Physical',
+  '4d  ·  Recorded through the API',
+  'The same use case, for real',
+  'rec-ask.gif',
+  'The same use case on the public server, from the command line: POST /api/v1/questions with an API key, then GET /api/v1/questions/:id for the status, the cost and the answer from gpt-4.1-nano.',
 );
 
 // ------------------------------------------------------------------ 5 DevOps
@@ -256,6 +271,13 @@ shown(
 );
 shown(
   'DevOps',
+  '5b  ·  Recorded on GitHub',
+  'The real pipeline runs',
+  'rec-pipeline.gif',
+  'The real pipeline runs, from the GitHub command line: the list of runs, and every job of one run with its result.',
+);
+shown(
+  'DevOps',
   '5c  ·  Technical findings',
   'What we found, and what we changed',
   'findings.png',
@@ -269,6 +291,20 @@ shown(
   'KEDA adds workers as the queue grows',
   'scaling.gif',
   "This is a real load test on the public host: ten users ask questions without pause. The bars are the jobs waiting in the queues, and the dashed line is KEDA's target of five jobs per worker. When the queue passes that line, KEDA adds a worker pod, and it went from one to four in 49 seconds. After the load stops, the queue empties, and a minute later KEDA scales back to one worker. All 135 questions finished with a median of 6.1 seconds, and none of the 1,040 requests failed.",
+);
+shown(
+  'Demo',
+  '6b  ·  Recorded on the server',
+  'KEDA adds workers, for real',
+  'rec-scale.gif',
+  'The same autoscaler on the public server: KEDA compares the jobs per worker with the target of five, and the worker replicas go up, then back down after the load.',
+);
+shown(
+  'Demo',
+  '6b  ·  Availability, recorded',
+  'A worker is deleted; the question still ends',
+  'rec-kill.gif',
+  'Availability. A question starts, and we force-delete the worker that runs it. Its turn was not acknowledged, so RabbitMQ gives it to another worker, and the question still ends.',
 );
 {
   const s = newSlide();
@@ -299,7 +335,7 @@ shown(
   s.addNotes(
     'Live demo, about eight minutes, with deploy/k8s/demo.sh and LUMEN_URL set to the address on the slide. ' +
       'Before the load test, switch the workers to the paced worker (gh workflow run platform-deploy.yml -f worker=demo), so the load costs nothing; switch back afterwards. ' +
-      'If the network fails, the backup slides at the end show the same runs, recorded.',
+      'If the network fails, the recorded slides before this one show the same runs.',
   );
 }
 {
@@ -325,36 +361,6 @@ shown(
   });
   s.addNotes('Thank you. We are happy to take questions.');
 }
-
-// ------------------------------------------------------------------ backup: recordings, if the network fails
-shown(
-  'Demo',
-  'Backup  ·  recorded through the API',
-  'A real question, a real answer',
-  'rec-ask.gif',
-  'A real question through the public API, with an API key, answered by gpt-4.1-nano.',
-);
-shown(
-  'Demo',
-  'Backup  ·  recorded on the server',
-  'KEDA adds workers',
-  'rec-scale.gif',
-  'The load test on the public server: the queue passes five jobs per worker, so KEDA adds a worker, and removes it after the load.',
-);
-shown(
-  'Demo',
-  'Backup  ·  recorded on the server',
-  'A deleted worker; the question still ends',
-  'rec-kill.gif',
-  'A question starts, we force-delete the worker, another worker takes its turns, and the question ends.',
-);
-shown(
-  'DevOps',
-  'Backup  ·  recorded on GitHub',
-  'The real pipeline runs',
-  'rec-pipeline.gif',
-  'The real pipeline runs, from the GitHub command line: every job of one run, with its result.',
-);
 
 fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'slides.json'), JSON.stringify(spec, null, 1));

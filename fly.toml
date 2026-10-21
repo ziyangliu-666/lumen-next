@@ -15,11 +15,11 @@ primary_region = "sin"
   IDENTITY_SESSION_LIFETIME_MS = "86400000"
   IDENTITY_INSECURE_COOKIES = "false"
   LUMEN_MODEL_PROVIDER = "openai"
-  # One model, the cheapest, so the field shows "Auto" and no choice. Nano
-  # gave wrong numbers on some computing questions that mini got right; put
-  # gpt-4.1-mini here when the answers matter more than the cost.
+  # The default is the cheapest model, and the field names it "Auto". Mini
+  # and 4.1 cost more per run, and are offered under their own names. Nano
+  # gave wrong numbers on some computing questions that mini got right.
   LUMEN_MODEL = "gpt-4.1-nano"
-  LUMEN_MODELS = "gpt-4.1-nano"
+  LUMEN_MODELS = "gpt-4.1-nano,gpt-4.1-mini,gpt-4.1"
   LUMEN_WORKER = "steering"
   LUMEN_COMPUTE_PROVIDER = "docker"
   # The sandbox: the same Python as the packages built into the app image

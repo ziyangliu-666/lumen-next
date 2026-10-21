@@ -3,10 +3,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { request } from './api';
 
 // The models a new session may think with, as the server allows them
-// (GET /api/models), the default first. The field shows a picker only when
-// there are two or more. With one there is nothing to choose, so the field
-// says "Auto" and the server runs that model: a demo can then run its
-// cheapest model without a name that a visitor has to judge.
+// (GET /api/models), the default first. The default is named "Auto": it is
+// the server's choice, and the cheapest model on a demo. The others keep
+// their real names. With one model the field says "Auto" and has no picker.
 
 /** The allowed models; empty until read, and when signed out or on failure. */
 export function useModels(enabled: boolean): readonly string[] {
@@ -23,6 +22,11 @@ export function useModels(enabled: boolean): readonly string[] {
     };
   }, [enabled]);
   return enabled ? models : [];
+}
+
+/** How the field names a model: the default (the first) is "Auto". */
+export function modelLabel(models: readonly string[], model: string | undefined): string {
+  return model === undefined || model === models[0] ? 'Auto' : model;
 }
 
 /** A quiet picker for the field's toolbar, the way chat products name the model there. */
@@ -49,7 +53,7 @@ export function ModelPicker({
       <SelectContent>
         {models.map((model) => (
           <SelectItem key={model} value={model}>
-            {model}
+            {modelLabel(models, model)}
           </SelectItem>
         ))}
       </SelectContent>

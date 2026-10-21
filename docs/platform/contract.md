@@ -200,7 +200,8 @@ autoscaling and EFS for the shared volume. The report says so.
 ## The demonstration, from the command line
 
 `deploy/k8s/demo.sh` runs the whole demonstration against the public host.
-LIU ZIYANG writes it on 24–25 October. It reads the address from `LUMEN_URL`,
+The script and recorded scenes exist as of 21 October; the team still needs
+the final timed rehearsal. It reads the address from `LUMEN_URL`,
 so the same script also runs against local k3d. It prints each command before
 it runs it:
 
@@ -221,7 +222,10 @@ it runs it:
    worker.
 9. `curl /api/wallet`: the cost of the question.
 
-## Schedule
+## Original target schedule
+
+This is the original plan, not a current backlog. Several deliverables landed
+early; see `requirements-check.md` and `evidence/` for the current status.
 
 | Date | Work | Done when |
 |---|---|---|
@@ -236,6 +240,7 @@ it runs it:
 
 Not in the demonstration, stated as future work in the report: EKS with node
 autoscaling, a separate
-`stream` service, one database per service, the model gateway, the agent
-registry beyond a list, UC6 (the literature watch), OpenTelemetry and network
-policies.
+`stream` service, one database per service, the model gateway, OpenTelemetry
+and network policies. The agent registry (publish and select an agent) and
+UC6 literature-watch client are now built and demonstrated; see
+`evidence/2026-10-20-public-api-flow.md`.

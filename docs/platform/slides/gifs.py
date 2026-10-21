@@ -1,10 +1,16 @@
 """The animations for the ASS presentation (docs/platform/slides/README.md has the rules).
 
-Drawn the way the interview deck's GIFs are drawn (Canvas, palette and font adapted from
-~/Projects/interview-deck/gif/make_gifs.py): a title and a sub line that change at each
-step, parts in fixed places, plain squares for work that moves, red for what acts now.
+Drawn the way lumen's own pages are drawn (apps/web/src/pages/landing/Intro.tsx and
+apps/web/src/ui/space.ts), in the dark theme: a black page, a faint dot field that fades
+from the middle out, and every picture printed as white halftone dots on one fixed grid,
+a dot as large as the paint under it is strong. Labels are crisp Switzer over the dots.
 
-Every number on a picture comes from docs/platform/evidence/.
+Each frame is painted twice: shapes go into a grey "paint" layer, which is printed as
+dots; words go straight onto the page. A scene's paint() never draws a dot itself.
+
+The scenes keep the interview deck's way of telling (~/Projects/interview-deck): a title
+and a sub line that change at each step, parts in fixed places, small blocks for work that
+moves. Brightness means "acts now". Every number comes from docs/platform/evidence/.
 
     python3 docs/platform/slides/gifs.py              # all of them
     python3 docs/platform/slides/gifs.py scale kill   # some of them
@@ -18,13 +24,26 @@ from PIL import Image, ImageDraw, ImageFont
 
 S = 144                                       # pixels per inch at the size on the slide
 W, H = 12.13, 5.0                             # inches: the GIF's size on the slide
-INK, RED, GRAY = (0x1A, 0x1D, 0x23), (0xC8, 0x10, 0x2E), (0x5F, 0x66, 0x70)
-RULE, EDGE, LIGHT = (0xD5, 0xD8, 0xDD), (0x9A, 0xA0, 0xA8), (0xF2, 0xF3, 0xF5)
-SHADE, WHITE, SOFT = (0xE6, 0xE8, 0xEB), (0xFF, 0xFF, 0xFF), (0xA3, 0xA9, 0xB1)
-BLUE, GREEN = (0x1F, 0x6F, 0xB5), (0x1E, 0x8A, 0x4C)
-FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"
-FONT_B = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+CELL = 10                                     # pixels between dots on the grid (0.07 in)
+
+# The names the scenes were written with, kept as meanings. The colour each one prints as
+# on lumen's black page is in PAINT (shapes) and TEXT (words) below.
+INK, RED, GRAY = "ink", "act", "gray"
+RULE, EDGE, LIGHT = "rule", "edge", "well"
+SHADE, WHITE, SOFT = "shade", "none", "soft"
+BLUE, GREEN = "work", "work"
+
+# How strong each meaning paints, from 0 (nothing) to 1 (the largest dot).
+PAINT = {"ink": 1.0, "act": 1.0, "work": 0.95, "gray": 0.55, "soft": 0.4, "edge": 0.42,
+         "rule": 0.3, "well": 0.12, "shade": 0.22, "none": 0.0}
+# The web app's dark palette (theme.css, .dark): ink, ink-2, ink-3, and black for words on
+# a white block.
+TEXT = {"ink": (255, 255, 255), "act": (255, 255, 255), "work": (255, 255, 255),
+        "gray": (0x9A, 0x9D, 0xA3), "soft": (0x7C, 0x80, 0x86), "edge": (0x9A, 0x9D, 0xA3),
+        "rule": (0x7C, 0x80, 0x86), "none": (0, 0, 0), "well": (0x9A, 0x9D, 0xA3),
+        "shade": (0x9A, 0x9D, 0xA3)}
 HERE = os.path.dirname(os.path.abspath(__file__))
+SANS = os.path.join(HERE, "..", "..", "..", "apps", "web", "public", "fonts", "switzer.woff2")
 OUT = os.path.join(HERE, "out")
 EVIDENCE = os.path.join(HERE, "..", "evidence")
 FR = 60                                       # ms per frame while something moves
@@ -32,14 +51,30 @@ _fonts = {}
 
 
 def font(pt, bold=False):
-    if (pt, bold) not in _fonts:
-        _fonts[(pt, bold)] = ImageFont.truetype(FONT_B if bold else FONT, round(pt / 72 * S))
-    return _fonts[(pt, bold)]
+    """Switzer, the site's sans: Semibold for marked words, Regular otherwise."""
+    key = (pt, bold)
+    if key not in _fonts:
+        f = ImageFont.truetype(SANS, round(pt / 72 * S))
+        f.set_variation_by_name("Semibold" if bold else "Regular")
+        _fonts[key] = f
+    return _fonts[key]
+
+
+def title_font(pt):
+    key = ("title", pt)
+    if key not in _fonts:
+        f = ImageFont.truetype(SANS, round(pt / 72 * S))
+        f.set_variation_by_name("Medium")
+        _fonts[key] = f
+    return _fonts[key]
 
 
 def mix(a, b, t):
+    """A meaning between two meanings: returned as a paint strength."""
     t = max(0.0, min(1.0, t))
-    return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))
+    pa = PAINT.get(a, a) if isinstance(a, str) else a
+    pb = PAINT.get(b, b) if isinstance(b, str) else b
+    return pa + (pb - pa) * t
 
 
 def ease(u):
@@ -51,98 +86,161 @@ def lerp(a, b, u):
     return a + (b - a) * u
 
 
+def strength(c):
+    return c if isinstance(c, (int, float)) else PAINT.get(c, 0.0)
+
+
+def _field(w, h):
+    """The faint dots behind everything, as behind lumen's intro: one per cell, larger
+    and brighter near the middle, gone at the edges."""
+    ys, xs = np.mgrid[0:h, 0:w]
+    cy, cx = ys // CELL, xs // CELL
+    mx, my = cx * CELL + CELL / 2, cy * CELL + CELL / 2
+    # Measured against each half-size, so the field is gone before every edge: a GIF on
+    # the black slide shows no rectangle around it.
+    d = np.hypot((mx - w / 2) / (w / 2), (my - h / 2) / (h / 2))
+    fade = np.clip(1 - d * 1.08, 0, 1)
+    r = 1.1 + 0.9 * fade
+    cover = np.clip(r - np.hypot(xs - mx, ys - my) + 0.5, 0, 1)
+    return (cover * (12 + 34 * fade)).astype(np.float32)
+
+
 class Canvas:
     def __init__(self, w=W, h=H):
         self.W, self.H = round(w * S), round(h * S)
         self.frames, self.durs = [], []
+        self.field = _field(self.W, self.H)
+        ys, xs = np.mgrid[0:self.H, 0:self.W]
+        self._cy, self._cx = ys // CELL, xs // CELL
+        self._dist = np.hypot(xs - (self._cx * CELL + CELL / 2), ys - (self._cy * CELL + CELL / 2))
 
     def begin(self):
-        self.img = Image.new("RGB", (self.W, self.H), WHITE)
-        self.d = ImageDraw.Draw(self.img)
+        self.paint = Image.new("L", (self.W, self.H), 0)
+        self.p = ImageDraw.Draw(self.paint)
+        # The site's second surface, the well: solid dark grey under the dots, so words
+        # on it stay readable and the field does not show through.
+        self.wells = Image.new("L", (self.W, self.H), 0)
+        self.w = ImageDraw.Draw(self.wells)
+        self.words = []                           # drawn after the dots, crisp
+
+    def _print(self):
+        """The paint layer as dots: each cell's mean paint sets its dot's radius."""
+        a = np.asarray(self.paint, dtype=np.float32) / 255.0
+        hc, wc = self.H // CELL, self.W // CELL
+        cells = a[: hc * CELL, : wc * CELL].reshape(hc, CELL, wc, CELL).mean(axis=(1, 3))
+        cells = np.pad(cells, ((0, 1), (0, 1)))
+        r = (CELL / 2) * np.sqrt(cells) * 0.95
+        rr = r[np.minimum(self._cy, hc), np.minimum(self._cx, wc)]
+        dots = np.clip(rr - self._dist + 0.5, 0, 1) * 255
+        well = np.asarray(self.wells, dtype=np.float32)
+        page = np.maximum(dots, np.where(well > 0, well, self.field * (rr < 0.6)))
+        img = Image.fromarray(page.astype(np.uint8), "L").convert("RGB")
+        d = ImageDraw.Draw(img)
+        for kind, args in self.words:
+            if kind == "text":
+                x, y, f, s, col = args
+                d.text((x, y), s, font=f, fill=col)
+            elif kind == "block":
+                box, fill = args
+                d.rectangle(box, fill=fill)
+            elif kind == "frame":
+                box, col, width = args
+                d.rectangle(box, outline=col, width=width)
+        return img
 
     def end(self, ms):
+        img = self._print()
         # A frame that repeats the one before only lengthens it, so a hold costs no size.
-        if self.frames and self.img.tobytes() == self.frames[-1].tobytes():
+        if self.frames and img.tobytes() == self.frames[-1].tobytes():
             self.durs[-1] += ms
         else:
-            self.frames.append(self.img)
+            self.frames.append(img)
             self.durs.append(ms)
 
+    # ---- shapes, into the paint layer
     def rect(self, x, y, w, h, fill=None, line=None, lw=1.25, r=0):
         box = [x * S, y * S, (x + w) * S, (y + h) * S]
-        width = max(1, round(lw / 72 * S)) if line else 0
-        if r:
-            self.d.rounded_rectangle(box, radius=r * S, fill=fill, outline=line, width=width)
-        else:
-            self.d.rectangle(box, fill=fill, outline=line, width=width)
+        if fill in (LIGHT, SHADE):
+            self.w.rectangle(box, fill=26 if fill == LIGHT else 42)
+            fill = None
+        f = strength(fill) if fill is not None else 0
+        if f > 0:
+            self.p.rectangle(box, fill=round(255 * f))
+        if line is not None and strength(line) > 0:
+            # An outline prints as one row of dots: about two thirds of a cell wide.
+            width = max(round(CELL * 0.7), round(lw / 72 * S))
+            shape = self.p.rounded_rectangle if r else self.p.rectangle
+            kw = {"radius": r * S} if r else {}
+            shape(box, outline=round(255 * strength(line)), width=width, **kw)
 
-    def text(self, x, y, w, h, s, pt=13, bold=False, color=INK, align="center"):
-        f = font(pt, bold)
+    def text(self, x, y, w, h, s, pt=13, bold=False, color=INK, align="center", f=None):
+        f = f or font(pt, bold)
         asc, desc = f.getmetrics()
         lines = s.split("\n")
         lh = asc + desc
         top = y * S + (h * S - lh * len(lines)) / 2
+        col = TEXT.get(color, color) if isinstance(color, str) else (255, 255, 255)
         for i, line in enumerate(lines):
             tw = f.getlength(line)
             tx = x * S + (w * S - tw) / 2 if align == "center" else ((x + w) * S - tw if align == "right" else x * S)
-            self.d.text((tx, top + i * lh), line, font=f, fill=color)
+            self.words.append(("text", (tx, top + i * lh, f, line, col)))
 
-    def box(self, x, y, w, h, s="", fill=WHITE, line=EDGE, color=INK, pt=14, bold=True, lw=1.25, r=0.06):
-        self.rect(x, y, w, h, fill, line, lw, r)
+    def box(self, x, y, w, h, s="", fill=WHITE, line=EDGE, color=INK, pt=14, bold=True, lw=1.25, r=0):
+        """A labelled part: a dotted outline, bright when it acts now; its name in words."""
+        on = fill in (INK, RED) or (isinstance(fill, float) and fill > 0.6)
+        if fill in (LIGHT, SHADE):
+            # #1a1b1e is the dark well; a shade is one step lighter (#2a2b2f, "raised").
+            self.w.rectangle([x * S, y * S, (x + w) * S, (y + h) * S], fill=26 if fill == LIGHT else 42)
+            if s:
+                self.text(x, y, w, h, s, pt, bold, color)
+            return
         if s:
-            self.text(x, y, w, h, s, pt, bold, color)
+            self.rect(x, y, w, h, line=1.0 if on else (line if line not in (WHITE,) else EDGE), r=r)
+            self.text(x, y, w, h, s, pt, bold, INK if on or color == INK else color)
+        else:
+            self.rect(x, y, w, h, fill=None if not on else fill, line=line, r=r)
 
     def line(self, pts, color=RULE, lw=2.0):
-        self.d.line([(x * S, y * S) for x, y in pts], fill=color, width=max(1, round(lw / 72 * S)), joint="curve")
+        self.p.line([(x * S, y * S) for x, y in pts], fill=round(255 * strength(color)),
+                    width=max(round(CELL * 0.55), round(lw / 72 * S)), joint="curve")
 
     def arrow(self, x1, y1, x2, y2, color=GRAY, lw=2.0):
-        p1, p2 = (x1 * S, y1 * S), (x2 * S, y2 * S)
-        self.d.line([p1, p2], fill=color, width=max(1, round(lw / 72 * S)))
-        dx, dy = p2[0] - p1[0], p2[1] - p1[1]
-        n = max(1e-6, (dx * dx + dy * dy) ** 0.5)
-        ux, uy = dx / n, dy / n
-        L, Wd = 0.12 * S, 0.07 * S
-        self.d.polygon([p2, (p2[0] - ux * L - uy * Wd, p2[1] - uy * L + ux * Wd),
-                        (p2[0] - ux * L + uy * Wd, p2[1] - uy * L - ux * Wd)], fill=color)
+        self.line([(x1, y1), (x2, y2)], color, lw)
 
     def square(self, x, y, col=BLUE, s=0.26):
-        """A piece of work: a plain square, centred on (x, y)."""
-        self.rect(x - s / 2, y - s / 2, s, s, fill=col, line=col)
+        """A piece of work: a small bright block, printed where it is on the grid."""
+        self.rect(x - s / 2, y - s / 2, s, s, fill=col)
+
+    def sphere(self, x, y, r, bright=1.0):
+        """An agent, drawn as lumen draws its mark: a ball lit from the upper left."""
+        n = max(2, round(r * S))
+        ys, xs = np.mgrid[-n:n + 1, -n:n + 1] / n
+        inside = xs * xs + ys * ys <= 1
+        z = np.sqrt(np.clip(1 - xs * xs - ys * ys, 0, 1))
+        light = np.clip(0.25 + 0.75 * (-0.45 * xs - 0.55 * ys + 0.7 * z), 0.08, 1) * bright
+        tile = Image.fromarray((light * inside * 255).astype(np.uint8), "L")
+        self.paint.paste(tile, (round(x * S) - n, round(y * S) - n), Image.fromarray((inside * 255).astype(np.uint8), "L"))
 
     def badge(self, x, y, w, s, pt=14):
-        self.box(x, y, w, 0.46, s, fill=RED, line=RED, color=WHITE, pt=pt, bold=True, r=0.08)
+        """A number that matters: black words on a white block, crisp, like "Sign up"."""
+        self.words.append(("block", ([x * S, y * S, (x + w) * S, (y + 0.46) * S], (255, 255, 255))))
+        f = font(pt, True)
+        tw = f.getlength(s)
+        asc, desc = f.getmetrics()
+        self.words.append(("text", (x * S + (w * S - tw) / 2, y * S + (0.46 * S - asc - desc) / 2, f, s, (0, 0, 0))))
 
     def save(self, name):
-        # Map pixels to the palette ourselves, so pure white stays pure white on the slide.
-        exact = [WHITE, INK, RED, GRAY, RULE, EDGE, LIGHT, SHADE, SOFT, BLUE, GREEN]
-        code = lambda a: (a[..., 0].astype(np.int64) << 16) | (a[..., 1].astype(np.int64) << 8) | a[..., 2]
-        arrs = [np.asarray(f, dtype=np.uint8) for f in self.frames]
-        step = max(1, len(arrs) // 8)
-        vals, cnts = np.unique(np.concatenate([code(x).ravel() for x in arrs[::step]]), return_counts=True)
-        exact_codes = [(r << 16) | (g << 8) | b for r, g, b in exact]
-        order = [int(v) for v in vals[np.argsort(-cnts)] if int(v) not in exact_codes]
-        pal_codes = exact_codes + order[: 256 - len(exact_codes)]
-        P = np.array([[(v >> 16) & 255, (v >> 8) & 255, v & 255] for v in pal_codes], dtype=np.int64)
-        flat = P.astype(np.uint8).ravel().tolist() + [0] * (768 - 3 * len(pal_codes))
-        out = []
-        for x in arrs:
-            u, inv = np.unique(code(x).ravel(), return_inverse=True)
-            U = np.stack([(u >> 16) & 255, (u >> 8) & 255, u & 255], axis=1)
-            near = ((U[:, None, :] - P[None, :, :]) ** 2).sum(-1).argmin(1).astype(np.uint8)
-            im = Image.fromarray(near[inv].reshape(x.shape[:2]), mode="P")
-            im.putpalette(flat)
-            out.append(im)
+        # Grey only: the page is black and white, so a grey palette keeps every frame exact.
+        frames = [f.convert("L") for f in self.frames]
         os.makedirs(OUT, exist_ok=True)
-        out[0].save(os.path.join(OUT, name), save_all=True, append_images=out[1:], duration=self.durs,
-                    loop=0, disposal=1, optimize=False)
-        # The first frame as a still, for the speaker notes and for checking.
+        frames[0].save(os.path.join(OUT, name), save_all=True, append_images=frames[1:], duration=self.durs,
+                       loop=0, disposal=1, optimize=False)
         self.frames[0].save(os.path.join(OUT, name.replace(".gif", ".png")))
-        # One still per step, for checking by eye.
         os.makedirs(os.path.join(OUT, "steps"), exist_ok=True)
         holds = [i for i, d in enumerate(self.durs) if d >= 700]
         for k, i in enumerate(holds):
             self.frames[i].save(os.path.join(OUT, "steps", "%s-%02d.png" % (name[:-4], k)))
-        print(name, len(out), "frames", round(sum(self.durs) / 1000, 1), "s")
+        print(name, len(frames), "frames", round(sum(self.durs) / 1000, 1), "s")
 
 
 class Scene:
@@ -159,7 +257,7 @@ class Scene:
     def snap(self, ms):
         c = self.c
         c.begin()
-        c.text(0.1, 0.05, W - 0.2, 0.5, self.title, 20, True, INK, "left")
+        c.text(0.1, 0.05, W - 0.2, 0.5, self.title, 20, False, INK, "left", f=title_font(20))
         if self.sub:
             c.text(0.1, 0.55, W - 0.2, 0.38, self.sub, 14, False, GRAY, "left")
         self.paint(c)
@@ -207,13 +305,13 @@ def problem():
             c.box(6.2, 1.6, 2.4, 1.4, "cost\n?", fill=WHITE, line=EDGE, pt=22)
         k = st["team"]
         if k > 0:
-            col = mix(WHITE, RED, k)
-            c.box(9.2, 1.6, 2.6, 0.7, "lead agent", fill=col, line=col, color=WHITE, pt=15)
             for j in range(3):
-                c.box(9.2 + j * 0.9, 2.75, 0.8, 0.6, "reader", fill=mix(WHITE, INK, k), line=mix(WHITE, INK, k),
-                      color=WHITE, pt=11)
-                c.line([(10.5, 2.3), (9.6 + j * 0.9, 2.75)], mix(WHITE, GRAY, k), 2)
-            c.text(9.2, 3.5, 2.6, 0.35, "work in parallel", 13, True, mix(WHITE, GRAY, k))
+                c.line([(10.5, 1.95), (9.55 + j * 0.95, 3.05)], 0.3 * k, 2)
+            c.sphere(10.5, 1.95, 0.42, k)
+            c.text(9.5, 2.42, 2.0, 0.3, "lead agent", 13, True, INK)
+            for j in range(3):
+                c.sphere(9.55 + j * 0.95, 3.15, 0.27, 0.85 * k)
+            c.text(9.0, 3.6, 3.0, 0.35, "readers work in parallel", 13, True, GRAY)
 
     sc = Scene(paint)
     sc.say("How a researcher uses an AI model today", "One chat window, one model, one thing at a time.")
@@ -260,22 +358,24 @@ def tree():
         hot = st["lit"]
         c.box(*Q, "your question", fill=RED if "q" in hot else WHITE, line=RED if "q" in hot else EDGE,
               color=WHITE if "q" in hot else INK, pt=15)
+        # Agents are spheres, as lumen draws them: bright while they work.
         if st["lead"]:
-            c.box(*LEAD, "lead agent", fill=RED if "lead" in hot else WHITE, line=RED if "lead" in hot else INK,
-                  color=WHITE if "lead" in hot else INK, pt=15, lw=2)
-            c.line([(2.6, 2.65), (3.6, 2.65)], RULE, 2.5)
+            on = "lead" in hot
+            c.line([(2.6, 2.65), (4.2, 2.65)], RULE, 2.5)
+            c.sphere(4.7, 2.65, 0.5, 1.0 if on else 0.45)
+            c.text(4.0, 3.2, 1.4, 0.32, "lead agent", 14, True, INK if on else GRAY)
         for i in range(st["readers"]):
             x, y = R[i]
             on = ("r%d" % i) in hot
-            c.line([(5.8, 2.65), (6.4, 2.65), (6.4, y + 0.35), (7.0, y + 0.35)], RULE, 2.5)
-            c.box(x, y, 1.6, 0.7, "reader %d" % (i + 1), fill=RED if on else WHITE, line=RED if on else INK,
-                  color=WHITE if on else INK, pt=13, lw=2)
+            c.line([(5.2, 2.65), (6.4, 2.65), (6.4, y + 0.35), (7.35, y + 0.35)], RULE, 2.5)
+            c.sphere(7.7, y + 0.35, 0.33, 1.0 if on else 0.45)
+            c.text(7.15, y + 0.72, 1.1, 0.28, "reader %d" % (i + 1), 12, True, INK if on else GRAY)
             for j in range(st["steps"][i + 1]):
-                c.rect(8.75 + j * 0.3, y + 0.2, 0.22, 0.3, fill=INK, line=INK)
+                c.rect(8.75 + j * 0.42, y + 0.2, 0.26, 0.3, fill=INK)
         for j in range(st["steps"][0]):
-            c.rect(3.65 + j * 0.3, 3.25, 0.22, 0.3, fill=INK, line=INK)
+            c.rect(4.25 + j * 0.42, 3.6, 0.26, 0.3, fill=INK)
         if st["steps"][0]:
-            c.text(3.6, 3.6, 2.2, 0.3, "steps", 12, True, GRAY, "left")
+            c.text(4.25, 3.95, 2.2, 0.3, "steps", 12, True, GRAY, "left")
         if st["readers"]:
             c.text(8.75, 0.85, 2.0, 0.3, "steps", 12, True, GRAY, "left")
         # the meter: cost against the account's cap
@@ -292,14 +392,14 @@ def tree():
             c.square(x, y, col)
 
     sc = Scene(paint)
-    sc.say("A real question on our server", "Every box is an agent. Every small square is a step it took.")
+    sc.say("A real question on our server", "Every sphere is an agent. Every small block is a step it took.")
     st.update(lead=True, readers=3, steps=[2, 3, 3, 2], cost=0.03, found=3, answer=True)
     sc.snap(2000)
     st.update(lead=False, readers=0, steps=[0, 0, 0, 0], cost=0.0, found=0, answer=False)
     sc.say("1. You ask a question", "")
     st["lit"] = {"q"}
     sc.snap(800)
-    sc.move(700, lambda u: st.update(sq=[(lerp(2.6, 3.6, u), 2.65, BLUE)]))
+    sc.move(700, lambda u: st.update(sq=[(lerp(2.6, 4.2, u), 2.65, BLUE)]))
     st.update(sq=[], lead=True, lit={"lead"})
     sc.say("2. A lead agent plans, and splits the work", "")
     for k in (1, 2):
@@ -308,7 +408,7 @@ def tree():
         sc.snap(450)
     sc.say("3. Three readers work at the same time", "Each one reads, runs commands and writes notes.")
     st["readers"] = 3
-    sc.move(800, lambda u: st.update(sq=[(*along([(5.8, 2.65), (6.4, 2.65), (6.4, y + 0.35), (7.0, y + 0.35)], u), BLUE)
+    sc.move(800, lambda u: st.update(sq=[(*along([(5.2, 2.65), (6.4, 2.65), (6.4, y + 0.35), (7.35, y + 0.35)], u), BLUE)
                                            for (_, y) in R]))
     st.update(sq=[], lit={"r0", "r1", "r2"})
     for k in range(1, 4):
@@ -327,7 +427,7 @@ def tree():
     st.update(answer=True, lit={"q"})
     sc.snap(2400)
     st["lit"] = set()
-    sc.say("A real question on our server", "Every box is an agent. Every small square is a step it took.")
+    sc.say("A real question on our server", "Every sphere is an agent. Every small block is a step it took.")
     sc.snap(1400)
     sc.c.save("tree.gif")
 
@@ -354,7 +454,7 @@ def platform():
         c.box(4.5, 3.05, 3.2, 1.5, fill=WHITE, line=RED if "run" in hot else EDGE, lw=2.5 if "run" in hot else 1.25)
         c.text(4.6, 3.08, 3.0, 0.3, "runs it: steps, cost, cap", 12, True, GRAY, "left")
         for j in range(st["run"]):
-            c.rect(4.7 + j * 0.3, 3.65, 0.22, 0.3, fill=INK, line=INK)
+            c.rect(4.7 + j * 0.42, 3.65, 0.26, 0.3, fill=INK)
         # consumers
         c.text(8.8, 1.05, 3.2, 0.35, "consumers", 14, True, GRAY, "left")
         c.box(8.8, 1.5, 3.0, 0.8, "web app", fill=RED if "web" in hot else WHITE, line=RED if "web" in hot else EDGE,
@@ -871,7 +971,7 @@ def keys():
             c.text(4.0, y - 0.38, 6, 0.3, "many requests at once", 13, True, GRAY, "left")
             for j in range(min(st["count"], 24)):
                 over = j >= 21
-                c.rect(4.0 + j * 0.3, y, 0.22, 0.34, fill=RED if over else INK, line=RED if over else INK)
+                c.rect(4.0 + j * 0.3, y, 0.2, 0.34, fill=INK if over else GRAY)
             if st["limited"]:
                 c.box(4.0 + 21 * 0.3 - 0.05, y + 0.45, 1.7, 0.42, "429  slow down", fill=RED, line=RED, color=WHITE, pt=12)
         if st["sq"]:
@@ -901,7 +1001,27 @@ def keys():
     sc.c.save("keys.gif")
 
 
-ALL = dict(problem=problem, tree=tree, platform=platform, services=services, depth=depth, hosting=hosting,
+def stills():
+    """Two pictures for the slides themselves: the dot field behind a section slide, and
+    lumen's sphere among stars for the title, drawn the way the landing page draws them."""
+    import random
+    c = Canvas(13.333, 7.5)
+    c.begin()
+    c.end(0)
+    c.frames[-1].save(os.path.join(OUT, "field.png"))
+    c = Canvas(13.333, 7.5)
+    c.begin()
+    rnd = random.Random(7)
+    for _ in range(260):                          # stars: each lights its nearest cell
+        x, y = rnd.uniform(7.6, 13.3), rnd.uniform(0.1, 7.4)
+        c.rect(x, y, 0.07, 0.07, fill=rnd.uniform(0.25, 0.9))
+    c.sphere(10.4, 3.75, 2.45, 1.0)
+    c.end(0)
+    c.frames[-1].save(os.path.join(OUT, "title.png"))
+    print("field.png, title.png")
+
+
+ALL = dict(stills=stills, problem=problem, tree=tree, platform=platform, services=services, depth=depth, hosting=hosting,
            scale=scale, kill=kill, pipeline=pipeline, keys=keys)
 
 if __name__ == "__main__":

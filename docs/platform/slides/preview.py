@@ -14,8 +14,21 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
 DPI = 110
-FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"
-FONT_B = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+SWITZER = os.path.join(HERE, "..", "..", "..", "apps", "web", "public", "fonts", "switzer.woff2")
+MONO = os.path.join(HERE, "..", "..", "..", "apps", "web", "public", "fonts", "jetbrains-mono.woff2")
+WEIGHT = {"Switzer": "Regular", "Switzer Medium": "Medium", "Switzer Semibold": "Semibold"}
+_fonts = {}
+
+
+def face(name, pt):
+    """The face the deck names, at its size on the slide."""
+    key = (name, pt)
+    if key not in _fonts:
+        f = ImageFont.truetype(MONO if name == "JetBrains Mono" else SWITZER, round(pt / 72 * DPI))
+        if name != "JetBrains Mono":
+            f.set_variation_by_name(WEIGHT.get(name, "Regular"))
+        _fonts[key] = f
+    return _fonts[key]
 
 
 def rgb(h):
@@ -42,17 +55,21 @@ def main():
     os.makedirs(os.path.join(OUT, "preview"), exist_ok=True)
     problems = []
     for n, slide in enumerate(spec, 1):
-        im = Image.new("RGB", (round(13.333 * DPI), round(7.5 * DPI)), rgb(slide["bg"]))
+        size = (round(13.333 * DPI), round(7.5 * DPI))
+        im = Image.new("RGB", size, rgb(slide["bg"]))
+        if slide.get("backdrop"):
+            im.paste(Image.open(slide["backdrop"]).convert("RGB").resize(size), (0, 0))
         d = ImageDraw.Draw(im)
         for it in slide["items"]:
             box = [it["x"] * DPI, it["y"] * DPI, (it["x"] + it["w"]) * DPI, (it["y"] + it["h"]) * DPI]
             if it["kind"] == "rect":
-                d.rectangle(box, fill=rgb(it["fill"]), outline=rgb(it["line"]))
+                d.rectangle(box, fill=rgb(it["fill"]) if it.get("fill") else None,
+                            outline=rgb(it["line"]) if it.get("line") else None)
             elif it["kind"] == "image":
                 pic = Image.open(it["file"]).convert("RGB").resize((round(it["w"] * DPI), round(it["h"] * DPI)))
                 im.paste(pic, (round(box[0]), round(box[1])))
             else:
-                f = ImageFont.truetype(FONT_B if it.get("bold") else FONT, round(it["fontSize"] / 72 * DPI))
+                f = face(it.get("fontFace", "Switzer"), it["fontSize"])
                 lines = wrap(d, it["text"], f, box[2] - box[0])
                 asc, desc = f.getmetrics()
                 lh = (asc + desc) * 1.05

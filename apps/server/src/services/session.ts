@@ -39,6 +39,7 @@ import {
   strictTransport,
 } from './shared/env.js';
 import { requireInternalKey } from './shared/internal.js';
+import { registerApprovalResume } from './shared/approvalResume.js';
 import { QueueWorker } from './shared/queueWorker.js';
 import { connectRabbit } from './shared/rabbit.js';
 import { run, serve } from './shared/serve.js';
@@ -127,14 +128,7 @@ run(log, async () => {
 
   registerTurnRoutes(server, turns, key);
   registerDirectoryRoutes(server, session.projects, key);
-  server.post<{ Body: { accountId: string; approvalId: string } }>(
-    '/internal/approvals/resume',
-    { preHandler: requireInternalKey(key) },
-    async (request, reply) => {
-      await session.approvals.requestResume(request.body);
-      return reply.status(204).send();
-    },
-  );
+  registerApprovalResume(server, session.approvals, key);
 
   await serve(server, log, [() => bus.close(), () => db.close()]);
   log.info('session service listening; turns go to lumen.turns');

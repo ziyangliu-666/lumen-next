@@ -236,8 +236,8 @@ shown(
 }
 {
   const s = newSlide();
-  head(s, 'Overview', 'Scope', 'What we built, and what we left out');
-  txt(s, 'built and running on the public server', {
+  head(s, 'Overview', 'Scope', 'Six use cases, on a public platform');
+  txt(s, 'use cases', {
     x: 0.6,
     y: 1.85,
     w: 6,
@@ -268,24 +268,25 @@ shown(
     });
     txt(s, t, { x: 1.5, y: y + 0.08, w: 5.2, h: 0.5, fontSize: 18, valign: 'middle' });
   });
-  txt(s, 'left out', { x: 7.3, y: 1.85, w: 5, h: 0.3, fontSize: 14, color: GRAY });
+  txt(s, 'the platform around them', { x: 7.3, y: 1.85, w: 5, h: 0.3, fontSize: 14, color: GRAY });
   const out = [
-    'Payments to producers',
-    'More than one region',
-    'One database per service',
-    'EKS, with node autoscaling',
-    'Agents as remote endpoints',
-    'Tracing and metrics',
+    'Five services on k3s, on AWS',
+    "Public HTTPS with Let's Encrypt",
+    'Autoscaling: HPA and KEDA',
+    'A versioned API, with OpenAPI',
+    'A CI/CD pipeline with security scans',
+    'A k6 load test',
   ];
   out.forEach((t, i) => {
     const y = 2.25 + i * 0.66;
     rect(s, 7.3, y, 5.43, 0.01, RULE);
-    txt(s, t, { x: 7.3, y: y + 0.08, w: 5.4, h: 0.5, fontSize: 18, color: GRAY, valign: 'middle' });
+    txt(s, t, { x: 7.3, y: y + 0.08, w: 5.4, h: 0.5, fontSize: 18, valign: 'middle' });
   });
   s.addNotes(
-    'Scope. The six use cases of the proposal are built and run on the public server, with autoscaling, the pipeline and HTTPS. ' +
-      'We left out payments and more regions, as the proposal said. We moved four things to the roadmap: a database per service, EKS, ' +
-      'agents as remote endpoints from producers, and tracing. The report gives the reason for each.',
+    'Scope. The six use cases of our proposal, all built and running on the public server: ' +
+      'a producer publishes an agent, a consumer asks with it through an API key, the owner approves a step over the cap, ' +
+      'usage is read per agent, and a second app, the literature watch, runs on the platform. ' +
+      'Around them: five services on k3s, HTTPS, autoscaling, the API, the pipeline and a load test.',
   );
 }
 

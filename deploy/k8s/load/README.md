@@ -28,8 +28,13 @@ is set, so force demo mode first:
 helm upgrade lumen deploy/k8s/lumen -n lumen --reuse-values --set-string config.worker=demo
 ```
 
-On the public host, run the `Platform deploy` workflow by hand with
-`worker: demo`.
+On the public host, coordinate with the core owner before changing the shared
+worker mode, then run the `Platform deploy` workflow by hand with `worker: demo`.
+Neither this script nor `demo.sh` switches the worker mode automatically.
+
+The separately coordinated real-model run on 21 October is recorded in
+`docs/platform/evidence/2026-10-21-load-real-model.md`. It incurred provider
+calls and is not the default cost-free smoke procedure.
 
 Each demo question records USD 0.03, and each account has a USD 1 cap. Thus
 one account holds about 33 questions. The pool (`POOL`, default 60) is larger
@@ -56,7 +61,7 @@ trailing slash. The identity slice refuses a write from any other origin.
 | Variable | Default | Meaning |
 |---|---|---|
 | `LUMEN_URL` | none | The origin to test. Required. |
-| `PROFILE` | `full` | `full`: 1 to 30 VUs over 2 min, hold 3 min, down over 1 min. `short`: 1 to 10 VUs over 30 s, hold 1 min, down over 20 s. `smoke`: 2 VUs for 30 s. `demo.sh` uses `short`; the deploy pipeline runs `smoke` after each deploy. |
+| `PROFILE` | `full` | `full`: 1 to 30 VUs over 2 min, hold 3 min, down over 1 min. `short`: 1 to 10 VUs over 30 s, hold 1 min, down over 20 s. `smoke`: 2 VUs for 30 s. `demo.sh` uses `short`; the deploy pipeline runs `smoke` only after a deploy whose effective worker mode is `demo`; it skips paid steering-mode runs. |
 | `POOL` | `60` | The number of accounts that `setup()` creates. |
 | `SUMMARY` | `summary.json` | The file for the JSON summary. |
 

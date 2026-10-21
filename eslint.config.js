@@ -24,6 +24,8 @@ export default tseslint.config(
       'deploy/k8s/load/**',
       // The literature watch: plain Node ESM that runs from a ConfigMap, outside every tsconfig.
       'apps/watch/**',
+      // The presentation deck's builder: a plain Node script, outside every tsconfig.
+      'docs/platform/slides/**',
       // The status board: one static page and its data, read by a browser as they are.
       'docs/status/**',
       // Files the web server sends to the browser byte for byte (theme-init.js

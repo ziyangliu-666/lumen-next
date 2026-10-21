@@ -1,0 +1,8 @@
+{
+  "name": "lumen-ass-slides",
+  "private": true,
+  "description": "Builds the ASS presentation deck. Not part of the npm workspaces.",
+  "dependencies": {
+    "pptxgenjs": "3.12.0"
+  }
+}

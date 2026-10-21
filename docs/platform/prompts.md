@@ -1,5 +1,11 @@
 # Prompts for each member's AI assistant
 
+These are the original 20 October assignment prompts, retained as history.
+They are not the current backlog or deployment configuration. Shared adapters
+and services have since landed. Use `contract.md`, `requirements-check.md`,
+the current code/chart and dated evidence for follow-up work: names, queue
+layout, prefetch and migration startup have evolved since these prompts.
+
 Each member copies their own prompt, from the line under their name to the end
 of the code block, into their AI coding assistant. Run it from the root of a
 fresh clone of `lumen-next`. Each prompt is complete: it names the branch, the

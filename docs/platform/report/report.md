@@ -153,7 +153,7 @@ service as built. The owners follow `docs/platform/contract.md`.
 
 ### 2.2 Project Status
 
-On 20 October 2026 the status is as follows.
+As of 21 October 2026 the status is as follows.
 
 Done, deployed and verified on the public host:
 
@@ -173,12 +173,20 @@ Done, deployed and verified on the public host:
   image scan, deploy, DAST, smoke load). The run before it stopped on purpose
   at the image scan (section 5.3).
 
-Limits of the current demonstration:
+Latest evidence and limits of the current demonstration:
 
-- The workers on the host run in demo mode, because no model key is set yet.
-  The answers are placeholders that show the input the worker received. The
-  team adds a model key with a low spending limit at the provider before the
-  presentation.
+- The 21 October real-model run used steering with gpt-4.1-nano. Of 131
+  questions, 130 were at rest when the profile ended; one was still running.
+  HTTP failures were 0%, median time to rest was 4.1 s and p95 was 27.0 s.
+  KEDA scaled workers from 1 to 2 and back to 1. See
+  `docs/platform/evidence/2026-10-21-load-real-model.md`.
+- Deployment run 39542685448 passed verify, SCA, SAST, image scan/deploy and
+  DAST. Its k6 smoke job was skipped as designed in steering mode; the green
+  pipeline does not mean that a new smoke load ran.
+- The recorded short profiles demonstrate observed scaling, not the full
+  profile or the proposal's maximum capacity. A hosted cross-service approval
+  scenario still needs its own evidence; local integration tests do not prove
+  the live ingress and queue configuration.
 
 Outstanding issues:
 
@@ -1058,7 +1066,7 @@ How a deployment is verified:
 
 - `helm --wait` waits for every readiness probe;
 - the workflow polls the public health check;
-- the DAST scan and the smoke load run against the live address;
+- DAST runs against the live address; smoke load does so only in demo mode;
 - `deploy/k8s/demo.sh` checks the whole flow by hand.
 
 Measured: pipeline run 39441445313 (20 October 2026) passed every stage. The
@@ -1127,11 +1135,13 @@ Delete everything after the grades are out.
 `deploy/k8s/demo.sh` runs the demonstration against the public address. It
 prints each command before it runs it and waits for Enter.
 
-The workers on the host run in demo mode, because no model key is set yet. A
-demo answer is a placeholder that shows the input the worker received; the
-steps, the fan-out, the costs and the scaling are real. The team adds a model
-key with a low spending limit at the provider before the presentation. The
-load test (step 7) always uses demo mode, so it costs nothing.
+The 21 October recording uses steering with gpt-4.1-nano; see
+`docs/platform/evidence/2026-10-21-load-real-model.md`. For a cost-free load
+rehearsal, first coordinate switching the deployment to `LUMEN_WORKER=demo`.
+`demo.sh` does not switch modes automatically: running its load step against
+steering workers makes paid model calls. The deploy pipeline automatically
+runs smoke load only in demo mode. Keep the existing recordings as a fallback
+and confirm the mode and provider budget before the live demonstration.
 
 Its steps:
 

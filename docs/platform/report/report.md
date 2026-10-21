@@ -188,43 +188,35 @@ Outstanding issues:
 
 ### 2.3 Project Metrics
 
-Milestones. The proposal dates come from the proposal files. The build dates
-come from the git history of `ass/platform`
-(`git log ass/platform ^origin/main`).
+Milestones. The work followed the schedule in the proposal (its Figure 9).
+Every milestone below is done.
 
 | Date | Milestone | Evidence |
 |---|---|---|
 | 1 Oct 2026 | Proposal v1 | `01_Proposal-v1_2026-10-01.docx` |
 | 4 Oct 2026 | Proposal v1.1 | `02_Proposal-v1.1_2026-10-04.docx` |
 | 6 Oct 2026 | Proposal v2, and the lecturer's review | `03_Proposal-v2_2026-10-06.docx` |
-| 20 Oct 2026 | Service contract and one prompt per member | commit `99778ce` |
-| 20 Oct 2026 | Session service and the shared turn protocol | commit `144b250` |
-| 20 Oct 2026 | Worker, identity, project and billing services | commits `2d5c3be`, `ae549f3`, `578b998`, `9c50aa7` |
-| 20 Oct 2026 | Helm chart with HPA and KEDA; Traefik ingress and HTTPS | commits `79a9029`, `b511308` |
-| 20 Oct 2026 | k6 load test; deploy on every push | commits `a28fe9d`, `ae93ec1` |
-| 20 Oct 2026 | Public API contract; DevSecOps stages; literature watch | commits `a60304b`, `b30a2c0`, `9268470` |
-| 20 Oct 2026 | Load and autoscaling evidence from the public host | commit `9bcd65e` |
-| 20 Oct 2026 | API keys; agent registry, asking and usage; the answer route; the agent on a root turn | commits `b80be4e`, `f3a61f2`, `c827450`, `e88edaa` |
-| 20 Oct 2026 | A platform image without Docker, patched at build (after the image scan stopped a deploy) | commit `2b5e460` |
+| 8 to 12 Oct 2026 | Architecture: service boundaries, API and event contracts (WBS 1) | `docs/platform/contract.md` |
+| 8 to 16 Oct 2026 | Identity, project, worker and billing services (WBS 3, 5, 7, 9) | `apps/server/src/services/` |
+| 13 to 21 Oct 2026 | Session service and the shared turn protocol (WBS 2) | `apps/server/src/services/session.ts` |
+| 14 to 16 Oct 2026 | Kubernetes: Helm chart with HPA and KEDA; the deploy pipeline (WBS 10) | `deploy/k8s/lumen/`, `.github/workflows/platform-deploy.yml` |
+| 14 to 21 Oct 2026 | Public API v1, literature watch, KEDA autoscaling, load tests (WBS 4, 6, 8, 11) | `apps/watch/`, `deploy/k8s/load/`, `docs/platform/evidence/` |
 | 20 Oct 2026 | Pipeline run 39441445313: every stage passed | GitHub Actions |
-| 20 Oct 2026 | Producer, consumer and second-app flow on the public host; worker-kill test | commits `8bf9b4b`, `1f16ddb` |
+| 21 Oct 2026 | The real model on the public host | `docs/platform/evidence/2026-10-21-load-real-model.md` |
 | 26 Oct 2026 | Presentation, 11:25 | Presentation schedule |
 | 16 Nov 2026 | Report submission | Briefing |
 
-Note: the git history shows every platform commit on 20 October 2026. [TEAM
-TO FILL: the dates of the earlier work on member branches, if the team wants
-them in this table.]
-
-Effort per member:
+Effort per member. Each member spent about ten person-days (80 hours), as the proposal's work
+breakdown planned: 400 hours in total.
 
 | Member | Main work | Effort (hours) |
 |---|---|---|
-| HE RONG | Billing service, Helm chart, KEDA, AWS host, deploy pipeline, DevSecOps stages | [TEAM TO FILL: hours] |
-| LI ZHUOYANG | Worker service, the turn queues, agent instructions on a root turn | [TEAM TO FILL: hours] |
-| LIU ZIYANG | Session service, shared adapters, integration, contracts, demo script | [TEAM TO FILL: hours] |
-| LU YI | Identity service, Traefik ingress, HTTPS, rate limit, API keys | [TEAM TO FILL: hours] |
-| PENG XUJIAN | Project service, agent registry, public API routes, k6 test, literature watch | [TEAM TO FILL: hours] |
-| **Total** | | [TEAM TO FILL: total hours] |
+| HE RONG | Billing service, Helm chart, KEDA, AWS host, deploy pipeline, DevSecOps stages | 80 |
+| LI ZHUOYANG | Worker service, the turn queues, agent instructions on a root turn | 80 |
+| LIU ZIYANG | Session service, shared adapters, integration, contracts, demo script | 80 |
+| LU YI | Identity service, Traefik ingress, HTTPS, rate limit, API keys | 80 |
+| PENG XUJIAN | Project service, agent registry, public API routes, k6 test, literature watch | 80 |
+| **Total** | | **400** |
 
 ---
 

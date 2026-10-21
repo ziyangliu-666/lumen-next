@@ -144,9 +144,11 @@ def milestones():
         for i, d in enumerate(DAYS):
             c.text(X0 + i * DW, Y0 + 5 * RH + 0.05, DW, 0.3, str(d), 13, "Regular", INK2 if i < t else INK3)
         c.text(X0, Y0 + 5 * RH + 0.38, X1 - X0, 0.3, "October 2026", 13, "Regular", INK3)
+        c.text(LX, Y0 - 0.38, X0 - LX - 0.15, 0.3, "effort", 13, "Regular", INK3, "right")
         for r, (who, tasks) in enumerate(PLAN):
             y = Y0 + r * RH
             c.text(LX, y, X0 - LX - 0.1, BH, who, 15, "Medium", INK, "left")
+            c.text(LX, y, X0 - LX - 0.15, BH, "80 h", 14, "Regular", INK2, "right")
             for task, a, b in tasks:
                 x, w = X0 + a * DW + 0.04, (b - a + 1) * DW - 0.08
                 state = "done" if t > b + 0.999 else ("active" if t > a else "faint")

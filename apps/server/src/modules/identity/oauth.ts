@@ -17,7 +17,7 @@ export interface OAuthProvider {
 }
 export class OAuthEmailConflict extends Error {
   constructor() {
-    super('Sign in with your existing method; automatic email linking is disabled');
+    super('The account with this email holds a different identity of this provider');
     this.name = 'OAuthEmailConflict';
   }
 }
@@ -97,12 +97,48 @@ export class OAuthAccounts {
           if (existing[0].suspended) throw new AuthFailure('invalid_credentials');
           return { accountId: existing[0].accountId, role: existing[0].role };
         }
-        // Never attach a provider to an existing account just because emails match.
-        const collision = await sql.query(
-          'select id from accounts where lower(btrim(email)) = $1',
+        // The provider has verified this email, so it proves the person owns
+        // the account that has it. A second identity of the same provider is
+        // still refused: one account holds one GitHub and one Google identity.
+        const owner = await sql.query<Principal & { suspended: boolean; proven: boolean }>(
+          `select a.id as "accountId", a.role, a.suspended,
+             exists (select 1 from identity_email_verifications v
+                     where v.account_id = a.id and lower(btrim(v.email)) = $1)
+             or exists (select 1 from credentials c
+                        where c.account_id = a.id and c.kind <> 'password') as proven
+           from accounts a where lower(btrim(a.email)) = $1 for update`,
           [email],
         );
-        if (collision.length) throw new OAuthEmailConflict();
+        if (owner[0]) {
+          const account = owner[0];
+          if (account.suspended) throw new AuthFailure('invalid_credentials');
+          const held = await sql.query(
+            'select id from credentials where account_id = $1 and kind = $2',
+            [account.accountId, kind],
+          );
+          if (held.length) throw new OAuthEmailConflict();
+          if (!account.proven) {
+            // Nobody proved this email before: someone else can have
+            // registered it with a password before its owner came. That
+            // password and its sessions go, so they cannot reach the account
+            // that the owner now signs in to.
+            await sql.query("delete from credentials where account_id = $1 and kind = 'password'", [
+              account.accountId,
+            ]);
+            await sql.query('delete from auth_sessions where account_id = $1', [account.accountId]);
+          }
+          await sql.query(
+            `insert into credentials (account_id, kind, external_provider, external_id)
+             values ($1, $2, $2, $3)`,
+            [account.accountId, kind, profile.subject],
+          );
+          await sql.query(
+            `insert into identity_email_verifications (account_id, email) values ($1, $2)
+             on conflict (account_id) do update set email = excluded.email, verified_at = now()`,
+            [account.accountId, email],
+          );
+          return { accountId: account.accountId, role: account.role };
+        }
         const created = await sql.query<Principal>(
           `insert into accounts (email, display_name, role) values ($1, $2, 'user')
            returning id as "accountId", role`,

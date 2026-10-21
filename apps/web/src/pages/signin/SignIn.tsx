@@ -107,7 +107,7 @@ function AccountSignIn(): JSX.Element {
   const [error, setError] = useState<string | null>(() => {
     const code = new URLSearchParams(window.location.search).get('authError');
     return code === 'oauth_email_conflict'
-      ? 'This email already belongs to an account. Sign in using its existing method. Automatic account linking is disabled.'
+      ? 'This email belongs to an account that uses a different account of this provider. Sign in with that one.'
       : code === 'oauth_failed'
         ? 'Provider sign-in failed or expired. Please try again.'
         : null;

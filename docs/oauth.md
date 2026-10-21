@@ -15,5 +15,8 @@ Register these callback URLs with the provider, on the origin in `LUMEN_ORIGIN`:
 The origin must be HTTPS. For local development, `http://localhost:4000` works
 when `IDENTITY_INSECURE_COOKIES=true` and `NODE_ENV` is not `production`.
 
-Accounts with the same email are not linked: a GitHub sign-in and a Google
-sign-in are two accounts.
+A provider sign-in with a verified email opens the account that has that
+email. If nobody proved that email before, its password is removed, so a
+person who registered someone else's email cannot keep access.
+
+Both providers show their account picker each time.

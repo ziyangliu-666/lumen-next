@@ -5,6 +5,8 @@ Live is the Scene these scenes use: a worker is a gear that turns while it is bu
 thing that moves is the business object (a question, a paper, a container image), drawn as
 its icon. scenes_proof.py uses Live too."""
 import os
+
+import draw
 import random
 
 from draw import FPS, INK, INK2, INK3, OUT, W, Canvas, Scene
@@ -26,6 +28,7 @@ class Live(Scene):
         self.spun = []                         # the last frame of each turning hold, for checking
 
     def _draw(self):
+        draw.NOW = self.t
         if self.st["busy"]:
             self.st["turn"] += SPIN
         c = Canvas()
@@ -63,7 +66,7 @@ def carry(c, x, y, kind, s=0.32):
 def gear(c, x, y, s, label=None, busy=False, turn=0.0, lit=None, faint=False, size=14):
     """A worker. It turns only while busy; a still gear does no work."""
     icon(c, "gear", x, y, s, lit=busy if lit is None else lit, label=label, faint=faint, size=size,
-         turn=turn if busy else 0.0)
+         turn=turn if busy else 0.0, still=not busy)
 
 
 def clock(c, x, y, r=0.1, color=INK2):

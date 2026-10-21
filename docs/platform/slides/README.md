@@ -57,6 +57,12 @@ spend. A busy worker's gear turns. `python3 icons.py` draws them all into
 `out/icons.png`. Settled on 21 October 2026, after the user found the boxes
 of words hard to read at a glance.
 
+**Everything moves.** Each icon has a small motion of its own: a gear turns, a
+database band runs down, a stream's newest line is written, a page loads, a
+coin spins. A lit icon moves twice as fast, and a lit connector flows. A
+waiting worker's gear stands still, so a stop means something. A hold is drawn
+frame by frame (`HOLD_FPS`), and `gifsicle` compresses each GIF to 32 greys.
+
 **Halftone, rarely.** Only the agents (spheres, as on lumen's landing page) and
 the title and end slides are halftone. At most one halftone group per slide:
 the agents of one question count as one group.

@@ -16,6 +16,8 @@ The paint function draws the whole picture from `sc.st` (a dict the scene owns) 
 frame; the moving jobs are in `sc.moving` and are drawn last.
 """
 import os
+import shutil
+import subprocess
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -25,6 +27,8 @@ X2 = 2                                         # drawn at twice the size, then s
 W, H = 12.13, 5.0                              # the GIF's size on the slide, in inches
 FPS = 25
 TOP = 0.95                                     # the title band; the diagram starts below it
+HOLD_FPS = 12.5                                # a hold is drawn too, so things keep moving
+NOW = 0.0                                      # the scene's clock in seconds, for motion that never stops
 
 # lumen's dark palette (apps/web/src/styles/theme.css, .dark)
 BLACK = (0, 0, 0)
@@ -129,10 +133,25 @@ class Canvas:
         self.d.line([(self._p(x), self._p(y)) for x, y in pts], fill=col,
                     width=self._lw(2 if active else pt), joint="curve")
 
+    def flow(self, pts, speed=1.0, gap=0.05, every=0.32):
+        """Marching gaps along a lit connector: something is moving along it now."""
+        segs = list(zip(pts, pts[1:]))
+        total = sum(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5 for a, b in segs)
+        if total < 0.3:
+            return
+        d = (NOW * speed) % every
+        while d < total - 0.12:
+            x, y = along(pts, d / total)
+            r = gap / 2
+            self.d.rectangle([self._p(x - r), self._p(y - r), self._p(x + r), self._p(y + r)], fill=BLACK)
+            d += every
+
     def arrow(self, pts, active=False, color=None):
-        """A connector with a 6 pt arrowhead at its last point."""
+        """A connector with a 6 pt arrowhead at its last point. A lit one flows."""
         col = color or (INK if active else RULE)
         self.line(pts, active, color=col)
+        if active and col == INK:
+            self.flow(pts)
         (x1, y1), (x2, y2) = pts[-2], pts[-1]
         dx, dy = x2 - x1, y2 - y1
         n = max(1e-6, (dx * dx + dy * dy) ** 0.5)
@@ -220,7 +239,11 @@ class Canvas:
 
     # ---- the one halftone thing
     def sphere(self, x, y, r, bright=1.0, cell=0.07):
-        """An agent: a ball lit from the upper left, printed as halftone dots."""
+        """An agent: a ball lit from the upper left, printed as halftone dots. The light
+        drifts round it, so an agent always looks at work."""
+        import math
+        a = NOW * 0.9 + x * 1.7 + y
+        lx, ly = -0.45 + 0.25 * math.cos(a), -0.55 + 0.25 * math.sin(a)
         c = cell
         n = int(r / c) + 1
         for j in range(-n, n + 1):
@@ -230,7 +253,7 @@ class Canvas:
                     continue
                 nx, ny = px / r, py / r
                 nz = max(0.0, 1 - nx * nx - ny * ny) ** 0.5
-                light = max(0.08, min(1.0, 0.25 + 0.75 * (-0.45 * nx - 0.55 * ny + 0.7 * nz))) * bright
+                light = max(0.08, min(1.0, 0.25 + 0.75 * (lx * nx + ly * ny + 0.7 * nz))) * bright
                 rr = c / 2 * light ** 0.5 * 0.95
                 cx, cy = x + px, y + py
                 self.d.ellipse([self._p(cx - rr), self._p(cy - rr), self._p(cx + rr), self._p(cy + rr)], fill=INK)
@@ -249,8 +272,11 @@ class Scene:
         self.title = ""
         self.moving = []                        # (x, y, kind) drawn on top of the picture
         self.frames, self.durs, self.holds = [], [], []
+        self.t = 0.0                            # the scene's clock: every frame moves it on
 
     def _draw(self):
+        global NOW
+        NOW = self.t
         c = Canvas()
         c.text(0.3, 0.18, W - 0.6, 0.55, self.title, 23, "Medium", INK, "left")
         self.paint(c, self.st)
@@ -259,6 +285,8 @@ class Scene:
         return c.frame()
 
     def _add(self, img, ms):
+        self.t += ms / 1000
+        img = img.convert("L")                  # a grey frame is a third of the memory
         if self.frames and img.tobytes() == self.frames[-1].tobytes():
             self.durs[-1] += ms
         else:
@@ -272,8 +300,11 @@ class Scene:
         self.hold(hold)
 
     def hold(self, seconds):
-        self._add(self._draw(), round(seconds * 1000))
-        self.holds.append(len(self.frames) - 1)
+        """The picture stays, and its icons keep moving."""
+        n = max(1, round(seconds * HOLD_FPS))
+        for _ in range(n):
+            self._add(self._draw(), round(1000 / HOLD_FPS))
+        self.holds.append((len(self.frames) - 1, seconds))
 
     def set(self, **changes):
         self.st.update(changes)
@@ -292,13 +323,17 @@ class Scene:
         self.moving = []
 
     def save(self):
-        frames = [f.convert("L") for f in self.frames]
+        frames = self.frames
         os.makedirs(OUT, exist_ok=True)
         frames[0].save(os.path.join(OUT, self.name), save_all=True, append_images=frames[1:],
                        duration=self.durs, loop=0, disposal=1, optimize=False)
+        # Every icon moves in every frame, so the plain GIF is large (17 MB for one scene).
+        # gifsicle keeps only what changed between frames, in 32 greys: about a tenth.
+        if shutil.which("gifsicle"):
+            subprocess.run(["gifsicle", "-b", "-O3", "--colors", "32", os.path.join(OUT, self.name)], check=True)
         self.frames[0].save(os.path.join(OUT, self.name.replace(".gif", ".png")))
         os.makedirs(os.path.join(OUT, "steps"), exist_ok=True)
         # One still per step, for checking: the frames held 1.5 s or longer.
-        for k, i in enumerate(i for i in sorted(set(self.holds)) if self.durs[i] >= 1500):
+        for k, i in enumerate(sorted({i for i, sec in self.holds if sec >= 1.5})):
             self.frames[i].save(os.path.join(OUT, "steps", "%s-%02d.png" % (self.name[:-4], k)))
         print(self.name, len(frames), "frames", round(sum(self.durs) / 1000, 1), "s")

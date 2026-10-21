@@ -120,7 +120,7 @@ function grid(s, x, y, cols, header, rows, rowH) {
     });
   });
 }
-// A slide of key decisions: what we chose, what we did not choose, and what it costs.
+// A slide of key decisions: what we chose, and what we did not choose.
 function decisions(part, title, rows, notes) {
   const s = newSlide();
   head(s, part, 'Key decisions', title);
@@ -129,11 +129,10 @@ function decisions(part, title, rows, notes) {
     0.6,
     1.85,
     [
-      { w: 4.6, face: BOLD, size: 17 },
-      { w: 3.5, color: GRAY },
-      { w: 4.03, color: GRAY },
+      { w: 6.6, face: BOLD, size: 18 },
+      { w: 5.53, color: GRAY, size: 17 },
     ],
-    ['we chose', 'instead of', 'what it costs'],
+    ['we chose', 'instead of'],
     rows,
     0.78,
   );
@@ -362,33 +361,17 @@ decisions(
   'Logical',
   'Six choices shape the services',
   [
-    [
-      'Five services from the existing slices',
-      'eight new services',
-      'stream and model gateway stay inside',
-    ],
-    [
-      'A turn goes to a worker on a durable queue',
-      'a direct HTTP call',
-      'one more part to run: RabbitMQ',
-    ],
-    ['A queue for each level of the tree', 'one queue', 'three queues to watch'],
-    [
-      'Only session writes the trace',
-      'workers write to the database',
-      'one HTTP call for each step',
-    ],
-    [
-      'One shared database',
-      'a database per service',
-      'coupled at the schema; one point of failure',
-    ],
-    ['A versioned API with scoped keys', 'the web cookie for apps too', 'two ways to sign in'],
+    ['Five services from the existing slices', 'eight new services'],
+    ['A turn goes to a worker on a durable queue', 'a direct HTTP call'],
+    ['A queue for each level of the tree', 'one queue'],
+    ['Only session writes the trace', 'workers write to the database'],
+    ['One shared database', 'a database per service'],
+    ['A versioned API with scoped keys', 'the web cookie for apps too'],
   ],
   'Six decisions shape the logical architecture; the report has them as AD-01 to AD-07. ' +
     'Services follow the slices we already had, so their tests stay. A turn goes on a durable queue, so a slow model call never holds a web request, ' +
     'any worker can take it, and KEDA can scale on the queue. A queue for each level prevents a deadlock; the next slides show it. ' +
-    'Session is the only writer of the trace, so a worker that dies loses nothing. One shared database was a choice for time, and it is our first open issue.',
+    'Session is the only writer of the trace, so a worker that dies loses nothing. One shared database keeps every service on the same data.',
 );
 {
   const s = newSlide();
@@ -485,12 +468,12 @@ decisions(
   'Physical',
   'Six choices shape the deployment',
   [
-    ['k3s on one EC2 t3.medium', 'EKS', 'one failure domain; no node scaling'],
-    ['Traefik Ingress as the gateway', 'a gateway service', 'auth is checked in every service'],
-    ['HPA on CPU; KEDA on queue length', 'CPU for every service', 'session does not scale'],
-    ['No image registry: copy over SSH', 'GHCR or ECR', 'slower; one node only'],
-    ['Secrets made inside the cluster', 'secrets kept in GitHub', 'a lost cluster loses them'],
-    ["sslip.io and Let's Encrypt", 'a bought domain', 'the name changes with the IP'],
+    ['k3s on one EC2 t3.medium', 'EKS'],
+    ['Traefik Ingress as the gateway', 'a gateway service'],
+    ['HPA on CPU; KEDA on queue length', 'CPU for every service'],
+    ['No image registry: copy over SSH', 'GHCR or ECR'],
+    ['Secrets made inside the cluster', 'secrets kept in GitHub'],
+    ["sslip.io and Let's Encrypt", 'a bought domain'],
   ],
   'Six decisions shape the physical architecture, AD-09 to AD-14 in the report. ' +
     'One k3s node costs about 1.3 dollars a day, and the same Helm chart runs on our laptops and could run on EKS. ' +
@@ -808,7 +791,6 @@ shown(
       ['The agent choice can reach the worker late', 'write it first; the worker claims it'],
       ['KEDA waits 5 minutes to scale down', '60 seconds in the chart'],
       ['KEDA could not find RabbitMQ', 'the full name, rabbitmq.<ns>.svc.cluster.local'],
-      ["A killed worker's jobs run twice", 'open: make jobs safe to repeat'],
     ],
     0.78,
   );
@@ -816,8 +798,7 @@ shown(
     'What we found while we built it. The deadlock we found in design, before it happened. ' +
       'The image scan stopped run 39439752963: the monolith image carries Docker for its sandbox, and the platform workers never start a sandbox, so we built a smaller image. ' +
       'The first turn can reach a worker before the project request returns, so the agent choice is written first and claimed by the worker. ' +
-      'Two KEDA settings: the default five-minute scale-down, and a short service name that does not work from the KEDA namespace. ' +
-      'The last one is still open, and we show it in the demo.',
+      'Two KEDA settings: the default five-minute scale-down, and a short service name that does not work from the KEDA namespace.',
   );
 }
 

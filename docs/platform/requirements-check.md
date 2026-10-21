@@ -44,19 +44,19 @@ Status: **Built** (on the branch and deployed), **Partial**, **Unconfirmed**.
 | R9 | Platform operations and data; analytics. | Briefing p3, p10; proposal UC5 | Built | `/api/v1/usage`: sessions, cost and median time to rest per agent for producers and per account for consumers; everything for staff. Staff administration also shows accounts and the ledger. |
 | R10 | A fortnightly progress report in Canvas ("PM Progress Reports"). | Briefing p14 | Unconfirmed | No submission receipt is recorded here. The team must confirm the Canvas submission date; repository evidence alone cannot establish whether it was submitted. |
 | R11 | A 40-minute presentation in the given outline, with an 8-minute demo. | Guidelines | Partial | `deploy/k8s/demo.sh` and `slides/out/Team15-Lumen-Platform.pptx` exist, including recorded public-host scenes. Timed rehearsal and final speaker allocation still need team confirmation. |
-| R12 | A report in the template, due 16 November. | Template | Partial | `report/report.md` and the Word export exist, including AD-01 to AD-20 and architectural limitations. Actual hours, submission date and repository review rules remain team placeholders; regenerate the final Word export after completing them. |
+| R12 | A report in the template, due 16 November. | Template | Partial | `report/report.md` and the Word export exist, including AD-01 to AD-20 and architectural limitations. The lead records approximately 80 hours per member from the proposal. Submission date and review rules still need confirmation. Source and Word runtime status have been updated; final fields and rehearsal remain. |
 
 ## Remaining acceptance and delivery work before 26 October
 
-1. **Hosted approval acceptance** (billing/session). Local Postgres and
-   real-HTTP acceptance now passes grant, rejection, account isolation and
-   delivery retry after a billing restart; see
-   `evidence/2026-10-21-approval-http.md` for the test and reproduction command.
-   Local success is not evidence of a hosted ingress/queue run; record that
-   approval run separately when the team schedules it.
-2. **Submission and effort records** (R10, R12). Confirm the Canvas receipt,
-   actual member hours and repository review rules. Do not infer them from
-   commit counts. Finish the report source, then refresh its Word export.
+1. **Hosted approval acceptance completed** (billing/session). The 21 October
+   run proved waiting → ended on grant, waiting → stopped at zero spend on
+   reject, delivery acknowledgement and a harmless repeated grant. See
+   `evidence/2026-10-21-hosted-approval.md`. Restart/retry remains covered by
+   the isolated HTTP test, not by an injected failure on the shared host.
+2. **Submission and effort records** (R10, R12). The lead's 21 October report
+   records approximately 80 hours per member using the proposal's allocation.
+   A detailed personal time log and Canvas receipt are not recorded here.
+   Confirm the submission and review rules, and complete the remaining fields.
 3. **Presentation rehearsal** (R11). Time the 40-minute presentation and
    8-minute demo with the existing deck and recordings; confirm who speaks.
 4. **Capacity claims** (R2). Keep the recorded short-profile results distinct
@@ -79,3 +79,9 @@ resolution and a timeline.
 | One EC2 node, not EKS. | Cost (about USD 1.3 a day) and time. The same chart runs on EKS. | EKS with node autoscaling, and EFS for the worker's shared volume. |
 | A redelivered turn runs again from its start. | A worker that dies mid-turn is rare; the question still finishes. | Make turns idempotent, or resume from the recorded steps. |
 | No network policies, no tracing. | Time. | Network policies that allow only the calls in the contract; OpenTelemetry with one trace id per question. |
+
+## Hosted optional integrations
+
+The 21 October acceptance account saw `GET /api/wallet/topups` return
+`enabled: false`. Hosted Stripe test Checkout/webhook validation still needs
+core-owned test configuration; no real payment is part of this acceptance.

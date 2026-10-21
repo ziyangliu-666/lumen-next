@@ -74,10 +74,13 @@ wallet/admin operations. The test PR is not included in this deployed base.
 
 ## Hosted follow-up
 
+Update: the normal grant/reject follow-up passed later on 21 October; see
+`2026-10-21-hosted-approval.md`. The procedure below records the original plan.
+
 Coordinate with the session/core owner for one isolated test account and an
 agreed worker mode/provider budget. Capture an over-cap task waiting, approve
 it in Wallet, and record the same task resuming through the worker queue and
 its ledger entry. Repeat rejection on another waiting task and confirm no
 worker execution. Save redacted task/approval IDs and timestamps with the
 image SHA and worker mode. Do not capture cookies, service keys or provider
-keys. Keep this hosted result pending until that evidence exists.
+keys. The linked follow-up supplies this evidence for the normal grant/reject path.

@@ -1,18 +1,17 @@
 # Report source and export status
 
-`report.md` is the editable report source. Its status and demonstration sections
-were reconciled on 21 October with the recorded real-model run and deployment
-39542685448.
+`report.md` is the editable source. The lead updated the Word export and
+proposal-based effort/milestones on 21 October. This closeout also corrects
+the Word runtime-status paragraphs and adds hosted approval evidence, while
+preserving the lead's effort table and existing layout.
 
-`Team15-Lumen-Platform-Report.docx` is the earlier 20 October export. It has not
-been regenerated from these corrections and is not the final submission copy.
-Use the Markdown source for current claims. Before submission, fill the team
-placeholders, regenerate the Word export in the course template, update its
-table of contents and inspect every page. Do not submit the old export as if it
-included the 21 October evidence.
+The source and Word export now record real-model operation and the hosted
+approval result. Stripe top-up is disabled on the tested deployment. The
+80 hours per member are the approximation recorded by the team from the
+proposal; this repository does not supply a personal daily timesheet.
 
-The remaining team inputs are the Canvas progress-report submission date,
-actual hours per member, earlier member-branch dates, and branch protection
-and review rules. These facts cannot be supplied by a code test or inferred
-from commit attribution. The presentation deck is maintained separately in
-`../slides/`, with its current output at `../slides/out/Team15-Lumen-Platform.pptx`.
+The Canvas progress-report receipt and repository review rules still need
+team confirmation. The final Word submission also needs those fields and an
+updated table of contents. These facts cannot be invented from test results
+or commit attribution. The presentation deck is maintained in `../slides/`,
+with its output at `../slides/out/Team15-Lumen-Platform.pptx`.

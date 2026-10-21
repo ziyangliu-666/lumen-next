@@ -183,10 +183,14 @@ Latest evidence and limits of the current demonstration:
 - Deployment run 39542685448 passed verify, SCA, SAST, image scan/deploy and
   DAST. Its k6 smoke job was skipped as designed in steering mode; the green
   pipeline does not mean that a new smoke load ran.
-- The recorded short profiles demonstrate observed scaling, not the full
-  profile or the proposal's maximum capacity. A hosted cross-service approval
-  scenario still needs its own evidence; local integration tests do not prove
-  the live ingress and queue configuration.
+- Hosted cross-service approval acceptance passed on 21 October after deploy
+  39562523797 at `e4fef48`: reject stopped the task at zero spend; grant ended
+  the task with USD 0.000121 matching session and Wallet. Repeating the grant
+  added no steps or spend, and both delivery flags cleared. See
+  `docs/platform/evidence/2026-10-21-hosted-approval.md`.
+- The recorded short profiles demonstrate observed scaling, not full capacity.
+  Stripe top-up is disabled on this deployment; implementation and local tests
+  are not evidence of a hosted Checkout/webhook acceptance.
 
 Outstanding issues:
 
@@ -866,8 +870,8 @@ What the result shows:
   least it can take (the minimum was 5.1 s). The median of 6.1 s shows that
   the wait in the queue added about 1 s at 10 users.
 
-Not measured: latency with real model calls, the `full` profile, and the
-proposal's targets (AISS-12).
+Real-model latency was measured separately on 21 October (see section 2.2).
+The `full` profile and the proposal's targets remain unmeasured (AISS-12).
 
 ### 4.2 Availability
 

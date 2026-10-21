@@ -40,7 +40,27 @@ python3 -m venv /tmp/fontvenv && /tmp/fontvenv/bin/pip install fonttools brotli
 Do the same for `wght=400` and `wght=600`, rename each family to "Switzer",
 "Switzer Medium" and "Switzer Semibold", and copy the files to `~/Library/Fonts`.
 
-## The look
+## The redesign (21 October 2026, later the same day)
+
+The rules below this section were replaced after the user watched the deck as an
+audience would. A symbol only means what we think it means because of our own
+context: nobody in the room can tell that a halftone ball is an agent, or why
+coins drop into a wallet. So the deck now follows these rules.
+
+- One slide answers one item of the course outline, and the item's number (1a,
+  3b, ...) stands at its top left.
+- Pictures use standard notation that a lecturer reads without a key: UML use
+  case, component, deployment and sequence diagrams, an ER diagram, a DDD context
+  map, a flowchart. Every box has its real name in words. No invented icons.
+- The agents are shown as they really work: slide 2 is a real run of lumen,
+  screenshotted every 3 seconds.
+- Only flows are animated. A thing that moves is a word on a white tag.
+- No text touches a line or a box edge. Check each picture zoomed, at several
+  frames, before it goes into the deck.
+
+The scenes are in `scenes_std*.py`; `make.py <scene>` draws one.
+
+## The look (before the redesign)
 
 Settled on 21 October 2026 from two reviews (`reviews/`), after a first dark
 version drew everything as halftone dots and blurred every edge.

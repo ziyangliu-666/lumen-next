@@ -200,13 +200,6 @@ shown(
 );
 shown(
   'Logical',
-  '3a  ·  Key architectural decision',
-  'One queue for each level of the task tree',
-  'queues.gif',
-  'A lead turn keeps its worker slot while its readers run. With one shared queue, two questions are enough to fill both slots with waiting leads. Their readers then sit in the queue, and no worker is free to take them: that is a deadlock. So we gave each level of the task tree its own queue and its own slots on every worker; in the real system each worker has four slots per level. The leads wait in the level-0 slots, the readers run in the level-1 slots, and every question finishes.',
-);
-shown(
-  'Logical',
   '3c  ·  Producers and consumers',
   'How apps use the platform',
   'interaction.gif',
@@ -234,10 +227,10 @@ shown(
 );
 shown(
   'Physical',
-  '4c  ·  Persistence',
-  'The schema, by context',
-  'er.png',
-  "All persistent data is in one PostgreSQL 16 database, and each context owns its own tables: the frames show the owner. Inside a context we use real foreign keys. Across contexts, a service keeps only the other context's id, so it does not depend on another team's schema. The task tree is one table with a parent link, so the cost roll-up and the usage queries are plain SQL. Money is numeric(12,6). Turns in flight are in RabbitMQ, not in the database, and the agents' files are on a 2Gi volume.",
+  '4a  ·  Key architectural decision',
+  'One queue for each level of the task tree',
+  'queues.gif',
+  'A lead turn keeps its worker slot while its readers run. With one shared queue, two questions are enough to fill both slots with waiting leads. Their readers then sit in the queue, and no worker is free to take them: that is a deadlock. So we gave each level of the task tree its own queue and its own slots on every worker; in the real system each worker has four slots per level. The leads wait in the level-0 slots, the readers run in the level-1 slots, and every question finishes.',
 );
 shown(
   'Physical',
@@ -252,6 +245,13 @@ shown(
   'The same use case, for real',
   'rec-ask.gif',
   'The same use case on the public server, from the command line: POST /api/v1/questions with an API key, then GET /api/v1/questions/:id for the status, the cost and the answer from gpt-4.1-nano.',
+);
+shown(
+  'Physical',
+  '4c  ·  Persistence',
+  'The schema, by context',
+  'er.png',
+  "All persistent data is in one PostgreSQL 16 database, and each context owns its own tables: the frames show the owner. Inside a context we use real foreign keys. Across contexts, a service keeps only the other context's id, so it does not depend on another team's schema. The task tree is one table with a parent link, so the cost roll-up and the usage queries are plain SQL. Money is numeric(12,6). Turns in flight are in RabbitMQ, not in the database, and the agents' files are on a 2Gi volume.",
 );
 
 // ------------------------------------------------------------------ 5 DevOps

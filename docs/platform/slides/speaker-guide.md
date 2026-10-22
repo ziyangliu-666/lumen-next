@@ -160,7 +160,7 @@ The five lines of the live demo:
 
 1. Ask a question in the browser; show the call tree grow.
 2. Your literature watch app publishes its agent and asks through the API; then read usage with GET /api/v1/usage.
-3. Start the k6 load; show `kubectl get scaledobject,hpa,pods` as KEDA adds workers.
+3. Go back to the recorded load test (slides 22 and 23); then show `kubectl get scaledobject,hpa -n lumen` and the worker pods live.
 4. Delete a worker during a question; the question still ends.
 5. Open the last pipeline run on GitHub.
 
@@ -176,9 +176,7 @@ Likely questions:
 ## Before the day (owner: LIU ZIYANG)
 
 - [ ] Start the EC2 instance the evening before; open the public address once.
-- [ ] Before the live load test, switch the workers to the paced worker, so the load
-      makes no model calls: `gh workflow run platform-deploy.yml --repo
-      ziyangliu-666/lumen-next --ref ass/platform -f worker=demo`. Switch back after.
+- [ ] The workers run the real model for the whole demo; no load test runs live.
 - [ ] Check the model provider's spending limit.
 - [ ] One full rehearsal with a timer; each speaker keeps to the time above.
 - [ ] Install the fonts on the presenting computer (README, "Switzer"), or PowerPoint

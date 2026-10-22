@@ -1150,7 +1150,7 @@ You built the project service, the agent registry, usage and the literature watc
 
 - Use case: ask a question in the browser; watch the call tree grow
 - Use case: the watch app publishes its agent and asks; then read usage
-- Scalability: run the k6 load test; watch KEDA add workers
+- Scalability: the recorded load test; KEDA's state, live
 - Availability: delete a worker during a question; it still ends
 - Maintainability: open the last pipeline run on GitHub
 
@@ -1162,7 +1162,7 @@ Do these on the presenting computer. Owner: LIU ZIYANG with PENG XUJIAN.
 
 1. Start the EC2 instance the evening before, and open the public address once.
 2. Check the model provider's spending limit.
-3. Worker mode. The speaker guide asks for the paced worker during the load test, so the load makes no model calls: `gh workflow run platform-deploy.yml --repo ziyangliu-666/lumen-next --ref ass/platform -f worker=demo`, and switch back afterwards. The switch is a pipeline run, so it cannot happen during the talk. Agree before the day which worker runs during the demo, because steps 1 and 2 show the answers of the worker that runs.
+3. Worker mode. The workers run the real model for the whole demo. No mode switch is needed, and nobody runs a load test live.
 4. Browser, tab 1: the public address, signed in with the demo account, on the home page.
 5. Browser, tab 2: the GitHub Actions page of the workflow "Platform deploy" in the repository ziyangliu-666/lumen-next.
 6. Terminal, at the repository root, with large font. Run these lines, so that the API key is never shown on screen:
@@ -1185,7 +1185,7 @@ Do these on the presenting computer. Owner: LIU ZIYANG with PENG XUJIAN.
 | 0:00 to 0:20 | Opening |
 | 0:20 to 1:50 | 1. Ask in the browser |
 | 1:50 to 3:40 | 2. The literature watch app |
-| 3:40 to 5:00 | 3. Load test and KEDA |
+| 3:40 to 5:00 | 3. Scalability: the recorded load test, KEDA live |
 | 5:00 to 6:15 | 4. Delete a worker |
 | 6:15 to 6:45 | 5. The pipeline |
 | 6:45 to 7:00 | Close |
@@ -1238,33 +1238,25 @@ Do these on the presenting computer. Owner: LIU ZIYANG with PENG XUJIAN.
 
 - If it fails: if the watch does not print a digest within 90 seconds, press Ctrl+C and say "I will not keep you waiting. Here is the same flow, recorded." Go back to slide 9 for the API calls and slide 15 for the recorded question. Then continue with step 3.
 
-**Step 3: run the k6 load test and watch KEDA add workers (3:40 to 5:00).**
+**Step 3: the load test, recorded, and KEDA, live (3:40 to 5:00).**
 
-- Do: in the terminal, type and run:
-
-  ```sh
-  k6 run -e LUMEN_URL=$LUMEN_URL -e PROFILE=short deploy/k8s/load/ask.js > /tmp/k6.log 2>&1 &
-  kubectl get hpa keda-hpa-worker -n lumen --watch
-  ```
-
-  Let the watch run for about 60 seconds. Then press Ctrl+C, and run:
+- Do: switch to the deck and go back to slide 22, the load test chart. After about 30 seconds, go to slide 23, the recorded KEDA watch. Then switch to the terminal and run:
 
   ```sh
+  kubectl get scaledobject,hpa -n lumen
   kubectl get pods -n lumen -l app.kubernetes.io/name=worker
   ```
 
-- What appears: the first command starts k6 in the background, and its output goes to a log file. The watch prints a new line when the numbers change. In TARGETS, the jobs per worker rise above "5/5 (avg)". In REPLICAS, the count rises from 1. The pod list shows more than one worker pod.
+- What appears: slide 22 shows the bars of waiting jobs and the worker count going from 1 to 4. Slide 23 shows the recorded watch, with the replicas going up. In the terminal, the first command lists the scaled object of the worker (minimum 1, maximum 4) and the CPU autoscalers of identity, project and billing. The second command lists the worker pods that run now.
 - What to say:
 
-> Now scalability. This command starts our k6 load test in the background. Ten users ask questions without a pause. The short profile takes about two minutes.
+> Now scalability. We ran the k6 load test on this server on 20 October, and He Rong showed it a moment ago. Here it is again. Ten users ask without a pause. Above five waiting turns per worker, KEDA adds a worker: from one to four in 49 seconds, and back to one after the load. 135 questions, and no request failed.
 >
-> Here we watch KEDA's autoscaler for the worker. This column is the number of waiting jobs per worker, against the target of five.
+> Here is the same autoscaler, recorded on this server. The replicas follow the queue.
 >
-> Now the jobs per worker pass five. And here the replicas go up: KEDA adds a worker.
->
-> Here you see the new worker pods. When the load ends, KEDA removes them again, a minute later.
+> Now I show it live. Here is KEDA's scaled object for the worker: at least one replica, at most four. Here are the CPU autoscalers for identity, project and billing. And here are the worker pods that run now. When the queue grows past five turns per worker, KEDA adds a pod, as you saw in the recording.
 
-- If it fails: if REPLICAS stays at 1 after 60 seconds, say "Here is the same autoscaler, recorded on this server." Go back to slide 23, and then to slide 22 for the full load test. If k6 does not start, do the same.
+- If it fails: if kubectl does not answer, stay on slide 23 and say "This is the same autoscaler, recorded on this server."
 
 **Step 4: delete a worker during a question; it still ends (5:00 to 6:15).**
 
@@ -1305,7 +1297,7 @@ Do these on the presenting computer. Owner: LIU ZIYANG with PENG XUJIAN.
 
 **Close (6:45 to 7:00).**
 
-- Do: in the terminal, press Ctrl+C if a command still runs. The k6 test ends by itself. Switch back to the deck and go to slide 25.
+- Do: in the terminal, press Ctrl+C if a command still runs. Switch back to the deck and go to slide 25.
 
 > That was the platform, live. Thank you. We are happy to take questions.
 

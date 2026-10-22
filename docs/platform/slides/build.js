@@ -325,7 +325,7 @@ shown(
   const steps = [
     ['Use case', 'ask a question in the browser; watch the call tree grow'],
     ['Use case', 'the watch app publishes its agent and asks; then read usage'],
-    ['Scalability', 'run the k6 load test; watch KEDA add workers'],
+    ['Scalability', 'the recorded load test; KEDA\'s state, live'],
     ['Availability', 'delete a worker during a question; it still ends'],
     ['Maintainability', 'open the last pipeline run on GitHub'],
   ];
@@ -335,8 +335,8 @@ shown(
     txt(s, t, { x: 3.3, y, w: 9.4, h: 0.56, fontSize: 22, valign: 'middle' });
   });
   s.addNotes(
-    'Live demo, about six minutes, with deploy/k8s/demo.sh and LUMEN_URL set to the address on the slide. ' +
-      'Before the load test, switch the workers to the paced worker (gh workflow run platform-deploy.yml -f worker=demo), so the load costs nothing; switch back afterwards. ' +
+    'Live demo, about six minutes, with LUMEN_URL set to the address on the slide. The workers run the real model. ' +
+      'For scalability, go back to the recorded load test (slides 22 and 23), then show kubectl get scaledobject,hpa -n lumen live. ' +
       'If the network fails, the recorded slides before this one show the same runs.',
   );
 }

@@ -144,7 +144,8 @@ shown(
   'lumen-at-work.gif',
   'Lumen is an AI that does research. This is a real run, recorded on 22 October with gpt-4.1: we ask for three key papers on retrieval-augmented generation. ' +
     'The lead agent searches arXiv, then hands one paper each to three reader agents that work in parallel. ' +
-    'On the right, the call tree grows, every task shows what it cost, and each reader records its paper as a finding.',
+    'On the right, the call tree grows, every task shows what it cost, and each reader records its paper as a finding. ' +
+    'The business problem: every research team that uses agents builds the same parts again, a record of each step, a spending cap, sign-in and a live view. Lumen Platform builds these parts once.',
 );
 shown(
   'Overview',
@@ -186,7 +187,7 @@ shown(
   '3b  ·  Logical architecture',
   'Five services behind one gateway',
   'logical.gif',
-  "The logical architecture has four tiers, and each dependency points down. The clients see one gateway, and the gateway routes to five services. Only Project and Worker call session's internal routes. At run time a question becomes a session, then a turn on the queue. A free worker runs it, and session saves each step.",
+  "The logical architecture has four tiers, and each dependency points down. The clients see one gateway, and the gateway routes to five services. Only Project and Worker call session's internal routes. At run time a question becomes a session, then a turn on the queue. A free worker runs it, and session saves each step. The proposal listed eight services. Traefik is the gateway, the live stream runs inside session, and the model client runs inside the worker, so five services remain, each with one job and its own tables.",
 );
 shown(
   'Logical',
@@ -238,7 +239,7 @@ shown(
   '4d  ·  Detailed design',
   'Asking a question with a chosen agent',
   'sequence.gif',
-  'This is use case A, a question asked with a chosen agent. Project checks the API key, session opens and publishes the root turn, and from that moment two lanes run at the same time. The app gets 201 at once and reads the answer whenever it likes, while a worker takes the turn and runs its steps in a loop. Each step goes back to session, which saves it in PostgreSQL.',
+  'This is UC2, a question asked with a chosen agent. Project checks the API key, session opens and publishes the root turn, and from that moment two lanes run at the same time. The app gets 201 at once and reads the answer whenever it likes, while a worker takes the turn and runs its steps in a loop. Each step goes back to session, which saves it in PostgreSQL.',
 );
 shown(
   'Physical',
@@ -246,6 +247,13 @@ shown(
   'A question through the public API',
   'rec-ask.gif',
   'The same use case on the public server, from the command line: POST /api/v1/questions with an API key, then GET /api/v1/questions/:id for the status, the cost and the answer from gpt-4.1-nano.',
+);
+shown(
+  'Physical',
+  '4d  ·  Availability, recorded',
+  'A worker is deleted; the question still ends',
+  'rec-kill.gif',
+  'Availability. A question starts, and we force-delete the worker that runs it. Its turn was not acknowledged, so RabbitMQ gives it to another worker, and the question still ends.',
 );
 shown(
   'Physical',
@@ -261,7 +269,7 @@ shown(
   '5a  ·  Source and artifacts',
   'From a branch to a running image',
   'branches.gif',
-  'ass/platform is our one integration branch; it left main on 19 October. It has 48 commits, and one short-lived branch came back through pull request #148. Every push builds one image tagged with its commit, copies it over SSH into k3s on the EC2 host, and helm puts it live.',
+  'ass/platform is our one integration branch. It has 48 commits, and one short-lived branch came back through pull request #148. Every push builds one image tagged with its commit, copies it over SSH into k3s on the EC2 host, and helm puts it live.',
 );
 shown(
   'DevOps',
@@ -300,13 +308,6 @@ shown(
   'rec-scale.gif',
   'The same autoscaler on the public server: KEDA compares the jobs per worker with the target of five, and the worker replicas go up, then back down after the load.',
 );
-shown(
-  'Demo',
-  '6b  ·  Availability, recorded',
-  'A worker is deleted; the question still ends',
-  'rec-kill.gif',
-  'Availability. A question starts, and we force-delete the worker that runs it. Its turn was not acknowledged, so RabbitMQ gives it to another worker, and the question still ends.',
-);
 {
   const s = newSlide();
   head(s, 'Demo', '6a  ·  6b  ·  Live demo', 'Now, on the public server');
@@ -323,7 +324,7 @@ shown(
   });
   const steps = [
     ['Use case', 'ask a question in the browser; watch the call tree grow'],
-    ['Use case', 'the literature watch app asks through the API'],
+    ['Use case', 'the literature watch app publishes its agent, asks, reads usage'],
     ['Scalability', 'run the k6 load test; watch KEDA add workers'],
     ['Availability', 'delete a worker during a question; it still ends'],
     ['Maintainability', 'open the last pipeline run on GitHub'],
@@ -334,7 +335,7 @@ shown(
     txt(s, t, { x: 3.3, y, w: 9.4, h: 0.56, fontSize: 22, valign: 'middle' });
   });
   s.addNotes(
-    'Live demo, about eight minutes, with deploy/k8s/demo.sh and LUMEN_URL set to the address on the slide. ' +
+    'Live demo, about six minutes, with deploy/k8s/demo.sh and LUMEN_URL set to the address on the slide. ' +
       'Before the load test, switch the workers to the paced worker (gh workflow run platform-deploy.yml -f worker=demo), so the load costs nothing; switch back afterwards. ' +
       'If the network fails, the recorded slides before this one show the same runs.',
   );

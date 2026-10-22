@@ -143,7 +143,7 @@ service as built. The owners follow `docs/platform/contract.md`.
 | 3 | Identity service; ingress, HTTPS, rate limits; API keys | LU YI | 7 |
 | 4 | Public API v1, OpenAPI document | LU YI | 3 |
 | 5 | Project service and agent registry | PENG XUJIAN | 4 |
-| 6 | Second app (literature watch); usage analytics; k6 load test | PENG XUJIAN | 6 |
+| 6 | Second app (literature watch); usage analytics | PENG XUJIAN | 6 |
 | 7 | Worker service and the job queue | LI ZHUOYANG | 5 |
 | 8 | Model gateway (not built, see AISS-08); KEDA autoscaling for workers; agent instructions on a root turn | LI ZHUOYANG | 5 |
 | 9 | Billing service | HE RONG | 4 |
@@ -219,11 +219,11 @@ breakdown planned: 400 hours in total.
 
 | Member | Main work | Effort (hours) |
 |---|---|---|
-| HE RONG | Billing service, Helm chart, KEDA, AWS host, deploy pipeline, DevSecOps stages | 80 |
-| LI ZHUOYANG | Worker service, the turn queues, agent instructions on a root turn | 80 |
+| HE RONG | Billing service, Helm chart, AWS host, deploy pipeline, DevSecOps stages, k6 load tests | 80 |
+| LI ZHUOYANG | Worker service, the turn queues, KEDA autoscaling, agent instructions on a root turn | 80 |
 | LIU ZIYANG | Session service, shared adapters, integration, contracts, demo script | 80 |
-| LU YI | Identity service, Traefik ingress, HTTPS, rate limit, API keys | 80 |
-| PENG XUJIAN | Project service, agent registry, public API routes, k6 test, literature watch | 80 |
+| LU YI | Identity service, Traefik ingress, HTTPS, rate limit, API keys, public API v1 | 80 |
+| PENG XUJIAN | Project service, agent registry, literature watch, usage analytics | 80 |
 | **Total** | | **400** |
 
 ---

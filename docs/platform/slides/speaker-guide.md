@@ -1,6 +1,6 @@
 # Speaker guide: ASS presentation, 26 October 2026, 11:25 to 12:05
 
-Team 15, Lumen Platform. The deck is `out/Team15-Lumen-Platform.pptx` (24 slides).
+Team 15, Lumen Platform. The deck is `out/Team15-Lumen-Platform.pptx` (25 slides).
 Each slide has full speaker notes; this guide says who speaks, for how long, and
 what to stress. Read your slides' notes aloud twice before the day.
 
@@ -29,10 +29,10 @@ what to stress. Read your slides' notes aloud twice before the day.
 |---|---|---|---|---|---|
 | 1 | LIU ZIYANG | 1 to 8 | 1a to 1c, 2a, 2b, 3a, 3b, 3c | 1 architecture and contracts; 2 session service | 7.5 min |
 | 2 | LU YI | 9 to 12 | 3c (the API), 4a, 4b | 3 identity, gateway, HTTPS, API keys; 4 public API v1 | 4.5 min |
-| 3 | LI ZHUOYANG | 13 to 15 | the queue decision, 4d | 7 worker service and the queue; 8 KEDA | 4.5 min |
-| 4 | HE RONG | 16 to 20 | 4c, 5a, 5b, 5c | 9 billing; 10 Kubernetes, Helm, pipeline; 11 load tests | 7 min |
-| 5 | PENG XUJIAN | 21 to 24 | 6a, 6b, the live demo | 5 project service, registry; 6 literature watch, usage, k6 test | 8.5 min |
-| | everyone | 25 | questions | | 8 min |
+| 3 | LI ZHUOYANG | 13 to 16 | the queue decision, 4d, availability | 7 worker service and the queue; 8 KEDA | 4.5 min |
+| 4 | HE RONG | 17 to 23 | 4c, 5a, 5b, 5c, 6b (load test, KEDA) | 9 billing; 10 Kubernetes, Helm, pipeline; 11 load tests | 8 min |
+| 5 | PENG XUJIAN | 24 | 6a, 6b, the live demo | 5 project service, agent registry; 6 literature watch, usage | 7 min |
+| | everyone | 25 | questions | | 9 min |
 
 Handover: each speaker ends with the next speaker's name and part, for example
 "Lu Yi built the public API and the gateway; he will show how apps use the platform,
@@ -90,37 +90,40 @@ Likely questions:
 - **What if the IP changes?** The name comes from the Elastic IP on sslip.io, so the
   IP stays fixed while the instance lives (AD-14).
 
-## 3. LI ZHUOYANG: slides 13 to 15 (4.5 minutes)
+## 3. LI ZHUOYANG: slides 13 to 16 (4.5 minutes)
 
-The queue decision and the detailed use case. You built the worker service and the
-turn queues.
+The queue decision, the detailed use case and availability. You built the worker
+service, the turn queues and the KEDA autoscaling of the workers.
 
 | Slide | Say | Stress |
 |---|---|---|
 | 13 Queues | Why one queue per level of the task tree: with one queue, waiting leads fill every worker slot and their readers never start. With a queue per level, the deepest level waits for nothing. | Found in design, before it happened. Each worker has four slots per level, and KEDA watches all three queues. |
-| 14 Sequence (4d) | Use case A: an app asks with a chosen agent. Gateway, key guard, session opens, the root turn goes on lumen.turns.0, the app gets 201 at once; a worker calls the model and posts each step to session. | Nothing waits on the model inside a web request. |
+| 14 Sequence (4d) | UC2: an app asks with a chosen agent. Gateway, key guard, session opens, the root turn goes on lumen.turns.0, the app gets 201 at once; a worker calls the model and posts each step to session. | Nothing waits on the model inside a web request. |
 | 15 The API call, recorded | The same flow with curl on the public server. | A real answer, a real cost. |
+| 16 Worker deleted, recorded | Availability: we force-delete the worker during a question; its turn goes to another worker, and the question ends. | The turn is acknowledged only when it is done. |
 
 Likely questions:
 - **What if a worker dies mid-turn?** A worker acknowledges a turn only after it is
-  done, so RabbitMQ gives an unacknowledged turn to another worker (slide 23 shows it).
+  done, so RabbitMQ gives an unacknowledged turn to another worker (slide 16 shows it).
 - **How many turns can one worker run?** `LUMEN_WORKER_SLOTS` = 4 per level per pod.
 - **Why does the worker report steps over HTTP and not write to the database?**
   Session is the only writer of the trace, so a worker that dies loses no step, and
   the cost roll-up and the budget checks stay in one place (AD-04).
 
-## 4. HE RONG: slides 16 to 20 (7 minutes)
+## 4. HE RONG: slides 17 to 23 (8 minutes)
 
-Persistence, and DevOps. You built the billing service, the Kubernetes setup, the Helm
-chart and the pipeline.
+Persistence, DevOps and the load test. You built the billing service, the Kubernetes
+setup, the Helm chart, the pipeline and the k6 load test.
 
 | Slide | Say | Stress |
 |---|---|---|
-| 16 ER diagram (4c) | One PostgreSQL 16 database; each context owns its tables (the frames). Solid lines are foreign keys inside a context; dashed lines are ids across contexts. | The task tree is one table with a parent link, so the cost roll-up is SQL. Money is numeric(12,6). Turns in flight live in RabbitMQ; files on a 2Gi volume. |
-| 17 Branches (5a) | One repository; each member merges a branch into ass/platform through a pull request. Each push builds one image tagged with the commit SHA, copied over SSH, imported into k3s, deployed by Helm. | No registry to run (AD-12). Secrets are made inside the cluster (AD-13). |
-| 18 Pipeline (5b) | Tests, npm audit and CodeQL in parallel; then build and the Trivy gate; then deploy; then OWASP ZAP and a k6 smoke load against the live address. | The first run was stopped at the gate: 5 critical CVEs never reached the host. With the fixed image, every job passed in 12 min 30 s. |
-| 19 Runs, recorded | The real runs from the GitHub command line. | Every job and its result. |
-| 20 Findings (5c) | Three findings: per-level queues; the image with Docker inside, replaced by a smaller patched image; KEDA's 300 s scale-down, set to 60 s. | The problem, then the change we made. |
+| 17 ER diagram (4c) | One PostgreSQL 16 database; each context owns its tables (the frames). Solid lines are foreign keys inside a context; dashed lines are ids across contexts. | The task tree is one table with a parent link, so the cost roll-up is SQL. Money is numeric(12,6). Turns in flight live in RabbitMQ; files on a 2Gi volume. |
+| 18 Branches (5a) | One repository; each member merges a branch into ass/platform through a pull request. Each push builds one image tagged with the commit SHA, copied over SSH, imported into k3s, deployed by Helm. | No registry to run (AD-12). Secrets are made inside the cluster (AD-13). |
+| 19 Pipeline (5b) | Tests, npm audit and CodeQL in parallel; then build and the Trivy gate; then deploy; then OWASP ZAP and a k6 smoke load against the live address. | The first run was stopped at the gate: 5 critical CVEs never reached the host. With the fixed image, every job passed in 12 min 30 s. |
+| 20 Runs, recorded | The real runs from the GitHub command line. | Every job and its result. |
+| 21 Findings (5c) | Three findings: per-level queues; the image with Docker inside, replaced by a smaller patched image; KEDA's 300 s scale-down, set to 60 s. | The problem, then the change we made. |
+| 22 Scaling (6b) | The k6 test, with the paced worker that makes no model calls, so it measures the platform's scaling: ten users without pause; the bars are waiting jobs; above five per worker KEDA adds one: 1 to 4 workers in 49 s, back to 1 a minute after the load. | 135 questions, median 6.1 s, 0 of 1,040 requests failed. |
+| 23 KEDA, recorded | The same autoscaler on the public server. | Replicas follow the queue. |
 
 Likely questions:
 - **Why one shared database?** Time: the tables are already grouped by owner, so the
@@ -135,38 +138,40 @@ Likely questions:
   request review is the gate. Local k3d runs the same chart.
 - **Are database migrations safe with two versions running?** Every service runs the
   migrations at startup under an advisory lock (AD-19).
+- **Why scale on queue length and not CPU?** A worker waits on the model most of the
+  time, so its CPU stays low while the queue grows (AD-11).
+- **The proposal said 200 concurrent sessions.** The test shows the mechanism that
+  carries that load: KEDA adds a worker for each five waiting turns, and HPA adds
+  pods on CPU. The same Helm chart runs on EKS, where node autoscaling adds machines
+  as the load grows.
 
-## 5. PENG XUJIAN: slides 21 to 24 (8.5 minutes)
+## 5. PENG XUJIAN: slide 24 and the live demo (7 minutes)
 
-The quality attributes and the live demo. You built the project service, the agent
-registry, the literature watch app and the k6 load test.
+The live demo. You built the project service, the agent registry, usage and the
+literature watch app. Open with one sentence: "The agent registry lets a producer
+publish an agent; the literature watch app is a second app built only on the public
+API. I will now show the platform live."
 
 | Slide | Say | Stress |
 |---|---|---|
-| 21 Scaling (6b) | Your k6 test, with the paced worker that makes no model calls, so it measures the platform's scaling: ten users without pause; the bars are waiting jobs; above five per worker KEDA adds one: 1 to 4 workers in 49 s, back to 1 a minute after the load. | 135 questions, median 6.1 s, 0 of 1,040 requests failed. |
-| 22 KEDA, recorded | The same autoscaler on the public server. | Replicas follow the queue. |
-| 23 Worker deleted, recorded | Availability: we force-delete the worker during a question; its turn goes to another worker, and the question ends. | The turn is acknowledged only when it is done. |
 | 24 Live demo (6a, 6b) | Run `deploy/k8s/demo.sh` with `LUMEN_URL` set, and follow the five lines on the slide. | About 6 minutes. |
 
 The five lines of the live demo:
 
 1. Ask a question in the browser; show the call tree grow.
-2. Your literature watch app publishes its agent and asks through the API.
+2. Your literature watch app publishes its agent, asks through the API, and reads usage.
 3. Start the k6 load; show `kubectl get scaledobject,hpa,pods` as KEDA adds workers.
 4. Delete a worker during a question; the question still ends.
 5. Open the last pipeline run on GitHub.
 
 If the network or the server fails, say so in one sentence and go back to the recorded
-slides 12, 15, 19, 22 and 23. End with: "Thank you. We are happy to take questions."
+slides 12, 15, 16, 20 and 23. End with: "Thank you. We are happy to take questions."
 
 Likely questions:
-- **Why scale on queue length and not CPU?** A worker waits on the model most of the
-  time, so its CPU stays low while the queue grows (AD-11).
-- **The proposal said 200 concurrent sessions. Did you test that?** Not on one
-  t3.medium; the recorded test used 10 virtual users. The larger test needs EKS with
-  node autoscaling (AISS-12). Say this plainly if asked; do not raise it yourself.
 - **What can a producer publish?** An agent is a slug, a name, a description and
   instructions of at most 4000 characters, chosen per question (AD-08).
+- **How does the watch app use the platform?** Only through the public API v1, with
+  its own API key, like any other consumer. It is about 210 lines.
 
 ## Before the day (owner: LIU ZIYANG)
 

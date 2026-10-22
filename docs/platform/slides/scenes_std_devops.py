@@ -39,6 +39,20 @@ def _diamond(c, cx, cy, w, h, name, lit=False):
     c.text(cx - w / 2, cy - h / 2, w, h, name, 14, "Semibold", INK)
 
 
+def _job(c, x, y, w, h, name, note, tool, dur, lit=False, faint=False, ok=False):
+    """A pipeline job: its name, what the name means, its tool and its duration, one per line."""
+    edge = INK if lit else (RULE2 if faint else RULE)
+    c.d.rectangle([c._p(x), c._p(y), c._p(x + w), c._p(y + h)], fill=RAISED if lit else BLACK, outline=edge,
+                  width=c._lw(2 if lit else 1.5))
+    c.text(x + 0.14, y + 0.06, w, 0.32, name, 15, "Semibold", INK3 if faint else INK, "left")
+    rows = [(line, i) for i, line in enumerate((note, tool, dur)) if line]
+    for k, (line, i) in enumerate(rows):
+        col = INK3 if (faint or i == 0) else INK2
+        c.text(x + 0.14, y + 0.38 + k * 0.25, w, 0.25, line, 13, "Regular", col, "left")
+    if ok:
+        c.check(x + w - 0.34, y + h - 0.32, 0.2)
+
+
 # ---------------------------------------------------------------- shared motion
 def _length(pts):
     return sum(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5 for a, b in zip(pts, pts[1:]))
@@ -63,72 +77,84 @@ def _part(pts, u):
 
 # ---------------------------------------------------------------- 5a: source and artifacts
 def branches():
+    """What happened on the remote (git log --first-parent, gh pr list, 22 October 2026).
+
+    ass/platform left main at 320aa39 on 19 October. It has 48 commits since then: 45 pushed
+    straight to it, and one pull request (#148, codex/platform-approval-acceptance, 2 commits)
+    that left it at its 36th commit and merged back as its 40th. No member branches, and main
+    was not merged back in after the branch point, so the picture shows neither.
+    """
     X0 = 2.75                                   # where the branch lines start
-    MAIN, PLAT = 1.25, 2.0                      # the two long-lived branches
+    MAIN, PLAT, FEAT = 1.45, 2.45, 3.3           # main, ass/platform, the feature branch
     END = 7.55                                  # where ass/platform hands over to the pipeline
-    # Each member's branch, from the WBS (report 2.1) and the branch list (report 5.1).
-    MEMBERS = [("Liu Ziyang", "ass/session"), ("Lu Yi", "ass/identity"), ("Peng Xujian", "ass/project"),
-               ("Li Zhuoyang", "ass/worker"), ("He Rong", "ass/deploy")]
-    LANES = [2.6 + k * 0.53 for k in range(5)]
-    MX = 5.0                                    # where main merges into ass/platform
+    N, BASE, MERGE = 46, 36, 40                 # first-parent commits; where #148 left and came back
     AX, AW = 8.25, 3.65                         # the artifact column
-    IMG, NODE, LIVE = (1.6, 0.8), (3.05, 0.72), (4.26, 0.58)
+    IMG, NODE, LIVE = (1.95, 0.76), (3.35, 0.64), (4.36, 0.52)
     AL = AX + 0.45                              # the artifact column's connectors
 
-    def lane(k):
-        # The member branches nest: the lowest starts first and merges last, so no line crosses.
-        start, end = 2.95 + (4 - k) * 0.36, 5.5 + k * 0.42
-        y = LANES[k]
-        return [(start, PLAT), (start, y), (end, y), (end, PLAT + 0.09)]
+    XB, XM = 5.6, 6.7                           # the pull request gets room, so its branch is readable
 
-    P = dict(main=[(X0, MAIN), (END, MAIN)], plat=[(X0, MAIN), (X0, PLAT), (END, PLAT)],
-             merge=[(MX, MAIN), (MX, PLAT - 0.09)], push=[(END, PLAT), (AX, PLAT)],
+    def cx(i):
+        """The x of the i-th commit on ass/platform, 1-based. The x is the order, not the time."""
+        if i <= BASE:
+            return lerp(X0 + 0.22, XB, (i - 1) / (BASE - 1))
+        if i <= MERGE:
+            return lerp(XB, XM, (i - BASE) / (MERGE - BASE))
+        return lerp(XM, END - 0.15, (i - MERGE) / (N - MERGE))
+
+    FB, FM = cx(BASE), cx(MERGE)
+    FEATP = [(FB, PLAT), (FB, FEAT), (FM, FEAT), (FM, PLAT + 0.07)]
+    FDOTS = [lerp(FB, FM, 0.33), lerp(FB, FM, 0.67)]
+    P = dict(
              ssh=[(AL, IMG[0] + IMG[1]), (AL, NODE[0])], helm=[(AL, NODE[0] + NODE[1]), (AL, LIVE[0])])
+    P["push"] = [(END, PLAT), (AX, PLAT)]
 
     def paint(c, st):
         on = st["on"]
-        g = st["grow"]
-        if g.get("main"):
-            c.text(0.2, MAIN - 0.17, 2.4, 0.34, "main: Lumen", 15, "Semibold", INK2, "left")
-            c.line(_part(P["main"], g["main"]), pt=2, color=INK if "main" in on else INK2)
-            for x in (X0, 3.7, MX, 6.4):
-                if X0 + g["main"] * (END - X0) >= x - 1e-6:
+        if st["main"]:
+            c.text(0.2, MAIN - 0.3, 2.4, 0.32, "main", 15, "Semibold", INK2, "left")
+            c.text(0.2, MAIN + 0.0, 2.4, 0.28, "Lumen, the base product", 13, "Regular", INK3, "left")
+            c.line([(X0, MAIN), (lerp(X0, END, st["main"]), MAIN)], pt=2, color=INK2)
+            for x in (X0, 4.1, 5.6, 7.0):
+                if lerp(X0, END, st["main"]) >= x - 1e-6:
                     _dot(c, x, MAIN)
-        if g.get("plat"):
-            c.text(0.2, PLAT - 0.17, 2.4, 0.34, "ass/platform", 15, "Semibold", INK, "left")
-            c.line(_part(P["plat"], g["plat"]), pt=2.5, color=INK)
-            _dot(c, X0, PLAT, INK)
-            if g["plat"] >= 1:
-                _dot(c, END - 0.12, PLAT, INK)
-        if g.get("merge"):
-            pts = _part(P["merge"], g["merge"])
-            if g["merge"] >= 1:
-                c.arrow(pts, color=INK if "merge" in on else INK2)
-                c.text(MX + 0.1, (MAIN + PLAT) / 2 - 0.14, 1.0, 0.28, "merge main", 13, "Regular", INK2, "left")
-            else:
-                c.line(pts, color=INK)
-        for k, (who, br) in enumerate(MEMBERS):
-            u = g.get(k, 0)
-            if not u:
-                continue
-            lit = k in on
+        if st["drop"]:
+            c.text(0.2, PLAT - 0.3, 2.4, 0.32, "ass/platform", 15, "Semibold", INK, "left")
+            c.text(0.2, PLAT + 0.0, 2.4, 0.28, "the platform's branch", 13, "Regular", INK2, "left")
+            c.line([(X0, MAIN), (X0, lerp(MAIN, PLAT, st["drop"]))], pt=2.5, color=INK)
+            if st["drop"] >= 1:
+                c.text(X0 + 0.12, (MAIN + PLAT) / 2 - 0.14, 2, 0.28, "left main on 19 October", 13, "Regular",
+                       INK2, "left")
+        if st["px"] > X0:
+            c.line([(X0, PLAT), (st["px"], PLAT)], pt=2.5, color=INK)
+            for i in range(1, N + 1):
+                if cx(i) <= st["px"] + 1e-6:
+                    _dot(c, cx(i), PLAT, INK, r=0.07 if i == MERGE else 0.03)
+        if st["feat"]:
+            lit = "feat" in on
             col = INK if lit else INK2
-            y = LANES[k]
-            c.text(0.2, y - 0.17, 1.35, 0.34, who, 15, "Semibold", INK, "left")
-            c.text(1.62, y - 0.15, 1.2, 0.3, br, 13, "Regular", INK2, "left")
-            pts = lane(k)
-            if u >= 1:
-                c.line(pts[:3], color=col, active=lit)
-                c.arrow(pts[2:], color=col)
-                c.text(pts[2][0] + 0.07, y - 0.42, 0.4, 0.26, "PR", 13, "Regular", col, "left")
+            pts = _part(FEATP, st["feat"])
+            if st["feat"] >= 1:
+                c.line(FEATP[:3], color=col)
+                c.arrow(FEATP[2:], color=col)
+                c.text(FM + 0.1, (PLAT + FEAT) / 2 - 0.14, 1.2, 0.28, "PR #148", 13, "Semibold", col, "left")
             else:
-                c.line(_part(pts, u), color=col, active=lit)
-            # the commits appear as the tag passes them
-            total = _length(pts)
-            start, end = pts[0][0], pts[2][0]
-            for x in (start + 0.3, lerp(start + 0.3, end, 0.55)):
-                if u * total >= (y - PLAT) + (x - start):
-                    _dot(c, x, y, col)
+                c.line(pts, color=col)
+            c.text(0.2, FEAT - 0.15, 2.4, 0.3, "a feature branch", 13, "Regular", INK2, "left")
+            c.text(FB - 3.6, FEAT - 0.15, 3.48, 0.3, "codex/platform-approval-acceptance", 13, "Regular", INK2,
+                   "right")
+            done = st["feat"] * _length(FEATP)
+            for x in FDOTS:
+                if done >= (FEAT - PLAT) + (x - FB):
+                    _dot(c, x, FEAT, col, r=0.035)
+        # the count, from the commits drawn so far
+        n = sum(1 for i in range(1, N + 1) if cx(i) <= st["px"] + 1e-6 and i != MERGE)
+        n += sum(1 for x in FDOTS if st["feat"] * _length(FEATP) >= (FEAT - PLAT) + (x - FB))
+        n += 1 if cx(MERGE) <= st["px"] + 1e-6 else 0
+        if st["px"] > X0:
+            c.text(X0, 3.95, 5, 0.3, "%d commits on ass/platform" % n, 14, "Semibold", INK, "left")
+        if st["count"]:
+            c.text(X0, 4.3, 5, 0.3, "1 pull request merged into it", 14, "Semibold", INK, "left")
         if st["art"]:
             c.arrow(P["push"], color=INK if "push" in on else INK2)
             c.text(END - 0.05, PLAT - 0.4, AX - END + 0.1, 0.28, "push", 13, "Regular", INK2)
@@ -139,46 +165,51 @@ def branches():
             node(c, AX, NODE[0], AW - 0.14, NODE[1], "EC2 host", "AWS", lit="node" in on)
             c.text(AX + 1.45, NODE[0] + 0.33, 2.0, 0.3, "k3s ctr images import", 13, "Regular", INK2, "left")
             c.arrow(P["helm"], color=INK if "helm" in on else INK2)
-            c.text(AL + 0.13, NODE[0] + NODE[1] + 0.08, 3, 0.28, "helm upgrade --install --wait", 13, "Regular",
+            c.text(AL + 0.13, NODE[0] + NODE[1] + 0.06, 3, 0.28, "helm upgrade --install --wait", 13, "Regular",
                    INK2, "left")
             comp(c, AX, LIVE[0], AW, LIVE[1], "Lumen platform, live", "", lit="live" in on, mark=False)
         for x, y, word in st["tags"]:
             tag(c, x, y, word)
 
-    st = dict(on=set(), grow={}, art=False, tags=[])
+    st = dict(on=set(), main=0.0, drop=0.0, px=X0, feat=0.0, count=False, art=False, tags=[])
     sc = Scene("branches.gif", paint, st)
-
-    def grow(key, seconds, word=None, lit=()):
-        pts = lane(key) if isinstance(key, int) else P[key]
-        sc.set(on=set(lit))
-
-        def f(u):
-            st["grow"][key] = max(u, 1e-3)
-            st["tags"] = [(*draw.along(pts, u), word)] if word else []
-        sc.tween(seconds, f)
-        sc.set(tags=[])
 
     def move(key, word, seconds=0.9):
         sc.tween(seconds, lambda u: st.update(tags=[(*draw.along(P[key], u), word)]))
         sc.set(tags=[])
 
-    # Build: the two long-lived branches, then each member's branch in turn.
-    sc.step("main holds Lumen", 0.3)
-    grow("main", 1.0, lit={"main"})
-    sc.hold(0.9)
-    sc.title = "ass/platform starts from main: the integration branch"
-    grow("plat", 1.0)
-    sc.hold(1.0)
-    for k, (who, br) in enumerate(MEMBERS):
-        sc.title = "%s works on %s and merges it through a PR" % (who, br)
-        grow(k, 1.3, "commit", lit={k})
-        sc.hold(0.6)
-    sc.title = "A change to Lumen goes to main first, then merges in"
-    sc.set(on={"merge"})
-    move("merge", "merge", 0.7)
-    grow("merge", 0.01, lit={"merge"})
-    sc.hold(1.0)
-    sc.step("Every push to ass/platform builds one image and deploys it", 1.8, on=set(), art=True)
+    # Build: main, then ass/platform and its commits, then the one pull request.
+    sc.step("main holds Lumen, the base product", 0.3)
+    sc.tween(1.0, lambda u: st.update(main=u))
+    sc.hold(0.8)
+    sc.title = "ass/platform leaves main on 19 October"
+    sc.tween(0.6, lambda u: st.update(drop=max(u, 1e-3)))
+    sc.hold(0.6)
+    sc.title = "Commits land on ass/platform"
+    sc.tween(2.4, lambda u: st.update(px=lerp(X0, cx(BASE), u)))
+    sc.hold(0.5)
+    sc.title = "A short-lived branch goes out for one change"
+    sc.set(on={"feat"})
+
+    def out(u):
+        st["feat"] = max(u * 0.75, 1e-3)
+        st["tags"] = [(*draw.along(_part(FEATP, 0.75), u), "commit")]
+    sc.tween(1.2, out)
+    sc.set(tags=[])
+    sc.title = "Pull request #148 merges it back into ass/platform"
+
+    def back(u):
+        st["feat"] = lerp(0.75, 1.0, u)
+        st["px"] = lerp(cx(BASE), cx(MERGE), u)
+        st["tags"] = [(*draw.along(FEATP, lerp(0.75, 1.0, u)), "PR #148")]
+    sc.tween(1.0, back)
+    sc.set(tags=[], count=True)
+    sc.hold(1.4)
+    sc.title = "More commits land; each one is pushed"
+    sc.set(on=set())
+    sc.tween(1.0, lambda u: st.update(px=lerp(cx(MERGE), END - 0.1, u)))
+    sc.hold(0.6)
+    sc.step("Every push to ass/platform builds one image and deploys it", 1.8, art=True)
     # Flow: one push becomes one image, and the image goes live.
     sc.title = "1. A push builds lumen-next:<commit sha>"
     sc.set(on={"push"})
@@ -195,24 +226,26 @@ def branches():
     move("helm", "lumen-next:<commit sha>", 0.8)
     sc.set(on={"live"})
     sc.hold(1.4)
-    sc.step("Five member branches into ass/platform; one image per commit", 3.6, on=set())
+    sc.step("One integration branch, one image per commit", 3.6, on=set())
     sc.save()
 
 
 # ---------------------------------------------------------------- 5b: the CI/CD pipeline
 def cicd():
     TRIG = (0.2, 2.15, 1.45, 1.6)
-    PAR = [("verify", "lint, types, tests", "5 min 05 s"), ("SCA", "npm audit", "33 s"),
-           ("SAST", "CodeQL", "2 min 54 s")]
-    PX, PW, PH, PY = 2.0, 1.55, 1.0, [1.2, 2.45, 3.7]
+    # each job: its name, what the name means (small, grey), its tool, and its real duration
+    PAR = [("verify", "lint, types, tests", "", "5 min 05 s"), ("SCA", "dependency audit", "npm audit", "33 s"),
+           ("SAST", "static analysis", "CodeQL", "2 min 54 s")]
+    PX, PW, PH, PY = 1.95, 1.7, 1.2, [1.05, 2.35, 3.65]
     FR = (3.9, 1.05, 3.6, 3.82)                # the deploy job's frame
     SX, SW, SH = 4.05, 2.75, 0.45                # its steps
     STEPS = [("build", "build image", "2 min 50 s", 1.52), ("copy", "copy and import", "1 min 04 s", 2.97),
              ("helm", "helm upgrade --wait", "22 s", 3.6), ("health", "health check", "", 4.23)]
     GATE = (SX + SW / 2, 2.45, 2.0, 0.62)       # the Trivy gate: centre, width, height
     STOP = (6.75, 2.27, 0.6, 0.36)
-    AFT = [("dast", "DAST", "OWASP ZAP", "1 min 40 s", 1.5), ("smoke", "Smoke load", "k6", "1 min 15 s", 2.95)]
-    AX, AW, AH = 7.85, 1.6, 1.05
+    AFT = [("dast", "DAST", "live scan", "OWASP ZAP", "1 min 40 s", 1.35),
+           ("smoke", "Smoke load", "2 users for 30 s", "k6", "1 min 15 s", 2.85)]
+    AX, AW, AH = 7.85, 1.6, 1.2
     SUM = (9.8, 2.47, 1.5, 0.6)
     RES = (9.75, 3.55)
 
@@ -220,7 +253,7 @@ def cicd():
         return y + h / 2
 
     TY = mid(TRIG[1], TRIG[3])
-    BUS1, BUS2, BUS3, BUS4 = 1.82, 3.72, 7.68, 9.63
+    BUS1, BUS2, BUS3, BUS4 = 1.8, 3.78, 7.68, 9.63
     DY = 2.95                                   # where the deploy frame's in and out connectors meet it
     gx, gy, gw, gh = GATE
     P = dict(
@@ -239,13 +272,11 @@ def cicd():
         c.line([(TRIG[0] + TRIG[2], TY), (BUS1, TY)], color=INK2)
         c.line([(BUS1, mid(PY[0], PH)), (BUS1, mid(PY[2], PH))], color=INK2)
         c.line([(BUS2, mid(PY[0], PH)), (BUS2, mid(PY[2], PH))], color=INK2)
-        for (key, note, d), y in zip(PAR, PY):
+        for (key, note, tool, d), y in zip(PAR, PY):
             k = key.lower()
             c.arrow([(BUS1, mid(y, PH)), (PX, mid(y, PH))], color=INK2)
             c.line([(PX + PW, mid(y, PH)), (BUS2, mid(y, PH))], color=INK2)
-            comp(c, PX, y, PW, PH, key, note + ("\n" + d if dur else ""), lit=k in on, mark=False)
-            if k in ok:
-                c.check(PX + PW - 0.36, y + 0.12, 0.22)
+            _job(c, PX, y, PW, PH, key, note, tool, d if dur else "", lit=k in on, ok=k in ok)
         c.arrow([(BUS2, DY), (FR[0], DY)], color=INK2)
         # the deploy job: a frame with its steps as a vertical flowchart
         fx, fy, fw, fh = FR
@@ -281,17 +312,14 @@ def cicd():
         _terminal(c, *STOP, "stop", lit="stop" in on)
         # after the deploy: two jobs in parallel against the live address, then the summary
         c.line([(fx + fw, DY), (BUS3, DY)], color=INK2)
-        c.line([(BUS3, mid(AFT[0][4], AH)), (BUS3, mid(AFT[1][4], AH))], color=INK2)
-        c.line([(BUS4, mid(AFT[0][4], AH)), (BUS4, mid(AFT[1][4], AH))], color=INK2)
-        for key, name, note, d, y in AFT:
+        c.line([(BUS3, mid(AFT[0][5], AH)), (BUS3, mid(AFT[1][5], AH))], color=INK2)
+        c.line([(BUS4, mid(AFT[0][5], AH)), (BUS4, mid(AFT[1][5], AH))], color=INK2)
+        for key, name, note, tool, d, y in AFT:
             fa = key in faint
             c.arrow([(BUS3, mid(y, AH)), (AX, mid(y, AH))], color=RULE2 if fa else INK2)
             c.line([(AX + AW, mid(y, AH)), (BUS4, mid(y, AH))], color=RULE2 if fa else INK2)
-            comp(c, AX, y, AW, AH, name, note + ("\n" + d if dur else ""), lit=key in on, faint=fa, mark=False)
-            if key in ok:
-                c.check(AX + AW - 0.36, y + AH - 0.36, 0.22)
-            if fa:
-                c.text(AX, y + AH + 0.04, AW, 0.28, "skipped", 13, "Regular", INK3)
+            _job(c, AX, y, AW, AH, name, note, tool, "skipped" if fa else (d if dur else ""), lit=key in on,
+                 faint=fa, ok=key in ok)
         c.arrow([(BUS4, DY), (SUM[0], DY)], color=INK2)
         _terminal(c, *SUM, "summary" + ("  4 s" if dur else ""), lit="sum" in on)
         if st["result"]:
@@ -307,7 +335,7 @@ def cicd():
 
     sc.step("The pipeline: .github/workflows/platform-deploy.yml", 3.0)
     # The first run: the gate stops the image.
-    sc.step("Run 39439752963 starts on a push to ass/platform", 0.4, on={"trig"})
+    sc.step("The first run starts on a push to ass/platform", 0.4, on={"trig"})
     move(P["push"], "push", 0.6)
     sc.set(tags=[], on={"verify", "sca", "sast"})
     sc.title = "Verify, SCA and SAST run in parallel, and all pass"
@@ -325,9 +353,9 @@ def cicd():
     sc.hold(1.4)
     sc.title = "The pipeline works: a vulnerable image never reaches the host"
     sc.hold(3.0)
-    sc.step("The fix: a smaller platform image, no Docker inside (2b5e460)", 2.8, tags=[], result=None)
+    sc.step("The fix: a smaller platform image, no Docker inside", 2.8, tags=[], result=None)
     # The second run: every stage passes; the real durations show.
-    sc.step("Run 39441445313: the fixed image", 0.4, on={"trig"}, ok=set(), faint=set(), dur=False)
+    sc.step("The next run: the fixed image", 0.4, on={"trig"}, ok=set(), faint=set(), dur=False)
     move(P["push"], "push", 0.6)
     sc.set(tags=[], on={"verify", "sca", "sast"}, dur=True)
     sc.hold(0.8)
@@ -345,7 +373,8 @@ def cicd():
     sc.hold(1.4)
     sc.set(ok=st["ok"] | {"dast", "smoke"}, on={"sum"})
     sc.hold(0.6)
-    sc.step("Every stage passed: live in 12 min 30 s", 3.6, on=set(), result=["live in", "12 min 30 s"])
+    sc.step("Every stage passed: all jobs done in 12 min 30 s", 3.6, on=set(),
+            result=["all jobs done", "in 12 min 30 s"])
     sc.save()
 
 
@@ -356,27 +385,27 @@ def findings():
     HY = 1.0                                    # the column heads
     PY, SY = 1.45, 3.32                         # the top of the problem and the solution diagrams
     PW, SW = 2.3, 4.26                         # the top of their words
-    HEADS = [("Per-depth queues", "found in design"), ("Trivy gate", "run 39439752963"),
+    HEADS = [("Per-level queues", "found in design"), ("Trivy gate", "image scan"),
              ("KEDA scale-down", "load test")]
-    WORDS = [("Parents wait for children that wait\nin the same queue: a deadlock.",
+    WORDS = [("Leads wait for readers that wait\nin the same queue: a deadlock.",
               "One queue per level of the task tree\n(AD-03)."),
              ("5 critical CVEs, most in the docker.io\npackage. The gate stopped the deploy.",
-              "deploy/k8s/Dockerfile: smaller, patched\nat build (2b5e460). The next run passed."),
-             ("KEDA's HPA waits 300 s by default\nbefore it removes a worker.",
+              "deploy/k8s/Dockerfile: smaller, patched\nat build. The next run passed."),
+             ("KEDA waits 300 s by default\nbefore it removes a worker.",
               "The chart sets 60 s, so the workers\ngo back to 1 a minute after the load.")]
-    DEPTHS = [SY - 0.03 + i * 0.3 for i in range(3)]   # the three queues, top edges
+    LEVELS = [SY - 0.03 + i * 0.3 for i in range(3)]   # the three queues, top edges
     DH = 0.27
 
     # the connectors the tags travel along
     x0, x1, x2 = XS
     PM, SM = PY + 0.36, SY + 0.36               # the middle line of each diagram
     P = dict(
-        parent=[(x0 + 1.45, PM), (x0 + 1.85 + 0.6, PM)],
-        d0=[(x0 + 1.45, DEPTHS[0] + DH / 2), (x0 + 1.65, DEPTHS[0] + DH / 2), (x0 + 1.65, SM),
+        lead=[(x0 + 1.45, PM), (x0 + 1.85 + 0.6, PM)],
+        d0=[(x0 + 1.45, LEVELS[0] + DH / 2), (x0 + 1.65, LEVELS[0] + DH / 2), (x0 + 1.65, SM),
             (x0 + 1.85 + 0.6, SM)],
-        d1=[(x0 + 1.45, DEPTHS[1] + DH / 2), (x0 + 1.65, DEPTHS[1] + DH / 2), (x0 + 1.65, SM),
+        d1=[(x0 + 1.45, LEVELS[1] + DH / 2), (x0 + 1.65, LEVELS[1] + DH / 2), (x0 + 1.65, SM),
             (x0 + 1.85 + 0.6, SM)],
-        d2=[(x0 + 1.45, DEPTHS[2] + DH / 2), (x0 + 1.65, DEPTHS[2] + DH / 2), (x0 + 1.65, SM),
+        d2=[(x0 + 1.45, LEVELS[2] + DH / 2), (x0 + 1.65, LEVELS[2] + DH / 2), (x0 + 1.65, SM),
             (x0 + 1.85 + 0.6, SM)],
         bad=[(x1 + 1.3, PM), (x1 + 2.6, PM)],
         good=[(x1 + 1.3, SM), (x1 + 2.6, SM), (x1 + 3.2, SM)],
@@ -403,7 +432,7 @@ def findings():
             if ("sw", i) in seen:
                 words(i, 1)
 
-        # 1. one queue for all turns can deadlock; one queue per depth cannot
+        # 1. one queue for all turns can deadlock; one queue per level cannot
         if ("p", 0) in seen:
             x = x0
             comp(c, x, PY, 1.45, 0.72, "one queue", st["q_note"], lit="queue" in on, mark=False)
@@ -411,14 +440,14 @@ def findings():
             comp(c, x + 1.85, PY, 1.9, 0.72, "worker slots", st["slot_note"], lit="slots" in on, mark=False)
         if ("s", 0) in seen:
             x = x0
-            for i, d in enumerate(("depth 0", "depth 1", "depth 2")):
-                y = DEPTHS[i]
+            for i, d in enumerate(("level 0", "level 1", "level 2")):
+                y = LEVELS[i]
                 lit = ("d%d" % i) in on
                 c.d.rectangle([c._p(x), c._p(y), c._p(x + 1.45), c._p(y + DH)], fill=RAISED if lit else BLACK,
                               outline=INK if lit else INK2, width=c._lw(1.5))
                 c.text(x, y, 1.45, DH, d, 13, "Medium", INK)
                 c.line([(x + 1.45, y + DH / 2), (x + 1.65, y + DH / 2)], color=INK2)
-            c.line([(x + 1.65, DEPTHS[0] + DH / 2), (x + 1.65, DEPTHS[2] + DH / 2)], color=INK2)
+            c.line([(x + 1.65, LEVELS[0] + DH / 2), (x + 1.65, LEVELS[2] + DH / 2)], color=INK2)
             c.arrow([(x + 1.65, SM), (x + 1.85, SM)], color=INK2)
             comp(c, x + 1.85, SY, 1.9, 0.72, "worker slots", st["slot2_note"], lit="slots2" in on, mark=False)
 
@@ -439,7 +468,7 @@ def findings():
                 else:
                     c.cross(x + 3.43, y - 0.12, 0.24, 0.24)
 
-        # 3. the HPA's scale-down window, to scale: 300 s by default, 60 s in the chart
+        # 3. KEDA's scale-down window, to scale: 300 s by default, 60 s in the chart
         for row, (y, secs, lit) in enumerate(((PY + 0.4, 300, False), (SY + 0.4, 60, True))):
             if ((("p", 2) if row == 0 else ("s", 2))) not in seen:
                 continue
@@ -470,23 +499,23 @@ def findings():
     def show(*keys):
         sc.set(seen=st["seen"] | set(keys))
 
-    # 1. per-depth queues
-    sc.step("1. One queue for all turns: parents fill every worker slot", 0.6, seen={("p", 0)}, on={"queue"})
+    # 1. per-level queues
+    sc.step("1. One queue for all turns: leads fill every worker slot", 0.6, seen={("p", 0)}, on={"queue"})
     for n in range(2):
-        move("parent", "parent", 0.6)
-        sc.set(on={"slots"}, slot_note="held by a parent")
+        move("lead", "lead", 0.6)
+        sc.set(on={"slots"}, slot_note="held by a lead")
         sc.hold(0.3)
-    sc.set(slot_note="all held by parents", q_note="children wait", on={"queue", "slots"})
+    sc.set(slot_note="all held by leads", q_note="readers wait", on={"queue", "slots"})
     sc.hold(0.6)
-    sc.title = "1. Their children wait in the same queue: a deadlock"
+    sc.title = "1. Their readers wait in the same queue: a deadlock"
     show(("pw", 0))
     sc.hold(2.0)
-    sc.step("1. One queue per depth: children always run", 0.4, on={"d1", "d2"})
+    sc.step("1. One queue per level: readers always run", 0.4, on={"d1", "d2"})
     show(("s", 0))
     sc.hold(0.4)
-    move("d1", "child", 0.6)
-    sc.set(on={"d2", "slots2"}, slot2_note="children always run")
-    move("d2", "child", 0.6)
+    move("d1", "reader", 0.6)
+    sc.set(on={"d2", "slots2"}, slot2_note="readers always run")
+    move("d2", "reader", 0.6)
     sc.set(on={"slots2"})
     show(("sw", 0))
     sc.hold(1.8)
@@ -522,11 +551,12 @@ def findings():
 def scaling():
     data = [d for d in _scaling() if d[0] <= 215]
     T1 = 220
-    X0, X1 = 1.05, 8.4                          # the plot, left and right
-    YB, YT, JMAX = 4.25, 1.55, 30               # the plot's baseline, top, top value
+    X0, X1 = 1.05, 9.35                         # the plot, left and right
+    YB, YT, JMAX = 4.4, 2.0, 30               # the plot's baseline, top, top value
     BW = 0.28                                   # a bar's width
-    RX, RW, RH = 9.15, 2.55, 0.36               # the worker pods, right of the chart
-    RY = [1.45 + k * 0.45 for k in range(4)]
+    RX, RW, RH = 9.85, 2.05, 0.32               # the worker pods, right of the chart
+    RY = [2.1 + k * 0.4 for k in range(4)]
+    PEAK = max(data, key=lambda d: d[2])        # the sample with the most jobs waiting
 
     def tx(t):
         return X0 + t / T1 * (X1 - X0)
@@ -537,22 +567,28 @@ def scaling():
     def paint(c, st):
         t = st["t"]
         seen = [d for d in data if d[0] <= t + 1e-6]
-        # the legend, one line under the title band
-        c.bar(X0, 1.08, 0.16, 0.16, INK2)
-        c.text(X0 + 0.26, 1.01, 3, 0.3, "jobs waiting (three queues)", 13, "Medium", INK2, "left")
+        # what the test is, quietly, under the step title; then the legend
+        c.text(0.3, 0.98, 10, 0.28, "load test with the paced worker (no model calls), so the test measures the "
+               "platform's scaling, not the model", 13, "Regular", INK3, "left")
+        LY = 1.42
+        c.bar(X0, LY + 0.07, 0.16, 0.16, INK2)
+        c.text(X0 + 0.26, LY, 3, 0.3, "jobs waiting (three queues)", 13, "Medium", INK2, "left")
         lx = X0 + 0.26 + _tw("jobs waiting (three queues)", 13, "Medium") + 0.45
-        _dashed(c, [(lx, 1.16), (lx + 0.42, 1.16)], INK)
-        c.text(lx + 0.55, 1.01, 3, 0.3, "target: 5 jobs per worker", 13, "Medium", INK2, "left")
+        _dashed(c, [(lx, LY + 0.15), (lx + 0.42, LY + 0.15)], INK)
+        c.text(lx + 0.55, LY, 6, 0.3, "target: 5 waiting jobs per worker (the line rises with each worker)", 13,
+               "Medium", INK2, "left")
         for n in (0, 10, 20, 30):
             y = jy(n)
             if n:
                 c.line([(X0, y), (X1, y)], pt=1, color=RULE2)
             c.text(0.3, y - 0.15, 0.6, 0.3, str(n), 13, "Regular", INK3, "right")
         c.line([(X0, YB), (X1, YB)], pt=1.5, color=RULE)
-        c.line([(tx(t), YT - 0.1), (tx(t), YB)], pt=2, color=INK)
+        now = st["peak"] if st["peak"] is not None else (seen[-1][0] if seen else -1)
+        c.line([(tx(now if st["peak"] is not None else t), YT - 0.1), (tx(now if st["peak"] is not None else t), YB)],
+               pt=2, color=INK)
         for ts, w, j in seen:
             if j:
-                c.bar(tx(ts) - BW / 2, jy(j), BW, YB - jy(j), INK if ts == seen[-1][0] else INK2)
+                c.bar(tx(ts) - BW / 2, jy(j), BW, YB - jy(j), INK if ts == now else INK2)
         pts = []
         for i, (ts, w, j) in enumerate(seen):
             end = min(t, data[i + 1][0]) if i + 1 < len(data) else t
@@ -567,7 +603,9 @@ def scaling():
             c.text(tx(s) - 0.5, YB + 0.1, 1.0, 0.3, "%d s" % s, 13, "Regular", INK3)
         # the worker pods: one box for each pod that runs now
         w_now = seen[-1][1] if seen else 1
-        c.text(RX, 1.05, RW, 0.3, "worker pods (KEDA)", 13, "Medium", INK2, "left")
+        if st["peak"] is not None:
+            w_now = PEAK[1]
+        c.text(RX, 1.76, RW, 0.3, "worker pods (KEDA)", 13, "Medium", INK2, "left")
         for k in range(4):
             if k < w_now:
                 new = st["added"].get(k, -99) > t - 9
@@ -576,7 +614,7 @@ def scaling():
                 c.d.rectangle([c._p(RX), c._p(RY[k]), c._p(RX + RW), c._p(RY[k] + RH)], outline=RULE2,
                               width=c._lw(1))
         if st["result"]:
-            _invert_lines(c, RX, 3.42, ["135 questions", "median 6.1 s", "0 of 1,040 failed"])
+            _invert_lines(c, RX, 3.72, ["135 questions", "median 6.1 s", "0 of 1,040 failed"], size=15, lh=0.32)
 
     # when KEDA added each worker, from the samples: the first sample with more workers
     added, prev = {}, 1
@@ -584,7 +622,7 @@ def scaling():
         for k in range(prev, w):
             added[k] = ts
         prev = w
-    sc = Scene("scaling.gif", paint, dict(t=0.0, result=False, added=added))
+    sc = Scene("scaling.gif", paint, dict(t=0.0, result=False, added=added, peak=None))
 
     def sweep(t_end, rate=26.0):
         t_start = sc.st["t"]
@@ -608,7 +646,9 @@ def scaling():
     sc.step("5. The load stops, the queue empties, and a minute later: 1 worker", 0.3)
     sweep(215, 32)
     sc.hold(2.2)
-    sc.step("6. Every question finished, and no request failed", 3.6, result=True)
+    # The GIF plays once and stays on its last frame: end on the peak, 4 workers, with the result.
+    sc.step("6. At the peak, 4 workers; every question finished, no request failed", 3.6, result=True,
+            peak=PEAK[0])
     sc.save()
 
 

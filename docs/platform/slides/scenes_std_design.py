@@ -156,8 +156,8 @@ def er():
     findings.x = projects.r + GAP
     tasks.x = findings.x
     tasks.w = findings.w = max(tasks.w, findings.w)
-    agents.x = findings.r + GAP
-    intents.x = agents.r + GAP
+    agents.x = findings.r + 0.34              # a little closer, to leave room for the worker frame
+    intents.x = agents.r + 0.34
     sessions.w = projects.w = max(sessions.w, projects.w)
     steps.x = tasks.r + GAP
     bx = steps.r + 0.1 + 0.15 + 0.1
@@ -175,7 +175,9 @@ def er():
                  ["projects", "findings", "agents", "intents"]),
                 ("session", (2.28, F1, steps.r + 0.1 - 2.28, low_b - F1), ["sessions", "tasks", "steps"]),
                 ("billing", (bx - 0.1, F1, approvals.r + 0.1 - (bx - 0.1), low_b - F1),
-                 ["wallets", "ledger", "approvals"])]
+                 ["wallets", "ledger", "approvals"]),
+                ("worker", (intents.r + 0.25, F0, 12.07 - (intents.r + 0.25), top_b - F0), [])]
+    WORKER_BOX = CONTEXTS[-1][1]
 
     # relationships, each from its one side to its many side; solid is a foreign key,
     # dashed an id from another context
@@ -202,6 +204,9 @@ def er():
         for name, box, tables in CONTEXTS:
             if name in st["ctx"]:
                 frame(c, *box, name)
+        if "worker" in st["ctx"]:
+            x, y, w, h = WORKER_BOX
+            c.text(x, y + 0.3, w, h - 0.3, "no\ntables", 13, "Regular", INK2)
         if st["links"]:
             for k, pts in L.items():
                 crow(c, pts, k in DASHED, INK if k == st["now"] else INK2)
@@ -226,7 +231,8 @@ def er():
     TITLES = dict(identity="identity: accounts and their API keys",
                   project="project: projects, findings, the agent registry",
                   session="session: the trace of each question",
-                  billing="billing: wallet, ledger, approvals")
+                  billing="billing: wallet, ledger, approvals",
+                  worker="worker: runs the agents, owns no tables")
     for name, box, tables in CONTEXTS:
         sc.step(TITLES[name], 0.35, ctx=st["ctx"] | {name})
         for k in tables:
@@ -262,7 +268,7 @@ def er():
     insert("task_ledger", "ledger", 0.9, 0.9)
 
     # 3. hold: the whole diagram, nothing lit
-    sc.step("Four contexts, each owns its tables, in one PostgreSQL 16", 3.6, lit=set(), now=None)
+    sc.step("Four of five contexts own tables; the worker owns none", 3.6, lit=set(), now=None)
     sc.save()
 
 
@@ -433,7 +439,7 @@ def sequence():
     send("get")
     send("route")
     send("answer", seconds=0.8, hold=1.0)
-    sc.step("On the public host: the answer in 4.9 s, for USD 0.01", 3.5, now=set(), on=set(), clock=LIFE_END)
+    sc.step("The app gets 201 at once and reads the answer later", 3.5, now=set(), on=set(), clock=LIFE_END)
     sc.save()
 
 
@@ -469,7 +475,7 @@ def queues():
             if word:
                 tag(c, *cell(x + N * CELL, i, y), word)
 
-    def draw_workers(c, top, bottom, rows, slots):
+    def draw_workers(c, top, bottom, rows, slots, done=(False, False)):
         for j in range(2):
             x = col(j)
             c.d.rectangle([c._p(x), c._p(top), c._p(x + COLW), c._p(bottom)], outline=INK2, width=c._lw(1.5))
@@ -478,7 +484,12 @@ def queues():
                 sx = x + (COLW - SLOTW) / 2
                 c.d.rectangle([c._p(sx), c._p(y - QH / 2), c._p(sx + SLOTW), c._p(y + QH / 2)], outline=RULE,
                               width=c._lw(1))
-                if slots[j][r]:
+                if slots[j][r] and r == 0 and done[j]:
+                    # a finished lead: its tag moves left, and a check mark stands beside it
+                    sx0, sy = slot(j, y)
+                    tag(c, sx0 - 0.11, sy, slots[j][r])
+                    c.check(sx0 + 0.21, sy - 0.11, 0.2)
+                elif slots[j][r]:
                     tag(c, *slot(j, y), slots[j][r])
 
     def paint(c, st):
@@ -503,12 +514,12 @@ def queues():
             c.text(0.3, y - 0.13, BQX - 0.42, 0.26, "lumen.turns.%d" % r, 13, "Regular", INK2, "right")
             draw_queue(c, BQX, y, st["bq"][r])
             c.arrow([(BQR, y), (GX, y)], color=INK2)
-        draw_workers(c, *BOTBOX, BY, st["bslots"])
+        draw_workers(c, *BOTBOX, BY, st["bslots"], st["done"])
         for x, y, word in st["moving"]:
             tag(c, x, y, word)
 
     st = dict(tq=[], tslots=[[None], [None]], bq=[[], [], []], bslots=[[None] * 3, [None] * 3], moving=[],
-              deadlock=False, nofree=False, waiting=[False, False], finish=False)
+              deadlock=False, nofree=False, waiting=[False, False], finish=False, done=[False, False])
     sc = Scene("queues.gif", paint, st)
 
     def glide(moves, seconds=0.7):
@@ -573,12 +584,12 @@ def queues():
         st["bslots"][0][1] = st["bslots"][1][1] = None
     sc.title = "The readers run in the reader slots: 6 of 6 done"
     sc.hold(0.8)
+    sc.step("lumen.turns.2 stays empty: readers do not delegate", 1.8)
     sc.title = "The leads write their answers, and every question finishes"
-    sc.hold(0.6)
-    st["bslots"][0][0] = st["bslots"][1][0] = None
-    sc.set(finish=True)
-    sc.hold(1.6)
-    sc.step("lumen.turns.2 stays empty: readers do not delegate", 2.6)
+    sc.hold(0.5)
+    sc.set(done=[True, True], finish=True)
+    # the last frame stays on screen: both halves complete, nothing lit
+    sc.hold(3.6)
     sc.save()
 
 

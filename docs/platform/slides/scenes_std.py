@@ -179,7 +179,9 @@ def logical():
     sc.set(on={"worker"})
     move("llm", "prompt", 0.8)
     sc.set(on={"worker", "llm"})
-    sc.tween(3.2, lambda u: st.update(think=int(u * 102)))
+    back = P["llm"][::-1]                       # the model's reply comes back on the same connector
+    sc.tween(0.8, lambda u: st.update(tags=[(*draw.along(back, u), "reply")]))
+    sc.set(tags=[], on={"worker"})
     sc.hold(0.6)
     sc.title = "5. Each step goes back to session, which saves it"
     sc.set(on={"worker", "session"})
@@ -191,7 +193,7 @@ def logical():
     sc.set(on={"session", "watch"}, think=None)
     move("answer", "answer", 1.1)
     sc.hold(2.4)
-    sc.step("Five services, one gateway, one queue between session and workers", 3.0, on=set(), all=True)
+    sc.step("Five services behind one gateway; turns wait in RabbitMQ, one queue per level", 3.0, on=set(), all=True)
     sc.save()
 
 

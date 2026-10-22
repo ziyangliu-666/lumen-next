@@ -177,3 +177,56 @@ Hold: "One EC2 node runs the whole platform in k3s". The full diagram stays with
 Facts: the node, region, security group, replica ranges (worker 1 to 4 with KEDA) and
 the protocols are the ones in the static diagram and in report 3.2. Section 4.1 of the
 report shows four worker pods under load.
+
+## Fixes after the clarity and slop review (2026-10-22)
+
+All three GIFs now play once and stop on their last frame (draw.py at 30 fps). In every
+last frame, nothing is lit or moving. I rendered one scene at a time and checked 11 frames
+of each, zoomed.
+
+### sequence.gif (21.6 s)
+- The last title is now "The app gets 201 at once and reads the answer later". The title
+  "On the public host: the answer in 4.9 s, for USD 0.01" is gone.
+- The speaker notes in my first section still end with the 4.9 s and one-cent sentence.
+  Remove that sentence too.
+
+### queues.gif (30.9 s)
+- The last frame now shows the solved lower half:
+  - each worker's level-0 slot keeps its "lead" tag with a check mark;
+  - the "all questions finish" block stays visible;
+  - the deadlock stays in the upper half.
+- The order at the end:
+  1. "The readers run in the reader slots: 6 of 6 done".
+  2. "lumen.turns.2 stays empty: readers do not delegate".
+  3. "The leads write their answers, and every question finishes". The check marks and the block appear, and this frame stays.
+- The words are lead, reader, level and slot everywhere. No frame uses parent, child or depth.
+
+### er.gif (26.6 s)
+- The last title is "Four of five contexts own tables; the worker owns none". A fifth thin
+  frame, "worker", with "no tables" inside it, stands at the top right. It is built last,
+  with the step title "worker: runs the agents, owns no tables". To make room, the gaps in
+  the top row are 0.08 in smaller.
+- I checked each line against the migrations. The lines were already correct, so none
+  changed. Solid means a `references` clause in the schema. Dashed means a plain id.
+  - **Inside a context, solid:**
+    - accounts to platform_api_keys (090);
+    - platform_agents to platform_question_intents (091, `agent_id`);
+    - projects to findings (005, `findings.project_id`);
+    - sessions to tasks, tasks to tasks (`parent_id`), and tasks to steps (001).
+  - **Across contexts, solid (real foreign keys):**
+    - platform_agents.owner_account_id to accounts (091);
+    - findings.session_id to sessions, and findings.task_id to tasks (001);
+    - ledger_entries.task_id to tasks (001).
+  - **Across contexts, dashed (plain ids):**
+    - projects.account_id to accounts (005 drops that foreign key and makes the column text);
+    - sessions.project_id to projects (text, no foreign key).
+  - **Plain ids that the picture does not draw:**
+    - `account_id` in sessions, the question intents and the three billing tables;
+    - `platform_question_intents.session_id`;
+    - `billing_approvals.task_id`.
+- **The proposed notes do not match the schema.** They say that only findings and ledger
+  entries cross with foreign keys. Two more foreign keys cross: platform_agents to
+  accounts, and findings to sessions. Notes that match the picture:
+  "One shared database (AD-06). Inside a context, tables use foreign keys. Across contexts,
+  most references are plain ids. A few foreign keys cross: findings point to sessions and
+  tasks, ledger entries point to tasks, and an agent points to its owner's account."

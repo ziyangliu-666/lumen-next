@@ -209,7 +209,16 @@ shown(
 // ------------------------------------------------------------------ 4 physical architecture
 shown(
   'Physical',
-  '4a  ·  4b  ·  Physical architecture',
+  '4a  ·  Key architectural decisions',
+  'Three choices shape the deployment',
+  'physdecisions.gif',
+  'Three decisions shape the physical architecture. First, k3s on one EC2 t3.medium instead of EKS: the same Helm chart runs on a laptop and on AWS, for about 1.3 dollars a day. ' +
+    'Second, two autoscalers: HPA on CPU for identity, project and billing, and KEDA on queue length for the worker, because a worker waits on the model and its CPU stays low while the queue grows. ' +
+    'Third, one PostgreSQL database with tables per context, so a step, its cost and its ledger entry are written in one transaction.',
+);
+shown(
+  'Physical',
+  '4b  ·  Physical architecture',
   'One AWS node, one k3s cluster',
   'deployment.gif',
   'The physical architecture as a UML deployment diagram. One EC2 t3.medium in Singapore runs k3s; we chose k3s over EKS, so the same Helm chart runs on a laptop and on AWS. ' +
@@ -237,12 +246,12 @@ shown(
   '4d  ·  Detailed design',
   'Asking a question with a chosen agent',
   'sequence.gif',
-  'This is use case A: a consumer asks a question with an agent that a producer published. The request comes through Traefik to the project service. The key guard checks the key, its rate and its scope, and then project asks session to open the session. Session puts the root turn on lumen.turns.0, and the client gets 201 at once. Any worker takes the turn. For each step it calls the model and posts the step to session, which writes it to PostgreSQL. The client then reads the answer with a GET. On the public host this took 4.9 seconds and cost one cent.',
+  'This is use case A: a consumer asks a question with an agent that a producer published. The request comes through Traefik to the project service. The key guard checks the key, its rate and its scope, and then project asks session to open the session. Session puts the root turn on lumen.turns.0, and the client gets 201 at once. Any worker takes the turn. For each step it calls the model and posts the step to session, which writes it to PostgreSQL. The client then reads the answer with a GET.',
 );
 shown(
   'Physical',
   '4d  ·  Recorded through the API',
-  'The same use case, for real',
+  'A question through the public API',
   'rec-ask.gif',
   'The same use case on the public server, from the command line: POST /api/v1/questions with an API key, then GET /api/v1/questions/:id for the status, the cost and the answer from gpt-4.1-nano.',
 );
@@ -251,7 +260,7 @@ shown(
   '4c  ·  Persistence',
   'The schema, by context',
   'er.gif',
-  "All persistent data is in one PostgreSQL 16 database, and each context owns its own tables: the frames show the owner. Inside a context we use real foreign keys. Across contexts, a service keeps only the other context's id, so it does not depend on another team's schema. The task tree is one table with a parent link, so the cost roll-up and the usage queries are plain SQL. Money is numeric(12,6). Turns in flight are in RabbitMQ, not in the database, and the agents' files are on a 2Gi volume.",
+  "All persistent data is in one PostgreSQL 16 database, AD-06, and each context owns its tables: the frames show the owner; the worker owns none. Inside a context, tables use foreign keys. Across contexts most references are plain ids, and a few foreign keys cross: findings point to sessions and tasks, ledger entries point to tasks, and an agent points to its owner's account. The task tree is one table with a parent link, so the cost roll-up is SQL. Money is numeric(12,6). Turns in flight are in RabbitMQ, and the agents' files are on a 2Gi volume.",
 );
 
 // ------------------------------------------------------------------ 5 DevOps
@@ -267,7 +276,7 @@ shown(
   '5b  ·  DevOps pipeline',
   'Six checks around one deploy',
   'pipeline.gif',
-  'Every push to ass/platform runs this pipeline. Tests, a dependency audit and CodeQL run in parallel. Only then does the deploy job build the image and scan it with Trivy. In our first run the gate found five critical CVEs and stopped the deploy, so the image never reached the host. That is the pipeline doing its job. We built a smaller platform image without Docker inside, and the next run passed every stage and was live in 12 minutes 30 seconds.',
+  'Every push to ass/platform runs this pipeline. Tests, a dependency audit and CodeQL run in parallel. Only then does the deploy job build the image and scan it with Trivy. In our first run the gate found five critical CVEs and stopped the deploy, so the image never reached the host. That is the pipeline doing its job. We built a smaller platform image without Docker inside, and in the next run every stage passed; all jobs were done in 12 minutes 30 seconds.',
 );
 shown(
   'DevOps',
@@ -290,12 +299,12 @@ shown(
   '6b  ·  Scalability',
   'KEDA adds workers as the queue grows',
   'scaling.gif',
-  "This is a real load test on the public host: ten users ask questions without pause. The bars are the jobs waiting in the queues, and the dashed line is KEDA's target of five jobs per worker. When the queue passes that line, KEDA adds a worker pod, and it went from one to four in 49 seconds. After the load stops, the queue empties, and a minute later KEDA scales back to one worker. All 135 questions finished with a median of 6.1 seconds, and none of the 1,040 requests failed.",
+  "This is our k6 load test on the public host, with the paced worker that makes no model calls, so the test measures how the platform scales and not how fast the model answers. Ten users ask questions without pause. The bars are the jobs waiting in the queues, and the dashed line is KEDA's target of five jobs per worker. When the queue passes that line, KEDA adds a worker pod, and it went from one to four in 49 seconds. After the load stops, the queue empties, and a minute later KEDA scales back to one worker. All 135 questions finished with a median of 6.1 seconds, and none of the 1,040 requests failed.",
 );
 shown(
   'Demo',
   '6b  ·  Recorded on the server',
-  'KEDA adds workers, for real',
+  'On the server: KEDA adds a worker',
   'rec-scale.gif',
   'The same autoscaler on the public server: KEDA compares the jobs per worker with the target of five, and the worker replicas go up, then back down after the load.',
 );

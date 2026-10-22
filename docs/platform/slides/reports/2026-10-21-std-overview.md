@@ -179,3 +179,53 @@ The four static pictures are now GIFs. Each one has three phases: a build, one r
    5. "A step over the cap needs an approval": the tag "approval", label "approval needed".
    6. "A finding goes back to the project": the tag "finding", label "finding recorded".
 6. Hold: "Five contexts, one core domain, six domain events".
+
+# Review fixes, 22 October: usecases.gif and the new physdecisions.gif
+
+Both GIFs use the current draw.py: 30 fps, and they play once. Each one ends on its full diagram. I rendered them one at a time and checked 12 frames spread over each GIF. For physdecisions.gif, I also checked zoomed crops of all three panels. No text touches a line, a box edge or other text.
+
+## out/usecases.gif (slide 1c), 19.3 s
+These changes answer the review:
+- **Demo-mode number removed.** The step "The answer returns: ended in 4.9 s, cost USD 0.01" is gone. The return step is now "The app reads the answer, the findings and the cost", with no number.
+- **Number order.** The build goes UC1, UC2, UC3, UC4, UC5, UC6.
+- **Actor names.** The actors now use the names in platform.gif: "Producer (agent author)", "Operator", "Literature watch app" and "People in the web app".
+
+One thing stays the same: the ovals are still grouped by actor. The producer's and the operator's use cases (UC1, UC5) are in the left column. The two consumers' use cases (UC2, UC6 for the watch app; UC3, UC4 for people in the web app) are in the right column. I tried strict number order on the page as well, and every such layout makes links cross. In the build, the use cases still come in number order.
+
+The steps:
+1. Build: "Four actors use the platform", then "The system boundary: Lumen platform".
+2. Build: each use case appears lit, with its links: "UC1 Publish an agent: the producer", "UC2 Ask a question: the literature watch app", "UC3 Manage API keys: people in the web app", "UC4 Approve spend over cap: people in the web app", "UC5 Read usage: the producer and the operator", "UC6 Watch the literature: the literature watch app".
+3. Flow: "Flow: the literature watch app asks a question (UC2)". The tag "question" goes to UC2.
+4. Flow: "The app reads the answer, the findings and the cost". The tag "answer" comes back.
+5. Hold, at least 3.6 s: "Six use cases, four actors, all built".
+
+## out/physdecisions.gif (slide 4a), new scene `physdecisions`, 23.7 s
+The layout is the same as decisions.gif: three panels, each with its AD number, a small standard diagram that moves, one caption line and one note line. Each panel also shows the rejected alternative, greyed and crossed out.
+
+- **AD-09.** The diagram:
+  - A "Helm chart" box has an arrow down to a UML node "EC2 t3.medium" (2 vCPU, 4 GB). Inside it is a nested node "k3s".
+  - The alternative is a crossed-out, greyed arrow from the chart to "EKS".
+  - Title "AD-09: one Helm chart installs every pod on k3s": the nine pods appear one by one in k3s (identity, project, session, worker, billing, postgres, rabbitmq, traefik, keda), the same set as deployment.png.
+  - Caption "k3s on one EC2 t3.medium, not EKS". Note "the laptop chart, unchanged; USD 1.3 a day".
+- **AD-11.** The diagram:
+  - "HPA on CPU" (identity, project, billing): a CPU bar with a 70% mark, and three pod slots. Title "AD-11: HPA adds pods when CPU passes 70%": the bar rises past 70% and the count goes "1 pod (1 to 3)", "2 pods", "3 pods". Then the CPU settles.
+  - "KEDA on queue length" (worker): a "turns" queue labelled "queueLength 5", and four pod slots. Title "AD-11: KEDA adds workers as turns wait in the queue": the queue fills and the count goes from 1 to 4 pods.
+  - The alternative: the worker's CPU bar stays low and greyed, with a crossed-out arrow to a greyed "HPA" box.
+  - Caption "HPA on CPU; KEDA on queue length". Note "a worker waits on the model, so its CPU is low".
+- **AD-06.** The diagram:
+  - The session service writes into one PostgreSQL frame. Inside it are four context frames, each with its own tables: session (steps, tasks), billing (ledger_entries), identity (accounts), project (projects, findings).
+  - The alternative is a crossed-out, greyed arrow from session to "own database" ("per service").
+  - Title "AD-06: one PostgreSQL; each context owns its tables". Then "AD-06: the step, its cost and the ledger entry in one transaction": a "step" tag goes from session into the database, the "steps, tasks" row lights, then "ledger_entries" lights with it.
+  - Caption "One PostgreSQL, tables per context". Note "step, cost and ledger entry in one transaction".
+- Hold, at least 3.6 s, on the full diagram: "Three decisions shape the physical architecture".
+
+Facts and their sources:
+- Report 3.2.1:
+  - AD-09: t3.medium, about USD 1.3 a day, and the same chart as on the laptop (k3d).
+  - AD-11: HPA at 70% CPU with 1 to 3 replicas; KEDA with `QueueLength` 5 and 1 to 4 replicas; a worker waits on the model.
+- Report 3.1.1, AD-06; and report 3.2.3 for the tables and their owners.
+- The single transaction is in `apps/server/src/modules/session/pgTrace.ts`, `appendCostedStep`: the step, the task's cost and billing's ledger entry commit together or not at all.
+- `deploy/k8s/lumen/values.yaml`: `queueLength: 5`.
+- `deploy/k8s/aws/README.md`: t3.medium, 2 vCPU, 4 GB.
+
+Speaker notes (4a): "Three decisions shape the physical side. We run k3s on one EC2 t3.medium instead of EKS: the Helm chart that runs on a laptop installs every pod unchanged, for about 1.3 US dollars a day. We scale with two autoscalers: HPA on CPU for identity, project and billing, and KEDA on queue length for the worker, because a worker waits on the model and its CPU stays low while turns pile up. And all contexts share one PostgreSQL, each with its own tables, so a step, its cost and its ledger entry commit in one transaction."

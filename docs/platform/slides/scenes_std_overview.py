@@ -4,6 +4,7 @@ platform.gif    who uses the platform and how (slide 1b)
 usecases.gif    a UML use case diagram of UC1 to UC6 (slide 1c)
 decisions.gif   AD-01, AD-02 and AD-04 as three small diagrams (slide 3a)
 contextmap.gif  a DDD context map with the domain events (slide 3c)
+physdecisions.gif AD-09, AD-11 and AD-06: the decisions that shape the physical side (slide 4a)
 interaction.gif the seven calls of report 3.1.4, as a sequence diagram (slide 3c)
 
 Every fact comes from docs/platform/report/report.md (sections 1.4.1, 3.1.1 and 3.1.4)
@@ -16,7 +17,7 @@ import math
 
 import draw
 from draw import BLACK, INK, INK2, INK3, RAISED, RULE, RULE2, Scene, font, S, X2
-from scenes_std import comp, tag
+from scenes_std import comp, node, tag
 
 
 # ---------------------------------------------------------------- shared drawing
@@ -57,7 +58,8 @@ def actor(c, x, y, name, color=INK):
     c.d.line([(c._p(x - 0.2), c._p(y - 0.22)), (c._p(x + 0.2), c._p(y - 0.22))], fill=color, width=lw)
     c.d.line([(c._p(x - 0.17), c._p(y + 0.26)), (c._p(x), c._p(y)), (c._p(x + 0.17), c._p(y + 0.26))],
              fill=color, width=lw, joint="curve")
-    c.text(x - 1.0, y + 0.3, 2.0, 0.3, name, 15, "Semibold", color)
+    lines = name.count("\n") + 1
+    c.text(x - 1.1, y + 0.3, 2.2, 0.3 * lines, name, 15, "Semibold", color)
 
 
 def oval(c, cx, cy, w, h, ident, name, lit=False):
@@ -223,6 +225,9 @@ def usecases():
     BX, BY, BW, BH = 2.25, 1.0, 7.6, 3.9        # the system boundary
     OW, OH = 3.3, 0.76
     LCX, RCX = BX + 0.3 + OW / 2, BX + BW - 0.3 - OW / 2
+    # The use cases are drawn and built in number order inside each actor's group: the left
+    # column holds the producer's and the operator's, the right column the two consumers'.
+    # Grouped this way, no two links cross.
     UC = {  # id: (centre x, centre y, short name)
         "UC1": (LCX, 2.15, "Publish an agent"),
         "UC2": (RCX, 1.78, "Ask a question"),
@@ -231,19 +236,21 @@ def usecases():
         "UC5": (LCX, 3.85, "Read usage"),
         "UC6": (RCX, 2.62, "Watch the literature"),
     }
-    ACT = {  # name: (hip x, hip y)
-        "Producer": (1.0, 2.45),
-        "Operator": (1.0, 4.1),
-        "Consumer app": (11.1, 2.5),
-        "Account owner": (11.1, 4.15),
+    # The same actors as in platform.gif. (hip x, hip y, the name's two lines)
+    ACT = {
+        "Producer": (1.0, 2.1, "Producer\n(agent author)"),
+        "Operator": (1.0, 4.05, "Operator"),
+        "Literature watch app": (11.1, 2.05, "Literature\nwatch app"),
+        "People in the web app": (11.1, 3.85, "People in\nthe web app"),
     }
-    WHO = {"UC1": ["Producer"], "UC2": ["Consumer app"], "UC3": ["Account owner"], "UC4": ["Account owner"],
-           "UC5": ["Producer", "Operator"], "UC6": ["Consumer app"]}
-    SAY = {"UC1": "the producer", "UC2": "an app", "UC3": "the account owner", "UC4": "the account owner",
-           "UC5": "the producer and the operator", "UC6": "an app, on a schedule"}
+    WHO = {"UC1": ["Producer"], "UC2": ["Literature watch app"], "UC3": ["People in the web app"],
+           "UC4": ["People in the web app"], "UC5": ["Producer", "Operator"], "UC6": ["Literature watch app"]}
+    SAY = {"UC1": "the producer", "UC2": "the literature watch app", "UC3": "people in the web app",
+           "UC4": "people in the web app", "UC5": "the producer and the operator",
+           "UC6": "the literature watch app"}
 
     def path(name, u):
-        ax, ay = ACT[name]
+        ax, ay, _ = ACT[name]
         sx, sy = ax + (0.32 if ax < BX else -0.32), ay - 0.22
         ux, uy, _ = UC[u]
         return [(sx, sy), on_oval(ux, uy, OW, OH, sx, sy)]
@@ -258,8 +265,8 @@ def usecases():
             ux, uy, n = UC[u]
             oval(c, ux, uy, OW, OH, u, n, lit=u == st["now"])
         if st["actors"]:
-            for name, (ax, ay) in ACT.items():
-                actor(c, ax, ay, name)
+            for name, (ax, ay, label) in ACT.items():
+                actor(c, ax, ay, label)
         for x, y, word in st["tags"]:
             tag(c, x, y, word)
 
@@ -269,14 +276,14 @@ def usecases():
     # build: the actors, the boundary, then each use case with its links
     sc.step("Four actors use the platform", 2.0, actors=True)
     sc.step("The system boundary: Lumen platform", 1.6, box=True)
-    for u in ["UC1", "UC2", "UC6", "UC3", "UC4", "UC5"]:
+    for u in ["UC1", "UC2", "UC3", "UC4", "UC5", "UC6"]:
         sc.step("%s  %s: %s" % (u, UC[u][2], SAY[u]), 1.3, ucs=st["ucs"] + [u], now=u)
-    # flow: an app asks a question (UC2)
-    sc.step("Flow: the consumer app asks a question (UC2)", 0.4, now="UC2")
-    travel(path("Consumer app", "UC2"), "question", 1.0)
+    # flow: the literature watch app asks a question (UC2)
+    sc.step("Flow: the literature watch app asks a question (UC2)", 0.4, now="UC2")
+    travel(path("Literature watch app", "UC2"), "question", 1.0)
     sc.hold(0.8)
-    sc.title = "The answer returns: ended in 4.9 s, cost USD 0.01"
-    travel(path("Consumer app", "UC2")[::-1], "answer", 1.0)
+    sc.title = "The app reads the answer, the findings and the cost"
+    travel(path("Literature watch app", "UC2")[::-1], "answer", 1.0)
     sc.hold(1.2)
     # hold
     sc.step("Six use cases, four actors, all built", 3.6, now=None)
@@ -492,6 +499,165 @@ def contextmap():
     sc.save()
 
 
+# ---------------------------------------------------------------- slide 4a: decisions that shape the physical side
+def physdecisions():
+    PW = 3.75
+    PX = [0.15, 4.2, 8.25]
+    CY = 4.22                                   # the captions' line
+    CAP = [("AD-09", "k3s on one EC2 t3.medium, not EKS", "the laptop chart, unchanged; USD 1.3 a day"),
+           ("AD-11", "HPA on CPU; KEDA on queue length", "a worker waits on the model, so its CPU is low"),
+           ("AD-06", "One PostgreSQL, tables per context", "step, cost and ledger entry in one transaction")]
+    # (a) AD-09: the pods that one Helm chart installs on k3s (deployment.png has the same nine)
+    a0 = PX[0]
+    PODS = ["identity", "project", "session", "worker", "billing", "postgres", "rabbitmq", "traefik", "keda"]
+    # (b) AD-11
+    b0 = PX[1]
+    BAR = (b0 + 0.7, 1.3)                       # a CPU bar's left edge and width
+    # (c) AD-06: the contexts' tables in the one database (report 3.2.3)
+    c0 = PX[2]
+    CTX = [("session", "steps, tasks", c0 + 0.25, 2.4, "steps"),
+           ("billing", "ledger_entries", c0 + 1.98, 2.4, "ledger"),
+           ("identity", "accounts", c0 + 0.25, 3.15, None),
+           ("project", "projects, findings", c0 + 1.98, 3.15, None)]
+    WRITE = [(c0 + 0.67, 1.72), (c0 + 0.67, 2.4)]
+
+    def plural(n, top):
+        return "%d pod%s (1 to %d)" % (n, "" if n == 1 else "s", top)
+
+    def cpu_bar(c, x, y, u, faint=False):
+        """A CPU bar: its outline, and a fill for the share in use."""
+        w = BAR[1]
+        c.d.rectangle([c._p(x), c._p(y), c._p(x + w), c._p(y + 0.18)], outline=RULE if faint else INK2,
+                      width=c._lw(1.5))
+        col = RULE if faint else (INK if u >= 0.7 else INK2)
+        if u > 0:
+            c.d.rectangle([c._p(x), c._p(y), c._p(x + w * u), c._p(y + 0.18)], fill=col)
+
+    def pods(c, x, y, n, total, w, lit=False):
+        for i in range(total):
+            px = x + i * (w + 0.08)
+            if i < n:
+                c.d.rectangle([c._p(px), c._p(y), c._p(px + w), c._p(y + 0.3)], fill=RAISED,
+                              outline=INK if lit else INK2, width=c._lw(1.5))
+            else:
+                c.d.rectangle([c._p(px), c._p(y), c._p(px + w), c._p(y + 0.3)], outline=RULE2, width=c._lw(1))
+
+    def paint(c, st):
+        lit = st["lit"]
+        for x in (4.05, 8.1):
+            c.line([(x, 1.0), (x, 4.9)], color=RULE2)
+        for k in range(3):
+            if st["panel"] > k:
+                x0 = PX[k]
+                ident, line, sub = CAP[k]
+                c.text(x0 + 0.1, 1.0, 1, 0.28, ident, 13, "Medium", INK2, "left")
+                if st["cap"] > k:
+                    c.text(x0 + 0.1, CY, PW, 0.32, line, 15, "Semibold", INK, "left")
+                    c.text(x0 + 0.1, CY + 0.36, PW, 0.28, sub, 13, "Regular", INK2, "left")
+        # (a) one chart, one EC2 node, k3s on it, the pods in k3s; EKS crossed out
+        if st["panel"] > 0:
+            comp(c, a0 + 0.1, 1.32, 1.3, 0.38, "Helm chart", mark=False, size=14, lit="chart" in lit)
+            comp(c, a0 + 2.45, 1.32, 1.1, 0.38, "EKS", mark=False, size=14, faint=True)
+            c.arrow([(a0 + 1.4, 1.51), (a0 + 2.45, 1.51)], color=RULE)
+            c.cross(a0 + 1.83, 1.41, 0.2, 0.2, color=INK3)
+            node(c, a0 + 0.1, 2.0, 3.45, 2.1, "EC2 t3.medium")
+            note(c, a0 + 1.75, 2.1, 1.6, "2 vCPU, 4 GB")
+            link(c, [(a0 + 0.75, 1.7), (a0 + 0.75, 1.86)], "chart" in lit)
+            node(c, a0 + 0.22, 2.6, 3.2, 1.4, "k3s", depth=0.1)
+            for i, p in enumerate(PODS[:st["pods"]]):
+                x, y = a0 + 0.34 + (i % 3) * 1.02, 3.05 + (i // 3) * 0.3
+                on = i == st["pods"] - 1 and "chart" in lit
+                comp(c, x, y, 0.95, 0.26, "", mark=False, lit=on)
+                c.text(x, y, 0.95, 0.26, p, 13, "Regular", INK if on else INK2)
+        # (b) HPA scales three services on CPU; KEDA scales the worker on the queue
+        if st["panel"] > 1:
+            hl, kl = "hpa" in lit, "keda" in lit
+            c.text(b0 + 0.1, 1.3, 3, 0.3, "HPA on CPU", 14, "Semibold", INK, "left")
+            note(c, b0 + 0.1, 1.55, 3, "identity, project, billing")
+            note(c, b0 + 0.1, 1.85, 0.5, "CPU", hl)
+            cpu_bar(c, BAR[0], 1.9, st["cpu"])
+            mx = BAR[0] + BAR[1] * 0.7
+            c.line([(mx, 1.84), (mx, 2.14)], color=INK)
+            note(c, mx - 0.5, 2.14, 1.0, "70%", hl, "center")
+            pods(c, b0 + 2.25, 1.84, st["hpa"], 3, 0.42, hl)
+            note(c, b0 + 2.25, 2.16, 1.5, plural(st["hpa"], 3), hl)
+            c.text(b0 + 0.1, 2.5, 3, 0.3, "KEDA on queue length", 14, "Semibold", INK, "left")
+            note(c, b0 + 0.1, 2.75, 3, "worker")
+            note(c, b0 + 0.1, 3.05, 0.5, "turns", kl)
+            c.queue(BAR[0], 3.07, 6, cell=BAR[1] / 6, active=kl)
+            cw = BAR[1] / 6
+            for j in range(int(st["queue"])):
+                x = BAR[0] + j * cw
+                c.d.rectangle([c._p(x + 0.05), c._p(3.12), c._p(x + cw - 0.05), c._p(3.07 + cw - 0.05)],
+                              fill=INK if kl else INK2)
+            note(c, BAR[0], 3.36, 1.6, "queueLength 5", kl)
+            pods(c, b0 + 2.25, 3.04, st["keda"], 4, 0.29, kl)
+            note(c, b0 + 2.25, 3.36, 1.5, plural(st["keda"], 4), kl)
+            # the alternative: HPA on the worker's CPU, which stays low while turns wait
+            note(c, b0 + 0.1, 3.74, 0.5, "CPU")
+            cpu_bar(c, BAR[0], 3.79, 0.12 + 0.04 * math.sin(draw.NOW * 3), faint=True)
+            comp(c, b0 + 2.6, 3.72, 0.7, 0.32, "HPA", mark=False, size=14, faint=True)
+            c.arrow([(BAR[0] + BAR[1], 3.88), (b0 + 2.6, 3.88)], color=RULE)
+            c.cross(b0 + 2.18, 3.78, 0.2, 0.2, color=INK3)
+        # (c) one database; each context owns its tables; a step commits with its cost
+        if st["panel"] > 2:
+            comp(c, c0 + 0.1, 1.32, 1.15, 0.4, "session", mark=False, size=14, lit="write" in lit)
+            comp(c, c0 + 2.15, 1.32, 1.5, 0.4, "own database", mark=False, size=14, faint=True)
+            c.arrow([(c0 + 1.25, 1.52), (c0 + 2.15, 1.52)], color=RULE)
+            c.cross(c0 + 1.6, 1.42, 0.2, 0.2, color=INK3)
+            c.text(c0 + 1.2, 1.66, 1.0, 0.28, "per service", 13, "Regular", INK3)
+            c.d.rectangle([c._p(c0 + 0.1), c._p(1.95), c._p(c0 + 3.65), c._p(3.95)], outline=INK2,
+                          width=c._lw(1.5))
+            c.text(c0 + 1.6, 2.0, 1.9, 0.3, "PostgreSQL", 14, "Semibold", INK2, "right")
+            link(c, WRITE, "write" in lit)
+            for name, tables, x, y, key in CTX:
+                on = key in lit
+                c.d.rectangle([c._p(x), c._p(y), c._p(x + 1.62), c._p(y + 0.66)], outline=INK if on else RULE,
+                              width=c._lw(2 if on else 1.5))
+                c.text(x + 0.12, y + 0.03, 1.5, 0.3, name, 14, "Semibold", INK, "left")
+                if on:
+                    c.d.rectangle([c._p(x + 0.07), c._p(y + 0.35), c._p(x + 1.55), c._p(y + 0.6)], fill=RAISED)
+                note(c, x + 0.12, y + 0.33, 1.5, tables, on)
+        for x, y, word in st["tags"]:
+            tag(c, x, y, word)
+
+    st = dict(panel=0, cap=0, pods=0, cpu=0.25, hpa=1, queue=0, keda=1, lit=set(), tags=[])
+    sc = Scene("physdecisions.gif", paint, st)
+    travel = mover(sc, st)
+    # AD-09: the chart installs every pod on the one node
+    sc.step("AD-09: one Helm chart installs every pod on k3s", 0.6, panel=1, lit={"chart"})
+    for i in range(len(PODS)):
+        sc.set(pods=i + 1)
+        sc.hold(0.3)
+    sc.step("AD-09: k3s on one EC2 t3.medium, not EKS", 1.6, cap=1, lit=set())
+    # AD-11: HPA follows CPU; KEDA follows the queue while the worker's CPU stays low
+    sc.step("AD-11: HPA adds pods when CPU passes 70%", 0.4, panel=2, lit={"hpa"})
+
+    def load(u):
+        st["cpu"] = 0.25 + 0.65 * u
+        st["hpa"] = 1 if st["cpu"] < 0.7 else (2 if st["cpu"] < 0.82 else 3)
+    sc.tween(2.4, load)
+    sc.tween(1.0, lambda u: st.update(cpu=0.9 - 0.35 * u))
+    sc.hold(0.6)
+    sc.step("AD-11: KEDA adds workers as turns wait in the queue", 0.3, lit={"keda"})
+    sc.tween(2.6, lambda u: st.update(queue=6 * u, keda=1 + min(3, int(6 * u / 1.5))))
+    sc.hold(0.8)
+    sc.step("AD-11: HPA on CPU; KEDA on queue length", 1.6, cap=2, lit=set())
+    # AD-06: one database; a step, its cost and its ledger entry commit together
+    sc.step("AD-06: one PostgreSQL; each context owns its tables", 1.6, panel=3)
+    sc.title = "AD-06: the step, its cost and the ledger entry in one transaction"
+    sc.set(lit={"write"})
+    travel(WRITE, "step", 0.7)
+    sc.set(lit={"write", "steps"})
+    sc.hold(0.5)
+    sc.set(lit={"write", "steps", "ledger"})
+    sc.hold(1.4)
+    sc.step("AD-06: one PostgreSQL, tables per context", 1.4, cap=3, lit=set())
+    # hold
+    sc.step("Three decisions shape the physical architecture", 3.6)
+    sc.save()
+
+
 # ---------------------------------------------------------------- slide 3c: producers and consumers
 def interaction():
     LANES = [("Consumer app", "literature watch", 1.45), ("Lumen platform", "API v1", 6.05),
@@ -584,4 +750,4 @@ def interaction():
 
 
 SCENES = dict(std_platform=platform, usecases=usecases, decisions=decisions, contextmap=contextmap,
-              interaction=interaction)
+              interaction=interaction, physdecisions=physdecisions)

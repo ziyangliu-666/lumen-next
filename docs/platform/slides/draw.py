@@ -323,6 +323,11 @@ class Scene:
         self.moving = []
 
     def save(self):
+        # The picture ends without its step title: the slide's own title names it, and a
+        # second title on the held frame fights the first.
+        if self.title:
+            self.title = ""
+            self.hold(2.5)
         frames = self.frames
         os.makedirs(OUT, exist_ok=True)
         frames[0].save(os.path.join(OUT, self.name), save_all=True, append_images=frames[1:],

@@ -151,14 +151,14 @@ shown(
   '1b  ·  Platform thinking',
   'Producers, consumers, one platform',
   'platform.gif',
-  "Lumen is a platform with two sides. Producers are agent authors: they publish an agent in the registry. Consumers ask questions, either from an app with an API key, like our literature watch, or as people in the web app. The seed is the run engine. It runs every question as a task tree, records each step with its cost, and stops at the account's budget cap. The consumer gets back the answer, the findings and the cost.",
+  "The platform sits between two groups of users. A producer, the agent author, publishes agents to the registry. A consumer asks: an app with its API key, or people who sign in to the web app. The seed is the run engine. It takes the agent's instructions, runs each question as a task tree, records each step with its cost, and keeps every step under the account's budget cap.",
 );
 shown(
   'Overview',
   '1c  ·  Scope',
   'Six use cases, all running',
   'usecases.gif',
-  'This is our scope: the six use cases of the proposal, all built and running on the public server. A producer publishes an agent and reads its usage. An app asks questions with a chosen agent, and the literature watch asks saved questions on a schedule. The account owner manages API keys and approves any step that would pass the cap. The operator reads usage for every account and agent.',
+  "This is the UML use case diagram of the platform. We take one actor at a time, so each actor's use cases are clear. The producer publishes and reads usage. The literature watch app asks and watches. People in the web app manage keys and approve spend over the cap. The operator also reads usage. All six use cases are built.",
 );
 
 // ------------------------------------------------------------------ 2 project conduct
@@ -179,31 +179,28 @@ shown(
   '3a  ·  Key architectural decisions',
   'Three decisions shape the services',
   'decisions.gif',
-  'Three decisions shaped the logical design. First, we cut the five services along the slices that already existed, so each slice kept its ports and its tests. Second, a turn goes from session to the workers on a durable RabbitMQ queue, not a direct call. A slow model call never holds a web request, and if a worker dies, its turn stays on the queue for another worker. Third, only session writes the trace: workers report each step over /internal, so a worker that dies loses no step.',
+  'The three key decisions are shown as before and after. AD-01 does not write new services: each slice of main gets a new entry point in the same image. AD-02 puts a durable queue between session and the workers, so a slow model call never holds a request, and any worker can take a turn. AD-04 makes session the only writer of the trace, so a worker that dies loses no step.',
 );
 shown(
   'Logical',
   '3b  ·  Logical architecture',
   'Five services behind one gateway',
   'logical.gif',
-  'The logical architecture has four tiers. Clients: the web app and the literature watch app. The edge: Traefik as the API gateway. ' +
-    'Five services: identity, project, session, worker and billing. The data: PostgreSQL and RabbitMQ. ' +
-    'Follow one question: the app calls the gateway, project opens a session, session puts a turn on a durable queue, ' +
-    'any free worker takes it and runs the agent against the LLM, every step goes back to session and into PostgreSQL, and the app reads the answer.',
+  "The logical architecture has four tiers, and each dependency points down. The clients see one gateway, and the gateway routes to five services. Only Project and Worker call session's internal routes. At run time a question becomes a session, then a turn on the queue. A free worker runs it, and session saves each step.",
 );
 shown(
   'Logical',
   '3c  ·  Domain-driven design',
   'Five bounded contexts',
   'contextmap.gif',
-  'We found the contexts from the use cases. We took the nouns our users say, grouped the ones that belong together, and each group became a bounded context with its aggregates. Session is the core domain: it owns the task tree and every step. The contexts talk through domain events: a question asked starts a session, a turn queued goes to execution, and every step recorded comes back to session. Spend recorded and approval needed go to billing, and finding recorded goes back to the project.',
+  'We found the contexts from the use cases and the nouns that users say. Each context keeps its own aggregates. Each context talks to the others only through domain events, and each arrow shows who sends and who receives. Session comes last, because every event goes through it: it is the core domain.',
 );
 shown(
   'Logical',
   '3c  ·  Producers and consumers',
   'How apps use the platform',
   'interaction.gif',
-  "This is the whole platform contract, seven calls on the public API. A producer creates a key and publishes an agent. A consumer app lists the agents and asks a question with the one it chose, and gets a session id at once. The platform runs the question with the agent's instructions in front, and the app reads the answer, the findings and the cost. Producers and the operator read usage from the same API: sessions, cost, and the median time to rest per agent.",
+  'This sequence diagram shows real calls on the public API v1, in the order they happen. First the producer creates an API key and publishes an agent. Then a consumer lists the agents, asks with one of them, and reads the answer, the findings and the cost. Last, the producer reads usage. Publish, list, ask and read all use one API.',
 );
 
 // ------------------------------------------------------------------ 4 physical architecture
@@ -212,19 +209,14 @@ shown(
   '4a  ·  Key architectural decisions',
   'Three choices shape the deployment',
   'physdecisions.gif',
-  'Three decisions shape the physical architecture. First, k3s on one EC2 t3.medium instead of EKS: the same Helm chart runs on a laptop and on AWS, for about 1.3 dollars a day. ' +
-    'Second, two autoscalers: HPA on CPU for identity, project and billing, and KEDA on queue length for the worker, because a worker waits on the model and its CPU stays low while the queue grows. ' +
-    'Third, one PostgreSQL database with tables per context, so a step, its cost and its ledger entry are written in one transaction.',
+  'Three decisions shape the physical side. The proposal put the chart on EKS; we run the same chart on k3s on one EC2 t3.medium, for about USD 1.3 a day, and the chart can still go to EKS. Two autoscalers watch two kinds of load: HPA adds identity, project and billing pods on CPU, and KEDA adds workers on queue length, because a worker waits on the model and its CPU stays low. One PostgreSQL with a frame per context lets one transaction write the step, its cost and the ledger entry together.',
 );
 shown(
   'Physical',
   '4b  ·  Physical architecture',
   'One AWS node, one k3s cluster',
   'deployment.gif',
-  'The physical architecture as a UML deployment diagram. One EC2 t3.medium in Singapore runs k3s; we chose k3s over EKS, so the same Helm chart runs on a laptop and on AWS. ' +
-    'The security group opens 22, 80 and 443 only. Traefik ends HTTPS and routes to five service deployments; ' +
-    'identity, project and billing scale on CPU with HPA, the worker scales on queue length with KEDA, and session runs one copy. ' +
-    'PostgreSQL and RabbitMQ are StatefulSets with volumes. GitHub Actions deploys over SSH, and the worker calls the OpenAI API over HTTPS.',
+  'The whole platform runs on one AWS node, an EC2 t3.medium in Singapore. k3s runs inside it, and every service, PostgreSQL, RabbitMQ and KEDA run as pods inside k3s. Users reach it only over HTTPS on 443, through Traefik, which routes to the service pods. GitHub Actions deploys over SSH on 22, and only the worker pod talks to the OpenAI API.',
 );
 shown(
   'Physical',
@@ -239,14 +231,14 @@ shown(
   '4a  ·  Key architectural decision',
   'One queue for each level of the task tree',
   'queues.gif',
-  'A lead turn keeps its worker slot while its readers run. With one shared queue, two questions are enough to fill both slots with waiting leads. Their readers then sit in the queue, and no worker is free to take them: that is a deadlock. So we gave each level of the task tree its own queue and its own slots on every worker; in the real system each worker has four slots per level. The leads wait in the level-0 slots, the readers run in the level-1 slots, and every question finishes.',
+  'AD-03 is about a deadlock that we found in design. With one shared queue, a lead keeps its slot while it waits for its readers, and the readers wait for a free slot. The waits close into a cycle, so no question can finish. A queue per level, with a slot per level, removes one edge of the cycle: the deepest level never waits, so the work always drains.',
 );
 shown(
   'Physical',
   '4d  ·  Detailed design',
   'Asking a question with a chosen agent',
   'sequence.gif',
-  'This is use case A: a consumer asks a question with an agent that a producer published. The request comes through Traefik to the project service. The key guard checks the key, its rate and its scope, and then project asks session to open the session. Session puts the root turn on lumen.turns.0, and the client gets 201 at once. Any worker takes the turn. For each step it calls the model and posts the step to session, which writes it to PostgreSQL. The client then reads the answer with a GET.',
+  'This is use case A, a question asked with a chosen agent. Project checks the API key, session opens and publishes the root turn, and from that moment two lanes run at the same time. The app gets 201 at once and reads the answer whenever it likes, while a worker takes the turn and runs its steps in a loop. Each step goes back to session, which saves it in PostgreSQL.',
 );
 shown(
   'Physical',
@@ -260,7 +252,7 @@ shown(
   '4c  ·  Persistence',
   'The schema, by context',
   'er.gif',
-  "All persistent data is in one PostgreSQL 16 database, AD-06, and each context owns its tables: the frames show the owner; the worker owns none. Inside a context, tables use foreign keys. Across contexts most references are plain ids, and a few foreign keys cross: findings point to sessions and tasks, ledger entries point to tasks, and an agent points to its owner's account. The task tree is one table with a parent link, so the cost roll-up is SQL. Money is numeric(12,6). Turns in flight are in RabbitMQ, and the agents' files are on a 2Gi volume.",
+  'Each context owns its own tables in the one PostgreSQL database. Solid lines are foreign keys inside a context; dashed lines are ids that cross a context, with no foreign key, so a later split stays mechanical. The tasks table is the centre: its parent_id is the call tree, and each task has its steps, its findings and its ledger entries. The worker owns no tables; it reports every step to session.',
 );
 
 // ------------------------------------------------------------------ 5 DevOps
@@ -269,14 +261,14 @@ shown(
   '5a  ·  Source and artifacts',
   'From a branch to a running image',
   'branches.gif',
-  'We use one repository. main holds Lumen, and ass/platform is our integration branch. Each member works on one branch and merges it back through a pull request. Every push to ass/platform builds one image, tagged with the commit SHA, from deploy/k8s/Dockerfile. The pipeline copies that image to the EC2 host over SSH, imports it into k3s, and deploys it with helm upgrade, so there is no registry to run.',
+  'ass/platform is our one integration branch; it left main on 19 October. It has 48 commits, and one short-lived branch came back through pull request #148. Every push builds one image tagged with its commit, copies it over SSH into k3s on the EC2 host, and helm puts it live.',
 );
 shown(
   'DevOps',
   '5b  ·  DevOps pipeline',
   'Six checks around one deploy',
   'pipeline.gif',
-  'Every push to ass/platform runs this pipeline. Tests, a dependency audit and CodeQL run in parallel. Only then does the deploy job build the image and scan it with Trivy. In our first run the gate found five critical CVEs and stopped the deploy, so the image never reached the host. That is the pipeline doing its job. We built a smaller platform image without Docker inside, and in the next run every stage passed; all jobs were done in 12 minutes 30 seconds.',
+  'A push to ass/platform starts the pipeline, and verify, SCA and SAST run at the same time. In the first run the Trivy gate found 5 critical CVEs in the image, so the deploy stopped before the host. The team built a smaller platform image without Docker, and the next run passed every stage, with DAST and a smoke load against the live address, in 12 min 30 s.',
 );
 shown(
   'DevOps',
@@ -290,7 +282,7 @@ shown(
   '5c  ·  Technical findings',
   'What we found, and what we changed',
   'findings.gif',
-  "Three findings changed the design. First, one queue for all turns can deadlock, because parents hold every worker slot while their children wait behind them, so we gave each depth of the task tree its own queue. Second, the image scan stopped an image that carried Docker for Lumen's sandbox, and the platform does not need Docker, so we built a smaller platform image, patched at build. Third, KEDA's autoscaler waits five minutes before it scales down by default, and we set it to one minute, so the workers return to one soon after the load.",
+  'We found three technical problems and fixed each one. One queue for all turns let leads hold every worker slot while their readers waited, so the queue became one queue per level of the task tree. The image with Docker inside failed the Trivy gate, and the smaller platform image passed. KEDA waits 300 s by default before it removes a worker; the chart sets 60 s.',
 );
 
 // ------------------------------------------------------------------ 6 demo
@@ -299,7 +291,7 @@ shown(
   '6b  ·  Scalability',
   'KEDA adds workers as the queue grows',
   'scaling.gif',
-  "This is our k6 load test on the public host, with the paced worker that makes no model calls, so the test measures how the platform scales and not how fast the model answers. Ten users ask questions without pause. The bars are the jobs waiting in the queues, and the dashed line is KEDA's target of five jobs per worker. When the queue passes that line, KEDA adds a worker pod, and it went from one to four in 49 seconds. After the load stops, the queue empties, and a minute later KEDA scales back to one worker. All 135 questions finished with a median of 6.1 seconds, and none of the 1,040 requests failed.",
+  "This is the real load test of 20 October, with the paced worker, so it measures the platform's scaling and not the model. When more than 5 jobs wait per worker, KEDA adds a pod, and you see the worker divide as the cursor passes that moment. Four workers stop the queue from growing and then drain it. A minute after the load ends, the extra pods merge back, and all 135 questions finished with no failed request.",
 );
 shown(
   'Demo',

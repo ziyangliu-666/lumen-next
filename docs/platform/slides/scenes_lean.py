@@ -136,14 +136,18 @@ def milestones():
         ("Li Zhuoyang", [("worker, queue", 0, 4), ("KEDA autoscaling", 5, 9)]),
         ("He Rong", [("billing", 0, 3), ("Kubernetes, pipeline", 4, 6), ("load tests", 7, 9)]),
     ]
-    LX, X0, X1, Y0, RH, BH = 0.3, 2.3, W - 0.3, 1.2, 0.62, 0.46
+    LX, X0, X1, Y0, RH, BH = 0.3, 2.3, W - 0.3, 1.15, 0.6, 0.46
     DW = (X1 - X0) / len(DAYS)
 
     def paint(c, st):
         t = st["t"]                             # how far the plan has run, in days
+        if 0 < t < len(DAYS):
+            # The sweep is drawn first, so a lit bar covers it: it never runs over a label.
+            x = X0 + t * DW
+            c.line([(x, Y0 - 0.15), (x, Y0 + 5 * RH - 0.1)], True)
         for i, d in enumerate(DAYS):
             c.text(X0 + i * DW, Y0 + 5 * RH + 0.05, DW, 0.3, str(d), 13, "Regular", INK2 if i < t else INK3)
-        c.text(X0, Y0 + 5 * RH + 0.38, X1 - X0, 0.3, "October 2026", 13, "Regular", INK3)
+        c.text(X0, Y0 + 5 * RH + 0.33, X1 - X0, 0.3, "October 2026", 13, "Regular", INK3)
         c.text(LX, Y0 - 0.38, X0 - LX - 0.15, 0.3, "effort", 13, "Regular", INK3, "right")
         for r, (who, tasks) in enumerate(PLAN):
             y = Y0 + r * RH
@@ -157,15 +161,17 @@ def milestones():
                        INK if state != "faint" else INK3, "left")
                 if state == "done":
                     c.check(x + w - 0.3, y + 0.1, 0.22)
-        if 0 < t < len(DAYS):
-            x = X0 + t * DW
-            c.line([(x, Y0 - 0.15), (x, Y0 + 5 * RH - 0.1)], True)
 
     st = dict(t=0.0)
     sc = Scene("milestones.gif", paint, st)
     sc.step("1. The proposal's plan: ten days for each member, 8 to 21 October", 2.8)
     sc.title = "2. Contracts first, then the services, then scale and the pipeline"
-    sc.tween(5.0, lambda u: st.update(t=u * len(DAYS)))
+    # The sweep moves at one constant speed, about 400 px a second: an eased sweep
+    # crawled over the labels and the check marks for a second at each end.
+    n = round(3.4 * 30)
+    for i in range(n + 1):
+        st["t"] = i / n * len(DAYS)
+        sc._add(sc._draw(), round(1000 / 30))
     sc.step("3. Every part was built and deployed to AWS by 21 October", 3.2)
     sc.save()
 

@@ -159,7 +159,7 @@ API. I will now show the platform live."
 The five lines of the live demo:
 
 1. Ask a question in the browser; show the call tree grow.
-2. Your literature watch app publishes its agent, asks through the API, and reads usage.
+2. Your literature watch app publishes its agent and asks through the API; then read usage with GET /api/v1/usage.
 3. Start the k6 load; show `kubectl get scaledobject,hpa,pods` as KEDA adds workers.
 4. Delete a worker during a question; the question still ends.
 5. Open the last pipeline run on GitHub.

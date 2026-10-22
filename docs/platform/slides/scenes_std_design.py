@@ -418,7 +418,7 @@ def sequence():
                                               shown=dict(st["shown"], **{k: u for k in keys})))
         sc.hold(hold)
 
-    sc.step("Use case A: ask a question with a chosen agent", 2.0)
+    sc.step("UC2: ask a question with a chosen agent", 2.0)
     sc.step("1. The watch app sends the question with its API key", 0.3)
     send("ask")
     send("forward")

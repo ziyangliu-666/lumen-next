@@ -324,7 +324,7 @@ shown(
   });
   const steps = [
     ['Use case', 'ask a question in the browser; watch the call tree grow'],
-    ['Use case', 'the literature watch app publishes its agent, asks, reads usage'],
+    ['Use case', 'the watch app publishes its agent and asks; then read usage'],
     ['Scalability', 'run the k6 load test; watch KEDA add workers'],
     ['Availability', 'delete a worker during a question; it still ends'],
     ['Maintainability', 'open the last pipeline run on GitHub'],

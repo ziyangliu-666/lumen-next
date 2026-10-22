@@ -1131,7 +1131,7 @@ def sequence():
         sc.tween(seconds, fn)
         sc.hold(hold)
 
-    sc.title = "Use case A: ask a question with a chosen agent"
+    sc.title = "UC2: ask a question with a chosen agent"
     sc.tween(0.9, lambda u: st.update(heads=u))
     sc.hold(0.8)
     sc.title = "The app sends the question; project checks the key"

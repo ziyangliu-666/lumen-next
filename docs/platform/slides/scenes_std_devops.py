@@ -6,7 +6,7 @@ report.md (sections 2.1, 5.1 to 5.3 and 6.1) or from docs/platform/evidence/.
 import os
 
 import draw
-from draw import BLACK, INK, INK2, INK3, RAISED, RULE, RULE2, Canvas, Scene, lerp
+from draw import BLACK, FPS, INK, INK2, INK3, RAISED, RULE, RULE2, Canvas, Scene, lerp
 from scenes_proof import _dashed, _invert_lines, _scaling, _tw
 from scenes_std import comp, node, tag
 
@@ -591,7 +591,7 @@ def scaling():
         n = max(1, round((t_end - t_start) / rate * 25))
         for i in range(1, n + 1):
             sc.st["t"] = lerp(t_start, t_end, i / n)
-            sc._add(sc._draw(), 40)
+            sc._add(sc._draw(), round(1000 / FPS))
 
     sc.step("1. Ten users ask questions without pause", 2.0)
     sweep(30)

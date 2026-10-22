@@ -25,9 +25,9 @@ from PIL import Image, ImageDraw, ImageFont
 S = 144                                        # pixels per inch at the size on the slide
 X2 = 2                                         # drawn at twice the size, then scaled down
 W, H = 12.13, 5.0                              # the GIF's size on the slide, in inches
-FPS = 25
+FPS = 30                                       # smooth motion: 30 frames a second
 TOP = 0.95                                     # the title band; the diagram starts below it
-HOLD_FPS = 12.5                                # a hold is drawn too, so things keep moving
+HOLD_FPS = 30                                  # a hold moves as smoothly as a tween
 NOW = 0.0                                      # the scene's clock in seconds, for motion that never stops
 
 # lumen's dark palette (apps/web/src/styles/theme.css, .dark)
@@ -328,9 +328,11 @@ class Scene:
         frames[0].save(os.path.join(OUT, self.name), save_all=True, append_images=frames[1:],
                        duration=self.durs, loop=0, disposal=1, optimize=False)
         # Every icon moves in every frame, so the plain GIF is large (17 MB for one scene).
-        # gifsicle keeps only what changed between frames, in 32 greys: about a tenth.
+        # gifsicle keeps only what changed between frames, in 32 greys: about a tenth. The GIF
+        # plays once and stays on its last frame, the complete diagram, while the speaker talks.
         if shutil.which("gifsicle"):
-            subprocess.run(["gifsicle", "-b", "-O3", "--colors", "32", os.path.join(OUT, self.name)], check=True)
+            subprocess.run(["gifsicle", "-b", "-O3", "--colors", "32", "--no-loopcount", os.path.join(OUT, self.name)],
+                           check=True)
         self.frames[0].save(os.path.join(OUT, self.name.replace(".gif", ".png")))
         os.makedirs(os.path.join(OUT, "steps"), exist_ok=True)
         # One still per step, for checking: the frames held 1.5 s or longer.

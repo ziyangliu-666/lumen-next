@@ -142,9 +142,9 @@ shown(
   '1a  ·  Context and business problem',
   'Lumen is an AI that does research',
   'lumen-at-work.gif',
-  'Lumen is an AI that does research. This is a real run, recorded today. You ask a research question; the lead agent, called lumen, ' +
-    'searches arXiv and hands parts of the work to reader agents. On the right, the call tree grows as each reader starts and finishes, ' +
-    'with what each one cost. Every step is visible while it happens.',
+  'Lumen is an AI that does research. This is a real run, recorded on 22 October with gpt-4.1: we ask for three key papers on retrieval-augmented generation. ' +
+    'The lead agent searches arXiv, then hands one paper each to three reader agents that work in parallel. ' +
+    'On the right, the call tree grows, every task shows what it cost, and each reader records its paper as a finding.',
 );
 shown(
   'Overview',

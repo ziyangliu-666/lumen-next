@@ -21,6 +21,12 @@ docs/platform/slides/tapes/record.sh pods     # writes out/casts/pods.cast
 docs/platform/slides/tapes/render.sh pods     # writes out/rec-pods.gif
 ```
 
+The deck uses cut versions of some recordings: `make.py atwork` enlarges slide 2 and ends
+it on the frame with all three readers; `make.py recpods recscale recpipeline` trim the
+empty part of a terminal recording and drop the columns that only hold internal names.
+Each drawn GIF plays once and holds its last frame; `make.py` writes the start of each
+step to `out/steps/<name>.txt`, and the time cues of `script.md` come from there.
+
 The order of the slides follows the course outline: overview (problem,
 platform thinking, scope), project conduct, logical architecture (decisions,
 how the contexts were found, the contexts, the services), physical

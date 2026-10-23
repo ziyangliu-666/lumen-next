@@ -25,9 +25,10 @@ from PIL import Image, ImageDraw, ImageFont
 S = 144                                        # pixels per inch at the size on the slide
 X2 = 2                                         # drawn at twice the size, then scaled down
 W, H = 12.13, 5.0                              # the GIF's size on the slide, in inches
-FPS = 30                                       # smooth motion: 30 frames a second
+FPS = 25                                       # 40 ms a frame: a GIF stores whole centiseconds, so the
+                                               # picture plays at exactly the clock that script.md cues
 TOP = 0.95                                     # the title band; the diagram starts below it
-HOLD_FPS = 30                                  # a hold moves as smoothly as a tween
+HOLD_FPS = 25                                  # a hold moves as smoothly as a tween
 NOW = 0.0                                      # the scene's clock in seconds, for motion that never stops
 
 # lumen's dark palette (apps/web/src/styles/theme.css, .dark)
@@ -269,16 +270,27 @@ class Scene:
         self.name = name
         self.paint = paint
         self.st = state
-        self.title = ""
+        self._title = ""
+        self.marks = []                         # (seconds, title): when each step starts, for script.md
         self.moving = []                        # (x, y, kind) drawn on top of the picture
         self.frames, self.durs, self.holds = [], [], []
         self.t = 0.0                            # the scene's clock: every frame moves it on
+
+    @property
+    def title(self):
+        return self._title
+
+    @title.setter
+    def title(self, text):
+        # The step's words are not drawn: the slide has one title, in build.js, and the speaker
+        # says each step (checklist review, 23 October). The step start is kept for the script.
+        self._title = text
+        self.marks.append((round(self.t, 1), text))
 
     def _draw(self):
         global NOW
         NOW = self.t
         c = Canvas()
-        c.text(0.3, 0.18, W - 0.6, 0.55, self.title, 23, "Medium", INK, "left")
         self.paint(c, self.st)
         for (x, y, kind) in self.moving:
             c.job(x, y, kind)
@@ -323,8 +335,8 @@ class Scene:
         self.moving = []
 
     def save(self):
-        # The picture ends on its last step, title included: without the title the top band
-        # was empty and the held frame looked unfinished (layout check, 22 October).
+        # The top band (TOP) stays empty: build.js places the picture so that the band sits
+        # under the slide title.
         frames = self.frames
         os.makedirs(OUT, exist_ok=True)
         frames[0].save(os.path.join(OUT, self.name), save_all=True, append_images=frames[1:],
@@ -340,4 +352,10 @@ class Scene:
         # One still per step, for checking: the frames held 1.5 s or longer.
         for k, i in enumerate(sorted({i for i, sec in self.holds if sec >= 1.5})):
             self.frames[i].save(os.path.join(OUT, "steps", "%s-%02d.png" % (self.name[:-4], k)))
+        with open(os.path.join(OUT, "steps", self.name[:-4] + ".txt"), "w") as f:
+            for sec, text in self.marks:
+                f.write("%5.1f  %s\n" % (sec, text))
+            f.write("%5.1f  (end, last frame held)\n" % (sum(self.durs) / 1000))
         print(self.name, len(frames), "frames", round(sum(self.durs) / 1000, 1), "s")
+        for sec, text in self.marks:
+            print("  %5.1f  %s" % (sec, text))

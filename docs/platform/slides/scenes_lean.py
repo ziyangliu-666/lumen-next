@@ -1,7 +1,9 @@
 """Three scenes for the lean deck: how the contexts were found, the schema, and the
 project's milestones. Each one replaces a slide of words or a table with a picture."""
+import os
 import random
 
+import draw
 from draw import INK, INK2, INK3, RULE2, W, Scene, lerp
 from icons import icon
 
@@ -132,11 +134,11 @@ def milestones():
     PLAN = [  # member, then (task, first day, last day) as indexes into DAYS, from the proposal
         ("Liu Ziyang", [("architecture", 0, 2), ("session service", 3, 9)]),
         ("Lu Yi", [("identity, gateway", 0, 6), ("public API", 7, 9)]),
-        ("Peng Xujian", [("projects", 0, 3), ("second app, usage", 4, 9)]),
-        ("Li Zhuoyang", [("worker, queue", 0, 4), ("KEDA autoscaling", 5, 9)]),
+        ("Peng Xujian", [("projects", 0, 3), ("watch app, usage", 4, 9)]),
+        ("Li Zhuoyang", [("worker, queue", 0, 4), ("worker autoscaling", 5, 9)]),
         ("He Rong", [("billing", 0, 3), ("Kubernetes, pipeline", 4, 6), ("load tests", 7, 9)]),
     ]
-    LX, X0, X1, Y0, RH, BH = 0.3, 2.3, W - 0.3, 1.15, 0.6, 0.46
+    LX, X0, X1, Y0, RH, BH = 0.3, 2.3, W - 0.3, 1.1, 0.58, 0.44
     DW = (X1 - X0) / len(DAYS)
 
     def paint(c, st):
@@ -147,7 +149,7 @@ def milestones():
             c.line([(x, Y0 - 0.15), (x, Y0 + 5 * RH - 0.1)], True)
         for i, d in enumerate(DAYS):
             c.text(X0 + i * DW, Y0 + 5 * RH + 0.05, DW, 0.3, str(d), 13, "Regular", INK2 if i < t else INK3)
-        c.text(X0, Y0 + 5 * RH + 0.33, X1 - X0, 0.3, "October 2026", 13, "Regular", INK3)
+        c.text(LX, Y0 + 5 * RH + 0.05, X0 - LX - 0.15, 0.3, "October 2026", 13, "Regular", INK3, "right")
         c.text(LX, Y0 - 0.38, X0 - LX - 0.15, 0.3, "effort", 13, "Regular", INK3, "right")
         for r, (who, tasks) in enumerate(PLAN):
             y = Y0 + r * RH
@@ -164,16 +166,106 @@ def milestones():
 
     st = dict(t=0.0)
     sc = Scene("milestones.gif", paint, st)
-    sc.step("1. The proposal's plan: ten days for each member, 8 to 21 October", 2.8)
-    sc.title = "2. Contracts first, then the services, then scale and the pipeline"
+    sc.step("The proposal's plan: ten days for each member, 8 to 21 October", 7.5)
+    sc.title = "The sweep: contracts, then the services, then scale and the pipeline"
     # The sweep moves at one constant speed, about 400 px a second: an eased sweep
     # crawled over the labels and the check marks for a second at each end.
-    n = round(3.4 * 30)
+    n = round(14.5 * draw.FPS)
     for i in range(n + 1):
         st["t"] = i / n * len(DAYS)
-        sc._add(sc._draw(), round(1000 / 30))
-    sc.step("3. Gantt chart: all tasks done and deployed to AWS by 21 October", 3.2)
+        sc._add(sc._draw(), round(1000 / draw.FPS))
+    sc.step("Every bar done; the platform runs on AWS", 3.0)
     sc.save()
 
 
-SCENES = dict(derive=derive, schema=schema, milestones=milestones)
+def atwork():
+    """Slide 2: the real run of 22 October (out/lumen-at-work.gif, 1310 x 540), made readable.
+
+    The 32 px gutter at each side and the 34 px gap between the two panes are cut, and the rest
+    is scaled by 1.4, so the call tree's 13 px text is about 18 px on the slide. The recording
+    ends at 29.9 s, the last frame where the call tree shows all three readers: after it, the
+    third finding pushes the tree below the bottom of the screenshot (checklist review)."""
+    import shutil
+    import subprocess
+    from PIL import Image, ImageDraw
+    src = Image.open(os.path.join(draw.OUT, "lumen-at-work.gif"))
+    LEFT, RIGHT, LAST = (24, 728), (762, 1290), 216
+    w = (LEFT[1] - LEFT[0]) + (RIGHT[1] - RIGHT[0])
+    k = 1730 / w
+    size = (1730, round(540 * k))
+    frames, durs = [], []
+    for i in range(LAST + 1):
+        src.seek(i)
+        f = src.convert("RGB")
+        out = Image.new("RGB", (w, 540), (0, 0, 0))
+        out.paste(f.crop((LEFT[0], 0, LEFT[1], 540)), (0, 0))
+        out.paste(f.crop((RIGHT[0], 0, RIGHT[1], 540)), (LEFT[1] - LEFT[0], 0))
+        ImageDraw.Draw(out).line([(LEFT[1] - LEFT[0], 52), (LEFT[1] - LEFT[0], 540)], fill=(69, 72, 76), width=1)
+        frames.append(out.resize(size, Image.LANCZOS).convert("L"))
+        durs.append(src.info.get("duration", 100))
+    durs[-1] = 4000
+    name = os.path.join(draw.OUT, "lumen-at-work-crop.gif")
+    frames[0].save(name, save_all=True, append_images=frames[1:], duration=durs, disposal=1, optimize=False)
+    if shutil.which("gifsicle"):
+        subprocess.run(["gifsicle", "-b", "-O3", "--colors", "64", "--no-loopcount", name], check=True)
+    print("lumen-at-work-crop.gif", len(frames), "frames", round(sum(durs) / 1000, 1), "s", size)
+
+
+def _recut(name, crop, rows=None):
+    """A terminal recording (out/rec-NAME.gif, agg at 22 px, 140 columns) cut for the slide.
+
+    crop is (columns, rows) to keep from the top left: the empty right and bottom go, so the
+    text is larger on the slide. rows maps a row to the column ranges kept in it, joined left
+    to right: it removes columns that only carry internal names (branch, run and job ids)."""
+    import shutil
+    import subprocess
+    from PIL import Image
+    CW, RH, X0, Y0 = 13.2, 29.7, 13, 14       # agg's cell and its padding at font size 22
+    src = Image.open(os.path.join(draw.OUT, "rec-%s.gif" % name))
+    W_ = round(X0 + crop[0] * CW + X0)
+    H_ = round(Y0 + crop[1] * RH + Y0 / 2)
+    frames, durs = [], []
+    for i in range(src.n_frames):
+        src.seek(i)
+        f = src.convert("RGB")
+        out = Image.new("RGB", (W_, H_), (0, 0, 0))
+        out.paste(f.crop((0, 0, W_, H_)), (0, 0))
+        for r, segs in (rows or {}).items():
+            y0, y1 = round(Y0 + r * RH), round(Y0 + (r + 1) * RH)
+            band = Image.new("RGB", (W_, y1 - y0), (0, 0, 0))
+            x = X0
+            for a, b in segs:
+                piece = f.crop((round(X0 + a * CW), y0, round(X0 + b * CW), y1))
+                band.paste(piece, (round(x), 0))
+                x += (b - a) * CW
+            out.paste(band, (0, y0))
+        frames.append(out)                      # RGB: the red X of a failed run stays red
+        durs.append(src.info.get("duration", 100))
+    path = os.path.join(draw.OUT, "rec-%s-cut.gif" % name)
+    frames[0].save(path, save_all=True, append_images=frames[1:], duration=durs, disposal=1, optimize=False)
+    if shutil.which("gifsicle"):
+        subprocess.run(["gifsicle", "-b", "-O3", "--colors", "32", "--no-loopcount", path], check=True)
+    print("rec-%s-cut.gif" % name, len(frames), "frames", round(sum(durs) / 1000, 1), "s", (W_, H_))
+
+
+def recpipeline():
+    # rows 1 to 7: STATUS and TITLE, then ELAPSED (the workflow, branch, event, id and age go);
+    # row 10 drops the branch name; rows 14 to 20 drop the job ids
+    list_ = [(0, 49), (112, 121)]
+    rows = {r: list_ for r in range(1, 8)}
+    rows[10] = [(0, 2), (15, 46)]
+    for r, cut in zip(range(14, 21), (25, 17, 32, 18, 31, 27, 16)):
+        rows[r] = [(0, cut - 1)]
+    _recut("pipeline", (64, 21), rows)
+
+
+def recpods():
+    _recut("pods", (110, 15))
+
+
+def recscale():
+    _recut("scale", (116, 14))
+
+
+SCENES = dict(derive=derive, schema=schema, milestones=milestones, atwork=atwork, recpipeline=recpipeline,
+              recpods=recpods, recscale=recscale)

@@ -2,7 +2,8 @@
 
 Text is laid out with Arial at its real size and wrapped at word boundaries, as PowerPoint
 does. A text that does not fit its box is drawn with a red outline and listed on stdout, so
-overflow is found before anyone opens the deck. A GIF is drawn as its first frame.
+overflow is found before anyone opens the deck. A GIF is drawn as its last frame, the one
+that PowerPoint holds while the speaker talks.
 
     python3 docs/platform/slides/preview.py
 """
@@ -66,7 +67,9 @@ def main():
                 d.rectangle(box, fill=rgb(it["fill"]) if it.get("fill") else None,
                             outline=rgb(it["line"]) if it.get("line") else None)
             elif it["kind"] == "image":
-                pic = Image.open(it["file"]).convert("RGB").resize((round(it["w"] * DPI), round(it["h"] * DPI)))
+                pic = Image.open(it["file"])
+                pic.seek(getattr(pic, "n_frames", 1) - 1)
+                pic = pic.convert("RGB").resize((round(it["w"] * DPI), round(it["h"] * DPI)))
                 im.paste(pic, (round(box[0]), round(box[1])))
             else:
                 f = face(it.get("fontFace", "Switzer"), it["fontSize"])

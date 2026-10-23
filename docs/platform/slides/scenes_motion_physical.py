@@ -226,12 +226,12 @@ def pod_row(c, slots, w, h, prog, horizontal=True, label="", a=1.0, lit=False, s
 
 # ---------------------------------------------------------------- 4a: physdecisions
 def physdecisions():
-    """AD-09, AD-11 and AD-06, each as a small before-and-after morph."""
+    """Hosting, scaling and the database, each as a small before-and-after morph."""
     PX = [0.15, 4.2, 8.25]
     CY = 4.18                                   # the captions' line
-    CAP = [("AD-09", "k3s on one EC2 t3.medium, not EKS", "the same Helm chart; about USD 1.3 a day"),
-           ("AD-11", "HPA on CPU; KEDA on queue length", "a worker waits on the model, so its CPU is low"),
-           ("AD-06", "One PostgreSQL, tables per context", "one transaction: step, cost, ledger entry")]
+    CAP = [("Hosting", "k3s on one EC2 t3.medium", "the same Helm chart also installs on EKS"),
+           ("Scaling", "HPA on CPU, KEDA on waiting jobs", "a worker waits on the model, so its CPU is low"),
+           ("Database", "One PostgreSQL, tables by owner", "one transaction: step, cost and ledger entry")]
 
     # (a) AD-09
     a0 = PX[0]
@@ -258,10 +258,10 @@ def physdecisions():
     FW, FH = 1.62, 0.84
     CTX = [("identity", ["accounts"], (c0 + 0.08, 1.38), (c0 + 0.24, 2.1)),
            ("project", ["projects", "findings"], (c0 + 2.05, 1.38), (c0 + 1.9, 2.1)),
-           ("session", ["steps", "tasks.own_cost"], (c0 + 0.08, 2.9), (c0 + 0.24, 2.98)),
-           ("billing", ["ledger_entries"], (c0 + 2.05, 2.9), (c0 + 1.9, 2.98))]
+           ("session", ["steps", "task cost"], (c0 + 0.08, 2.9), (c0 + 0.24, 2.98)),
+           ("billing", ["ledger"], (c0 + 2.05, 2.9), (c0 + 1.9, 2.98))]
     PG = (c0 + 0.1, 1.5, 3.55, 2.55)
-    TX = {"steps", "tasks.own_cost", "ledger_entries"}     # the rows of the one transaction
+    TX = {"steps", "task cost", "ledger"}     # the rows of the one transaction
 
     def cylinder(c, x, y, w, h, ry, a=1.0, lit=False, fill=BLACK):
         """A database: a cylinder; ry is the height of its top ellipse (0 gives a plain frame)."""
@@ -291,7 +291,7 @@ def physdecisions():
             if st["panel"] > k:
                 x0 = PX[k]
                 ident, cap, sub = CAP[k]
-                text(c, x0 + 0.1, 0.98, 1, 0.28, ident, 13, "Medium", INK2)
+                text(c, x0 + 0.1, 0.98, 2, 0.28, ident, 13, "Medium", INK2)
                 if st["cap"] > k:
                     text(c, x0 + 0.1, CY, 3.8, 0.32, cap, 15, "Semibold", INK)
                     text(c, x0 + 0.1, CY + 0.34, 3.8, 0.28, sub, 13, "Regular", INK2)
@@ -346,7 +346,7 @@ def physdecisions():
                 text(c, b0 + 0.1, y - 0.02, 0.85, PODH + 0.04, name, 13, "Regular", INK if hl else INK2)
                 slots = [(PODX + i * (PODW + 0.08), y) for i in range(3)]
                 pod_row(c, slots, PODW, PODH, st["hpa"], label="pod", lit=False, stretch=0.16)
-            text(c, b0 + 0.1, 2.84, 3.6, 0.3, "KEDA: 5 jobs per worker", 14, "Semibold", INK)
+            text(c, b0 + 0.1, 2.84, 3.6, 0.3, "KEDA: waiting jobs", 14, "Semibold", INK)
             text(c, b0 + 0.1, QY - 0.03, 0.85, 0.3, "jobs", 13, "Regular", INK if kl else INK2)
             c.queue(QX, QY, QN, cell=QCELL, active=kl)
             for j in range(int(st["queue"])):
@@ -391,18 +391,18 @@ def physdecisions():
     sc = Scene("physdecisions.gif", paint, st)
 
     # AD-09: the proposal, then the morph, then the chart reaches both
-    sc.step("AD-09, before: the proposal put the chart on an EKS cluster", 0.2, panel=1, lit09=True)
+    sc.step("Hosting, before: the proposal put the chart on an EKS cluster", 0.2, panel=1, lit09=True)
     sc.tween(0.6, lambda u: st.update(a_down=u))
     kick(sc, "eks")
-    sc.hold(1.4)
-    sc.title = "AD-09, after: the cluster shrinks to one EC2 node, with k3s on it"
+    sc.hold(10.5)
+    sc.title = "Hosting, after: the cluster shrinks to one EC2 node, with k3s on it"
     sc.set(lit09=False)                         # the chart's arrow stays while the cluster shrinks
     sc.tween(1.4, lambda u: st.update(m09=u))
     sc.tween(0.4, lambda u: st.update(k3s=u))
     for i in range(9):
         sc.tween(0.12, lambda u, i=i: st["pods"].__setitem__(i, u))
-    sc.hold(0.4)
-    sc.title = "AD-09: the same Helm chart installs on either one"
+    sc.hold(6.7)
+    sc.title = "Hosting: the same Helm chart installs on either one"
     sc.set(lit09=True)
     kick(sc, "k3s")
     sc.hold(0.5)
@@ -413,33 +413,33 @@ def physdecisions():
     sc.hold(0.8)
 
     # AD-11: CPU rises and three services divide; turns wait and the worker divides
-    sc.step("AD-11: CPU passes 70%, so HPA adds identity, project and billing pods", 0.3, panel=2, hl=True)
+    sc.step("Scaling: CPU passes 70%, so HPA adds identity, project and billing pods", 0.3, panel=2, hl=True)
 
     def load(u):
         st["cpu"] = 0.22 + 0.7 * u
         st["hpa"][1] = max(0.0, min(1.0, (st["cpu"] - 0.7) / 0.08))
         st["hpa"][2] = max(0.0, min(1.0, (st["cpu"] - 0.8) / 0.08))
     sc.tween(2.6, load)
-    sc.hold(0.5)
-    sc.step("AD-11: jobs wait, so KEDA adds workers; their CPU stays low", 0.2, hl=False, kl=True)
+    sc.hold(8.8)
+    sc.step("Scaling: jobs wait, so KEDA adds workers, and their CPU stays low", 0.2, hl=False, kl=True)
 
     def turns(u):
         st["queue"] = QN * u
         for k in (1, 2, 3):
             st["keda"][k] = max(0.0, min(1.0, (st["queue"] - 1.6 * k) / 1.2))
     sc.tween(3.2, turns)
-    sc.hold(0.6)
+    sc.hold(7.1)
     sc.set(kl=False, cap=2)
     sc.hold(0.8)
 
     # AD-06: the databases merge; one transaction lights its three rows together
-    sc.step("AD-06, before: a database for each service", 1.6, panel=3)
-    sc.title = "AD-06, after: one PostgreSQL; each context keeps its own tables"
+    sc.step("Database, before: a database for each service", 4.8, panel=3)
+    sc.title = "Database, after: one PostgreSQL, and each service keeps its own tables"
     sc.tween(1.5, lambda u: st.update(m06=u))
-    sc.hold(1.0)
-    sc.step("AD-06: one transaction writes the step, its cost and the ledger entry", 2.4, spot=True)
+    sc.hold(3.7)
+    sc.step("Database: one transaction writes the step, its cost and the ledger entry", 8.7, spot=True)
     sc.set(spot=False, cap=3)
-    sc.title = "Physical architecture decisions AD-09, AD-11 and AD-06"
+    sc.title = "Physical architecture decisions: hosting, scaling and the database"
     sc.hold(3.0)
     sc.save()
 
@@ -455,8 +455,8 @@ def deployment():
            ("billing", "1–3  HPA")]
     PX = [5.15 + i * 1.25 for i in range(5)]
     # the data row lines up with the service row above it
-    DATA = [("postgres", (PX[0], 3.5, PX[1] + 1.12 - PX[0], 0.66), "PostgreSQL", "StatefulSet + 2Gi volume"),
-            ("rabbitmq", (PX[2], 3.5, PX[3] + 1.12 - PX[2], 0.66), "RabbitMQ", "StatefulSet"),
+    DATA = [("postgres", (PX[0], 3.5, PX[1] + 1.12 - PX[0], 0.66), "PostgreSQL", "data on a 2 GB disk"),
+            ("rabbitmq", (PX[2], 3.5, PX[3] + 1.12 - PX[2], 0.66), "RabbitMQ", "the job queues"),
             ("keda", (PX[4], 3.5, 1.12, 0.66), "KEDA", "autoscaler")]
     OUT = {"browser": ((0.22, 1.35, 1.3, 0.8), "Browser", "device"),
            "watch": ((0.22, 2.55, 1.3, 0.8), "Watch app", "client"),
@@ -506,7 +506,13 @@ def deployment():
             node(c, *r, "k3s cluster" if u > 0.8 else "", "Kubernetes" if u > 0.8 else "", depth=0.12, a=ka,
                  lit=st["spot"] == "ssh", p=pulse(st, "k3s"))
             if u >= 1:
-                text(c, 5.15, 1.95, 4, 0.28, "namespace lumen", 13, "Regular", ink(INK2, ka))
+                # The namespace lumen holds our pods only: Traefik and KEDA run in k3s's own
+                # namespaces, so the dashed frame leaves them out (checklist review, 23 October).
+                x0, x1, y0, y1 = PX[0] - 0.1, PX[4] + 1.22, 2.22, 4.26
+                notch = PX[4] - 0.07
+                ring_ = [(x0, y0), (x1, y0), (x1, 3.42), (notch, 3.42), (notch, y1), (x0, y1), (x0, y0)]
+                line(c, ring_, ink(INK3, ka), dashed=True)
+                text(c, x0 + 0.08, 1.93, 4, 0.28, "namespace lumen", 13, "Regular", ink(INK2, ka))
         # the parts inside k3s, each grown in from the cluster's outline
         if g.get("bus", 0) > 0:
             col = ink(INK if lit("bus") else INK2, a("bus"))
@@ -561,28 +567,28 @@ def deployment():
     # 1. build: each level grows in from its parent
     sc.step("One AWS node: an EC2 t3.medium in Singapore", 0.2)
     grow_in(["aws"], 0.9)
-    sc.hold(1.0)
-    sc.title = "k3s runs inside it, in the namespace lumen"
+    sc.hold(6.7)
+    sc.title = "k3s runs inside it; the namespace lumen holds our own pods"
     grow_in(["k3s"], 0.9)
-    sc.hold(0.9)
+    sc.hold(5.6)
     sc.title = "Inside k3s: Traefik and the five service pods"
     grow_in(["traefik", "identity", "project", "session", "worker", "billing"], 1.6, 0.35)
     sc.tween(0.5, lambda u: G.__setitem__("bus", u))
-    sc.hold(0.6)
-    sc.title = "PostgreSQL and RabbitMQ as StatefulSets, and KEDA"
+    sc.hold(10.5)
+    sc.title = "PostgreSQL, RabbitMQ and KEDA"
     grow_in(["postgres", "rabbitmq", "keda"], 1.0, 0.3)
-    sc.hold(0.8)
+    sc.hold(6.5)
     sc.title = "Outside the node: the clients, CI/CD and the model API"
     grow_in(["browser", "watch", "gha", "openai"], 0.8, 0.2)
     for key, target in (("browser", "traefik"), ("watch", "traefik"), ("ssh", "k3s"), ("openai", "openai")):
         sc.tween(0.45, lambda u, key=key: G.__setitem__("w_" + key, u))
         kick(sc, target)
-    sc.hold(1.0)
+    sc.hold(1.5)
 
     # 2. the paths, one at a time
-    sc.step("HTTPS on 443 to Traefik, which routes to the service pods", 2.8, spot="https")
-    sc.step("GitHub Actions deploys over SSH 22 into k3s", 2.4, spot="ssh")
-    sc.step("The worker pod calls the OpenAI API over HTTPS", 2.4, spot="openai")
+    sc.step("HTTPS on 443 to Traefik, which routes to the service pods", 7.4, spot="https")
+    sc.step("GitHub Actions deploys over SSH 22 into k3s", 3.5, spot="ssh")
+    sc.step("The worker pod calls the OpenAI API over HTTPS", 3.5, spot="openai")
     sc.step("UML deployment diagram: the platform in k3s on one EC2 node", 3.0, spot=None)
     sc.save()
 
@@ -626,10 +632,10 @@ def scaling():
         text(c, 0.3, 0.98, 10, 0.28, "load test, 20 October, with a fixed delay in place of each model call", 13, "Regular", INK3)
         LY = 1.42
         c.bar(X0, LY + 0.07, 0.16, 0.16, INK2)
-        text(c, X0 + 0.26, LY, 3, 0.3, "jobs waiting (three queues)", 13, "Medium", INK2)
-        lx = X0 + 0.26 + tw("jobs waiting (three queues)", 13, "Medium") + 0.45
+        text(c, X0 + 0.26, LY, 3, 0.3, "jobs in the three queues", 13, "Medium", INK2)
+        lx = X0 + 0.26 + tw("jobs in the three queues", 13, "Medium") + 0.45
         dashed_h(c, [(lx, LY + 0.15), (lx + 0.42, LY + 0.15)], INK)
-        text(c, lx + 0.55, LY, 5.5, 0.3, "target: 5 waiting jobs per worker", 13, "Medium", INK2)
+        text(c, lx + 0.55, LY, 5.5, 0.3, "KEDA target: 5 jobs × workers", 13, "Medium", INK2)
         for n in (0, 10, 20, 30):
             y = jy(n)
             if n:
@@ -641,6 +647,10 @@ def scaling():
         for ts, w, j in seen:
             if j:
                 c.bar(tx(ts) - BW / 2, jy(j), BW, YB - jy(j), INK if (st["cursor"] and ts == seen[-1][0]) else INK2)
+        # the first sample after the peak with no job waiting: the queue is empty there
+        empty = next((ts for ts, w, j in data if ts > 60 and j == 0), None)
+        if empty is not None and t >= empty:
+            text(c, tx(empty) - 0.12, YB - 0.34, 1.4, 0.28, "queue empty", 13, "Regular", INK2, "left")
         pts = []
         for i, (ts, w, j) in enumerate(seen):
             end = min(t, data[i + 1][0]) if i + 1 < len(data) else t
@@ -664,16 +674,16 @@ def scaling():
             if k in st["t_rem"]:
                 prog[k] = max(0.0, 1 - (now - st["t_rem"][k]) / DIV)
         n = 1 + sum(1 for k in (1, 2, 3) if prog[k] >= 0.5)
-        text(c, RX, 1.7, RW + 0.3, 0.3, "worker pods (KEDA): %d" % n, 14, "Semibold", INK)
+        text(c, RX, 1.7, RW + 0.3, 0.3, "worker pods: %d (max 4)" % n, 14, "Semibold", INK)
         for k in (1, 2, 3):                     # where a pod can go: its empty place
             x, y = SLOTS[k]
             c.d.rectangle([c._p(x), c._p(y), c._p(x + RW), c._p(y + RH)], outline=RULE2, width=c._lw(1))
         pod_row(c, SLOTS, RW, RH, prog, horizontal=False, label="worker %d", stretch=0.16, size=14)
         if st["result"]:
             # the result: as wide as the worker pods above it
-            c.bar(RX, 3.66, RW, 1.04, INK)
-            for i, s_ in enumerate(["135 questions", "median 6.1 s", "0 of 1,040 failed"]):
-                text(c, RX + 0.18, 3.76 + i * 0.28, RW, 0.28, s_, 15, "Semibold", BLACK)
+            c.bar(RX, 3.62, RW, 1.28, INK)
+            for i, s_ in enumerate(["0 requests failed", "of 1,040 sent", "135 questions", "1 to 4 workers"]):
+                text(c, RX + 0.16, 3.72 + i * 0.27, RW, 0.27, s_, 14, "Semibold", BLACK)
 
     st = dict(t=0.0, cursor=True, result=False, t_add={}, t_rem={})
     sc = Scene("scaling.gif", paint, st)
@@ -692,22 +702,22 @@ def scaling():
                     st["t_rem"][k] = sc.t
             sc._add(sc._draw(), round(1000 / FPS))
 
-    sc.step("Ten users ask questions without pause", 1.6)
+    sc.step("Ten users ask questions without pause", 11.3)
     sweep(30)
     sc.hold(1.0)
-    sc.step("One worker falls behind; the queue grows", 0.2)
+    sc.step("One worker falls behind, and the queue grows", 0.2)
     sweep(41)
-    sc.hold(1.4)
+    sc.hold(7.7)
     sc.step("Above 5 jobs per worker, KEDA adds a worker pod", 0.2)
     sweep(79, 12)
-    sc.hold(1.4)
+    sc.hold(7.5)
     sc.step("With 4 workers, the queue stops growing, then drains", 0.2)
-    sweep(130, 22)
-    sc.hold(1.0)
+    sweep(135, 22)
+    sc.hold(4.9)
     sc.step("A minute after the load, KEDA removes the extra pods", 0.2)
     sweep(215, 20)
-    sc.hold(1.2)
-    sc.step("Load test of 20 October: 1 to 4 workers, and no request failed", 3.4, cursor=False, result=True)
+    sc.hold(1.7)
+    sc.step("Load test of 20 October: 1 to 4 workers, and no request failed", 7.4, cursor=False, result=True)
     sc.save()
 
 
@@ -752,11 +762,11 @@ def er():
     keys = Table("platform_api_keys", [("PK", "id"), ("FK", "account_id"), ("", "prefix"), ("", "key_hash"),
                                        ("", "scopes"), ("", "revoked_at")], LEFT + 0.1, accounts.b + 0.26, 1.85)
     px = accounts.r + 0.35
-    projects = Table("projects", [("PK", "id"), ("", "account_id"), ("", "title"), ("", "mode")], px, T0)
+    projects = Table("projects", [("PK", "id"), ("", "account_id"), ("", "title")], px, T0)
     findings = Table("findings", [("PK", "id"), ("FK", "project_id"), ("FK", "session_id"), ("FK", "task_id"),
                                   ("", "title")], 0, T0)
-    agents = Table("platform_agents", [("PK", "id"), ("FK", "owner_account_id"), ("", "slug"), ("", "instructions"),
-                                       ("", "withdrawn_at")], 0, T0)
+    agents = Table("platform_agents", [("PK", "id"), ("FK", "owner_account_id"), ("", "slug"), ("", "instructions")],
+                     0, T0)
     intents = Table("platform_question_intents", [("PK", "id"), ("", "account_id"), ("FK", "agent_id"),
                                                   ("", "question"), ("", "session_id")], 0, T0)
     # the project frame reaches far enough below its tables to hold the crow's foot under findings
@@ -769,8 +779,8 @@ def er():
     steps = Table("steps", [("PK FK", "task_id"), ("PK", "index"), ("", "kind"), ("", "text"), ("", "detail")], 0, B0)
     wallets = Table("billing_wallets", [("PK", "account_id"), ("", "cap")], 0, B0)
     ledger = Table("ledger_entries", [("PK", "id"), ("", "account_id"), ("FK", "task_id"), ("", "amount")], 0, 0)
-    approvals = Table("billing_approvals", [("PK", "id"), ("", "account_id"), ("", "task_id"), ("", "attempt_id"),
-                                            ("", "status"), ("", "resume_pending")], 0, B0)
+    approvals = Table("billing_approvals", [("PK", "id"), ("", "account_id"), ("", "task_id"), ("", "status")], 0,
+                      B0)
     findings.x = projects.r + GAP
     tasks.x = findings.x
     tasks.w = findings.w = max(tasks.w, findings.w)
@@ -899,7 +909,7 @@ def er():
             c.text(LEFT + 0.58, ky, 1.5, 0.24, "foreign key", 13, "Regular", INK2, "left")
             line(c, [(LEFT + 0.1, ky + 0.36), (LEFT + 0.47, ky + 0.36)], INK2, dashed=True)
             c.text(LEFT + 0.58, ky + 0.24, 1.5, 0.24, "id, no foreign key", 13, "Regular", INK2, "left")
-            c.text(LEFT + 0.1, ky + 0.5, 2.0, 0.24, "files: a 2Gi volume", 13, "Regular", INK2, "left")
+            c.text(LEFT + 0.1, ky + 0.5, 2.0, 0.24, "files: a 2 GB disk", 13, "Regular", INK2, "left")
 
     st = dict(ctx={}, tables={}, rels={}, focus=None, now=set(), legend=False, pulse={})
     sc = Scene("er.gif", paint, st)
@@ -912,7 +922,7 @@ def er():
             for t in tables:
                 st["tables"][t] = u
         sc.tween(0.45, fn)
-    sc.hold(1.0)
+    sc.hold(8.2)
 
     # 2. one table at a time, with its relationships
     def rel(sentence, *ks, hold=1.15):
@@ -925,25 +935,25 @@ def er():
         sc.hold(hold)
 
     sc.set(focus="accounts")
-    rel("An account has many API keys", "keys")
-    rel("An account owns the agents it publishes", "acc_agents")
-    rel("A project keeps its account_id: an id from identity, no foreign key", "acc_proj", hold=1.6)
+    rel("An account has many API keys", "keys", hold=1.5)
+    rel("An account owns the agents it publishes", "acc_agents", hold=1.9)
+    rel("A project keeps its account_id: an id from identity, no foreign key", "acc_proj", hold=6.3)
     sc.set(focus="agents")
-    rel("A question can name one agent", "intents")
+    rel("A question can name one agent", "intents", hold=1.5)
     sc.set(focus="projects")
-    rel("A project has many findings, and its sessions keep its id", "proj_find", "proj_sess", hold=1.6)
+    rel("A project has many findings, and its sessions keep its id", "proj_find", "proj_sess", hold=3.7)
     sc.set(focus="sessions")
-    rel("A session has many tasks and many findings", "sess_tasks", "sess_find", hold=1.5)
+    rel("A session (one question) has many tasks and many findings", "sess_tasks", "sess_find", hold=4.1)
     sc.set(focus="tasks")
-    rel("A task has child tasks: parent_id is the call tree", "task_self")
-    rel("A task has many steps, in order", "task_steps")
+    rel("A task has child tasks: parent_id is the call tree", "task_self", hold=7.2)
+    rel("A task has many steps, in order", "task_steps", hold=1.9)
     rel("A reader's task records findings", "task_find")
-    rel("Each model call of a task is a ledger entry", "task_ledger", hold=1.5)
+    rel("Each model call of a task is a ledger entry", "task_ledger", hold=3.7)
     sc.set(focus="worker", now=set())
     sc.title = "The worker runs the agents and owns no tables"
-    sc.hold(1.6)
+    sc.hold(1.0)
     sc.set(focus=None, legend=True)
-    sc.title = "ER diagram: PostgreSQL 16; money is numeric(12,6)"
+    sc.title = "ER diagram: PostgreSQL 16, money as numeric(12,6)"
     sc.hold(3.0)
     sc.save()
 
@@ -988,14 +998,14 @@ def sequence():
 
     MSG = [("ask", A, C, "POST /api/v1/questions", False),
            ("guard", C, C, "check the API key", False),
-           ("start", C, D, "POST /internal/directory/start", False),
-           ("publish", D, F, "publish lumen.turns.0", False),
-           ("accepted", C, A, "201 {sessionId}", True),
+           ("start", C, D, "start the question", False),
+           ("publish", D, F, "job to level 0 queue", False),
+           ("accepted", C, A, "201 {question id}", True),
            ("get", A, D, "GET /api/v1/questions/:id", False),
            ("answer", D, A, "200 {status, answer, findings, cost}", True),
            ("consume", F, G, "consume", False),
-           ("llm", G, H, "chat completion", False),
-           ("step", G, D, "POST /internal/turns/:id/step", False),
+           ("llm", G, H, "model call", False),
+           ("step", G, D, "send the step", False),
            ("insert", D, E, "INSERT steps", False)]
     BY = {m[0]: m for m in MSG}
     # activation bars: (lifeline, from, to, nested). PostgreSQL and RabbitMQ get none: an arrow
@@ -1064,7 +1074,7 @@ def sequence():
             c.d.line([(c._p(x + w - k), c._p(y)), (c._p(x + w - k), c._p(y + k)), (c._p(x + w), c._p(y + k))],
                      fill=ink(INK2, a), width=c._lw(1))
             line(c, [(X[A], y + h / 2), (x, y + h / 2)], ink(INK2, a), 1, dashed=True)
-            c.text(x + 0.12, y + 0.1, w - 0.2, h - 0.2, "Every call of the app\npasses Traefik,\nthe API gateway",
+            c.text(x + 0.12, y + 0.1, w - 0.2, h - 0.2, "Every call of the app\npasses Traefik and\ncarries its API key",
                    13, "Regular", ink(INK2, a), "left")
         if st["loop"] > 0:
             a = st["loop"]
@@ -1131,26 +1141,26 @@ def sequence():
         sc.tween(seconds, fn)
         sc.hold(hold)
 
-    sc.title = "UC2: ask a question with a chosen agent"
+    sc.title = "Ask a question: the sequence diagram"
     sc.tween(0.9, lambda u: st.update(heads=u))
-    sc.hold(0.8)
-    sc.title = "The app sends the question; project checks the key"
+    sc.hold(6.1)
+    sc.title = "The app sends the question, and project checks the key"
     send("ask")
-    send("guard", hold=0.5)
+    send("guard", hold=3.4)
     sc.title = "Session starts the question and puts the first job on the queue"
     send("start")
-    send("publish", hold=0.6)
+    send("publish", hold=5.9)
     sc.title = "par: from here, two lanes run at the same time"
     sc.set(now=set(), on=set())
     sc.tween(0.5, lambda u: st.update(par=u))
-    sc.hold(0.8)
+    sc.hold(5.6)
     sc.title = "The app gets 201 at once, while a worker takes the job"
-    send("accepted", "consume", seconds=0.8, hold=0.9)
+    send("accepted", "consume", seconds=0.8, hold=6.6)
     sc.tween(0.4, lambda u: st.update(loop=u))
     sc.title = "The app reads the answer while the worker runs its steps"
     send("get", "llm", seconds=0.6, hold=0.4)
     send("answer", "step", seconds=0.7, hold=0.4)
-    send("insert", seconds=0.5, hold=0.8)
+    send("insert", seconds=0.5, hold=4.4)
     sc.title = "loop: the worker runs one step after another"
     sc.set(now=set(), on=set())
     for _ in range(2):
@@ -1159,6 +1169,7 @@ def sequence():
             sc.tween(0.45, lambda u, k=k: st["over"].__setitem__(k, u))
         sc.hold(0.25)
         sc.set(over={})
+    sc.hold(7.2)
     sc.set(on=set())
     sc.title = "The app gets 201 at once and reads the answer while the worker runs"
     sc.hold(3.2)
@@ -1200,11 +1211,11 @@ def branches():
                 if xe >= x - 1e-6:
                     _dot(c, x, MAIN)
         if st["drop"]:
-            text(c, 0.22, PLAT - 0.3, 2.4, 0.32, "ass/platform", 15, "Semibold", INK)
-            text(c, 0.22, PLAT, 2.4, 0.28, "the platform's branch", 13, "Regular", INK2)
+            text(c, 0.22, PLAT - 0.3, 2.4, 0.32, "integration branch", 15, "Semibold", INK)
+            text(c, 0.22, PLAT, 2.4, 0.28, "the platform's work", 13, "Regular", INK2)
             c.line([(X0, MAIN), (X0, lerp(MAIN, PLAT, st["drop"]))], pt=2.5, color=INK)
             if st["drop"] >= 1:
-                text(c, X0 + 0.12, (MAIN + PLAT) / 2 - 0.14, 2, 0.28, "branched off main on 19 October", 13, "Regular", INK2)
+                text(c, X0 + 0.12, (MAIN + PLAT) / 2 - 0.14, 2, 0.28, "branched off main", 13, "Regular", INK2)
         if st["px"] > X0:
             c.line([(X0, PLAT), (st["px"], PLAT)], pt=2.5, color=INK)
             for i in range(1, N + 1):
@@ -1217,10 +1228,9 @@ def branches():
             line(c, pts, col)
             if st["feat"] >= 1:
                 arrowhead(c, FEATP[-1], FEATP[-2], col)
-                text(c, FM + 0.1, (PLAT + FEAT) / 2 - 0.14, 1.2, 0.28, "PR #148", 13, "Semibold", col)
+                text(c, FM + 0.1, (PLAT + FEAT) / 2 - 0.14, 1.4, 0.28, "pull request", 13, "Semibold", col)
             text(c, 0.22, FEAT - 0.15, 2.4, 0.3, "a feature branch", 13, "Regular", INK2)
-            text(c, FB - 3.7, FEAT - 0.15, 3.48, 0.3, "codex/platform-approval-acceptance", 13, "Regular", INK2,
-                 "right")
+            text(c, FB - 3.7, FEAT - 0.15, 3.48, 0.3, "tests for spend approvals", 13, "Regular", INK2, "right")
             done = st["feat"] * _length(FEATP)
             for x in FDOTS:
                 if done >= (FEAT - PLAT) + (x - FB):
@@ -1229,9 +1239,8 @@ def branches():
         n += sum(1 for x in FDOTS if st["feat"] * _length(FEATP) >= (FEAT - PLAT) + (x - FB))
         n += 1 if cx(MERGE) <= st["px"] + 1e-6 else 0
         if st["px"] > X0:
-            text(c, X0, 3.95, 5, 0.3, "%d commits on ass/platform" % n, 14, "Semibold", INK)
-        if st["merged"] >= 1:
-            text(c, X0, 4.3, 5, 0.3, "1 pull request merged into it", 14, "Semibold", INK)
+            # no count: the branch keeps growing after the recording (independent review)
+            text(c, X0, 3.95, 5, 0.3, "every commit lands on the integration branch", 14, "Semibold", INK)
         # the deploy column is there, dimmed, from the start; each part lights as its line reaches it
         g = st["art"]
 
@@ -1242,14 +1251,14 @@ def branches():
         arrow(c, P["push"], g.get("push", 0), INK2)
         arrowhead(c, P["push"][-1], P["push"][-2], ink(INK2, la("push")))
         text(c, END - 0.05, PLAT - 0.4, AX - END + 0.1, 0.28, "push", 13, "Regular", ink(INK2, la("push")), "center")
-        comp(c, AX, IMG[0], AW, IMG[1], "lumen-next:<commit sha>", "image, built from deploy/k8s/Dockerfile",
+        comp(c, AX, IMG[0], AW, IMG[1], "image, tagged with its commit", "built from the platform Dockerfile",
              a=la("push"), p=pulse(st, "image"))
         line(c, P["ssh"], ink(INK2, DIM))
         arrow(c, P["ssh"], g.get("ssh", 0), INK2)
         arrowhead(c, P["ssh"][-1], P["ssh"][-2], ink(INK2, la("ssh")))
         text(c, AL + 0.13, IMG[0] + IMG[1] + 0.08, 3, 0.28, "copy over SSH (scp)", 13, "Regular", ink(INK2, la("ssh")))
         node(c, AX, NODE[0], AW - 0.14, NODE[1], "EC2 host", "AWS", a=la("ssh"), p=pulse(st, "node"))
-        text(c, AX + 1.45, NODE[0] + 0.32, 2.0, 0.3, "k3s ctr images import", 13, "Regular", ink(INK2, la("ssh")))
+        text(c, AX + 1.45, NODE[0] + 0.32, 2.0, 0.3, "imported into k3s", 13, "Regular", ink(INK2, la("ssh")))
         line(c, P["helm"], ink(INK2, DIM))
         arrow(c, P["helm"], g.get("helm", 0), INK2)
         arrowhead(c, P["helm"][-1], P["helm"][-2], ink(INK2, la("helm")))
@@ -1262,34 +1271,34 @@ def branches():
 
     sc.title = "main holds Lumen, the base product"
     sc.tween(1.0, lambda u: st.update(main=u))
-    sc.hold(0.8)
-    sc.title = "ass/platform branches off main on 19 October"
+    sc.hold(5.1)
+    sc.title = "The integration branch leaves main"
     sc.tween(0.7, lambda u: st.update(drop=max(u, 1e-3)))
-    sc.hold(0.4)
-    sc.title = "Commits land on ass/platform"
+    sc.hold(3.6)
+    sc.title = "Commits land on the integration branch"
     sc.tween(2.2, lambda u: st.update(px=lerp(X0, cx(BASE), u)))
     sc.hold(0.4)
     sc.title = "A short-lived branch holds one change"
     sc.set(featlit=True)
     sc.tween(1.2, lambda u: st.update(feat=max(u * 0.72, 1e-3)))
-    sc.hold(0.4)
-    sc.title = "Pull request #148 merges it back into ass/platform"
+    sc.hold(1.8)
+    sc.title = "A pull request merges it back after review"
     sc.tween(0.9, lambda u: st.update(feat=lerp(0.72, 1.0, u), px=lerp(cx(BASE), cx(MERGE), u)))
     kick(sc, "merge")
     sc.tween(0.3, lambda u: st.update(merged=u))
-    sc.hold(1.2)
-    sc.title = "More commits land; each one is pushed"
+    sc.hold(2.2)
+    sc.title = "More commits land, and each one is pushed"
     sc.set(featlit=False)
     sc.tween(1.0, lambda u: st.update(px=lerp(cx(MERGE), END - 0.1, u)))
-    sc.hold(0.4)
-    for key, target, title in (("push", "image", "A push builds one image: lumen-next:<commit sha>"),
-                               ("ssh", "node", "The image goes over SSH into k3s on the EC2 host"),
-                               ("helm", "live", "helm upgrade --install --wait puts it live")):
+    sc.hold(3.8)
+    for key, target, title, rest in (("push", "image", "A push builds one image, tagged with its commit", 2.8),
+                                     ("ssh", "node", "The image goes over SSH into k3s on the EC2 host", 4.5),
+                                     ("helm", "live", "helm upgrade --install --wait puts it live", 1.5)):
         sc.title = title
         sc.tween(0.7, lambda u, key=key: st["art"].__setitem__(key, u))
         kick(sc, target)
-        sc.hold(1.5)
-    sc.title = "Git branches and the deploy path of each commit on ass/platform"
+        sc.hold(rest)
+    sc.title = "Git branches and the deploy path of each commit"
     sc.hold(3.0)
     sc.save()
 
@@ -1316,7 +1325,7 @@ def cicd():
            ("smoke", "Smoke load", "2 users for 30 s", "k6", "1 min 15 s", 2.75)]
     AX, AW, AH = 7.85, 1.6, 1.2
     SUM = (9.8, 2.37, 1.5, 0.6)
-    RES_Y = 3.45                                # a result block, centred under the summary
+    RES_Y = 3.15                                # a result block, centred under the summary
 
     def mid(y, h):
         return y + h / 2
@@ -1365,7 +1374,7 @@ def cicd():
                 arrow(c, pts, u, INK if u < 1 else INK2, pt=2 if u < 1 else 1.5)
             else:
                 arrowhead(c, pts[-1], pts[-2], col)
-        _terminal(c, *TRIG, "trigger", "push to\nass/platform,\nor a manual\nrun", lit=on("trig"))
+        _terminal(c, *TRIG, "trigger", "push to the\nintegration\nbranch, or a\nmanual run", lit=on("trig"))
         for (name, note, tool, d), y in zip(PAR, PY):
             k = name.lower()
             _job(c, PX, y, PW, PH, name, note, tool, d if dur else "", lit=on(k), faint=faint(k), ok=k in ok)
@@ -1398,7 +1407,8 @@ def cicd():
         _terminal(c, *SUM, "summary" + ("  4 s" if dur else ""), lit=on("sum"), faint=faint("sum"))
         if st["result"]:
             w = max(tw(s_, 16, "Semibold") for s_ in st["result"]) + 0.36
-            _invert_lines(c, SUM[0] + SUM[2] / 2 - w / 2, RES_Y, st["result"])
+            # right of the connector from the smoke load to the summary, so it never covers it
+            _invert_lines(c, max(SUM[0] + SUM[2] / 2 - w / 2, BUS4 + 0.12), RES_Y, st["result"])
 
     st = dict(g={}, ok=set(), dur=False, seen=set(), broken=False, stopped=False, result=None, pulse={})
     sc = Scene("pipeline.gif", paint, st)
@@ -1428,27 +1438,30 @@ def cicd():
         reach("gate")
         sc.hold(0.5)
 
-    sc.step("The pipeline: .github/workflows/platform-deploy.yml", 2.0)
-    sc.title = "The first run: verify, SCA and SAST run at the same time and pass"
+    sc.step("The pipeline starts on a push", 4.8)
+    sc.title = "The first runs: verify, SCA and SAST run at the same time and pass"
     run(False)
-    sc.title = "5 critical CVEs: the Trivy gate stops the deploy"
+    sc.hold(7.0)
+    sc.title = "5 critical CVEs: the Trivy gate stops the deploy, in the first two runs"
     sc.tween(0.4, lambda u: G.__setitem__("pass", 0.5 * u))
     sc.set(broken=True)
     sc.hold(0.3)
     grow_k(["fail"], 0.5)
-    sc.set(stopped=True, result=["5 critical CVEs:", "deploy stopped"])
-    sc.hold(2.0)
-    sc.step("The fix: a smaller platform image, with no Docker inside", 1.6, result=None)
+    sc.set(stopped=True, result=["two runs stopped:", "5 critical CVEs"])
+    sc.hold(11.4)
+    sc.step("The fix: a smaller platform image, with no Docker inside", 3.9, result=None)
     sc.set(g={}, ok=set(), seen=set(), broken=False, stopped=False, dur=True)
     G = st["g"]
     sc.title = "The next run: the fixed image"
     run(True)
+    sc.hold(1.0)
     sc.title = "The image passes the gate; the deploy steps run one after another"
     for key, step_ in (("pass", "copy"), ("helm", "helm"), ("health", "health")):
         grow_k([key], 0.45)
         reach(step_)
         sc.hold(0.25)
     sc.set(ok=st["ok"] | {"deploy", "health"})
+    sc.hold(3.0)
     sc.title = "DAST and a smoke load run at the same time against the live address"
     grow_k(["in_dast", "in_smoke"], 0.5)
     reach("dast", "smoke")
@@ -1456,8 +1469,11 @@ def cicd():
     sc.set(ok=st["ok"] | {"dast", "smoke"})
     grow_k(["out_dast", "out_smoke"], 0.5)
     reach("sum")
-    sc.hold(0.5)
-    sc.step("CI/CD pipeline: all jobs passed in 12 min 30 s", 3.2, result=["all jobs done", "in 12 min 30 s"])
+    sc.hold(6.5)
+    # The jobs ran 12 min 30 s (14:49:09 to 15:01:39 UTC). GitHub's elapsed time for the run,
+    # 20 min 45 s, also counts the 8 minutes it waited for the run before it (gh run view).
+    sc.step("CI/CD pipeline: all jobs passed", 3.2,
+            result=["all jobs passed", "first to last job:", "12 min 30 s", "run: 20 min 45 s"])
     sc.save()
 
 
@@ -1470,11 +1486,11 @@ def findings():
     HY = 1.0
     HEADS = [("Per-level queues", "found in design"), ("Trivy gate", "image scan"), ("KEDA scale-down", "load test")]
     WORDS = [("Leads wait for readers that wait\nin the same queue: a deadlock.",
-              "One queue per level of the call tree\n(AD-03)."),
-             ("5 critical CVEs, most in the docker.io\npackage. The gate stopped the deploy.",
-              "deploy/k8s/Dockerfile: smaller, patched\nat build. The next run passed."),
+              "One queue per level of the call tree\n(slide 13)."),
+             ("5 critical CVEs, most in the Docker\npackage. The gate stopped the deploy.",
+              "A smaller platform image, patched\nat build. The next run passed."),
              ("KEDA waits 300 s by default\nbefore it removes a worker.",
-              "The chart sets 60 s, so the workers\ngo back to 1 a minute after the load.")]
+              "Our Helm chart sets 60 s, so the extra\nworkers leave a minute after the load.")]
     DY0, DH = 1.5, 0.84                         # the diagram band
     PW_Y, SOL_Y, SW_Y = 2.72, 3.36, 3.7          # problem words, the solution arrow, solution words
     x0, x1, x2 = XS
@@ -1517,7 +1533,7 @@ def findings():
                     line(c, [(x0 + 1.45, r[1] + 0.105), (jx, r[1] + 0.105)], ink(INK2, m))
                 line(c, [(jx, LEV[0][1] + 0.105), (jx, LEV[2][1] + 0.105)], ink(INK2, m))
                 arrow(c, [(jx, MIDY), (SLOTS[0], MIDY)], 1, ink(INK2, m))
-            comp(c, *SLOTS, "workers", "all busy with leads" if m < 0.5 else "readers always run",
+            comp(c, *SLOTS, "workers", "all busy with leads" if m < 0.5 else "readers run too",
                  p=pulse(st, "slots"))
 
         # 2. the image with Docker shrinks, and passes the gate
@@ -1573,12 +1589,12 @@ def findings():
     sc.title = "1. Their readers wait in the same queue: a deadlock"
     show(("pw", 0))
     kick(sc, "q")
-    sc.hold(1.8)
+    sc.hold(4.4)
     sc.title = "1. The one queue splits into a queue per level"
     sc.tween(1.3, lambda u: st["m"].__setitem__(0, u))
     kick(sc, "slots")
     show(("sw", 0))
-    sc.hold(1.8)
+    sc.hold(3.0)
     # 2. the Trivy gate
     sc.step("2. The Lumen image carries Docker: the gate stops it", 0.2)
     show(("p", 1))
@@ -1586,7 +1602,7 @@ def findings():
     kick(sc, "gate")
     sc.tween(0.4, lambda u: st.update(g2=u))
     show(("pw", 1))
-    sc.hold(1.8)
+    sc.hold(7.1)
     sc.title = "2. The image shrinks: no Docker inside, and it passes"
     sc.set(g1=0.0, g2=0.0)
     sc.tween(1.1, lambda u: st["m"].__setitem__(1, u))
@@ -1594,17 +1610,17 @@ def findings():
     kick(sc, "gate")
     sc.tween(0.35, lambda u: st.update(g2=u))
     show(("sw", 1))
-    sc.hold(1.6)
+    sc.hold(1.0)
     # 3. the KEDA scale-down window
     sc.step("3. By default, KEDA waits 300 s before it removes a worker", 0.2)
     show(("p", 2))
     sc.tween(1.6, lambda u: st.update(fill=u))
     show(("pw", 2))
-    sc.hold(1.4)
+    sc.hold(7.3)
     sc.title = "3. The chart sets 60 s, a fifth of the default"
     sc.tween(1.2, lambda u: st["m"].__setitem__(2, u))
     show(("sw", 2))
-    sc.hold(1.6)
+    sc.hold(9.2)
     sc.title = "Three technical findings and their fixes"
     sc.hold(3.0)
     sc.save()

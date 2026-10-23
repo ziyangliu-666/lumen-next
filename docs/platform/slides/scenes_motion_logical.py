@@ -10,11 +10,11 @@ Each motion has one meaning (SWE5006 slides/MOTION.md):
 
 platform.gif     producers and consumers around the platform (key std_platform)
 usecases.gif     the UML use case diagram, one actor at a time
-decisions.gif    AD-01, AD-02 and AD-04 as three small before and after morphs
+decisions.gif    three logical decisions as small before and after morphs
 contextmap.gif   the DDD context map, one context at a time, Session last
 interaction.gif  the seven public API calls, grouped into producer and consumer phases
 logical.gif      the component diagram, tier by tier, then one question at run time
-queues.gif       AD-03: the wait-for cycle of one shared queue, and how a queue per level breaks it
+queues.gif       the queue decision: the wait-for cycle of one shared queue, and how a queue per level breaks it
 
 The facts come from scenes_std_overview.py, scenes_std.py, scenes_std_design.py and
 docs/platform/report/report.md. Every picture ends on its complete diagram, nothing lit.
@@ -249,9 +249,9 @@ def platform():
         a = A("eng")
         cbox(c, *ENG, "", a=a, hot=H("eng"), pulse=Pp("eng"))
         c.text(IX + 0.14, ENG[1] + 0.07, IW, 0.32, "Run engine", 15, "Semibold", ink(INK, a), "left")
-        c.text(IX + 0.14, ENG[1] + 0.39, IW, 0.28, "the session, worker and billing services", 13, "Regular",
+        c.text(IX + 0.14, ENG[1] + 0.39, IW, 0.28, "three services: session, worker, billing", 13, "Regular",
                ink(INK2, a), "left")
-        c.text(IX + 0.15, ENG[1] + 0.7, IW, 0.28, "each question runs as", 13, "Regular", ink(INK2, a), "left")
+        c.text(IX + 0.15, ENG[1] + 0.7, IW, 0.28, "for each question:", 13, "Regular", ink(INK2, a), "left")
         for i, (k, name) in enumerate(PARTS):
             cbox(c, IX + 0.15 + i * (bw + 0.1), ENG[1] + 1.02, bw, 0.84, name, a=min(a, A(k)), hot=H(k), mark=False,
                  size=14)
@@ -273,32 +273,32 @@ def platform():
 
     sc = Scene("platform.gif", paint, {})
     lk = Look(sc, KEYS)
-    sc.step("Producers and consumers around the Lumen platform", 2.4)
+    sc.step("Producers and consumers around the Lumen platform", 3.5)
     sc.title = "Producers: an agent author publishes agents to the registry"
     lk.spot({"plat", "prod", "reg", "pub"}, hot={"prod", "reg", "pub"})
     lk.grow("pub", 0.8, pulse=["reg"])
-    sc.hold(1.8)
+    sc.hold(10.0)
     sc.title = "Consumers: an app asks with an API key; people ask in the web app"
     lk.spot({"plat", "cons", "watch", "web_app", "people", "ask", "web", "eng"}, hot={"watch", "web_app", "ask", "web"})
     lk.grow("ask", 0.7, pulse=["eng"])
     lk.grow("web", 0.7, pulse=["eng"])
-    sc.hold(1.6)
+    sc.hold(7.0)
     sc.title = "The run engine takes the agent's instructions"
     lk.spot({"plat", "eng", "tree", "cost", "cap", "reg", "instr"}, hot={"eng", "instr"})
     lk.grow("instr", 0.6, pulse=["eng"])
-    sc.hold(1.0)
-    for k, title in (("tree", "Each question runs as a call tree"),
-                     ("cost", "Each step is recorded with its cost"),
-                     ("cap", "Every step stays under the account's budget cap")):
+    sc.hold(3.0)
+    for k, title, sec in (("tree", "Each question runs as a call tree", 7.0),
+                          ("cost", "Each step is recorded with its cost", 5.4),
+                          ("cap", "Each step is checked against the budget cap", 6.2)):
         sc.title = title
         sc.set(hot={"eng", k})
-        sc.hold(1.4)
+        sc.hold(sec)
     sc.title = "The answer, findings and cost go back; people watch the run live"
     lk.spot({"plat", "eng", "tree", "cost", "cap", "cons", "watch", "web_app", "people", "ans", "live"},
             hot={"eng", "ans", "live"})
     lk.grow("ans", 0.7, pulse=["watch"])
     lk.grow("live", 0.7, pulse=["web_app"])
-    sc.hold(1.4)
+    sc.hold(3.6)
     sc.title = "The Lumen platform between producers and consumers"
     lk.spot(None, 0.6)
     sc.hold(2.0)
@@ -311,8 +311,8 @@ def oval(c, cx, cy, w, h, ident, name, a=1.0, hot=False, pulse=0.0):
     c.d.ellipse([c._p(cx - w / 2), c._p(cy - h / 2), c._p(cx + w / 2), c._p(cy + h / 2)],
                 fill=ink(RAISED, a) if hot else BLACK, outline=ink(INK if hot else INK2, a),
                 width=c._lw(2 if hot else 1.5))
-    c.text(cx - w / 2, cy - 0.25, w, 0.24, ident, 13, "Regular", ink(INK2, a))
-    c.text(cx - w / 2, cy - 0.05, w, 0.28, name, 15, "Semibold", ink(INK, a))
+    # The use case's name only: the audience never sees our numbers for them.
+    c.text(cx - w / 2, cy - 0.15, w, 0.3, name, 15, "Semibold", ink(INK, a))
     ring(c, cx - w / 2, cy - h / 2, w, h, pulse, a, oval=True)
 
 
@@ -326,16 +326,18 @@ def usecases():
     BX, BY, BW, BH = 2.25, 1.0, 7.6, 3.75       # the system boundary
     OW, OH = 3.3, 0.625                         # the right column: four ovals, 0.25 apart
     LCX, RCX = BX + 0.3 + OW / 2, BX + BW - 0.3 - OW / 2
-    UC = {"UC1": (LCX, 2.15, "Publish an agent"), "UC2": (RCX, 1.73, "Ask a question"),
-          "UC3": (RCX, 3.48, "Manage API keys"), "UC4": (RCX, 4.36, "Approve spend over cap"),
-          "UC5": (LCX, 3.83, "Read usage"), "UC6": (RCX, 2.61, "Watch the literature")}
-    ACT = {"Producer": (1.0, 2.1, "Producer\n(agent author)"), "Operator": (1.0, 4.05, "Operator"),
+    # "Ask a question" sits second, between its two actors, so no line crosses another oval.
+    UC = {"UC1": (LCX, 2.15, "Publish an agent"), "UC2": (RCX, 2.61, "Ask a question"),
+          "UC3": (RCX, 3.48, "Manage API keys"), "UC4": (RCX, 4.36, "Approve extra spend"),
+          "UC5": (LCX, 3.83, "Read usage"), "UC6": (RCX, 1.73, "Get topic digests")}
+    ACT = {"Producer": (1.0, 2.1, "Producer\n(agent author)"), "Operator": (1.0, 4.05, "Operator\n(our team)"),
            "Watch": (11.1, 2.05, "Literature\nwatch app"), "People": (11.1, 3.85, "People in\nthe web app")}
-    USES = {"Producer": ["UC1", "UC5"], "Watch": ["UC2", "UC6"], "People": ["UC3", "UC4"], "Operator": ["UC5"]}
-    TITLE = {"Producer": "The producer publishes an agent (UC1) and reads usage (UC5)",
-             "Watch": "The literature watch app asks (UC2) and watches the literature (UC6)",
-             "People": "People in the web app manage API keys (UC3) and approve spend (UC4)",
-             "Operator": "The operator reads usage too (UC5)"}
+    USES = {"Producer": ["UC1", "UC5"], "Watch": ["UC2", "UC6"], "People": ["UC2", "UC3", "UC4"], "Operator": ["UC5"]}
+    TITLE = {"Producer": "The producer publishes an agent and reads usage",
+             "Watch": "The literature watch app asks and gets topic digests",
+             "People": "People in the web app ask, manage API keys and approve extra spend",
+             "Operator": "The operator reads usage too"}
+    HOLD = {"Producer": 1.6, "Watch": 3.4, "People": 4.5, "Operator": 2.0}
     LINKS = [(n, u) for n in USES for u in USES[n]]
     KEYS = ["box"] + list(UC) + list(ACT) + ["%s-%s" % l for l in LINKS]
 
@@ -360,7 +362,7 @@ def usecases():
 
     sc = Scene("usecases.gif", paint, {})
     lk = Look(sc, KEYS)
-    sc.step("Four actors and the system boundary of the Lumen platform", 2.4)
+    sc.step("Four actors and the system boundary of the Lumen platform", 7.0)
     for n in ("Producer", "Watch", "People", "Operator"):
         sc.title = TITLE[n]
         links = ["%s-%s" % (n, u) for u in USES[n]]
@@ -368,7 +370,7 @@ def usecases():
         for u, k in zip(USES[n], links):
             lk.grow(k, 0.6, pulse=[u])
             sc.hold(0.5)
-        sc.hold(1.3)
+        sc.hold(HOLD[n])
     sc.title = "Use case diagram: six use cases and four actors"
     lk.spot(None, 0.6)
     sc.hold(2.0)
@@ -380,12 +382,12 @@ def decisions():
     PW = 3.75
     PX = [0.15, 4.2, 8.25]
     CY = 4.12                                   # the captions' line
-    CAP = [("AD-01", "Five services, one per module", "one image, an entry point per service"),
-           ("AD-02", "A durable queue, not a direct call", "a slow model call never holds a request"),
-           ("AD-04", "Only session writes the steps", "a worker that dies loses no step")]
+    CAP = [("Services", "Each module becomes a service", "all services share one container image"),
+           ("Job queue", "Session puts jobs on a durable queue", "requests return before the model answers"),
+           ("Step writes", "Only session writes the steps", "a step that reached session stays saved")]
     # AD-01: the slices of main, and the service each one becomes
-    SL = [("modules/identity", "identity"), ("modules/projects", "project"), ("modules/session", "session"),
-          ("modules/steering", "worker"), ("modules/billing", "billing")]
+    SL = [("sign-in module", "identity"), ("projects module", "project"), ("call tree module", "session"),
+          ("agent loop module", "worker"), ("billing module", "billing")]
     CONT = (0.35, 1.7, 3.4, 2.25)
     # AD-02: session, the queue, the workers
     b0 = PX[1]
@@ -411,7 +413,7 @@ def decisions():
             c.line([(x, 1.0), (x, 4.75)], color=RULE2)
         for k in range(3):
             if st["panel"] > k:
-                c.text(PX[k] + 0.1, 1.0, 1, 0.28, CAP[k][0], 13, "Medium", INK2, "left")
+                c.text(PX[k] + 0.1, 1.0, 2, 0.28, CAP[k][0], 13, "Medium", INK2, "left")
             ca = st["cap"][k]
             if ca > 0:
                 caption(c, PX[k] + 0.1, CY, PW, CAP[k][1], CAP[k][2], ca)
@@ -462,7 +464,7 @@ def decisions():
                     x = QX + (2 - j) * QC + 0.07
                     c.d.rectangle([c._p(x), c._p(MIDY - QC / 2 + 0.07), c._p(x + QC - 0.14),
                                    c._p(MIDY + QC / 2 - 0.07)], fill=INK)
-                c.text(QX + 1.5 * QC - 1.0, MIDY + 0.25, 2.0, 0.5, "RabbitMQ\nqueue of jobs", 13, "Regular",
+                c.text(QX + 1.5 * QC - 1.0, MIDY + 0.25, 2.0, 0.5, "RabbitMQ\njob queues", 13, "Regular",
                        ink(INK2, q))
                 arrow(c, [(SES2[0] + SES2[2], MIDY), (QX, MIDY)], st["g2"])
                 if st["g2"] >= 1:
@@ -521,15 +523,15 @@ def decisions():
         sc.tween(0.4, lambda v: st["cap"].__setitem__(k, v))
 
     # AD-01
-    sc.step("AD-01 before: five modules in one Lumen process", 1.8, panel=1)
-    sc.title = "AD-01 after: each module becomes a service"
+    sc.step("Services, before: five modules in one Lumen process", 9.0, panel=1)
+    sc.title = "Services, after: each module becomes a service"
     sc.tween(2.0, lambda v: st.update(m1=v))
     sc.hold(0.6)
     show_cap(0)
-    sc.hold(0.8)
+    sc.hold(4.8)
     # AD-02
-    sc.step("AD-02 before: session calls a worker directly", 1.6, panel=2)
-    sc.title = "AD-02 after: a durable queue replaces the direct call"
+    sc.step("Job queue, before: session calls a worker directly", 3.0, panel=2)
+    sc.title = "Job queue, after: a durable queue replaces the direct call"
     sc.tween(0.7, lambda v: st.update(brk2=v))
     sc.tween(0.5, lambda v: st.update(q2=v))
     sc.tween(0.5, lambda v: st.update(g2=v))
@@ -537,8 +539,9 @@ def decisions():
     for j in (1, 2, 3):
         sc.set(jobs2=j)
         sc.hold(0.3)
+    sc.hold(9.5)
     sc.set(hot2=False)
-    sc.title = "AD-02: more workers can start, and any worker takes the next job"
+    sc.title = "Job queue: more workers can start, and any worker takes the next job"
     for i in (1, 2):
         sc.tween(0.3, lambda v, i=i: st["stretch"].__setitem__(0, 0.3 * v))
         y1 = WY[i]
@@ -553,18 +556,18 @@ def decisions():
     sc.hold(0.6)
     sc.set(busy2=False)
     show_cap(1)
-    sc.hold(0.8)
+    sc.hold(5.5)
     # AD-04
-    sc.step("AD-04 before: the worker writes each step to the database", 1.6, panel=3)
-    sc.title = "AD-04 after: each step goes through session"
+    sc.step("Step writes, before: the worker writes each step to the database", 4.5, panel=3)
+    sc.title = "Step writes, after: each step goes through session"
     sc.tween(0.7, lambda v: st.update(brk4=v))
     sc.tween(0.4, lambda v: st.update(se4=v))
     lk.grow("r1", 0.6, pulse=["se4"])
     lk.grow("r2", 0.6, pulse=["db4"])
-    sc.hold(0.6)
-    sc.title = "AD-04: session is the only writer of the steps"
+    sc.hold(2.0)
+    sc.title = "Step writes: session is the only writer of the steps"
     lk.spot({"se4", "r2", "db4"}, hot={"se4", "r2"})
-    sc.hold(1.4)
+    sc.hold(7.0)
     lk.spot(None, 0.4)
     show_cap(2)
     sc.title = "Three key decisions of the logical design"
@@ -574,16 +577,16 @@ def decisions():
 
 # ---------------------------------------------------------------- contextmap: one context at a time
 def contextmap():
-    STEPS = ["use cases UC1 to UC6", "nouns users say: agent, question, step, budget cap", "5 bounded contexts",
+    STEPS = ["the six use cases", "nouns users say: agent, question, step, budget cap", "5 bounded contexts",
              "their aggregates"]
     LX, LW = 0.24, 2.61
     MX, MW = 4.6, 2.8
     RX, RW = 9.25, 2.67
-    CTX = {"Project": (LX, 1.6, LW, 1.7, ["Project, Finding", "Agent registry:", "Agent, QuestionIntent"]),
-           "Identity": (LX, 3.95, LW, 0.8, ["Account, ApiKey"]),
-           "Session": (MX, 2.1, MW, 2.4, ["Session, the root", "its tree of Tasks", "Step, a value"]),
-           "Worker": (RX, 1.6, RW, 1.35, ["the agent loop;", "it keeps no state"]),
-           "Billing": (RX, 3.3, RW, 1.45, ["Wallet, LedgerEntry", "Approval"])}
+    CTX = {"Project": (LX, 1.6, LW, 1.7, ["projects, findings", "agent registry:", "agents, chosen agent"]),
+           "Identity": (LX, 3.95, LW, 0.8, ["accounts, API keys"]),
+           "Session": (MX, 2.1, MW, 2.4, ["question: the root", "its call tree of tasks", "steps, never changed"]),
+           "Worker": (RX, 1.6, RW, 1.35, ["the agent loop,", "with no saved state"]),
+           "Billing": (RX, 3.3, RW, 1.45, ["budget, ledger of spend", "approvals"])}
     # the method strip: spread across the map's width, 0.35 above it
     SY0, SH = 0.87, 0.38
     SX0, SX1 = LX, RX + RW
@@ -595,11 +598,11 @@ def contextmap():
           "approval": ("approval needed", [(MX + MW, 4.2), (RX, 4.2)], "above", "Session", "Billing"),
           "finding": ("finding recorded", [(MX, 3.1), (LX + LW, 3.1)], "below", "Session", "Project"),
           # Identity is upstream of Projects: it says who asks, with which key.
-          "key": ("account, API key", [(LX + 1.0, 3.95), (LX + 1.0, 3.3)], "right", "Identity", "Project")}
-    ORDER = [("Project", ["asked", "finding"], "Project sends question asked and receives finding recorded"),
-             ("Identity", ["key"], "Identity is upstream: it says who asks, with which API key"),
-             ("Worker", ["queued", "step"], "Worker receives job queued and sends step recorded"),
-             ("Billing", ["spend", "approval"], "Billing receives spend recorded and approval needed")]
+          "key": ("who asks (upstream)", [(LX + 1.0, 3.95), (LX + 1.0, 3.3)], "right", "Identity", "Project")}
+    ORDER = [("Project", ["asked", "finding"], "Project sends question asked and receives finding recorded", 5.5),
+             ("Identity", ["key"], "Identity is upstream: it says who asks, with which API key", 3.2),
+             ("Worker", ["queued", "step"], "Worker receives job queued and sends step recorded", 2.5),
+             ("Billing", ["spend", "approval"], "Billing receives spend recorded and approval needed", 1.0)]
     KEYS = ["strip"] + list(CTX) + list(EV)
     sw = [width(s) + 0.3 for s in STEPS]
     sgap = (SX1 - SX0 - sum(sw)) / (len(STEPS) - 1)
@@ -641,7 +644,8 @@ def contextmap():
             if g <= 0:
                 continue
             a, on = A(k), lk.hot(k)
-            arrow(c, pts, g, a, lit=on)
+            # The line from Identity is an upstream relation, not a domain event: dashed.
+            arrow(c, pts, g, a, lit=on, dashed=k == "key")
             la = a * clamp(g * 2 - 1)
             col = ink(INK if on else INK2, la)
             (x1, y1), (x2, _) = pts
@@ -657,23 +661,23 @@ def contextmap():
     sc.title = "How we found the contexts"
     for i in range(4):
         sc.set(strip=i + 1)
-        sc.hold(0.7)
+        sc.hold(2.6)
     sc.set(building=False)
     sc.step("Five bounded contexts, each with its own aggregates", 0.3, ctx=True)
     sc.tween(0.5, lambda v: st.update(agg=v))
-    sc.hold(1.6)
-    for name, evs, title in ORDER:
+    sc.hold(10.9)
+    for name, evs, title, rest in ORDER:
         sc.title = title
         near = {name} | {EV[e][3] for e in evs} | {EV[e][4] for e in evs}
         lk.spot(near | set(evs), hot={name} | set(evs))
         for e in evs:
             lk.grow(e, 0.7, pulse=[EV[e][4]])
             sc.hold(0.4)
-        sc.hold(1.0)
-    sc.title = "Session, the core domain: every domain event goes through it"
+        sc.hold(rest)
+    sc.title = "Session, the core domain: every event but Identity's goes through it"
     lk.spot((set(CTX) - {"Identity"}) | (set(EV) - {"key"}), hot={"Session"} | (set(EV) - {"key"}))
     lk.pulse(["Session"])
-    sc.hold(1.8)
+    sc.hold(9.5)
     sc.title = "Context map: five bounded contexts and six domain events"
     lk.spot(None, 0.6)
     sc.hold(1.6)
@@ -692,12 +696,13 @@ def interaction():
     BAR = 0.08
     MSG = [(PRO, "1  POST /api/v1/keys", True), (PRO, "2  POST /api/v1/agents", True),
            (CON, "3  GET /api/v1/agents", True), (CON, "4  POST /api/v1/questions", True),
-           (None, "5  runs the agent on the question", False),
-           (CON, "6  GET /api/v1/questions/:id", True), (PRO, "7  GET /api/v1/usage", True)]
+           (None, "runs the agent on the question", False),
+           (CON, "5  GET /api/v1/questions/:id", True), (PRO, "6  GET /api/v1/usage", True)]
     TITLES = ["1. A producer creates an API key", "2. The producer publishes an agent",
               "3. A consumer lists the agents", "4. The consumer asks with a chosen agent",
-              "5. The platform runs the question", "6. The consumer reads the answer, findings and cost",
-              "7. The producer and the operator read usage"]
+              "The platform runs the question", "5. The consumer reads the answer, findings and cost",
+              "6. The producer reads usage"]
+    HOLDS = [1.0, 3.2, 1.0, 5.3, 2.3, 3.0, 1.6]   # each call's hold: the speaker's words fit it
     PHASES = [("producer", [0, 1], "pro"), ("consumer", [2, 3, 4, 5], "con"), ("producer", [6], "pro")]
     KEYS = ["con", "pla", "pro", "ph0", "ph1", "ph2"] + ["m%d" % i for i in range(7)]
 
@@ -760,7 +765,7 @@ def interaction():
     st = dict(ph=[0.0, 0.0, 0.0])
     sc = Scene("interaction.gif", paint, st)
     lk = Look(sc, KEYS)
-    sc.step("Producers and consumers use one public API", 2.2)
+    sc.step("Producers and consumers use one public API", 7.0)
     i = 0
     for p, (name, rows, who) in enumerate(PHASES):
         sc.title = "The %s phase" % name
@@ -775,7 +780,7 @@ def interaction():
             if MSG[i][2]:
                 sc.hold(0.25)
                 lk.grow("r%d" % i, 0.5)
-            sc.hold(1.0)
+            sc.hold(HOLDS[i])
             sc.set(hot=lk.st["hot"] - {"m%d" % i})
     sc.title = "Sequence diagram: producer and consumer calls on the public API v1"
     lk.spot(None, 0.6)
@@ -816,6 +821,8 @@ def logical():
         "session_mq": [(SX[2] + BW * 3 / 4, SB), (SX[2] + BW * 3 / 4, MQ[1])],
         "worker_mq": [(SX[3] + BW / 4, SB), (SX[3] + BW / 4, MQ[1])],
         "worker_llm": [(SX[3] + BW * 3 / 4, SB), (SX[3] + BW * 3 / 4, LLM[1])],
+        # the worker reads the chosen agent of a question: down the gap between RabbitMQ and the model
+        "worker_pg": [((MQ[0] + MQ[2] + LLM[0]) / 2, SB), ((MQ[0] + MQ[2] + LLM[0]) / 2, PG[1])],
     }
     TIER_DEPS = [("Clients depend on the API gateway", ["web_gw", "watch_gw"], ["web", "watch", "gw"]),
                  ("The gateway routes to the five services", ["gw_%s" % s[0] for s in SVC],
@@ -823,7 +830,8 @@ def logical():
                  ("Project and worker call session's internal routes", ["project_session", "worker_session"],
                   ["project", "session", "worker"]),
                  ("Services depend on PostgreSQL, RabbitMQ and the model",
-                  ["identity_pg", "project_pg", "session_pg", "billing_pg", "session_mq", "worker_mq", "worker_llm"],
+                  ["identity_pg", "project_pg", "session_pg", "billing_pg", "worker_pg", "session_mq", "worker_mq",
+                   "worker_llm"],
                   [s[0] for s in SVC] + ["pg", "mq", "llm"])]
     NODES = ["web", "watch", "gw"] + [s[0] for s in SVC] + ["mq", "llm", "pg"]
     KEYS = NODES + list(DEP)
@@ -839,11 +847,10 @@ def logical():
             cbox(c, SX[i], SY, BW, BH, name, note, a=A(k), hot=H(k), pulse=Pp(k))
         # The broker, the LLM and the database are not our components: no component mark.
         cbox(c, *MQ, "RabbitMQ", a=A("mq"), hot=H("mq"), mark=False, left=True, pulse=Pp("mq"))
-        c.text(MQ[0] + 1.2, MQ[1], 1.0, MQ[3], "AMQP", 13, "Regular", ink(INK2, A("mq")), "left")
         cbox(c, *LLM, "Model", a=A("llm"), hot=H("llm"), mark=False, left=True, pulse=Pp("llm"))
         c.text(LLM[0] + 0.88, LLM[1], 1.1, LLM[3], "external API", 13, "Regular", ink(INK2, A("llm")), "left")
         cbox(c, *PG, "PostgreSQL", a=A("pg"), hot=H("pg"), mark=False, left=True, pulse=Pp("pg"))
-        c.text(PG[0] + 1.75, PG[1], 4.0, PG[3], "one database, tables per context", 13, "Regular",
+        c.text(PG[0] + 1.75, PG[1], 4.0, PG[3], "one database, tables grouped by owner", 13, "Regular",
                ink(INK2, A("pg")), "left")
         for k, pts in DEP.items():
             arrow(c, pts, lk.g(k), A(k), lit=H(k), dashed=True, open_=True)
@@ -854,13 +861,13 @@ def logical():
     sc = Scene("logical.gif", paint, st)
     lk = Look(sc, KEYS)
 
-    sc.step("Four tiers: clients, the API gateway, five services, the data", 1.6)
-    for title, deps, nodes in TIER_DEPS:
+    sc.step("Four tiers: clients, the API gateway, five services, the data", 7.8)
+    for (title, deps, nodes), rest in zip(TIER_DEPS, (2.3, 2.8, 5.0, 5.5)):
         sc.title = title
         lk.spot(set(nodes) | set(deps), 0.4, hot=set(deps))
         sup = sorted({d.split("_")[1] for d in deps})   # a key is client_supplier
         lk.grow(deps[0], 0.7, also=deps[1:], pulse=sup)
-        sc.hold(0.8)
+        sc.hold(rest)
     lk.spot(None, 0.4)
     sc.hold(0.8)
 
@@ -875,17 +882,22 @@ def logical():
     sc.title = "Run time: the watch app asks a question"
     send("watch_gw", "question", ["watch", "gw"])
     send("gw_project", "question", ["gw", "project"])
+    sc.hold(2.6)
     sc.title = "Project passes the question to session"
     send("project_session", "question", ["project", "session"], 0.6)
-    sc.title = "Session puts a job on the queue; a free worker takes it"
+    sc.hold(1.3)
+    sc.title = "Session puts a job on the queue, and a free worker takes it"
     send("session_mq", "job", ["session", "mq"], 0.6)
     send("worker_mq", "job", ["mq", "worker"], 0.6, back=True)
+    sc.hold(3.4)
     sc.title = "The worker calls the model"
     send("worker_llm", "prompt", ["worker", "llm"], 0.6)
     send("worker_llm", "reply", ["worker", "llm"], 0.6, back=True)
+    sc.hold(0.4)
     sc.title = "Each step goes back to session, which saves it"
     send("worker_session", "step", ["worker", "session"], 0.6)
     send("session_pg", "step", ["session", "pg"], 0.6)
+    sc.hold(2.5)
     sc.title = "The app reads the answer"
     send("gw_session", "answer", ["session", "gw"], 0.6, back=True, dx=0.5)
     send("watch_gw", "answer", ["gw", "watch"], 0.7, back=True)
@@ -940,7 +952,7 @@ def queues():
     def paint(c, st):
         f = st["fix"]
         # the left half: the queues and the workers
-        hdr = "one shared queue" if f < 0.5 else "a queue per level; each worker runs one job per level"
+        hdr = "one shared queue" if f < 0.5 else "one queue per level of the call tree"
         c.text(0.3, 1.0, 6, 0.32, hdr, 15, "Semibold", INK, "left")
         for r, y in enumerate(LY):
             a = row_alpha(r, f)
@@ -948,7 +960,8 @@ def queues():
                 continue
             la = a if r != SHARED else clamp(f * 2)
             c.text(0.2, y - 0.25, QX - 0.3, 0.26, "level %d" % r, 13, "Semibold", ink(INK, la), "right")
-            c.text(0.2, y + 0.0, QX - 0.3, 0.26, "lumen.turns.%d" % r, 13, "Regular", ink(INK2, la), "right")
+            c.text(0.2, y + 0.0, QX - 0.3, 0.26, ("leads", "readers", "their helpers")[r], 13, "Regular",
+                   ink(INK2, la), "right")
             c.d.rectangle([c._p(QX), c._p(y - QH / 2), c._p(QR), c._p(y + QH / 2)], outline=ink(INK2, a),
                           width=c._lw(1.5))
             for k in range(1, N):
@@ -982,7 +995,7 @@ def queues():
         if st["count"]:
             c.text(QX, LY[1] + QH / 2 + 0.06, QR - QX, 0.28, st["count"], 13, "Regular", INK, "right")
         if st["finish"]:
-            c.invert(QX, 4.36, "all questions finish", 16, h=0.4)
+            c.invert(QX, 4.36, "both questions finish", 16, h=0.4)
         for x, y, word in st["moving"]:
             wtag(c, x, y, word)
         # the right half: the wait-for graph
@@ -1058,32 +1071,33 @@ def queues():
         q.extend(rest)
 
     S = SHARED
-    sc.step("AD-03: one shared queue; two questions start two lead agents", 0.2)
+    sc.step("One shared queue: two questions start two lead agents", 0.2)
     arrive(S, ["lead", "lead"])
-    sc.hold(0.5)
+    sc.hold(10.4)
     sc.title = "Each worker runs one job, and each takes a lead"
     take(S, 1)
     take(S, 0)
-    sc.hold(0.5)
+    sc.hold(3.6)
     sc.title = "Each lead starts three readers and holds its worker while it waits"
     arrive(S, ["reader"] * 6, 1.1)
-    sc.hold(0.8)
+    sc.hold(5.0)
     sc.title = "Who waits for whom"
     sc.tween(0.4, lambda v: st.update(graph=v))
-    for k, title in (("e1", "A lead waits for its readers"), ("e2", "A reader waits for a free worker"),
-                     ("e3", "Every worker is busy with a lead")):
+    for k, title, rest in (("e1", "A lead waits for its readers", 1.6),
+                           ("e2", "A reader waits for a free worker", 1.0),
+                           ("e3", "Every worker is busy with a lead", 1.4)):
         sc.title = title
         a, b, _ = EDGE[k]
         sc.set(hot={a, b, k})
         lk.grow(k, 0.7, pulse=[b])
-        sc.hold(1.0)
+        sc.hold(rest)
     sc.set(hot=set())
     sc.title = "The waits close into a cycle, so no question can finish"
     sc.set(cycle=1.0)
     sc.tween(1.8, lambda u: st.update(turn=u * 2))
     sc.set(deadlock=True)
     sc.tween(1.0, lambda u: st.update(turn=u))
-    sc.hold(0.4)
+    sc.hold(1.6)
     # the fix: the shared queue becomes level 1 in place; levels 0 and 2 and their slots come in,
     # and the leads move up to the level 0 slots
     sc.step("The fix: a queue per level; each worker runs one job per level", 0.2, cycle=0.0, deadlock=False)
@@ -1094,12 +1108,12 @@ def queues():
     glide([(leads[j], slot(j, LY[S]), slot(j, LY[0])) for j in range(2)], 0.7)
     for j in range(2):
         st["slots"][j][0] = leads[j]
-    sc.hold(0.5)
+    sc.hold(10.0)
     sc.title = "A reader no longer waits behind a lead, so the cycle breaks"
     sc.set(hot={"e2"})
     sc.tween(0.9, lambda v: st.update(fall=v))
     sc.set(hot=set())
-    sc.hold(0.6)
+    sc.hold(4.3)
     for k in range(3):
         sc.title = "The readers run beside the leads"
         take(1, 1)
@@ -1108,7 +1122,7 @@ def queues():
         sc.hold(0.4)
         st["slots"][0][1] = st["slots"][1][1] = None
     sc.hold(0.4)
-    sc.step("Level 2 stays empty: readers do not delegate", 1.4)
+    sc.step("Level 2 stays empty: readers do not delegate", 7.0)
     sc.title = "With a queue per level, all questions finish"
     sc.set(done=True, count="", finish=True)
     sc.hold(2.0)

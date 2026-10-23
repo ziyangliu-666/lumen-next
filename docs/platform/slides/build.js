@@ -145,7 +145,7 @@ shown(
   'Lumen is an AI that does research. This is a real run, recorded on 22 October with gpt-4.1: we ask for three key papers on retrieval-augmented generation. ' +
     'The lead agent searches arXiv, then hands one paper each to three reader agents that work in parallel. ' +
     'On the right, the call tree grows, every task shows what it cost, and each reader records its paper as a finding. ' +
-    'The business problem: every research team that uses agents builds the same parts again, a record of each step, a spending cap, sign-in and a live view. Lumen Platform builds these parts once.',
+    'For this course, we turned Lumen into a platform: other apps can use the same research AI through one public API.',
 );
 shown(
   'Overview',

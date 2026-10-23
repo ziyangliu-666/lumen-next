@@ -48,7 +48,7 @@ boundaries and contracts, and built the session service.
 | Slide | Say | Stress |
 |---|---|---|
 | 1 Title | Team, project; the talk follows the course outline. | 15 s |
-| 2 Lumen at work (1a) | Lumen is an AI that does research. This is a real run: the lead agent searches arXiv and hands work to reader agents; the call tree on the right grows, with the cost of each agent. | The business problem: every research team builds the same agent plumbing again. |
+| 2 Lumen at work (1a) | Lumen is an AI that does research. This is a real run: the lead agent searches arXiv and hands work to reader agents; the call tree on the right grows, with the cost of each agent. | We built a research AI; for this course we made it a platform that other apps use through one API. |
 | 3 Platform (1b) | Producers publish agents; consumers ask with an API key; the platform is the seed: task tree, steps with cost, budget cap. | Platform thinking: a new app gets all of this for free. The literature watch is about 210 lines. |
 | 4 Use cases (1c) | The six use cases of the proposal; all built and running on the public server. | Name the actors. |
 | 5 Plan (2a, 2b) | We worked to the proposal's plan, 8 to 21 October; ten person-days, 80 hours, per member; every part is done. | Status: all built, deployed and verified. |

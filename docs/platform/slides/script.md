@@ -70,7 +70,7 @@ At the top of the run page, a bar shows the project name, the state, the money s
 
 **What to say.**
 
-> [0 s] Lumen is an AI that does research. What you see here is a real run, recorded on 22 October with gpt-4.1. We ask for three key papers on retrieval-augmented generation.
+> [0 s] We built Lumen, an AI that helps with research. What you see here is a real run, recorded on 22 October with gpt-4.1. We ask for three key papers on retrieval-augmented generation.
 >
 > [5 s] Here, on the right, is the call tree. This first row is the lead agent, with its cost.
 >
@@ -80,7 +80,7 @@ At the top of the run page, a bar shows the project name, the state, the money s
 >
 > [35 s] When the readers are done, the lead agent finishes. The whole run cost about four cents.
 >
-> Now the business problem. Every research team that uses agents builds the same parts again: a record of each step, a spending cap, sign-in, and a live view like this one. Lumen Platform builds these parts once.
+> So that is Lumen: a research AI. For this course, we turned it into a platform. Other apps can use the same research AI through one public API. Now I show you who uses it.
 
 **Point at.**
 1. The call tree on the right, when the three reader rows appear.
@@ -89,7 +89,7 @@ At the top of the run page, a bar shows the project name, the state, the money s
 
 **If asked.**
 - *Is this recording real or a mock-up?* It is a real run of the Lumen web app on 22 October, with the model gpt-4.1. The papers, the costs and the findings on the screen are the real output.
-- *What is the business problem in one sentence?* Every team that uses agents builds the same plumbing again: a record of each step, a spending cap, sign-in and a live view. The platform builds it once, and a new app only uses it.
+- *Why make it a platform?* So that other apps can use the research AI without building it again. Our second app, the literature watch, uses only the public API.
 
 ### Slide 3: Producers, consumers, one platform
 

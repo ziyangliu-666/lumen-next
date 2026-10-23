@@ -31,6 +31,8 @@ let cur = null;
 const newSlide = () => {
   const s = pres.addSlide();
   s.background = { color: PAPER };
+  // A plain running page number, top right: the team asked for numbers instead of 4a, 4b labels.
+  s.slideNumber = { x: 11.93, y: 0.42, w: 0.8, h: 0.32, fontSize: 14, color: GRAY, fontFace: SANS, align: 'right' };
   cur = { bg: PAPER, backdrop: null, items: [] };
   spec.push(cur);
   return s;
@@ -59,7 +61,15 @@ function progress(s, part) {
   const pw = (12.13 - 0.15 * (PARTS.length - 1)) / PARTS.length;
   PARTS.forEach((p, i) => rect(s, 0.6 + i * (pw + 0.15), 7.1, pw, 0.03, i === n ? INK : RULE));
 }
+// "4a  ·  4b  ·  Live demo" becomes "4  ·  Live demo": the team found letter labels confusing.
+const plainItem = (item) => {
+  const bits = item.split('  ·  ');
+  const nums = bits.filter((b) => /^\d+[a-d]?$/.test(b));
+  const rest = bits.filter((b) => !/^\d+[a-d]?$/.test(b));
+  return nums.length ? `${nums[0].replace(/[a-d]$/, '')}  ·  ${rest.join('  ·  ')}` : item;
+};
 function head(s, part, item, title) {
+  item = plainItem(item);
   txt(s, item, { x: 0.6, y: 0.42, w: 12, h: 0.32, fontSize: 14, color: GRAY });
   txt(s, title, {
     x: 0.6,

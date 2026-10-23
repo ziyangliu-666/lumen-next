@@ -16,9 +16,12 @@ what to stress. Read your slides' notes aloud twice before the day.
 - **In the questions, the owner of a part answers about it.**
 - **Point at the picture.** Each slide has one picture. Say what the audience must
   look at: "the white tag is one job", "the dashed line is KEDA's target".
-- **Say the outline item.** The grey text at the top left of each slide (1a, 3b, ...)
-  is the item of the course outline that the slide answers. Read it out when your
-  part starts: "Now 4, the physical architecture."
+- **Say the part when your part starts.** The grey text at the top left of each slide
+  names the part of the course outline, for example "4  ·  Physical architecture". Each
+  slide has a page number at the top right; use it when you refer to a slide.
+- **To change the slide, say "next please".** Nobody else touches the deck.
+- **When you hand over, name the next member and the part.** For example: "Next,
+  Lu Yi shows how apps use the platform." Then stop.
 - **Use only real numbers.** Every number on the slides comes from
   `docs/platform/evidence/` or the pipeline runs. If you do not know a number, say
   "it is in the report, section ...".

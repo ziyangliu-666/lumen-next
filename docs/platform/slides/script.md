@@ -30,7 +30,7 @@ You designed the service boundaries and the contracts, and you built the session
 - Speaker: LIU ZIYANG
 - Time: 25 s
 
-**What is on the screen.** A black slide with no picture. At the top, in grey: "Architecting Scalable Systems · Team 15". In the middle, in large white letters: "Lumen Platform". Under it, in grey: "An AI that does research, built as a scalable platform". Lower down, the five names: He Rong, Li Zhuoyang, Liu Ziyang, Lu Yi, Peng Xujian. At the bottom, in grey monospace: the public address `lumen.54-179-112-87.sslip.io`.
+**What is on the screen.** A black slide with no picture. At the top, in grey: "Architecting Scalable Systems · Team 15". In the middle, in large white letters: "Lumen Platform". Under it, in grey: "An AI for research, built as a scalable platform". Lower down, the five names: He Rong, Li Zhuoyang, Liu Ziyang, Lu Yi, Peng Xujian. At the bottom, in grey monospace: the public address `lumen.54-179-112-87.sslip.io`.
 
 **What happens, in order.** Nothing moves.
 
@@ -45,7 +45,7 @@ You designed the service boundaries and the contracts, and you built the session
 **If asked.**
 - *Is the address live now?* Yes. It is the public server on AWS, and we use it in the live demo at the end.
 
-### Slide 2: Lumen is an AI that does research
+### Slide 2: What Lumen does
 
 - Outline item: 1a · Context and business problem
 - Speaker: LIU ZIYANG
@@ -91,7 +91,7 @@ At the top of the run page, a bar shows the project name, the state, the money s
 - *Is this recording real or a mock-up?* It is a real run of the Lumen web app on 22 October, with the model gpt-4.1. The papers, the costs and the findings on the screen are the real output.
 - *Why make it a platform?* So that other apps can use the research AI without building it again. Our second app, the literature watch, uses only the public API.
 
-### Slide 3: Producers, consumers, one platform
+### Slide 3: Producers and consumers
 
 - Outline item: 1b · Platform thinking
 - Speaker: LIU ZIYANG
@@ -100,7 +100,7 @@ At the top of the run page, a bar shows the project name, the state, the money s
 **What is on the screen.** A diagram in three columns, 23 s per loop.
 
 - Left: a stick figure, "Producer", with "agent author" under it.
-- Middle: a large frame, "Lumen platform". Inside it, at the top, a box "Agent registry: the agents that producers publish". Under it, a box "Run engine: the seed", with the line "the session, worker and billing services" and three small boxes: "task tree", "steps and cost", "budget cap".
+- Middle: a large frame, "Lumen platform". Inside it, at the top, a box "Agent registry: the agents that producers publish". Under it, a box "Run engine", with the line "the session, worker and billing services" and three small boxes: "call tree", "steps and cost", "budget cap".
 - Right: the label "Consumers", with a box "Literature watch app" and, under it, a box "Web app" with a stick figure "People".
 
 At the end, arrows join them: "publish an agent" from the producer to the registry; "the agent's instructions" from the registry down to the run engine; "ask with an API key" from the watch app; "ask, signed in" from the web app; and back to the consumers, "answer + findings + cost" and "the run, live".
@@ -108,13 +108,13 @@ At the end, arrows join them: "publish an agent" from the producer to the regist
 **What happens, in order.**
 - 0 s: "Producers and consumers around the Lumen platform". Everything is shown.
 - 2.4 s: "Producers: an agent author publishes agents to the registry". The producer and the registry light up.
-- 5.8 s: "Consumers: an app asks with its API key; people ask, signed in". The watch app and the web app light up.
-- 10.1 s: "The seed: the run engine takes the agent's instructions". The arrow from the registry to the run engine appears.
-- 12.6 s: "Each question runs as a task tree". The box "task tree" lights up.
+- 5.8 s: "Consumers: an app asks with an API key; people ask in the web app". The watch app and the web app light up.
+- 10.1 s: "The run engine takes the agent's instructions". The arrow from the registry to the run engine appears.
+- 12.6 s: "Each question runs as a call tree". The box "call tree" lights up.
 - 14.0 s: "Each step is recorded with its cost". The box "steps and cost" lights up.
 - 15.4 s: "Every step stays under the account's budget cap". The box "budget cap" lights up.
-- 16.7 s: "The answer, its findings and cost go back; people see the run live". The consumers light up.
-- 20.8 s: "Producers publish, consumers ask, the seed runs it". All arrows show. Loop at 23.4 s.
+- 16.7 s: "The answer, findings and cost go back; people watch the run live". The consumers light up.
+- 20.8 s: "The Lumen platform between producers and consumers". All arrows show. Loop at 23.4 s.
 
 **What to say.**
 
@@ -124,24 +124,23 @@ At the end, arrows join them: "publish an agent" from the producer to the regist
 >
 > [5.8 s] On the right are the consumers. An app, like our literature watch, asks with its API key. People ask in the web app after they sign in.
 >
-> [10.1 s] In the middle is the seed: the run engine. It takes the agent's instructions, and it runs each question as a task tree.
+> [10.1 s] In the middle is the run engine. It takes the agent's instructions, and it runs each question as a call tree.
 >
 > [14 s] It records each step with its cost. And it keeps every step under the account's budget cap.
 >
 > [16.7 s] The answer, the findings and the cost go back.
 >
-> So a new app gets all of this for free. Our literature watch app is about 210 lines of code.
+> So a new app does not build any of this again. Our literature watch app is about 210 lines of code.
 
 **Point at.**
 1. The producer on the left and the registry.
-2. The run engine, "the seed", and its three boxes.
+2. The run engine and its three boxes.
 3. The two consumers on the right.
 
 **If asked.**
 - *What exactly does a new app save?* The literature watch has no database, no model calls and no billing of its own. The platform gives it sign-in and keys, the agent runtime, the cost cap and approvals, and scaling.
-- *What is the "seed"?* The seed is the core value that brings both sides to the platform: the run engine. It runs a question as a task tree, records every step with its cost, and keeps the spend under the cap.
 
-### Slide 4: Six use cases, all running
+### Slide 4: Use cases
 
 - Outline item: 1c · Scope
 - Speaker: LIU ZIYANG
@@ -155,12 +154,12 @@ At the end, arrows join them: "publish an agent" from the producer to the regist
 Four actors stand outside: on the left, "Producer (agent author)" at the top and "Operator" at the bottom; on the right, "Literature watch app" at the top and "People in the web app" at the bottom.
 
 **What happens, in order.**
-- 0 s: "Four actors, six use cases, one system boundary".
+- 0 s: "Four actors and the system boundary of the Lumen platform".
 - 2.4 s: "The producer publishes an agent (UC1) and reads usage (UC5)". The producer and those two ovals light up; lines join them.
 - 7.2 s: "The literature watch app asks (UC2) and watches the literature (UC6)".
-- 12.0 s: "People in the web app manage API keys (UC3), approve spend (UC4)".
+- 12.0 s: "People in the web app manage API keys (UC3) and approve spend (UC4)".
 - 16.8 s: "The operator reads usage too (UC5)".
-- 20.1 s: "Six use cases, four actors, all built". Every line shows. Loop at 22.6 s.
+- 20.1 s: "Use case diagram: six use cases and four actors". Every line shows. Loop at 22.6 s.
 
 **What to say.**
 
@@ -170,7 +169,7 @@ Four actors stand outside: on the left, "Producer (agent author)" at the top and
 >
 > [7.2 s] The literature watch app asks a question, and watches the literature.
 >
-> [12 s] People in the web app manage their API keys. When a question needs more money than the cap, they approve the spend.
+> [12 s] People in the web app manage their API keys. When a question needs more money than the budget cap, they approve the spend.
 >
 > [16.8 s] The operator reads usage too.
 >
@@ -185,7 +184,7 @@ Four actors stand outside: on the left, "Producer (agent author)" at the top and
 - *Who is the operator?* The operator is our team, with staff accounts. The operator reads usage for every account and every agent.
 - *What does "approve spend over cap" mean?* When a question would pass the account's budget cap, it waits. A person approves the extra spend in the web app, and the question goes on.
 
-### Slide 5: We worked to the proposal's plan
+### Slide 5: Plan and effort
 
 - Outline item: 2a · 2b · Status, milestones and effort
 - Speaker: LIU ZIYANG
@@ -204,7 +203,7 @@ The axis at the bottom shows the working days 8, 9, 12, 13, 14, 15, 16, 19, 20, 
 **What happens, in order.**
 - 0 s: "1. The proposal's plan: ten days for each member, 8 to 21 October". All bars are grey.
 - 2.8 s: "2. Contracts first, then the services, then scale and the pipeline". A white cursor line moves along the days, and each bar lights up as the cursor reaches it.
-- 5.9 s: "3. Every part was built and deployed to AWS by 21 October". Every bar shows a check mark. Loop at 9.0 s.
+- 5.9 s: "3. Gantt chart: all tasks done and deployed to AWS by 21 October". Every bar shows a check mark. Loop at 9.0 s.
 
 **What to say.**
 
@@ -222,7 +221,7 @@ The axis at the bottom shows the working days 8, 9, 12, 13, 14, 15, 16, 19, 20, 
 - *How did you track the effort?* We worked to the work breakdown of the proposal, with ten person-days for each member. The table on this slide is that plan, and every item on it is done.
 - *Who did what?* Each row is one member and the parts that member built. Each member presents those parts today.
 
-### Slide 6: Three decisions shape the services
+### Slide 6: Logical architecture decisions
 
 - Outline item: 3a · Key architectural decisions
 - Speaker: LIU ZIYANG
@@ -230,49 +229,49 @@ The axis at the bottom shows the working days 8, 9, 12, 13, 14, 15, 16, 19, 20, 
 
 **What is on the screen.** Three columns, labelled AD-01, AD-02 and AD-04, each drawn as a "before" and an "after". 23 s per loop.
 
-- AD-01, left: at first a box "one process: main" with five rows: modules/identity, modules/projects, modules/session, modules/steering, modules/billing. After: five service boxes, identity, project, session, worker and billing, each next to its module. Caption: "Five services, cut along the slices / same image, a new entry point each".
-- AD-02, middle: at first "session" with an arrow "direct HTTP call" to "worker". After: a queue of cells, "RabbitMQ queue of turns", between session and three worker boxes. Caption: "A durable queue, not a direct call / a slow model call never holds a request".
-- AD-04, right: at first "worker" with a line "writes each step" down to "trace PostgreSQL". After: worker, then "session", then the trace, with "one call per step" and "SQL: the only writer". Caption: "Session alone writes the trace / a worker that dies loses no step".
+- AD-01, left: at first a box "one process: Lumen" with five rows: modules/identity, modules/projects, modules/session, modules/steering, modules/billing. After: five service boxes, identity, project, session, worker and billing, each next to its module. Caption: "Five services, one per module / one image, an entry point per service".
+- AD-02, middle: at first "session" with an arrow "direct HTTP call" to "worker". After: a queue of cells, "RabbitMQ queue of jobs", between session and three worker boxes. Caption: "A durable queue, not a direct call / a slow model call never holds a request".
+- AD-04, right: at first "worker" with a line "writes each step" down to "steps PostgreSQL". After: worker, then "session", then the steps, with "sends each step" and "the only writer". Caption: "Only session writes the steps / a worker that dies loses no step".
 
 **What happens, in order.**
-- 0 s: "AD-01 before: five slices in one process on main".
-- 1.8 s: "AD-01 after: each slice moves up into a service of its own".
+- 0 s: "AD-01 before: five modules in one Lumen process".
+- 1.8 s: "AD-01 after: each module becomes a service".
 - 5.4 s: "AD-02 before: session calls a worker directly".
-- 7.0 s: "AD-02 after: the direct call breaks; a durable queue takes its place".
-- 9.5 s: "AD-02: behind the queue, the worker divides; any worker takes a turn". Turns move through the queue, and the worker box divides into three.
-- 13.7 s: "AD-04 before: the worker writes each step to the trace".
-- 15.3 s: "AD-04 after: that line breaks; the step goes through session".
-- 18.9 s: "AD-04: session is the one writer of the trace".
+- 7.0 s: "AD-02 after: a durable queue replaces the direct call".
+- 9.5 s: "AD-02: more workers can start, and any worker takes the next job". Jobs move through the queue, and two more worker boxes appear.
+- 13.7 s: "AD-04 before: the worker writes each step to the database".
+- 15.3 s: "AD-04 after: each step goes through session".
+- 18.9 s: "AD-04: session is the only writer of the steps".
 - 21.6 s: "Three key decisions of the logical design". Loop at 23.2 s.
 
 **What to say.**
 
 > [0 s] Now 3, the logical architecture. Here are our three key decisions, each as before and after.
 >
-> [1.8 s] AD-01. Each slice of the main program moves into a service of its own. Every service uses the same image, with a new entry point.
+> [1.8 s] AD-01. Each module of Lumen becomes a service. Every service uses the same image, with its own entry point.
 >
 > [5.4 s] AD-02. Before, session calls a worker directly.
 >
-> [7 s] Here the direct call breaks, and a durable queue takes its place. A slow model call never holds a web request.
+> [7 s] Here a durable queue replaces the direct call. A slow model call never holds a web request.
 >
-> [9.5 s] Behind the queue, the worker divides. Any worker can take any turn.
+> [9.5 s] More workers can start behind the queue. Any worker can take the next job.
 >
-> [13.7 s] AD-04. Before, the worker writes each step to the trace itself.
+> [13.7 s] AD-04. Before, the worker writes each step to the database itself.
 >
-> [15.3 s] Now that line breaks. The step goes through session.
+> [15.3 s] Now each step goes through session.
 >
-> [18.9 s] Session is the only writer of the trace. So a worker that dies loses no step.
+> [18.9 s] Session is the only writer of the steps. So a worker that dies loses no step.
 
 **Point at.**
 1. The five service boxes in the AD-01 column.
 2. The queue cells between session and the workers in AD-02.
-3. "SQL: the only writer" in AD-04.
+3. "the only writer" in AD-04.
 
 **If asked.**
-- *Why five services and not the eight in the proposal?* The five follow the slices that already had clear ports and tests, which is AD-01. The live stream runs inside session, and model calls go through the worker's model module, which prices each call.
-- *Why does the worker report steps over HTTP and not write to the database?* Session is the only writer of the trace, so a worker that dies loses no step. The cost roll-up and the budget checks also stay in one place.
+- *Why five services and not the eight in the proposal?* The five follow the modules that already had clear ports and tests, which is AD-01. The live stream runs inside session, and model calls go through the worker's model module, which prices each call.
+- *Why does the worker report steps over HTTP and not write to the database?* Session is the only writer of the steps, so a worker that dies loses no step. The cost roll-up and the budget checks also stay in one place.
 
-### Slide 7: Five services behind one gateway
+### Slide 7: Logical architecture
 
 - Outline item: 3b · Logical architecture
 - Speaker: LIU ZIYANG
@@ -282,24 +281,24 @@ The axis at the bottom shows the working days 8, 9, 12, 13, 14, 15, 16, 19, 20, 
 
 - clients: "Web app" and "Literature watch app".
 - edge: one wide box, "API gateway (Traefik)".
-- services: five boxes, from left to right: "Identity: sign-in, API keys", "Project: projects, registry", "Session: the task tree", "Worker: the agent loop", "Billing: cap, approvals".
-- data: "RabbitMQ AMQP" and "LLM external API", and under them one wide box, "PostgreSQL: one database, tables per context".
+- services: five boxes, from left to right: "Identity: sign-in, API keys", "Project: projects, registry", "Session: the call tree", "Worker: the agent loop", "Billing: the budget cap".
+- data: "RabbitMQ AMQP" and "Model external API", and under them one wide box, "PostgreSQL: one database, tables per context".
 
-Dashed arrows point down from each tier to the next. Dashed arrows go from Project to Session and from Worker to Session. During the run, small white tags move along the lines: "question", "turn", "prompt", "step", "answer".
+Dashed arrows point down from each tier to the next. Dashed arrows go from Project to Session and from Worker to Session. During the run, small white tags move along the lines: "question", "job", "prompt", "step", "answer".
 
 **What happens, in order.**
 - 0 s: "Four tiers: clients, the API gateway, five services, the data".
 - 1.6 s: "Clients depend on the API gateway".
 - 3.9 s: "The gateway routes to the five services".
 - 6.2 s: "Project and worker call session's internal routes".
-- 8.5 s: "Services depend on the data: one database, one broker, the LLM".
+- 8.5 s: "Services depend on PostgreSQL, RabbitMQ and the model".
 - 11.9 s: "Run time: the watch app asks a question". A "question" tag goes from the watch app to the gateway.
-- 14.0 s: "Project opens a session". The tag goes from Project to Session.
-- 14.9 s: "Session puts a turn on the queue; a free worker takes it". A "turn" tag goes to RabbitMQ.
-- 16.6 s: "The worker runs the agent with the LLM". A "prompt" tag goes from Worker to the LLM.
+- 14.0 s: "Project passes the question to session". The tag goes from Project to Session.
+- 14.9 s: "Session puts a job on the queue; a free worker takes it". A "job" tag goes to RabbitMQ.
+- 16.6 s: "The worker calls the model". A "prompt" tag goes from Worker to the model.
 - 18.4 s: "Each step goes back to session, which saves it". A "step" tag goes from Worker to Session.
 - 20.1 s: "The app reads the answer". An "answer" tag goes up from Session to the gateway.
-- 22.6 s: "Five services behind one gateway; turns wait in RabbitMQ". Loop at 24.9 s.
+- 22.6 s: "Component diagram: five services behind the Traefik API gateway". Loop at 24.9 s.
 
 **What to say.**
 
@@ -311,30 +310,30 @@ Dashed arrows point down from each tier to the next. Dashed arrows go from Proje
 >
 > [6.2 s] Only Project and Worker call session's internal routes.
 >
-> [8.5 s] The services depend on one database, one broker and the model.
+> [8.5 s] The services depend on PostgreSQL, RabbitMQ and the model.
 >
 > [11.9 s] Now follow the white tag at run time. The watch app asks a question.
 >
-> [14 s] Project opens a session. Session puts a turn on the queue, and a free worker takes it.
+> [14 s] Project passes the question to session. Session puts a job on the queue, and a free worker takes it.
 >
-> [16.6 s] The worker runs the agent with the language model.
+> [16.6 s] The worker calls the model.
 >
 > [18.4 s] Each step goes back to session, which saves it.
 >
 > [20.1 s] And the app reads the answer.
 >
-> The queue lets the worker scale on its own. The proposal listed eight services. Traefik is the gateway, the live stream runs inside session, and the model client runs inside the worker. So five services remain, each with one job and its own tables.
+> The queue lets the worker scale on its own. The proposal listed eight services. Traefik is the gateway, the live stream runs inside session, and the model client runs inside the worker. So five services remain, each with one purpose and its own tables.
 
 **Point at.**
 1. The gateway box, the one door for the clients.
-2. The white tag as it moves: question, turn, prompt, step, answer.
+2. The white tag as it moves: question, job, prompt, step, answer.
 3. RabbitMQ between Session and Worker.
 
 **If asked.**
 - *Why can session not scale like the worker?* Session runs one replica with the Recreate strategy, so two kernels never run at the same time during a rollout. The heavy work is the agent loop, and that runs in the workers, which scale from one to four on the queue.
 - *How do services trust each other?* Every internal route checks a shared internal key, and Traefik never routes internal paths from outside.
 
-### Slide 8: Five bounded contexts
+### Slide 8: Bounded contexts
 
 - Outline item: 3c · Domain-driven design
 - Speaker: LIU ZIYANG
@@ -342,29 +341,29 @@ Dashed arrows point down from each tier to the next. Dashed arrows go from Proje
 
 **What is on the screen.** A DDD context map, 26 s per loop.
 
-- At the top, a chain of four boxes with arrows: "use cases UC1 to UC6" → "nouns users say: agent, question, step, cap" → "5 bounded contexts" → "their aggregates".
-- Under the chain, five context boxes. Left: "Projects" (Project, Finding; Agent registry: Agent, QuestionIntent) and, under it, "Identity" (Account, ApiKey). Middle: "«core domain» Session" (Session, the root; its Task tree; Step, a value). Right: "Execution" (the worker loop; it keeps no state) and, under it, "Billing" (Wallet, LedgerEntry, Approval).
-- Arrows with event names: "question asked" from Projects to Session; "finding recorded" from Session to Projects; "account, API key" up from Identity to Projects; "turn queued" from Session to Execution; "step recorded" from Execution to Session; "spend recorded" and "approval needed" from Session to Billing.
+- At the top, a chain of four boxes with arrows: "use cases UC1 to UC6" → "nouns users say: agent, question, step, budget cap" → "5 bounded contexts" → "their aggregates".
+- Under the chain, five context boxes. Left: "Project" (Project, Finding; Agent registry: Agent, QuestionIntent) and, under it, "Identity" (Account, ApiKey). Middle: "«core domain» Session" (Session, the root; its tree of Tasks; Step, a value). Right: "Worker" (the agent loop; it keeps no state) and, under it, "Billing" (Wallet, LedgerEntry, Approval).
+- Arrows with event names: "question asked" from Project to Session; "finding recorded" from Session to Project; "account, API key" up from Identity to Project; "job queued" from Session to Worker; "step recorded" from Worker to Session; "spend recorded" and "approval needed" from Session to Billing.
 
 **What happens, in order.**
 - 0 s: "How we found the contexts". The chain at the top builds up, one box at a time.
 - 2.8 s: "Five bounded contexts, each with its own aggregates". The five boxes appear.
-- 5.1 s: "Projects sends question asked, receives finding recorded".
+- 5.1 s: "Project sends question asked and receives finding recorded".
 - 9.6 s: "Identity is upstream: it says who asks, with which API key".
-- 12.6 s: "Execution receives turn queued, sends step recorded".
+- 12.6 s: "Worker receives job queued and sends step recorded".
 - 17.1 s: "Billing receives spend recorded and approval needed".
 - 21.5 s: "Session, the core domain: every domain event goes through it". Session lights up, and all its arrows are white.
-- 24.2 s: "Five contexts, one core domain, six domain events". Loop at 26.4 s.
+- 24.2 s: "Context map: five bounded contexts and six domain events". Loop at 26.4 s.
 
 **What to say.**
 
-> [0 s] Here is how we found the contexts. From the six use cases, we took the nouns that users say: agent, question, step, cap. We grouped them where one word keeps one meaning. That gave five bounded contexts, and their aggregates.
+> [0 s] Here is how we found the contexts. From the six use cases, we took the nouns that users say: agent, question, step, budget cap. We grouped them where one word keeps one meaning. That gave five bounded contexts, and their aggregates.
 >
-> [5.1 s] Projects sends "question asked", and receives "finding recorded".
+> [5.1 s] Project sends "question asked", and receives "finding recorded".
 >
 > [9.6 s] Identity is upstream. It says who asks, and with which API key.
 >
-> [12.6 s] Execution, the worker loop, receives "turn queued" and sends "step recorded". It keeps no state.
+> [12.6 s] The worker receives "job queued" and sends "step recorded". It keeps no state.
 >
 > [17.1 s] Billing receives "spend recorded" and "approval needed".
 >
@@ -380,8 +379,8 @@ Dashed arrows point down from each tier to the next. Dashed arrows go from Proje
 3. The event names on the arrows.
 
 **If asked.**
-- *How did you choose the aggregates?* We took as an aggregate what one transaction must keep consistent. A task tree rolls up its cost, and a wallet never passes its cap without an approval.
-- *Why is Session the core domain?* Every domain event goes through it, and it owns the task tree, which is what makes Lumen different. The other contexts support it.
+- *How did you choose the aggregates?* We took as an aggregate what one transaction must keep consistent. A call tree rolls up its cost, and a wallet never passes its budget cap without an approval.
+- *Why is Session the core domain?* Every domain event goes through it, and it owns the call tree, which is what makes Lumen different. The other contexts support it.
 
 **Handover.** "That is our logical architecture. LU YI built identity, the gateway, the API keys and the public API. LU YI will now show how apps use the platform, and where it runs."
 
@@ -391,7 +390,7 @@ Dashed arrows point down from each tier to the next. Dashed arrows go from Proje
 
 You built identity, the gateway, HTTPS, the rate limits, the API keys and the public API v1. In the questions, you answer about the public API, security and the deployment.
 
-### Slide 9: How apps use the platform
+### Slide 9: Public API flow
 
 - Outline item: 3c · Producers and consumers
 - Speaker: LU YI
@@ -403,12 +402,12 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 2. POST /api/v1/agents (producer to platform)
 3. GET /api/v1/agents (consumer to platform)
 4. POST /api/v1/questions (consumer to platform)
-5. "runs it, the agent's instructions first" (a self-call on the platform)
+5. "runs the agent on the question" (a self-call on the platform)
 6. GET /api/v1/questions/:id (consumer to platform)
 7. GET /api/v1/usage (producer to platform)
 
 **What happens, in order.**
-- 0 s: "A producer publishes; a consumer asks; one public API".
+- 0 s: "Producers and consumers use one public API".
 - 2.2 s: "The producer phase".
 - 3.5 s: "1. A producer creates an API key".
 - 5.8 s: "2. The producer publishes an agent".
@@ -419,7 +418,7 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 - 16.2 s: "6. The consumer reads the answer, findings and cost".
 - 18.5 s: "The producer phase" again.
 - 19.9 s: "7. The producer and the operator read usage".
-- 22.2 s: "Publish, list, ask, read: all on the public API v1". Loop at 24.8 s.
+- 22.2 s: "Sequence diagram: producer and consumer calls on the public API v1". Loop at 24.8 s.
 
 **What to say.**
 
@@ -429,7 +428,7 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 >
 > [8.2 s] Now the consumer, on the left. It lists the agents. Then it asks a question with one of them.
 >
-> [14.1 s] The platform runs the question. It puts the agent's instructions first.
+> [14.1 s] The platform runs the agent on the question.
 >
 > [16.2 s] The consumer reads the answer, the findings and the cost.
 >
@@ -444,9 +443,9 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 
 **If asked.**
 - *Why API keys and not JWT?* A key can be revoked at once, and a lookup for each request is cheap at this size. An app can store, scope and revoke a key without a password.
-- *What happens when an app sends too many requests?* The key guard answers 429 with a Retry-After header. The literature watch waits for that time and then asks again.
+- *What happens when an app sends too many requests?* The API key check answers 429 with a Retry-After header. The literature watch waits for that time and then asks again.
 
-### Slide 10: Three choices shape the deployment
+### Slide 10: Physical architecture decisions
 
 - Outline item: 4a · Key architectural decisions
 - Speaker: LU YI
@@ -454,20 +453,20 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 
 **What is on the screen.** Three columns, labelled AD-09, AD-11 and AD-06, each drawn as before and after. 25 s per loop.
 
-- AD-09, left: at first "Helm chart" above an "«AWS» EKS cluster" with a "managed control plane" and three "EC2" nodes. After: one node "EC2 t3.medium, 2 vCPU, 4 GB", with "k3s" inside it and nine small boxes: identity, project, session, worker, billing, postgres, rabbitmq, traefik, keda. A dashed arrow "same chart" goes from the Helm chart to a box "EKS". Caption: "k3s on one EC2 t3.medium, not EKS / the laptop chart, unchanged; USD 1.3 a day".
-- AD-11, middle: two panels. "HPA: CPU above 70%" with a CPU bar and pod rows for identity, project and billing. "KEDA: 5 turns per worker" with a row of turn cells, a worker pod row and a CPU bar. Caption: "HPA on CPU; KEDA on queue length / a worker waits on the model, so its CPU is low".
-- AD-06, right: at first four database cylinders: identity DB, project DB, session DB, billing DB. After: one cylinder "PostgreSQL" with four frames inside: identity, project, session, billing. Caption: "One PostgreSQL, tables per context / one transaction: step, cost, ledger".
+- AD-09, left: at first "Helm chart" above an "«AWS» EKS cluster" with a "managed control plane" and three "EC2" nodes. After: one node "EC2 t3.medium, 2 vCPU, 4 GB", with "k3s" inside it and nine small boxes: identity, project, session, worker, billing, postgres, rabbitmq, traefik, keda. A dashed arrow "same chart" goes from the Helm chart to a box "EKS". Caption: "k3s on one EC2 t3.medium, not EKS / the same Helm chart; about USD 1.3 a day".
+- AD-11, middle: two panels. "HPA: CPU above 70%" with a CPU bar and pod rows for identity, project and billing. "KEDA: 5 jobs per worker" with a row of job cells, a worker pod row and a CPU bar. Caption: "HPA on CPU; KEDA on queue length / a worker waits on the model, so its CPU is low".
+- AD-06, right: at first four database cylinders: identity DB, project DB, session DB, billing DB. After: one cylinder "PostgreSQL" with four frames inside: identity, project, session, billing. Caption: "One PostgreSQL, tables per context / one transaction: step, cost, ledger entry".
 
 **What happens, in order.**
 - 0 s: "AD-09, before: the proposal put the chart on an EKS cluster".
 - 2.1 s: "AD-09, after: the cluster shrinks to one EC2 node, with k3s on it".
 - 5.5 s: "AD-09: the same Helm chart installs on either one".
-- 8.5 s: "AD-11: CPU passes 70%; identity, project and billing divide". The CPU bar fills, and each row grows from one pod to three.
-- 11.7 s: "AD-11: turns wait; the worker divides while its CPU stays low". The turn cells fill, and the worker row grows to four pods while its CPU bar stays short.
+- 8.5 s: "AD-11: CPU passes 70%, so HPA adds identity, project and billing pods". The CPU bar fills, and each row grows from one pod to three.
+- 11.7 s: "AD-11: jobs wait, so KEDA adds workers; their CPU stays low". The job cells fill, and the worker row grows to four pods while its CPU bar stays short.
 - 16.2 s: "AD-06, before: a database for each service".
 - 17.8 s: "AD-06, after: one PostgreSQL; each context keeps its own tables".
 - 20.1 s: "AD-06: one transaction writes the step, its cost and the ledger entry". The session and billing frames light up together.
-- 22.5 s: "Three decisions shape the physical architecture". Loop at 25.5 s.
+- 22.5 s: "Physical architecture decisions AD-09, AD-11 and AD-06". Loop at 25.5 s.
 
 **What to say.**
 
@@ -481,7 +480,7 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 >
 > [8.5 s] AD-11. Two autoscalers watch two kinds of load. When CPU passes 70 percent, HPA adds identity, project and billing pods.
 >
-> [11.7 s] The worker is different. Here the turns wait, and the worker divides, but its CPU stays low. A worker waits on the model, so we scale it on the queue length with KEDA.
+> [11.7 s] The worker is different. Here the jobs wait, and KEDA adds workers, but their CPU stays low. A worker waits on the model, so we scale it on the queue length with KEDA.
 >
 > [16.2 s] AD-06. The proposal had a database for each service.
 >
@@ -498,7 +497,7 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 - *Why not EKS, as in the proposal?* One t3.medium with k3s costs about USD 1.3 a day while it runs, and k3s ships the same Traefik, storage and metrics-server as our laptop cluster. The chart does not change, so the same chart installs on EKS.
 - *Why scale the worker on queue length and not on CPU?* A worker waits on the model most of the time, so its CPU stays low while the queue grows. The queue shows the agent load first.
 
-### Slide 11: One AWS node, one k3s cluster
+### Slide 11: Deployment diagram
 
 - Outline item: 4b · Physical architecture
 - Speaker: LU YI
@@ -521,7 +520,7 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 - 11.4 s: "HTTPS on 443 to Traefik, which routes to the service pods". The browser, the watch app, Traefik and the five pods light up.
 - 14.2 s: "GitHub Actions deploys over SSH 22 into k3s".
 - 16.5 s: "The worker pod calls the OpenAI API over HTTPS".
-- 18.9 s: "One EC2 node runs the whole platform in k3s". Loop at 21.9 s.
+- 18.9 s: "UML deployment diagram: the platform in k3s on one EC2 node". Loop at 21.9 s.
 
 **What to say.**
 
@@ -550,7 +549,7 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 - *What if the IP address changes?* The host name comes from the Elastic IP on sslip.io, so the IP stays fixed while the instance lives. The certificate is a real Let's Encrypt certificate for that name.
 - *Why is port 80 open?* Traefik redirects HTTP on port 80 to HTTPS. All traffic to the services goes over HTTPS on 443.
 
-### Slide 12: Every service is running
+### Slide 12: Pods on the server (recorded)
 
 - Outline item: 4b · Recorded on the server
 - Speaker: LU YI
@@ -573,9 +572,9 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 >
 > [2.9 s] Here are the pods. You can see the five services: billing, identity, project, session and worker. You also see PostgreSQL and RabbitMQ. All of them are running.
 >
-> [6.5 s] And here are the autoscalers. HPA watches CPU for identity, project and billing, with a target of 70 percent and up to three pods. The last line is KEDA for the worker. It compares the waiting turns with a target of five per worker, and it allows up to four workers.
+> [6.5 s] And here are the autoscalers. HPA watches CPU for identity, project and billing, with a target of 70 percent and up to three pods. The last line is KEDA for the worker. It compares the waiting jobs with a target of five per worker, and it allows up to four workers.
 >
-> That is where the platform runs. LI ZHUOYANG built the worker service, the turn queues and the KEDA autoscaling. LI ZHUOYANG will now show the queue design, one use case in detail, and what happens when a worker dies.
+> That is where the platform runs. LI ZHUOYANG built the worker service, the job queues and the KEDA autoscaling. LI ZHUOYANG will now show the queue design, one use case in detail, and what happens when a worker dies.
 
 **Point at.**
 1. The column "Running" in the pod list.
@@ -585,15 +584,15 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 - *Why can we not reach kubectl directly?* The Kubernetes API is not public. The security group opens only 22, 80 and 443, so we run kubectl on the host over SSH.
 - *Where is Traefik in this list?* Traefik comes with k3s, so it runs outside our namespace. This list shows only the namespace lumen.
 
-**Handover.** "That is where the platform runs. LI ZHUOYANG built the worker service, the turn queues and the KEDA autoscaling. LI ZHUOYANG will now show the queue design, one use case in detail, and what happens when a worker dies."
+**Handover.** "That is where the platform runs. LI ZHUOYANG built the worker service, the job queues and the KEDA autoscaling. LI ZHUOYANG will now show the queue design, one use case in detail, and what happens when a worker dies."
 
 ---
 
 ## LI ZHUOYANG: slides 13 to 16, about 4.5 minutes
 
-You built the worker service, the turn queues and the KEDA autoscaling of the workers. In the questions, you answer about the queues, the worker and availability.
+You built the worker service, the job queues and the KEDA autoscaling of the workers. In the questions, you answer about the queues, the worker and availability.
 
-### Slide 13: One queue for each level of the task tree
+### Slide 13: Decision: one queue per tree level
 
 - Outline item: 4a · Key architectural decision
 - Speaker: LI ZHUOYANG
@@ -602,48 +601,48 @@ You built the worker service, the turn queues and the KEDA autoscaling of the wo
 **What is on the screen.** A queue diagram and a wait-for graph, 27 s per loop.
 
 - Left: at first a label "one shared queue" with a long row of cells, then two boxes "worker 1" and "worker 2". White tags move through it: "lead" and "reader".
-- Right, after a few seconds: a panel "waits for" with three boxes, "lead", "reader" and "slot", and the arrows between them: "waits for" (lead to reader), "waits for a free slot" (reader to slot), "held by" (slot to lead).
-- After the fix, the left side shows "a queue per level, a slot per level": three rows, "level 0 lumen.turns.0", "level 1 lumen.turns.1", "level 2 lumen.turns.2", and each worker has three slots, one per level.
+- Right, after a few seconds: a panel "waits for" with three boxes, "lead", "reader" and "worker", and the arrows between them: "waits for" (lead to reader), "waits for a free worker" (reader to worker), "busy with" (worker to lead).
+- After the fix, the left side shows "a queue per level; each worker runs one job per level": three rows, "level 0 lumen.turns.0", "level 1 lumen.turns.1", "level 2 lumen.turns.2", and each worker has three boxes, one per level.
 
 **What happens, in order.**
-- 0 s: "AD-03: one shared queue; two questions put two leads on it".
-- 1.5 s: "Each worker has one slot, and each takes a lead".
-- 3.1 s: "Each lead delegates three readers, and keeps its slot while it waits". Six reader tags fill the queue.
+- 0 s: "AD-03: one shared queue; two questions start two lead agents".
+- 1.5 s: "Each worker runs one job, and each takes a lead".
+- 3.1 s: "Each lead starts three readers and holds its worker while it waits". Six reader tags fill the queue.
 - 5.0 s: "A lead waits for its readers". The wait-for panel appears.
-- 7.5 s: "A reader waits for a free slot".
-- 9.6 s: "Every slot is held by a lead".
-- 11.7 s: "The waits close into a cycle: no question can finish". Dots run round the triangle.
-- 14.6 s: "The fix: a queue per level, and a slot per level". The one queue divides into three.
-- 17.1 s: "A reader no longer waits for a lead's slot: the cycle breaks". The arrow "waits for a free slot" fades.
-- 18.5 s: "The readers run in the reader slots".
+- 7.5 s: "A reader waits for a free worker".
+- 9.6 s: "Every worker is busy with a lead".
+- 11.7 s: "The waits close into a cycle, so no question can finish". Dots run round the triangle.
+- 14.6 s: "The fix: a queue per level; each worker runs one job per level". The one queue splits into three.
+- 17.1 s: "A reader no longer waits behind a lead, so the cycle breaks". The arrow "waits for a free worker" fades.
+- 18.5 s: "The readers run beside the leads".
 - 23.5 s: "Level 2 stays empty: readers do not delegate". The text "6 of 6 readers done" shows.
-- 24.9 s: "The leads write their answers: every question finishes". Both leads get a check mark, and "all questions finish" shows. Loop at 26.9 s.
+- 24.9 s: "With a queue per level, all questions finish". Both leads get a check mark, and "all questions finish" shows. Loop at 26.9 s.
 
 **What to say.**
 
 > Thank you. I start with AD-03, a deadlock that we found in design, before it could happen.
 >
-> [0 s] Here is one shared queue for all turns. Two questions put two leads on it.
+> [0 s] Here is one shared queue for all jobs. Two questions start two lead agents.
 >
-> [1.5 s] Each worker has one slot, and each worker takes a lead.
+> [1.5 s] Each worker runs one job, and each worker takes a lead.
 >
-> [3.1 s] Each lead delegates three readers. And it keeps its slot while it waits for them.
+> [3.1 s] Each lead starts three reader agents. And it holds its worker while it waits for them.
 >
 > [5 s] Now look at the panel on the right. A lead waits for its readers.
 >
-> [7.5 s] A reader waits for a free slot.
+> [7.5 s] A reader waits for a free worker.
 >
-> [9.6 s] But every slot is held by a lead.
+> [9.6 s] But every worker is busy with a lead.
 >
 > [11.7 s] So the waits close into a cycle. No question can finish.
 >
-> [14.6 s] Our fix is a queue for each level of the task tree, and a slot for each level.
+> [14.6 s] Our fix is a queue for each level of the call tree. Each worker runs one job of each level.
 >
-> [17.1 s] Now a reader no longer waits for a lead's slot. One edge of the cycle is gone.
+> [17.1 s] Now a reader no longer waits behind a lead. The cycle breaks.
 >
-> [18.5 s] The readers run in the reader slots. The deepest level never waits, so the work always drains.
+> [18.5 s] The readers run beside the leads. The deepest level never waits, so the work always drains.
 >
-> [24.9 s] The leads write their answers, and every question finishes. In the real system, each worker has four slots for each level, and KEDA watches all three queues.
+> [24.9 s] The leads write their answers, and every question finishes. In the real system, each worker runs up to four jobs of each level, and KEDA watches all three queues.
 
 **Point at.**
 1. The triangle on the right when it closes into a cycle.
@@ -651,29 +650,29 @@ You built the worker service, the turn queues and the KEDA autoscaling of the wo
 3. The check marks on the leads at the end.
 
 **If asked.**
-- *How many turns can one worker run?* Each worker pod has four slots for each level. It is set by LUMEN_WORKER_SLOTS, and RabbitMQ gives each channel that many turns at a time.
+- *How many jobs can one worker run?* Four of each level at a time. LUMEN_WORKER_SLOTS sets it, and RabbitMQ gives each channel that many jobs at a time.
 - *What runs on level 2?* Level 2 takes depth 2 and deeper. A reader does not delegate in this example, so level 2 stays empty here.
 
-### Slide 14: Asking a question with a chosen agent
+### Slide 14: UC2 sequence diagram
 
 - Outline item: 4d · Detailed design
 - Speaker: LI ZHUOYANG
 - Time: 70 s
 
-**What is on the screen.** A UML sequence diagram, 18 s per loop. The title on the picture is "Use case A: ask a question with a chosen agent". Seven lifelines, from left to right: Watch app, project, session, PostgreSQL, RabbitMQ, worker, OpenAI API. The messages, from top to bottom:
+**What is on the screen.** A UML sequence diagram, 18 s per loop. The title on the picture is "UC2: ask a question with a chosen agent". Seven lifelines, from left to right: Watch app, project, session, PostgreSQL, RabbitMQ, worker, OpenAI API. The messages, from top to bottom:
 
-- POST /api/v1/questions (Watch app to project), then "key guard check" (project to itself).
+- POST /api/v1/questions (Watch app to project), then "check the API key" (project to itself).
 - POST /internal/directory/start (project to session).
 - publish lumen.turns.0 (session to RabbitMQ).
 - A frame "par" with two lanes. Upper lane: "201 {sessionId}" back to the watch app; GET /api/v1/questions/:id to session; "200 {status, answer, findings, cost}" back. Lower lane: "consume" (RabbitMQ to worker), then a frame "loop [each step]": "chat completion" (worker to OpenAI API), "POST /internal/turns/:id/step" (worker to session), "INSERT steps" (session to PostgreSQL).
 - A note at the lower left: "Every call of the app passes Traefik, the API gateway".
 
 **What happens, in order.**
-- 0 s: "Use case A: ask a question with a chosen agent". The lifelines are grey.
+- 0 s: "UC2: ask a question with a chosen agent". The lifelines are grey.
 - 1.6 s: "The app sends the question; project checks the key".
-- 3.5 s: "Project opens a session; session publishes the root turn".
+- 3.5 s: "Session starts the question and puts the first job on the queue".
 - 5.4 s: "par: from here, two lanes run at the same time". The par frame and the note appear.
-- 6.7 s: "The app gets 201 at once, while a worker takes the turn".
+- 6.7 s: "The app gets 201 at once, while a worker takes the job".
 - 8.7 s: "The app reads the answer while the worker runs its steps".
 - 12.0 s: "loop: the worker runs one step after another".
 - 15.2 s: "The app gets 201 at once and reads the answer while the worker runs". Loop at 18.4 s.
@@ -684,11 +683,11 @@ You built the worker service, the turn queues and the KEDA autoscaling of the wo
 >
 > [1.6 s] The watch app sends the question. Project checks the API key.
 >
-> [3.5 s] Project opens a session. Session publishes the root turn on the first queue, lumen dot turns dot zero.
+> [3.5 s] Session starts the question. It puts the first job on the first queue, level zero.
 >
 > [5.4 s] From this moment, two lanes run at the same time.
 >
-> [6.7 s] In the upper lane, the app gets 201 at once. In the lower lane, a worker takes the turn.
+> [6.7 s] In the upper lane, the app gets 201 at once. In the lower lane, a worker takes the job.
 >
 > [8.7 s] The app reads the answer whenever it likes.
 >
@@ -702,10 +701,10 @@ You built the worker service, the turn queues and the KEDA autoscaling of the wo
 3. The "loop [each step]" frame at the bottom right.
 
 **If asked.**
-- *How does the agent's instructions reach the worker?* The question first writes a question intent row. The worker claims it on the root turn and puts the agent's instructions in front of the question.
+- *How do the agent's instructions reach the worker?* The question first writes a row that names the agent. The worker reads it with the first job and puts the agent's instructions in front of the question.
 - *What does the app get back at once?* It gets 201 with the session id. It then reads the status, the answer, the findings and the cost with GET /api/v1/questions/:id.
 
-### Slide 15: A question through the public API
+### Slide 15: UC2 through the public API (recorded)
 
 - Outline item: 4d · Recorded through the API
 - Speaker: LI ZHUOYANG
@@ -746,7 +745,7 @@ You built the worker service, the turn queues and the KEDA autoscaling of the wo
 - *What is the cost unit?* The cost is in US dollars. This question cost 0.000168 dollars.
 - *Why is the agent null here?* This call asks without a chosen agent. With an agent, the call adds the agent's slug, and the platform puts that agent's instructions first.
 
-### Slide 16: A worker is deleted; the question still ends
+### Slide 16: Availability: deleting a worker (recorded)
 
 - Outline item: 4d · Availability, recorded
 - Speaker: LI ZHUOYANG
@@ -780,7 +779,7 @@ You built the worker service, the turn queues and the KEDA autoscaling of the wo
 >
 > [27.4 s] And here it ends. The cost goes up, because the work goes on.
 >
-> Why does this work? A worker acknowledges a turn only when the turn is done. This turn was not acknowledged. So RabbitMQ gives it to another worker, and the question still ends.
+> Why does this work? A worker acknowledges a job only when the job is done. This job was not acknowledged. So RabbitMQ gives it to another worker, and the question still ends.
 >
 > [46.6 s] At the end you see the new worker pod. Kubernetes started it in place of the old one.
 >
@@ -792,8 +791,8 @@ You built the worker service, the turn queues and the KEDA autoscaling of the wo
 3. The new pod name and its age at the end.
 
 **If asked.**
-- *What if a worker dies in the middle of a turn?* The worker acknowledges a turn only after the turn is done. RabbitMQ gives an unacknowledged turn to another worker, as this recording shows.
-- *What if the connection to RabbitMQ breaks?* The service process ends, and Kubernetes restarts the pod. A turn that was not acknowledged goes back on its queue.
+- *What if a worker dies in the middle of a job?* The worker acknowledges a job only after the job is done. RabbitMQ gives an unacknowledged job to another worker, as this recording shows.
+- *What if the connection to RabbitMQ breaks?* The service process ends, and Kubernetes restarts the pod. A job that was not acknowledged goes back on its queue.
 
 **Handover.** "That is the worker and the queue. HE RONG built billing, the Kubernetes setup, the pipeline and the load test. HE RONG will now show the schema, the DevOps pipeline and the scaling test."
 
@@ -803,7 +802,7 @@ You built the worker service, the turn queues and the KEDA autoscaling of the wo
 
 You built the billing service, the Kubernetes setup, the Helm chart, the pipeline and the k6 load test. In the questions, you answer about persistence, DevOps and the load test.
 
-### Slide 17: The schema, by context
+### Slide 17: Database schema
 
 - Outline item: 4c · Persistence
 - Speaker: HE RONG
@@ -821,9 +820,9 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 **What happens, in order.**
 - 0 s: "Five contexts in one PostgreSQL; four of them own tables". The tables draw themselves.
 - 3.3 s: "An account has many API keys".
-- 4.9 s: "An account owns the agents it registers".
+- 4.9 s: "An account owns the agents it publishes".
 - 6.6 s: "A project keeps its account_id: an id from identity, no foreign key".
-- 8.7 s: "A question intent names one agent".
+- 8.7 s: "A question can name one agent".
 - 10.3 s: "A project has many findings, and its sessions keep its id".
 - 12.4 s: "A session has many tasks and many findings".
 - 14.5 s: "A task has child tasks: parent_id is the call tree". A line loops from tasks back to itself.
@@ -831,7 +830,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 - 17.8 s: "A reader's task records findings".
 - 19.5 s: "Each model call of a task is a ledger entry".
 - 21.5 s: "The worker runs the agents and owns no tables".
-- 23.1 s: "PostgreSQL 16, money as numeric(12,6); turns stay in RabbitMQ". Loop at 26.0 s.
+- 23.1 s: "ER diagram: PostgreSQL 16; money is numeric(12,6)". Loop at 26.0 s.
 
 **What to say.**
 
@@ -845,7 +844,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 >
 > [12.4 s] A session has many tasks.
 >
-> [14.5 s] The tasks table is the centre. Its parent id is the call tree. So the task tree is one table with a parent link, and the cost roll-up is plain SQL.
+> [14.5 s] The tasks table is the centre. Its parent id is the call tree. So the call tree is one table with a parent link, and the cost roll-up is plain SQL.
 >
 > [16.2 s] Each task has its steps, in order. A reader's task records findings.
 >
@@ -853,7 +852,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 >
 > [21.5 s] The worker owns no tables. It reports every step to session.
 >
-> [23.1 s] Money is stored as numeric 12, 6. The turns in flight live in RabbitMQ, and files live on a 2 gigabyte volume.
+> [23.1 s] Money is stored as numeric 12, 6. The jobs in flight live in RabbitMQ, and files live on a 2 gigabyte volume.
 
 **Point at.**
 1. The frames around each context.
@@ -864,7 +863,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 - *Why one shared database and not one per service?* The tables are already grouped by owner, and no foreign key crosses a context, so the split is mechanical. One database also lets one transaction write the step, its cost and the ledger entry together.
 - *How is an approval used only once?* It is decided in one transaction with SELECT FOR UPDATE. The billing pods claim delivery rows with FOR UPDATE SKIP LOCKED and a 30-second lease.
 
-### Slide 18: From a branch to a running image
+### Slide 18: Branches and images
 
 - Outline item: 5a · Source and artifacts
 - Speaker: HE RONG
@@ -872,30 +871,30 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 
 **What is on the screen.** A branch graph on the left and a deploy chain on the right, 20 s per loop.
 
-- Left, three rows: "main: Lumen, the base product"; "ass/platform: the platform's branch"; "a feature branch", named "codex/platform-approval-acceptance". A counter under the graph: "48 commits on ass/platform" and "1 pull request merged into it". A label "left main on 19 October", and a tag "PR #148" where the feature branch merges back.
+- Left, three rows: "main: Lumen, the base product"; "ass/platform: the platform's branch"; "a feature branch", named "codex/platform-approval-acceptance". A counter under the graph: "48 commits on ass/platform" and "1 pull request merged into it". A label "branched off main on 19 October", and a tag "PR #148" where the feature branch merges back.
 - Right, a chain from top to bottom: "push" into a box "lumen-next:<commit sha>: image, built from deploy/k8s/Dockerfile"; then "copy over SSH (scp)" to a node "«AWS» EC2 host: k3s ctr images import"; then "helm upgrade --install --wait" to a box "Lumen platform, live".
 
 **What happens, in order.**
 - 0 s: "main holds Lumen, the base product".
-- 1.7 s: "ass/platform grows out of main on 19 October".
+- 1.7 s: "ass/platform branches off main on 19 October".
 - 2.8 s: "Commits land on ass/platform". The counter rises.
-- 5.2 s: "A short-lived branch grows out for one change".
-- 6.7 s: "Pull request #148 grows back into ass/platform".
+- 5.2 s: "A short-lived branch holds one change".
+- 6.7 s: "Pull request #148 merges it back into ass/platform".
 - 9.0 s: "More commits land; each one is pushed". The counter reaches 48.
 - 10.4 s: "A push builds one image: lumen-next:<commit sha>".
 - 12.5 s: "The image goes over SSH into k3s on the EC2 host".
 - 14.6 s: "helm upgrade --install --wait puts it live".
-- 16.7 s: "One integration branch, one image per commit". Loop at 19.7 s.
+- 16.7 s: "Git branches and the deploy path of each commit on ass/platform". Loop at 19.7 s.
 
 **What to say.**
 
 > Now 5, DevOps. First, 5a: the source and the artifacts.
 >
-> [1.7 s] ass/platform is our one integration branch. It grows out of main on 19 October.
+> [1.7 s] ass/platform is our one integration branch. It branches off main on 19 October.
 >
-> [5.2 s] For one change, a short-lived branch grows out.
+> [5.2 s] One change came on a short-lived branch.
 >
-> [6.7 s] It comes back through pull request 148.
+> [6.7 s] It merged back through pull request 148.
 >
 > [9 s] In total, ass/platform has 48 commits.
 >
@@ -916,7 +915,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 - *How do you roll back?* We run helm rollback on the server, or we push a revert. Every deploy is a Helm release with its history.
 - *Where is staging?* A merge into ass/platform is the approval to deploy, and the pull request review is the gate. Our local k3d cluster runs the same chart.
 
-### Slide 19: Six checks around one deploy
+### Slide 19: CI/CD pipeline
 
 - Outline item: 5b · DevOps pipeline
 - Speaker: HE RONG
@@ -932,13 +931,13 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 
 **What happens, in order.**
 - 0 s: "The pipeline: .github/workflows/platform-deploy.yml".
-- 2.0 s: "The first run: verify, SCA and SAST grow at the same time, and pass". Three check marks.
-- 6.0 s: "5 critical CVEs: the line breaks at the Trivy gate". A cross on the line under the gate.
+- 2.0 s: "The first run: verify, SCA and SAST run at the same time and pass". Three check marks.
+- 6.0 s: "5 critical CVEs: the Trivy gate stops the deploy". A cross on the line under the gate.
 - 9.2 s: "The fix: a smaller platform image, with no Docker inside". "stop" lights up.
 - 10.8 s: "The next run: the fixed image". The times appear in the boxes.
 - 14.1 s: "The image passes the gate; the deploy steps run one after another".
 - 16.2 s: "DAST and a smoke load run at the same time against the live address".
-- 18.3 s: "Every stage passed: all jobs done in 12 min 30 s". A white label "all jobs done in 12 min 30 s". Loop at 21.5 s.
+- 18.3 s: "CI/CD pipeline: all jobs passed in 12 min 30 s". A white label "all jobs done in 12 min 30 s". Loop at 21.5 s.
 
 **What to say.**
 
@@ -948,7 +947,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 >
 > [2 s] Verify, SCA and SAST run at the same time. Verify runs lint, types and tests. SCA is npm audit. SAST is CodeQL.
 >
-> [6 s] Then the image goes through the Trivy gate. In the first run, the gate found 5 critical CVEs in the image. Here the line breaks. The deploy stopped before the image reached the host.
+> [6 s] Then the image goes through the Trivy gate. In the first run, the gate found 5 critical CVEs in the image. Here the gate stops the deploy, before the image reaches the host.
 >
 > [9.2 s] So we built a smaller platform image, with no Docker inside.
 >
@@ -967,7 +966,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 - *What does the Trivy gate check?* It scans the image and stops the deploy on a CRITICAL finding that has a fix. The Trivy action is pinned to a commit, not a tag.
 - *Are database migrations safe when two versions run?* Every service runs the migrations at startup under an advisory lock. Pods that start together migrate one after another.
 
-### Slide 20: The real pipeline runs
+### Slide 20: Pipeline runs (recorded)
 
 - Outline item: 5b · Recorded on GitHub
 - Speaker: HE RONG
@@ -1000,7 +999,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 - *Which run did the gate stop?* Run 39439752963. The gate found 5 critical CVEs there, and the next run with the fixed image, 39441445313, passed every job.
 - *Can we see the runs ourselves?* Yes. The runs are in the GitHub Actions page of the repository, under the workflow "Platform deploy".
 
-### Slide 21: What we found, and what we changed
+### Slide 21: Technical findings
 
 - Outline item: 5c · Technical findings
 - Speaker: HE RONG
@@ -1008,27 +1007,27 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 
 **What is on the screen.** Three panels from left to right, 21 s per loop. Each panel has a name, a small grey source, a picture, the problem in grey, the word "solution" with an arrow, and the change in white.
 
-- "Per-level queues, found in design": "one queue, readers wait" into "worker slots, all held by leads". After: three rows "level 0, level 1, level 2" into "worker slots, readers always run". Solution: "One queue per level of the task tree (AD-03)."
+- "Per-level queues, found in design": "one queue, readers wait" into "workers, all busy with leads". After: three rows "level 0, level 1, level 2" into "workers, readers always run". Solution: "One queue per level of the call tree (AD-03)."
 - "Trivy gate, image scan": "Lumen image, with Docker" into a diamond "gate". After: "platform image, no Docker", through the gate with a check. Problem: "5 critical CVEs, most in the docker.io package. The gate stopped the deploy." Solution: "deploy/k8s/Dockerfile: smaller, patched at build. The next run passed."
 - "KEDA scale-down, load test": a bar from "load ends", labelled "300 s, default", and under it "60 s, in the chart". Problem: "KEDA waits 300 s by default before it removes a worker." Solution: "The chart sets 60 s, so the workers go back to 1 a minute after the load."
 
 **What happens, in order.**
-- 0 s: "1. One queue for all turns: leads hold every worker slot".
+- 0 s: "1. One queue for all jobs: the leads hold every worker".
 - 1.4 s: "1. Their readers wait in the same queue: a deadlock".
-- 3.1 s: "1. The one queue divides into a queue per level".
+- 3.1 s: "1. The one queue splits into a queue per level".
 - 6.0 s: "2. The Lumen image carries Docker: the gate stops it".
 - 9.0 s: "2. The image shrinks: no Docker inside, and it passes".
 - 12.4 s: "3. By default, KEDA waits 300 s before it removes a worker". The bar fills.
-- 15.4 s: "3. The chart sets 60 s: the bar shrinks to a fifth".
-- 18.1 s: "Three technical findings and how the team fixed them". Loop at 21.1 s.
+- 15.4 s: "3. The chart sets 60 s, a fifth of the default".
+- 18.1 s: "Three technical findings and their fixes". Loop at 21.1 s.
 
 **What to say.**
 
 > 5c, our technical findings. We found three problems, and we fixed each one.
 >
-> [0 s] First, one queue for all turns. The leads held every worker slot, while their readers waited in the same queue.
+> [0 s] First, one queue for all jobs. The leads held every worker, while their readers waited in the same queue.
 >
-> [3.1 s] So the one queue became a queue for each level of the task tree.
+> [3.1 s] So the one queue became a queue for each level of the call tree.
 >
 > [6 s] Second, our first image had Docker inside. The Trivy gate stopped it, with 5 critical CVEs, most of them in the Docker package.
 >
@@ -1036,7 +1035,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 >
 > [12.4 s] Third, we found this one in the load test. By default, KEDA waits 300 seconds before it removes a worker.
 >
-> [15.4 s] Our chart sets 60 seconds. Here the bar shrinks to a fifth. So the workers go back to one a minute after the load.
+> [15.4 s] Our chart sets 60 seconds, a fifth of the default. So the workers go back to one a minute after the load.
 
 **Point at.**
 1. The "solution" line in each panel.
@@ -1046,13 +1045,13 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 - *Why did the image have Docker inside?* The base product runs code in a sandbox, so its image carries a Docker engine. The platform workers do not need it, so the platform image leaves it out and installs the security updates at build time.
 - *Why 60 seconds?* With the default, the extra workers stay for five minutes after the load. With 60 seconds, the workers go back to one a minute after the load, and KEDA still checks the queues every 10 seconds.
 
-### Slide 22: KEDA adds workers as the queue grows
+### Slide 22: Scalability: load test
 
 - Outline item: 6b · Scalability
 - Speaker: HE RONG
 - Time: 95 s
 
-**What is on the screen.** A bar chart of the real load test, 22 s per loop. A grey line at the top: "load test, 20 October: the paced worker, no model calls". A legend: grey square "jobs waiting (three queues)", dashed line "target: 5 waiting jobs per worker".
+**What is on the screen.** A bar chart of the real load test, 22 s per loop. A grey line at the top: "load test, 20 October, with a fixed delay in place of each model call". A legend: grey square "jobs waiting (three queues)", dashed line "target: 5 waiting jobs per worker".
 
 - The chart: y axis 0 to 30 jobs; x axis 0 s to 180 s. Grey bars show the waiting jobs. A white vertical cursor moves from left to right. The dashed target line steps up from 5 to 10, 15 and 20 as workers are added, then steps down.
 - Right: "worker pods (KEDA)" with a count and four boxes, "worker 1" to "worker 4".
@@ -1061,37 +1060,37 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 **What happens, in order.**
 - 0 s: "Ten users ask questions without pause". The cursor starts at 0 s.
 - 3.6 s: "One worker falls behind; the queue grows". A bar passes the dashed line at 5.
-- 5.6 s: "Above 5 jobs per worker, KEDA adds a pod: the worker divides". The worker box divides as the cursor passes that moment; the count rises to 4.
+- 5.6 s: "Above 5 jobs per worker, KEDA adds a worker pod". A new worker box appears as the cursor passes that moment; the count rises to 4.
 - 10.0 s: "With 4 workers, the queue stops growing, then drains". The highest bar is near 29.
-- 13.2 s: "A minute after the load, KEDA removes the extra pods: they merge back".
-- 18.5 s: "Up to 4 workers at the peak, back to 1 after; no request failed". The result box appears. Loop at 21.8 s.
+- 13.2 s: "A minute after the load, KEDA removes the extra pods".
+- 18.5 s: "Load test of 20 October: 1 to 4 workers, and no request failed". The result box appears. Loop at 21.8 s.
 
 **What to say.**
 
-> Now 6b, scalability. This is our real load test of 20 October. We used the paced worker, which makes no model calls. So the test measures the platform's scaling, not the model.
+> Now 6b, scalability. This is our real load test of 20 October. We put a fixed delay in place of each model call. So the test measures the platform's scaling, not the model.
 >
 > [0 s] Ten users ask questions without a pause. The grey bars are the jobs that wait on the three queues. The dashed line is KEDA's target: five waiting jobs per worker.
 >
 > [3.6 s] One worker falls behind, and the queue grows.
 >
-> [5.6 s] When more than five jobs wait per worker, KEDA adds a pod. Here on the right, you see the worker divide as the cursor passes that moment. We went from one to four workers in 49 seconds.
+> [5.6 s] When more than five jobs wait per worker, KEDA adds a pod. Here on the right, a new worker pod appears as the cursor passes that moment. We went from one to four workers in 49 seconds.
 >
 > [10 s] With four workers, the queue stops growing. Then it drains.
 >
-> [13.2 s] A minute after the load ends, KEDA removes the extra pods. They merge back into one.
+> [13.2 s] A minute after the load ends, KEDA removes the extra pods. One worker remains.
 >
 > [18.5 s] All 135 questions finished. The median time was 6.1 seconds. And not one of the 1,040 requests failed.
 
 **Point at.**
 1. The dashed target line as it steps up.
-2. The worker boxes on the right when they divide.
+2. The worker boxes on the right when they appear.
 3. The result box at the end.
 
 **If asked.**
-- *The proposal said 200 concurrent sessions.* This test shows the mechanism that carries that load: KEDA adds a worker for each five waiting turns, and HPA adds pods on CPU. The same Helm chart runs on EKS, where node autoscaling adds machines as the load grows.
-- *Why the paced worker and not the real model?* The paced worker makes the test measure the platform, not the speed of the model provider, and it costs nothing. The scaling path is the same: the turns go through the same queues and the same KEDA trigger.
+- *The proposal said 200 concurrent sessions.* This test shows the mechanism that carries that load: KEDA adds a worker for each five waiting jobs, and HPA adds pods on CPU. The same Helm chart runs on EKS, where node autoscaling adds machines as the load grows.
+- *Why a fixed delay and not the real model?* The delay makes the test measure the platform, not the speed of the model provider, and it costs nothing. The scaling path is the same: the jobs go through the same queues and the same KEDA trigger.
 
-### Slide 23: On the server: KEDA adds a worker
+### Slide 23: KEDA scaling (recorded)
 
 - Outline item: 6b · Recorded on the server
 - Speaker: HE RONG
@@ -1130,7 +1129,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 
 **If asked.**
 - *What does "4500m" mean?* It is Kubernetes notation for 4.5. It means 4.5 waiting jobs per worker on average.
-- *What does "+ 1 more" mean in TARGETS?* KEDA watches all three turn queues, one trigger for each. The column shows two of them and says that one more follows.
+- *What does "+ 1 more" mean in TARGETS?* KEDA watches all three job queues, one trigger for each. The column shows two of them and says that one more follows.
 
 **Handover.** "That is persistence, DevOps and scalability. PENG XUJIAN built the project service, the agent registry, usage and the literature watch app. PENG XUJIAN will now show the platform live."
 
@@ -1140,7 +1139,7 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 
 You built the project service, the agent registry, usage and the literature watch app. In the questions, you answer about the registry, usage and the watch app.
 
-### Slide 24: Now, on the public server
+### Slide 24: Live demo
 
 - Outline item: 6a · 6b · Live demo
 - Speaker: PENG XUJIAN
@@ -1150,7 +1149,7 @@ You built the project service, the agent registry, usage and the literature watc
 
 - Use case: ask a question in the browser; watch the call tree grow
 - Use case: the watch app publishes its agent and asks; then read usage
-- Scalability: the recorded load test; KEDA's state, live
+- Scalability: the recorded load test, then KEDA live
 - Availability: delete a worker during a question; it still ends
 - Maintainability: open the last pipeline run on GitHub
 
@@ -1230,7 +1229,7 @@ Do these on the presenting computer. Owner: LIU ZIYANG with PENG XUJIAN.
 >
 > First, the producer side. This command publishes the agent "literature-scout" to the registry. An agent is a slug, a name, a description and its instructions.
 >
-> Now the consumer side. The watch asks the platform one question for each topic on its list, with that agent. While it runs, the platform does the same work that you saw in the browser: a task tree, steps with their cost, the budget cap.
+> Now the consumer side. The watch asks the platform one question for each topic on its list, with that agent. While it runs, the platform does the same work that you saw in the browser: a call tree, steps with their cost, and the budget cap.
 >
 > Here is the digest: the answer, the findings, the cost and the time it took.
 >
@@ -1250,11 +1249,11 @@ Do these on the presenting computer. Owner: LIU ZIYANG with PENG XUJIAN.
 - What appears: slide 22 shows the bars of waiting jobs and the worker count going from 1 to 4. Slide 23 shows the recorded watch, with the replicas going up. In the terminal, the first command lists the scaled object of the worker (minimum 1, maximum 4) and the CPU autoscalers of identity, project and billing. The second command lists the worker pods that run now.
 - What to say:
 
-> Now scalability. We ran the k6 load test on this server on 20 October, and He Rong showed it a moment ago. Here it is again. Ten users ask without a pause. Above five waiting turns per worker, KEDA adds a worker: from one to four in 49 seconds, and back to one after the load. 135 questions, and no request failed.
+> Now scalability. We ran the k6 load test on this server on 20 October, and He Rong showed it a moment ago. Here it is again. Ten users ask without a pause. Above five waiting jobs per worker, KEDA adds a worker: from one to four in 49 seconds, and back to one after the load. 135 questions, and no request failed.
 >
 > Here is the same autoscaler, recorded on this server. The replicas follow the queue.
 >
-> Now I show it live. Here is KEDA's scaled object for the worker: at least one replica, at most four. Here are the CPU autoscalers for identity, project and billing. And here are the worker pods that run now. When the queue grows past five turns per worker, KEDA adds a pod, as you saw in the recording.
+> Now I show it live. Here is KEDA's scaled object for the worker: at least one replica, at most four. Here are the CPU autoscalers for identity, project and billing. And here are the worker pods that run now. When the queue grows past five jobs per worker, KEDA adds a pod, as you saw in the recording.
 
 - If it fails: if kubectl does not answer, stay on slide 23 and say "This is the same autoscaler, recorded on this server."
 
@@ -1280,7 +1279,7 @@ Do these on the presenting computer. Owner: LIU ZIYANG with PENG XUJIAN.
 >
 > Here we read the question every four seconds. It is still running.
 >
-> And here it ends. A worker acknowledges a turn only when the turn is done. So RabbitMQ gave the open turn to another worker, and the question still ended.
+> And here it ends. A worker acknowledges a job only when the job is done. So RabbitMQ gave the open job to another worker, and the question still ended.
 >
 > And here is the new worker pod that Kubernetes started.
 

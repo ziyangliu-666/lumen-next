@@ -172,7 +172,7 @@ def milestones():
     for i in range(n + 1):
         st["t"] = i / n * len(DAYS)
         sc._add(sc._draw(), round(1000 / 30))
-    sc.step("3. Every part was built and deployed to AWS by 21 October", 3.2)
+    sc.step("3. Gantt chart: all tasks done and deployed to AWS by 21 October", 3.2)
     sc.save()
 
 

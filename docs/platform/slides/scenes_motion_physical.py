@@ -229,7 +229,7 @@ def physdecisions():
     """AD-09, AD-11 and AD-06, each as a small before-and-after morph."""
     PX = [0.15, 4.2, 8.25]
     CY = 4.18                                   # the captions' line
-    CAP = [("AD-09", "k3s on one EC2 t3.medium, not EKS", "the laptop chart, unchanged; USD 1.3 a day"),
+    CAP = [("AD-09", "k3s on one EC2 t3.medium, not EKS", "the same Helm chart; about USD 1.3 a day"),
            ("AD-11", "HPA on CPU; KEDA on queue length", "a worker waits on the model, so its CPU is low"),
            ("AD-06", "One PostgreSQL, tables per context", "one transaction: step, cost, ledger entry")]
 
@@ -346,8 +346,8 @@ def physdecisions():
                 text(c, b0 + 0.1, y - 0.02, 0.85, PODH + 0.04, name, 13, "Regular", INK if hl else INK2)
                 slots = [(PODX + i * (PODW + 0.08), y) for i in range(3)]
                 pod_row(c, slots, PODW, PODH, st["hpa"], label="pod", lit=False, stretch=0.16)
-            text(c, b0 + 0.1, 2.84, 3.6, 0.3, "KEDA: 5 turns per worker", 14, "Semibold", INK)
-            text(c, b0 + 0.1, QY - 0.03, 0.85, 0.3, "turns", 13, "Regular", INK if kl else INK2)
+            text(c, b0 + 0.1, 2.84, 3.6, 0.3, "KEDA: 5 jobs per worker", 14, "Semibold", INK)
+            text(c, b0 + 0.1, QY - 0.03, 0.85, 0.3, "jobs", 13, "Regular", INK if kl else INK2)
             c.queue(QX, QY, QN, cell=QCELL, active=kl)
             for j in range(int(st["queue"])):
                 x = QX + j * QCELL
@@ -413,7 +413,7 @@ def physdecisions():
     sc.hold(0.8)
 
     # AD-11: CPU rises and three services divide; turns wait and the worker divides
-    sc.step("AD-11: CPU passes 70%; identity, project and billing divide", 0.3, panel=2, hl=True)
+    sc.step("AD-11: CPU passes 70%, so HPA adds identity, project and billing pods", 0.3, panel=2, hl=True)
 
     def load(u):
         st["cpu"] = 0.22 + 0.7 * u
@@ -421,7 +421,7 @@ def physdecisions():
         st["hpa"][2] = max(0.0, min(1.0, (st["cpu"] - 0.8) / 0.08))
     sc.tween(2.6, load)
     sc.hold(0.5)
-    sc.step("AD-11: turns wait; the worker divides while its CPU stays low", 0.2, hl=False, kl=True)
+    sc.step("AD-11: jobs wait, so KEDA adds workers; their CPU stays low", 0.2, hl=False, kl=True)
 
     def turns(u):
         st["queue"] = QN * u
@@ -439,7 +439,7 @@ def physdecisions():
     sc.hold(1.0)
     sc.step("AD-06: one transaction writes the step, its cost and the ledger entry", 2.4, spot=True)
     sc.set(spot=False, cap=3)
-    sc.title = "Three decisions shape the physical architecture"
+    sc.title = "Physical architecture decisions AD-09, AD-11 and AD-06"
     sc.hold(3.0)
     sc.save()
 
@@ -583,7 +583,7 @@ def deployment():
     sc.step("HTTPS on 443 to Traefik, which routes to the service pods", 2.8, spot="https")
     sc.step("GitHub Actions deploys over SSH 22 into k3s", 2.4, spot="ssh")
     sc.step("The worker pod calls the OpenAI API over HTTPS", 2.4, spot="openai")
-    sc.step("One EC2 node runs the whole platform in k3s", 3.0, spot=None)
+    sc.step("UML deployment diagram: the platform in k3s on one EC2 node", 3.0, spot=None)
     sc.save()
 
 
@@ -623,7 +623,7 @@ def scaling():
     def paint(c, st):
         t = st["t"]
         seen = [d for d in data if d[0] <= t + 1e-6]
-        text(c, 0.3, 0.98, 10, 0.28, "load test, 20 October: the paced worker, no model calls", 13, "Regular", INK3)
+        text(c, 0.3, 0.98, 10, 0.28, "load test, 20 October, with a fixed delay in place of each model call", 13, "Regular", INK3)
         LY = 1.42
         c.bar(X0, LY + 0.07, 0.16, 0.16, INK2)
         text(c, X0 + 0.26, LY, 3, 0.3, "jobs waiting (three queues)", 13, "Medium", INK2)
@@ -698,16 +698,16 @@ def scaling():
     sc.step("One worker falls behind; the queue grows", 0.2)
     sweep(41)
     sc.hold(1.4)
-    sc.step("Above 5 jobs per worker, KEDA adds a pod: the worker divides", 0.2)
+    sc.step("Above 5 jobs per worker, KEDA adds a worker pod", 0.2)
     sweep(79, 12)
     sc.hold(1.4)
     sc.step("With 4 workers, the queue stops growing, then drains", 0.2)
     sweep(130, 22)
     sc.hold(1.0)
-    sc.step("A minute after the load, KEDA removes the extra pods: they merge back", 0.2)
+    sc.step("A minute after the load, KEDA removes the extra pods", 0.2)
     sweep(215, 20)
     sc.hold(1.2)
-    sc.step("Up to 4 workers at the peak, back to 1 after; no request failed", 3.4, cursor=False, result=True)
+    sc.step("Load test of 20 October: 1 to 4 workers, and no request failed", 3.4, cursor=False, result=True)
     sc.save()
 
 
@@ -926,10 +926,10 @@ def er():
 
     sc.set(focus="accounts")
     rel("An account has many API keys", "keys")
-    rel("An account owns the agents it registers", "acc_agents")
+    rel("An account owns the agents it publishes", "acc_agents")
     rel("A project keeps its account_id: an id from identity, no foreign key", "acc_proj", hold=1.6)
     sc.set(focus="agents")
-    rel("A question intent names one agent", "intents")
+    rel("A question can name one agent", "intents")
     sc.set(focus="projects")
     rel("A project has many findings, and its sessions keep its id", "proj_find", "proj_sess", hold=1.6)
     sc.set(focus="sessions")
@@ -943,7 +943,7 @@ def er():
     sc.title = "The worker runs the agents and owns no tables"
     sc.hold(1.6)
     sc.set(focus=None, legend=True)
-    sc.title = "PostgreSQL 16, money as numeric(12,6); turns stay in RabbitMQ"
+    sc.title = "ER diagram: PostgreSQL 16; money is numeric(12,6)"
     sc.hold(3.0)
     sc.save()
 
@@ -987,7 +987,7 @@ def sequence():
     LX0, LX1 = X[D] - 0.42, 11.84
 
     MSG = [("ask", A, C, "POST /api/v1/questions", False),
-           ("guard", C, C, "key guard check", False),
+           ("guard", C, C, "check the API key", False),
            ("start", C, D, "POST /internal/directory/start", False),
            ("publish", D, F, "publish lumen.turns.0", False),
            ("accepted", C, A, "201 {sessionId}", True),
@@ -1137,14 +1137,14 @@ def sequence():
     sc.title = "The app sends the question; project checks the key"
     send("ask")
     send("guard", hold=0.5)
-    sc.title = "Project opens a session; session publishes the root turn"
+    sc.title = "Session starts the question and puts the first job on the queue"
     send("start")
     send("publish", hold=0.6)
     sc.title = "par: from here, two lanes run at the same time"
     sc.set(now=set(), on=set())
     sc.tween(0.5, lambda u: st.update(par=u))
     sc.hold(0.8)
-    sc.title = "The app gets 201 at once, while a worker takes the turn"
+    sc.title = "The app gets 201 at once, while a worker takes the job"
     send("accepted", "consume", seconds=0.8, hold=0.9)
     sc.tween(0.4, lambda u: st.update(loop=u))
     sc.title = "The app reads the answer while the worker runs its steps"
@@ -1204,7 +1204,7 @@ def branches():
             text(c, 0.22, PLAT, 2.4, 0.28, "the platform's branch", 13, "Regular", INK2)
             c.line([(X0, MAIN), (X0, lerp(MAIN, PLAT, st["drop"]))], pt=2.5, color=INK)
             if st["drop"] >= 1:
-                text(c, X0 + 0.12, (MAIN + PLAT) / 2 - 0.14, 2, 0.28, "left main on 19 October", 13, "Regular", INK2)
+                text(c, X0 + 0.12, (MAIN + PLAT) / 2 - 0.14, 2, 0.28, "branched off main on 19 October", 13, "Regular", INK2)
         if st["px"] > X0:
             c.line([(X0, PLAT), (st["px"], PLAT)], pt=2.5, color=INK)
             for i in range(1, N + 1):
@@ -1263,17 +1263,17 @@ def branches():
     sc.title = "main holds Lumen, the base product"
     sc.tween(1.0, lambda u: st.update(main=u))
     sc.hold(0.8)
-    sc.title = "ass/platform grows out of main on 19 October"
+    sc.title = "ass/platform branches off main on 19 October"
     sc.tween(0.7, lambda u: st.update(drop=max(u, 1e-3)))
     sc.hold(0.4)
     sc.title = "Commits land on ass/platform"
     sc.tween(2.2, lambda u: st.update(px=lerp(X0, cx(BASE), u)))
     sc.hold(0.4)
-    sc.title = "A short-lived branch grows out for one change"
+    sc.title = "A short-lived branch holds one change"
     sc.set(featlit=True)
     sc.tween(1.2, lambda u: st.update(feat=max(u * 0.72, 1e-3)))
     sc.hold(0.4)
-    sc.title = "Pull request #148 grows back into ass/platform"
+    sc.title = "Pull request #148 merges it back into ass/platform"
     sc.tween(0.9, lambda u: st.update(feat=lerp(0.72, 1.0, u), px=lerp(cx(BASE), cx(MERGE), u)))
     kick(sc, "merge")
     sc.tween(0.3, lambda u: st.update(merged=u))
@@ -1289,7 +1289,7 @@ def branches():
         sc.tween(0.7, lambda u, key=key: st["art"].__setitem__(key, u))
         kick(sc, target)
         sc.hold(1.5)
-    sc.title = "One integration branch, one image per commit"
+    sc.title = "Git branches and the deploy path of each commit on ass/platform"
     sc.hold(3.0)
     sc.save()
 
@@ -1429,9 +1429,9 @@ def cicd():
         sc.hold(0.5)
 
     sc.step("The pipeline: .github/workflows/platform-deploy.yml", 2.0)
-    sc.title = "The first run: verify, SCA and SAST grow at the same time, and pass"
+    sc.title = "The first run: verify, SCA and SAST run at the same time and pass"
     run(False)
-    sc.title = "5 critical CVEs: the line breaks at the Trivy gate"
+    sc.title = "5 critical CVEs: the Trivy gate stops the deploy"
     sc.tween(0.4, lambda u: G.__setitem__("pass", 0.5 * u))
     sc.set(broken=True)
     sc.hold(0.3)
@@ -1457,7 +1457,7 @@ def cicd():
     grow_k(["out_dast", "out_smoke"], 0.5)
     reach("sum")
     sc.hold(0.5)
-    sc.step("Every stage passed: all jobs done in 12 min 30 s", 3.2, result=["all jobs done", "in 12 min 30 s"])
+    sc.step("CI/CD pipeline: all jobs passed in 12 min 30 s", 3.2, result=["all jobs done", "in 12 min 30 s"])
     sc.save()
 
 
@@ -1470,7 +1470,7 @@ def findings():
     HY = 1.0
     HEADS = [("Per-level queues", "found in design"), ("Trivy gate", "image scan"), ("KEDA scale-down", "load test")]
     WORDS = [("Leads wait for readers that wait\nin the same queue: a deadlock.",
-              "One queue per level of the task tree\n(AD-03)."),
+              "One queue per level of the call tree\n(AD-03)."),
              ("5 critical CVEs, most in the docker.io\npackage. The gate stopped the deploy.",
               "deploy/k8s/Dockerfile: smaller, patched\nat build. The next run passed."),
              ("KEDA waits 300 s by default\nbefore it removes a worker.",
@@ -1517,7 +1517,7 @@ def findings():
                     line(c, [(x0 + 1.45, r[1] + 0.105), (jx, r[1] + 0.105)], ink(INK2, m))
                 line(c, [(jx, LEV[0][1] + 0.105), (jx, LEV[2][1] + 0.105)], ink(INK2, m))
                 arrow(c, [(jx, MIDY), (SLOTS[0], MIDY)], 1, ink(INK2, m))
-            comp(c, *SLOTS, "worker slots", "all held by leads" if m < 0.5 else "readers always run",
+            comp(c, *SLOTS, "workers", "all busy with leads" if m < 0.5 else "readers always run",
                  p=pulse(st, "slots"))
 
         # 2. the image with Docker shrinks, and passes the gate
@@ -1569,12 +1569,12 @@ def findings():
         st["seen"] |= set(keys)
 
     # 1. per-level queues
-    sc.step("1. One queue for all turns: leads hold every worker slot", 1.4, seen={("p", 0)})
+    sc.step("1. One queue for all jobs: the leads hold every worker", 1.4, seen={("p", 0)})
     sc.title = "1. Their readers wait in the same queue: a deadlock"
     show(("pw", 0))
     kick(sc, "q")
     sc.hold(1.8)
-    sc.title = "1. The one queue divides into a queue per level"
+    sc.title = "1. The one queue splits into a queue per level"
     sc.tween(1.3, lambda u: st["m"].__setitem__(0, u))
     kick(sc, "slots")
     show(("sw", 0))
@@ -1601,11 +1601,11 @@ def findings():
     sc.tween(1.6, lambda u: st.update(fill=u))
     show(("pw", 2))
     sc.hold(1.4)
-    sc.title = "3. The chart sets 60 s: the bar shrinks to a fifth"
+    sc.title = "3. The chart sets 60 s, a fifth of the default"
     sc.tween(1.2, lambda u: st["m"].__setitem__(2, u))
     show(("sw", 2))
     sc.hold(1.6)
-    sc.title = "Three technical findings and how the team fixed them"
+    sc.title = "Three technical findings and their fixes"
     sc.hold(3.0)
     sc.save()
 

@@ -298,7 +298,7 @@ def decisions():
     PAIRS = [("identity", "identity"), ("projects", "project"), ("session", "session"), ("steering", "worker"),
              ("billing", "billing")]
     ROW = [1.7 + i * 0.5 for i in range(5)]
-    CAP = [("AD-01", "Five services, cut along the slices", "same image, a new entry point each"),
+    CAP = [("AD-01", "Five services, cut along the modules", "same image, a new entry point each"),
            ("AD-02", "A durable queue, not a direct call", "a slow model call never holds a request"),
            ("AD-04", "Session is the only writer of the trace", "a worker that dies loses no step")]
     # panel (b)
@@ -328,7 +328,7 @@ def decisions():
         # (a) AD-01: each slice becomes a service
         if st["panel"] > 0:
             x0 = PX[0]
-            c.text(x0 + 0.1, 1.32, 1.4, 0.28, "slices (main)", 13, "Regular", INK2)
+            c.text(x0 + 0.1, 1.32, 1.4, 0.28, "modules (main)", 13, "Regular", INK2)
             c.text(x0 + 2.15, 1.32, 1.4, 0.28, "services", 13, "Regular", INK2)
             for i, (s1, s2) in enumerate(PAIRS):
                 y = ROW[i]
@@ -374,11 +374,11 @@ def decisions():
     sc = Scene("decisions.gif", paint, st)
     travel = mover(sc, st)
     # AD-01: the slices, then each one becomes a service
-    sc.step("AD-01: each existing slice becomes a service", 1.2, panel=1, now="a")
+    sc.step("AD-01: each existing module becomes a service", 1.2, panel=1, now="a")
     for i in range(5):
         sc.set(a=i + 1)
         sc.hold(0.55)
-    sc.step("AD-01: five services, cut along the slices", 1.6, cap=1, now=None)
+    sc.step("AD-01: five services, cut along the modules", 1.6, cap=1, now=None)
     # AD-02: three turns go through the queue, each to a free worker
     sc.step("AD-02: a turn waits on a durable queue", 1.0, panel=2)
     for w in range(3):

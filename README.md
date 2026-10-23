@@ -96,3 +96,5 @@ Make `npm run verify` pass and use
 ## License
 
 [AGPL-3.0](LICENSE)
+
+<!-- CI pipeline demo for the SWE5006 presentation, 26 October 2026. This draft pull request is closed after the recording. -->

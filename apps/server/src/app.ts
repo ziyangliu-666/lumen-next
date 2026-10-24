@@ -182,7 +182,7 @@ export async function composeApp(options: AppOptions): Promise<App> {
           ((key) =>
             new OpenAICompatible({
               name: 'openai',
-              model: 'gpt-4.1-nano',
+              model: 'gpt-4.1-mini',
               baseUrl: 'https://api.openai.com/v1',
               apiKey: key,
             })),

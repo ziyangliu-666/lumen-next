@@ -246,9 +246,8 @@ jobs:
           if [ -n "$OPENAI_API_KEY" ]; then
             args+=(--set-string "extraSecrets.OPENAI_API_KEY=$OPENAI_API_KEY")
             args+=(--set-string "extraSecrets.LUMEN_MODEL_PROVIDER=openai")
-            # The cheapest OpenAI model the adapter is tested with. gpt-5-nano is cheaper per
-            # input token, but it bills its hidden reasoning as output, so a turn costs more.
-            args+=(--set-string "extraSecrets.LUMEN_MODEL=gpt-4.1-nano")
+            # gpt-4.1-nano is deprecated (OpenAI returns 404); mini is the default.
+            args+=(--set-string "extraSecrets.LUMEN_MODEL=gpt-4.1-mini")
           fi
           # config.worker "" lets the chart choose: steering when a model key
           # is set, demo otherwise. Force demo for a load test that costs nothing.

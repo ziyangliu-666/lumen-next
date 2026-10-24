@@ -344,9 +344,9 @@ describe('core/model: the process picks its provider from the environment', () =
     expect(reply.text).toContain('sky');
   });
 
-  it('builds each vendor with its key and its cheapest model, and refuses a name it does not know', () => {
+  it('builds each vendor with its key and its default model, and refuses a name it does not know', () => {
     const openai = modelFromEnv({ LUMEN_MODEL_PROVIDER: 'openai', OPENAI_API_KEY: 'k' });
-    expect([openai.name, openai.model]).toEqual(['openai', 'gpt-4.1-nano']);
+    expect([openai.name, openai.model]).toEqual(['openai', 'gpt-4.1-mini']);
     const deepseek = modelFromEnv({
       LUMEN_MODEL_PROVIDER: 'deepseek',
       DEEPSEEK_API_KEY: 'k',

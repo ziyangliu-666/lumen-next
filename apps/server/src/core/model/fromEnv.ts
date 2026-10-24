@@ -10,16 +10,16 @@ import type { ModelProvider } from './provider.js';
 export const PROVIDERS = ['openai', 'deepseek', 'none'] as const;
 export type ProviderName = (typeof PROVIDERS)[number];
 
-/** The cheapest model each vendor sells, for the demo and the tests. */
+/** The default model for each vendor, for the demo and the tests. */
 const DEFAULT_MODEL: Record<Exclude<ProviderName, 'none'>, string> = {
-  openai: 'gpt-4.1-nano',
+  openai: 'gpt-4.1-mini',
   deepseek: 'deepseek-flash',
 };
 
 /**
- * The models a session may choose, from LUMEN_MODELS ("gpt-4.1-nano,
- * gpt-4.1-mini"): the same vendor and key as the default, each its own model
- * name. The default (LUMEN_MODEL, or the vendor's cheapest) comes first. Each
+ * The models a session may choose, from LUMEN_MODELS ("gpt-4.1-mini,
+ * gpt-4.1"): the same vendor and key as the default, each its own model
+ * name. The default (LUMEN_MODEL, or the vendor's default) comes first. Each
  * must have a price row, or its calls could not be charged: the process
  * refuses to start rather than run a model it cannot bill. Unset, there is
  * no choice and the list holds the default alone.

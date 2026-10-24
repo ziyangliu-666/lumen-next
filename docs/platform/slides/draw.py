@@ -312,7 +312,13 @@ class Scene:
         self.hold(hold)
 
     def hold(self, seconds):
-        """The picture stays, and its icons keep moving."""
+        """The picture stays, and its icons keep moving.
+
+        A long hold is shortened: past 1.2 s only a tenth of it is kept. The speaker talks
+        over the finished picture, which PowerPoint keeps on screen after the GIF plays once;
+        holds stretched to the length of the words made the drawing itself too slow."""
+        if seconds > 1.2:
+            seconds = 1.2 + (seconds - 1.2) * 0.1
         n = max(1, round(seconds * HOLD_FPS))
         for _ in range(n):
             self._add(self._draw(), round(1000 / HOLD_FPS))

@@ -4,7 +4,7 @@ This script covers the deck `out/Team15-Lumen-Platform.pptx` (Team 15, 25 slides
 
 How to read each slide section:
 
-- **What to say** holds the exact words to say to the lecturers. A time in square brackets, for example [6 s], is a cue: say the next words when the picture reaches that second. Do not read the cue aloud.
+- **What to say** holds the exact words to say to the lecturers. A time in square brackets, for example [6 s], is the moment that step appears in the picture. Do not read it aloud. Speak at your own pace: the picture plays once, then stays on the finished diagram, so you can finish your words over it.
 - Each picture is a GIF. It starts when the slide opens, plays once, and then holds its last frame. The words after the last cue go over that held frame, and they describe it.
 - The times come from the GIF frames. They can be off by half a second.
 - Speak at about 140 words a minute. If a lecturer interrupts, answer in two or three sentences, say "I will continue", and go on. Cut words, not slides.
@@ -125,21 +125,21 @@ At the end, arrows join them: "publish an agent", "the agent's instructions", "a
 
 > [0 s] The platform sits between two groups of users.
 >
-> [3.5 s] On the left is the producer, the person who writes an agent. An agent is a model with instructions. The producer publishes it to this registry.
+> [1 s] On the left is the producer, the person who writes an agent. An agent is a model with instructions. The producer publishes it to this registry.
 >
-> [15.4 s] On the right are the consumers. An app, like our literature watch app, asks with its API key. People ask in the web app.
+> [5 s] On the right are the consumers. An app, like our literature watch app, asks with its API key. People ask in the web app.
 >
-> [25.4 s] In the middle, the run engine takes the agent's instructions.
+> [10 s] In the middle, the run engine takes the agent's instructions.
 >
-> [30 s] It runs each question as a call tree: the lead agent and the helper agents it starts.
+> [13 s] It runs each question as a call tree: the lead agent and the helper agents it starts.
 >
-> [37 s] It records each step, one model or tool call, with its cost.
+> [15 s] It records each step, one model or tool call, with its cost.
 >
-> [42.4 s] And it checks each step against the budget cap, the most an account may spend.
+> [16 s] And it checks each step against the budget cap, the most an account may spend.
 >
-> [48.6 s] The answer, the findings and the cost go back. People watch the run live.
+> [18 s] The answer, the findings and the cost go back. People watch the run live.
 >
-> [55.2 s] A new app builds none of this. Our literature watch app is about 210 lines of code.
+> [23 s] A new app builds none of this. Our literature watch app is about 210 lines of code.
 
 **Point at.**
 1. The producer on the left and the registry.
@@ -170,15 +170,15 @@ At the end, arrows join them: "publish an agent", "the agent's instructions", "a
 
 > [0 s] This is the use case diagram. The frame is the platform. Four actors stand outside it.
 >
-> [7 s] The producer publishes an agent and reads how much it is used.
+> [2 s] The producer publishes an agent and reads how much it is used.
 >
-> [12.3 s] The literature watch app asks questions. For each topic on its list, it writes a digest.
+> [7 s] The literature watch app asks questions. For each topic on its list, it writes a digest.
 >
-> [19.4 s] People in the web app ask questions and manage their API keys. They approve extra spend when a question would pass the budget cap.
+> [12 s] People in the web app ask questions and manage their API keys. They approve extra spend when a question would pass the budget cap.
 >
-> [29.2 s] The operator is our team. It reads usage too.
+> [19 s] The operator is our team. It reads usage too.
 >
-> [33.4 s] All six use cases run on the public server.
+> [22 s] All six use cases run on the public server.
 
 **Point at.**
 1. The producer and "Publish an agent".
@@ -212,9 +212,9 @@ At the end, arrows join them: "publish an agent", "the agent's instructions", "a
 
 > [0 s] This is the plan from our proposal. Each member has ten days, from 8 to 21 October.
 >
-> [7.5 s] We fixed the interfaces between the services first. Then each member built a service. Then came autoscaling, the public API and the pipeline.
+> [2 s] We fixed the interfaces between the services first. Then each member built a service. Then came autoscaling, the public API and the pipeline.
 >
-> [22 s] Every bar is done, and the platform runs on AWS. Each member spent ten person-days, which is 80 hours. That is 400 hours in total.
+> [16 s] Every bar is done, and the platform runs on AWS. Each member spent ten person-days, which is 80 hours. That is 400 hours in total.
 
 **Point at.**
 1. The "80 h" column on the left.
@@ -251,21 +251,21 @@ At the end, arrows join them: "publish an agent", "the agent's instructions", "a
 
 > [0 s] Here are three decisions of the logical design, each as before and after. First, Lumen was one program with five modules.
 >
-> [9 s] Each module became a service. The worker runs the agent loop: each agent's model and tool calls.
+> [2 s] Each module became a service. The worker runs the agent loop: each agent's model and tool calls.
 >
-> [16.9 s] Second, session called a worker directly.
+> [7 s] Second, session called a worker directly.
 >
-> [19.9 s] Now session puts each job, one piece of work for a worker, on a durable queue in RabbitMQ. A durable queue keeps its jobs when a program stops.
+> [8 s] Now session puts each job, one piece of work for a worker, on a durable queue in RabbitMQ. A durable queue keeps its jobs when a program stops.
 >
-> [32.2 s] More workers can start, and any free worker takes the next job. A web request returns before the model answers.
+> [13 s] More workers can start, and any free worker takes the next job. A web request returns before the model answers.
 >
-> [41.5 s] Third, the worker wrote each step to the database itself.
+> [18 s] Third, the worker wrote each step to the database itself.
 >
-> [46 s] Now the worker sends each step to session, and session writes it.
+> [20 s] Now the worker sends each step to session, and session writes it.
 >
-> [51.4 s] Session is the only writer of the steps. A step that reached session stays saved when a worker stops.
+> [24 s] Session is the only writer of the steps. A step that reached session stays saved when a worker stops.
 >
-> [59.8 s] The label says job queues, plural. Li Zhuoyang shows why there are three, on slide 13.
+> [28 s] The label says job queues, plural. Li Zhuoyang shows why there are three, on slide 13.
 
 **Point at.**
 1. The five service boxes in the first column.
@@ -309,27 +309,27 @@ Dashed arrows point down from each tier to the next, and from Project and from W
 
 > [0 s] A component diagram in four tiers. Each dependency points down, or sideways to session.
 >
-> [7.8 s] The clients see one thing: the API gateway, Traefik.
+> [2 s] The clients see one thing: the API gateway, Traefik.
 >
-> [11.8 s] The gateway routes each path to one of five services.
+> [5 s] The gateway routes each path to one of five services.
 >
-> [16.2 s] Only Project and Worker call session's internal routes. The gateway never routes those from outside.
+> [8 s] Only Project and Worker call session's internal routes. The gateway never routes those from outside.
 >
-> [22.9 s] The services use one PostgreSQL database, RabbitMQ for the job queues, and the model's external API.
+> [11 s] The services use one PostgreSQL database, RabbitMQ for the job queues, and the model's external API.
 >
-> [31.4 s] Now follow one question at run time. The watch app asks.
+> [16 s] Now follow one question at run time. The watch app asks.
 >
-> [36.4 s] Project passes it to session.
+> [20 s] Project passes it to session.
 >
-> [38.6 s] Session puts a job on the queue, and a free worker takes it.
+> [22 s] Session puts a job on the queue, and a free worker takes it.
 >
-> [44 s] The worker calls the model.
+> [25 s] The worker calls the model.
 >
-> [46.4 s] Each step goes back to session, and session saves it.
+> [28 s] Each step goes back to session, and session saves it.
 >
-> [50.9 s] The app reads the answer.
+> [31 s] The app reads the answer.
 >
-> [53.6 s] Billing has no line from session. Session checks the budget and records the spend in billing's tables, in the same database transaction.
+> [34 s] Billing has no line from session. Session checks the budget and records the spend in billing's tables, in the same database transaction.
 
 **Point at.**
 1. The gateway box, the one door for the clients.
@@ -366,19 +366,19 @@ Dashed arrows point down from each tier to the next, and from Project and from W
 
 > [0 s] Here is how we found the contexts. We took the nouns that users say in the six use cases: agent, question, step, budget cap.
 >
-> [10.4 s] We grouped them so each word keeps one meaning: five bounded contexts. Each box lists its aggregates, the things one transaction keeps consistent.
+> [5 s] We grouped them so each word keeps one meaning: five bounded contexts. Each box lists its aggregates, the things one transaction keeps consistent.
 >
-> [22.1 s] Each arrow is a domain event: a fact that one context tells another. Project sends "question asked", and receives "finding recorded".
+> [8 s] Each arrow is a domain event: a fact that one context tells another. Project sends "question asked", and receives "finding recorded".
 >
-> [31.4 s] Identity is upstream. It tells Project who asks, with which API key.
+> [14 s] Identity is upstream. It tells Project who asks, with which API key.
 >
-> [36.8 s] The worker receives "job queued" and sends "step recorded". It keeps no saved state.
+> [17 s] The worker receives "job queued" and sends "step recorded". It keeps no saved state.
 >
-> [43.1 s] Billing receives "spend recorded" and "approval needed".
+> [23 s] Billing receives "spend recorded" and "approval needed".
 >
-> [47.9 s] Session is part of every event but Identity's. It owns the call tree, what makes Lumen different, so it is the core domain.
+> [27 s] Session is part of every event but Identity's. It owns the call tree, what makes Lumen different, so it is the core domain.
 >
-> [58.4 s] Next, Lu Yi. Lu Yi built identity, the gateway, the API keys and the public API. Lu Yi now shows how apps use the platform, and where it runs.
+> [30 s] Next, Lu Yi. Lu Yi built identity, the gateway, the API keys and the public API. Lu Yi now shows how apps use the platform, and where it runs.
 
 **Point at.**
 1. The chain at the top: use cases, nouns, contexts, aggregates.
@@ -426,17 +426,17 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 
 > [0 s] This sequence diagram shows the real calls on our public API, in the order they happen.
 >
-> [7 s] First the producer. It creates an API key, then publishes an agent: a name, a description and its instructions.
+> [2 s] First the producer. It creates an API key, then publishes an agent: a name, a description and its instructions.
 >
-> [15.4 s] Now the consumer, on the left. It has its own API key. It lists the agents, then asks a question with one of them.
+> [8 s] Now the consumer, on the left. It has its own API key. It lists the agents, then asks a question with one of them.
 >
-> [26 s] The platform runs the agent on the question.
+> [15 s] The platform runs the agent on the question.
 >
-> [29.5 s] The consumer reads the answer, the findings and the cost.
+> [18 s] The consumer reads the answer, the findings and the cost.
 >
-> [35.3 s] Last, the producer reads its usage.
+> [22 s] Last, the producer reads its usage.
 >
-> [38.3 s] An app uses only these six calls.
+> [25 s] An app uses only these six calls.
 
 **Point at.**
 1. Calls 1 and 2, the producer phase.
@@ -475,19 +475,19 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 
 > [0 s] Now the physical architecture: three decisions. First, hosting. Our proposal put the Helm chart, our install package for Kubernetes, on EKS, the managed Kubernetes of AWS.
 >
-> [11.3 s] We run it on one EC2 t3.medium machine instead, with k3s, a small Kubernetes. It costs about 1.3 US dollars a day.
+> [3 s] We run it on one EC2 t3.medium machine instead, with k3s, a small Kubernetes. It costs about 1.3 US dollars a day.
 >
-> [21.4 s] The same chart installs on EKS without change.
+> [8 s] The same chart installs on EKS without change.
 >
-> [24.5 s] Second, scaling. HPA, the Kubernetes autoscaler, adds identity, project and billing pods when CPU passes 70 percent. A pod is one running copy of a service.
+> [11 s] Second, scaling. HPA, the Kubernetes autoscaler, adds identity, project and billing pods when CPU passes 70 percent. A pod is one running copy of a service.
 >
-> [36.2 s] A worker waits on the model, so its CPU stays low. So KEDA, an event-driven autoscaler, adds worker pods when jobs wait in the queue.
+> [16 s] A worker waits on the model, so its CPU stays low. So KEDA, an event-driven autoscaler, adds worker pods when jobs wait in the queue.
 >
-> [47.6 s] Third, the database. The proposal had a database for each service.
+> [22 s] Third, the database. The proposal had a database for each service.
 >
-> [52.4 s] We run one PostgreSQL. Each service keeps its own tables in it.
+> [24 s] We run one PostgreSQL. Each service keeps its own tables in it.
 >
-> [57.6 s] So one transaction writes the step, its cost and the ledger entry together. The ledger is billing's record of spend.
+> [27 s] So one transaction writes the step, its cost and the ledger entry together. The ledger is billing's record of spend.
 
 **Point at.**
 1. The arrow "same chart" to EKS.
@@ -525,21 +525,21 @@ You built identity, the gateway, HTTPS, the rate limits, the API keys and the pu
 
 > [0 s] This UML deployment diagram shows one AWS machine, an EC2 t3.medium in Singapore.
 >
-> [7.8 s] k3s runs inside it. The dashed frame, namespace lumen, holds our pods.
+> [3 s] k3s runs inside it. The dashed frame, namespace lumen, holds our pods.
 >
-> [14.4 s] Under each service is its pod count. Identity, project and billing run one to three, with HPA. The worker runs one to four, with KEDA.
+> [5 s] Under each service is its pod count. Identity, project and billing run one to three, with HPA. The worker runs one to four, with KEDA.
 >
-> [27 s] PostgreSQL keeps its data on a 2 gigabyte disk. RabbitMQ holds the job queues.
+> [10 s] PostgreSQL keeps its data on a 2 gigabyte disk. RabbitMQ holds the job queues.
 >
-> [34.5 s] Outside are the clients, GitHub Actions and OpenAI.
+> [12 s] Outside are the clients, GitHub Actions and OpenAI.
 >
-> [38.8 s] Users reach the platform only over HTTPS on port 443. Traefik routes each path to a service.
+> [16 s] Users reach the platform only over HTTPS on port 443. Traefik routes each path to a service.
 >
-> [46.2 s] GitHub Actions deploys over SSH on port 22.
+> [18 s] GitHub Actions deploys over SSH on port 22.
 >
-> [49.7 s] Only the worker pods call the OpenAI API.
+> [20 s] Only the worker pods call the OpenAI API.
 >
-> [53.2 s] The security group, the AWS firewall, opens only ports 22, 80 and 443.
+> [21 s] The security group, the AWS firewall, opens only ports 22, 80 and 443.
 
 **Point at.**
 1. The pod counts under the services.
@@ -623,27 +623,27 @@ You built the worker service, the job queues and the worker autoscaling. In the 
 
 > [0 s] Thank you. This decision is about a deadlock that we found in design. Here is one shared queue for all jobs. Two questions start two lead agents.
 >
-> [11.5 s] Each worker runs one job, so each worker takes a lead.
+> [3 s] Each worker runs one job, so each worker takes a lead.
 >
-> [16.4 s] Each lead starts three readers. It holds its worker while it waits for them.
+> [6 s] Each lead starts three readers. It holds its worker while it waits for them.
 >
-> [23 s] Here, a lead waits for its readers.
+> [9 s] Here, a lead waits for its readers.
 >
-> [25.8 s] Readers wait for workers.
+> [12 s] Readers wait for workers.
 >
-> [28.1 s] Every worker holds a lead.
+> [14 s] Every worker holds a lead.
 >
-> [30.7 s] The waits form a cycle, so no question can finish.
+> [16 s] The waits form a cycle, so no question can finish.
 >
-> [35.2 s] The fix is one queue per level of the call tree. Level 0 holds leads, and level 1 readers. Each worker takes a job from each level.
+> [20 s] The fix is one queue per level of the call tree. Level 0 holds leads, and level 1 readers. Each worker takes a job from each level.
 >
-> [47.4 s] A reader no longer waits behind a lead, so the cycle breaks.
+> [25 s] A reader no longer waits behind a lead, so the cycle breaks.
 >
-> [52.6 s] The readers run beside the leads.
+> [27 s] The readers run beside the leads.
 >
-> [58.1 s] Level 2 is for agents that readers start. Here it stays empty.
+> [33 s] Level 2 is for agents that readers start. Here it stays empty.
 >
-> [65.1 s] Both questions finish. In the real system, each worker runs up to four jobs from each level. The autoscaler watches all three queues.
+> [34 s] Both questions finish. In the real system, each worker runs up to four jobs from each level. The autoscaler watches all three queues.
 
 **Point at.**
 1. The triangle on the right when it closes into a cycle.
@@ -682,19 +682,19 @@ You built the worker service, the job queues and the worker autoscaling. In the 
 
 > [0 s] This is the detailed design of one use case, Ask a question, as a UML sequence diagram.
 >
-> [7 s] The watch app sends the question. Project checks the API key.
+> [3 s] The watch app sends the question. Project checks the API key.
 >
-> [12 s] Project asks session to start the question. Session puts the first job on the level 0 queue.
+> [6 s] Project asks session to start the question. Session puts the first job on the level 0 queue.
 >
-> [19.4 s] The par frame means that from here, two lanes run at the same time.
+> [9 s] The par frame means that from here, two lanes run at the same time.
 >
-> [25.6 s] In the upper lane, the app gets 201 at once. In the lower lane, a worker takes the job.
+> [11 s] In the upper lane, the app gets 201 at once. In the lower lane, a worker takes the job.
 >
-> [33.4 s] The app reads the answer whenever it likes. Session checks the key on this read too.
+> [14 s] The app reads the answer whenever it likes. Session checks the key on this read too.
 >
-> [40.6 s] Meanwhile the worker runs its steps in a loop. It calls the model and sends each step to session, which saves it in PostgreSQL.
+> [18 s] Meanwhile the worker runs its steps in a loop. It calls the model and sends each step to session, which saves it in PostgreSQL.
 >
-> [51.1 s] So no web request waits on the model.
+> [23 s] So no web request waits on the model.
 
 **Point at.**
 1. "job to level 0 queue".
@@ -835,27 +835,27 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 
 > [0 s] This ER diagram shows our one PostgreSQL 16 database. The frames group the tables by the service that owns them. The worker owns none.
 >
-> [10.6 s] An account has API keys.
+> [4 s] An account has API keys.
 >
-> [12.8 s] It owns the agents it publishes.
+> [6 s] It owns the agents it publishes.
 >
-> [15.3 s] A dashed line is an id with no foreign key, as in projects.
+> [8 s] A dashed line is an id with no foreign key, as in projects.
 >
-> [22.3 s] A question names an agent.
+> [10 s] A question names an agent.
 >
-> [24.4 s] Sessions keep their project's id.
+> [12 s] Sessions keep their project's id.
 >
-> [28.8 s] Each question is one row in sessions.
+> [14 s] Each question is one row in sessions.
 >
-> [33.5 s] Tasks is the centre. Its parent id forms the call tree, so the cost roll-up is plain SQL.
+> [17 s] Tasks is the centre. Its parent id forms the call tree, so the cost roll-up is plain SQL.
 >
-> [41.3 s] Each task has its steps.
+> [19 s] Each task has its steps.
 >
-> [43.9 s] Readers record findings.
+> [21 s] Readers record findings.
 >
-> [45.7 s] Each model call of a task is a ledger entry in billing.
+> [23 s] Each model call of a task is a ledger entry in billing.
 >
-> [51 s] Solid lines are foreign keys. Four of them cross between owners. Findings point to sessions and to tasks. Ledger entries point to tasks, and agents point to accounts. Money is stored as numeric 12, 6.
+> [26 s] Solid lines are foreign keys. Four of them cross between owners. Findings point to sessions and to tasks. Ledger entries point to tasks, and agents point to accounts. Money is stored as numeric 12, 6.
 
 **Point at.**
 1. The frames around the tables of each service.
@@ -893,23 +893,23 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 
 > [0 s] Now DevOps. First, the source and the artifacts. Main holds Lumen, the base product.
 >
-> [6.1 s] The platform work lives on one integration branch off main.
+> [3 s] The platform work lives on one integration branch off main.
 >
-> [10.5 s] Commits land on it.
+> [5 s] Commits land on it.
 >
-> [13.1 s] A short-lived feature branch holds one change,
+> [8 s] A short-lived feature branch holds one change,
 >
-> [16.2 s] and a pull request merges it back after review.
+> [10 s] and a pull request merges it back after review.
 >
-> [19.6 s] Every commit lands on this branch, and each push deploys.
+> [13 s] Every commit lands on this branch, and each push deploys.
 >
-> [24.5 s] Every push builds one image, tagged with its commit.
+> [15 s] Every push builds one image, tagged with its commit.
 >
-> [28 s] The pipeline copies the image over SSH into k3s on the EC2 host.
+> [17 s] The pipeline copies the image over SSH into k3s on the EC2 host.
 >
-> [33.3 s] And helm puts it live.
+> [19 s] And helm puts it live.
 >
-> [35.6 s] So we need no image registry, and each running version maps to one commit.
+> [21 s] So we need no image registry, and each running version maps to one commit.
 
 **Point at.**
 1. The pull request.
@@ -948,19 +948,19 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 
 > [0 s] Next, the pipeline. A push to the integration branch starts it.
 >
-> [4.8 s] Verify, SCA and SAST run at the same time. Verify runs lint, types and tests. SCA audits the dependencies, and SAST is CodeQL, a static analysis.
+> [2 s] Verify, SCA and SAST run at the same time. Verify runs lint, types and tests. SCA audits the dependencies, and SAST is CodeQL, a static analysis.
 >
-> [16.1 s] Then Trivy scans the image for known security flaws, called CVEs. The first two runs stopped here. The image had 5 critical CVEs, so it never reached the host.
+> [8 s] Then Trivy scans the image for known security flaws, called CVEs. The first two runs stopped here. The image had 5 critical CVEs, so it never reached the host.
 >
-> [28.8 s] We built a smaller platform image without Docker inside.
+> [11 s] We built a smaller platform image without Docker inside.
 >
-> [32.7 s] In the next run, the image passes the gate.
+> [13 s] In the next run, the image passes the gate.
 >
-> [37.2 s] The deploy steps run one after another: copy, import, helm, health check.
+> [17 s] The deploy steps run one after another: copy, import, helm, health check.
 >
-> [42.3 s] Then DAST scans the live address with OWASP ZAP. A smoke load, a short k6 test, runs at the same time.
+> [21 s] Then DAST scans the live address with OWASP ZAP. A smoke load, a short k6 test, runs at the same time.
 >
-> [50.6 s] Every job passed. From the first job to the last took 12 minutes 30 seconds. GitHub shows 20 minutes 45 seconds for this run. That time includes 8 minutes of waiting for the run before it.
+> [24 s] Every job passed. From the first job to the last took 12 minutes 30 seconds. GitHub shows 20 minutes 45 seconds for this run. That time includes 8 minutes of waiting for the run before it.
 
 **Point at.**
 1. The three parallel checks on the left.
@@ -1028,15 +1028,15 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 
 > [0 s] Three problems. The first two you saw on slides 13 and 19.
 >
-> [5.8 s] One queue per level of the call tree ended the deadlock.
+> [3 s] One queue per level of the call tree ended the deadlock.
 >
-> [10.1 s] The image scan stopped the old image, which carried Docker.
+> [5 s] The image scan stopped the old image, which carried Docker.
 >
-> [18.5 s] The smaller image without Docker passed.
+> [8 s] The smaller image without Docker passed.
 >
-> [21.6 s] The third we found in the load test. By default, KEDA waits 300 seconds after the load before it removes a worker.
+> [12 s] The third we found in the load test. By default, KEDA waits 300 seconds after the load before it removes a worker.
 >
-> [30.7 s] Our Helm chart sets 60 seconds, a fifth of the default. So the extra workers leave a minute after the load, and KEDA still checks the queues every 10 seconds.
+> [15 s] Our Helm chart sets 60 seconds, a fifth of the default. So the extra workers leave a minute after the load, and KEDA still checks the queues every 10 seconds.
 
 **Point at.**
 1. The "solution" line in each panel.
@@ -1069,15 +1069,15 @@ You built the billing service, the Kubernetes setup, the Helm chart, the pipelin
 
 > [0 s] This is our real load test of 20 October. A fixed delay replaced each model call, so the test measures the platform's scaling. Ten users ask questions without a pause.
 >
-> [13.4 s] The grey bars are the jobs in the three queues. One worker falls behind, and the queues grow.
+> [4 s] The grey bars are the jobs in the three queues. One worker falls behind, and the queues grow.
 >
-> [21.8 s] The dashed line is KEDA's target: five jobs for each worker. KEDA checks each queue against it, and adds worker pods, up to four.
+> [7 s] The dashed line is KEDA's target: five jobs for each worker. KEDA checks each queue against it, and adds worker pods, up to four.
 >
-> [32.6 s] Four is the maximum we set. With four workers, the queue stops growing and drains to zero.
+> [12 s] Four is the maximum we set. With four workers, the queue stops growing and drains to zero.
 >
-> [40.3 s] A minute after the load ends, KEDA removes the extra pods. One worker remains.
+> [16 s] A minute after the load ends, KEDA removes the extra pods. One worker remains.
 >
-> [46.2 s] All 135 questions finished, with a median of 6.1 seconds. Not one of the 1,040 requests failed.
+> [22 s] All 135 questions finished, with a median of 6.1 seconds. Not one of the 1,040 requests failed.
 
 **Point at.**
 1. The dashed target line as it steps up.

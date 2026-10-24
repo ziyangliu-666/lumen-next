@@ -46,10 +46,10 @@ describe('the model a session chose', () => {
     const env = {
       LUMEN_MODEL_PROVIDER: 'openai',
       OPENAI_API_KEY: 'x',
-      LUMEN_MODELS: 'gpt-4.1-mini, gpt-4.1-nano',
+      LUMEN_MODELS: 'gpt-4.1, gpt-4.1-mini',
     };
-    expect([...modelChoicesFromEnv(env).keys()]).toEqual(['gpt-4.1-nano', 'gpt-4.1-mini']);
-    expect([...modelChoicesFromEnv({ ...env, LUMEN_MODELS: '' }).keys()]).toEqual(['gpt-4.1-nano']);
+    expect([...modelChoicesFromEnv(env).keys()]).toEqual(['gpt-4.1-mini', 'gpt-4.1']);
+    expect([...modelChoicesFromEnv({ ...env, LUMEN_MODELS: '' }).keys()]).toEqual(['gpt-4.1-mini']);
     expect(() => modelChoicesFromEnv({ ...env, LUMEN_MODELS: 'gpt-9-unpriced' })).toThrow(
       /no price/,
     );

@@ -70,7 +70,7 @@ const TEMPLATES: readonly Template[] = [
     instructions: [
       'For the topic in the question:',
       '1. Search arXiv for papers from the last twelve months, and pick the three most relevant.',
-      '2. Delegate one reader per paper. Give each reader the topic and the paper title. Each reader searches arXiv for the paper and records one finding with record_finding: title = the short name of the paper; text = authors, year, arXiv link, and one line on what it adds.',
+      "2. Delegate one reader per paper, all at once. In each reader's task, give the topic and the paper title, and ask it to search arXiv for that paper and record exactly one finding with record_finding: title = the short name of the paper; text = authors, year, arXiv link, and one line on what it adds.",
       '3. Reply with a short digest: what is new, what is still open, and which paper to read first.',
       'Give only papers a search returned.',
     ].join('\n'),
@@ -82,7 +82,7 @@ const TEMPLATES: readonly Template[] = [
     instructions: [
       'For the sequence or counting problem in the question:',
       '1. Search OEIS with the terms, and pick up to three candidate sequences.',
-      '2. Delegate one reader per candidate. Each reader searches OEIS for it and records one finding with record_finding: title = the A-number and name; text = the terms that match, a formula, and where it differs.',
+      "2. Delegate one reader per candidate, all at once. In each reader's task, give the A-number, and ask it to search OEIS for it and record exactly one finding with record_finding: title = the A-number and name; text = the terms that match, a formula, and where it differs.",
       '3. Reply with the best match and how sure you are.',
     ].join('\n'),
   },
@@ -92,8 +92,8 @@ const TEMPLATES: readonly Template[] = [
     description: 'Maps earlier, parallel and follow-up work around an idea.',
     instructions: [
       'For the paper or idea in the question:',
-      '1. Name three directions: earlier foundations, parallel approaches, and recent follow-ups.',
-      '2. Delegate one reader per direction. Each reader searches arXiv and records one finding with record_finding: title = the direction; text = the two most relevant papers, with authors, year and link.',
+      '1. Search arXiv for the idea, and from the results name three directions: earlier foundations, parallel approaches, and recent follow-ups.',
+      "2. Delegate one reader per direction, all at once. In each reader's task, name the direction, and ask it to search arXiv and record exactly one finding with record_finding: title = the direction; text = the two most relevant papers, with authors, year and link.",
       '3. Reply with a short map of how the directions connect.',
       'Give only papers a search returned.',
     ].join('\n'),
@@ -105,7 +105,7 @@ const TEMPLATES: readonly Template[] = [
     instructions: [
       'For the area in the question:',
       '1. Search arXiv for recent papers that state open problems or conjectures in it.',
-      '2. Delegate three readers, one per problem. Each records one finding with record_finding: title = the problem in a few words; text = where it is stated (authors, year, link) and what is known.',
+      "2. Delegate three readers, one per problem, all at once. In each reader's task, name the problem, and ask it to search arXiv and record exactly one finding with record_finding: title = the problem in a few words; text = where it is stated (authors, year, link) and what is known.",
       '3. Reply with the problems in order of how approachable they look.',
     ].join('\n'),
   },
@@ -116,7 +116,7 @@ const TEMPLATES: readonly Template[] = [
     instructions: [
       'For the problem in the question:',
       '1. Search arXiv and pick three different methods used for it.',
-      '2. Delegate one reader per method. Each records one finding with record_finding: title = the method; text = the key paper (authors, year, link), its strength and its limit.',
+      "2. Delegate one reader per method, all at once. In each reader's task, name the method, and ask it to search arXiv and record exactly one finding with record_finding: title = the method; text = the key paper (authors, year, link), its strength and its limit.",
       '3. Reply with a short comparison and which method to try first.',
     ].join('\n'),
   },

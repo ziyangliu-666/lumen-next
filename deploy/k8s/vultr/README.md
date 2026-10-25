@@ -7,12 +7,13 @@ RabbitMQ and worker files use k3s local-path storage on this VM.
 ## Provision a separate host
 
 The live host (`lumen-ass`, 139.180.185.51) is Singapore (`sgp`), Ubuntu
-24.04 x64 (`os_id` 2284), Cloud Compute `vc2-1c-2gb`: 1 vCPU, 2 GB RAM,
-55 GB SSD, USD 10/month on 25 October 2026. It is the cheapest plan that runs
-the chart; the AWS `t3.medium` used about 2 GB under load, and swap covers
-the peaks. If pods stay Pending or get OOM-killed, resize in place to
-`vc2-2c-4gb` (USD 20/month); Vultr cannot downsize again. Confirm the current
-price before creating a host. A powered-off Vultr
+24.04 x64 (`os_id` 2284), Cloud Compute `vc2-2c-4gb`: 2 vCPU, 4 GB RAM,
+80 GB SSD, USD 20/month on 25 October 2026. This is the smallest plan that
+works. `vc2-1c-2gb` (USD 10) was tried first: during the first install it
+swapped about 500 MB, the one CPU stayed at 100%, the k3s API timed out and
+Helm was left in `pending-install`. Vultr can resize up in place, keeping
+the IP, but cannot resize down. Confirm the current price before creating a
+host. A powered-off Vultr
 VM still incurs charges; stopping it at night does not save the instance fee.
 
 Create a dedicated SSH key entry using the public half of the existing

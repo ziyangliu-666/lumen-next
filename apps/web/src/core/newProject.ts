@@ -75,6 +75,20 @@ function created(result: unknown): { projectId: string; sessionId: string } | nu
   return { projectId: result.project.id, sessionId: result.sessionId };
 }
 
+/** The answer of POST /api/v1/questions: `{sessionId, projectId, agent}`. */
+function asked(result: unknown): { projectId: string; sessionId: string } | null {
+  if (
+    !result ||
+    typeof result !== 'object' ||
+    !('sessionId' in result) ||
+    typeof result.sessionId !== 'string' ||
+    !('projectId' in result) ||
+    typeof result.projectId !== 'string'
+  )
+    return null;
+  return { projectId: result.projectId, sessionId: result.sessionId };
+}
+
 export interface NewProjectOptions {
   /**
    * Set when the person cannot send yet, for example nobody is signed in.
@@ -102,7 +116,7 @@ export interface NewProject {
    * Starts the project. Files go to its /mnt/upload right after it is
    * created, and the question names them, so lumen looks there.
    */
-  readonly submit: (files?: readonly File[], model?: string) => Promise<void>;
+  readonly submit: (files?: readonly File[], model?: string, agent?: string) => Promise<void>;
 }
 
 /** The draft, the checks, and the create, visit and open steps of a new project. */
@@ -117,7 +131,11 @@ export function useNewProject({ notReady = null, onUnauthorized }: NewProjectOpt
     saveProjectDraft(next);
   }
 
-  async function submit(files: readonly File[] = [], model?: string): Promise<void> {
+  async function submit(
+    files: readonly File[] = [],
+    model?: string,
+    agent?: string,
+  ): Promise<void> {
     if (pending || uncertain) return;
     // The person asks; the field does not send an empty question.
     const typed = draft.question.trim();
@@ -138,11 +156,16 @@ export function useNewProject({ notReady = null, onUnauthorized }: NewProjectOpt
     setPending(true);
     setError(null);
     try {
-      const result = created(
-        await request<unknown>('/api/projects', {
-          json: { question, mode, ...(model ? { model } : {}) },
-        }),
-      );
+      // With an agent, the project starts through the public API, the same
+      // route the literature watch uses (POST /api/v1/questions): it records
+      // which agent leads the session, so the producer's usage counts it.
+      const result = agent
+        ? asked(await request<unknown>('/api/v1/questions', { json: { question, agent } }))
+        : created(
+            await request<unknown>('/api/projects', {
+              json: { question, mode, ...(model ? { model } : {}) },
+            }),
+          );
       if (!result) {
         setUncertain(true);
         throw new Error('The server did not confirm the new project. Check Projects first.');

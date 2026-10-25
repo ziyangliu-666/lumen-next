@@ -13,6 +13,7 @@ import { markBusy } from '@/core/favicon';
 import { ModelPicker, useModels } from '@/core/models';
 import { go } from '@/core/router';
 import { BarActions, BarCrumb, BarStatus } from '@/core/shell';
+import { SessionAgent } from '@/core/agents';
 import {
   apply,
   fetchSession,
@@ -585,6 +586,7 @@ export function Session(): JSX.Element {
       <BarCrumb>{crumb}</BarCrumb>
 
       <BarStatus>
+        <SessionAgent sessionId={thisSession} />
         {status}
         {/* One time label, in a fixed slot, so the cluster does not move
             when the run ends: the turn's clock while it runs, the time it

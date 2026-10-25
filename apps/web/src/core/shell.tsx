@@ -97,7 +97,13 @@ export function PageCrumb({ page }: { page?: string }): JSX.Element {
           <h1 className="min-w-0 truncate text-sm font-semibold text-ink">{page}</h1>
         </>
       ) : (
-        <h1 className="text-sm font-semibold text-ink">Projects</h1>
+        <>
+          <h1 className="text-sm font-semibold text-ink">Projects</h1>
+          {/* The registry, one step from the projects: the platform's other half. */}
+          <a href="#/agents" className="shrink-0 pl-3 text-ink-2 hover:text-ink">
+            Agents
+          </a>
+        </>
       )}
     </BarCrumb>
   );
@@ -113,7 +119,7 @@ export function PageCrumb({ page }: { page?: string }): JSX.Element {
 function shotOf(path: string): ShotName {
   if (path === '/') return 'landing';
   if (path === '/signin') return 'signin';
-  if (path === '/home') return 'home';
+  if (path === '/home' || path === '/agents') return 'home';
   if (path === '/session') return 'session';
   return 'quiet';
 }

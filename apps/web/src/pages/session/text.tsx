@@ -255,6 +255,25 @@ export function tablesApart(text: string): string {
     .join('\n');
 }
 
+/**
+ * Models often write LaTeX as \( … \) and \[ … \]. Markdown reads the
+ * backslashes as escapes and prints "( n )", so these become $…$ and $$…$$,
+ * which remark-math draws. Code (fenced or inline) is left as it is.
+ */
+export function mathDelimiters(text: string): string {
+  // Odd parts are code: a fenced block or an inline span.
+  return text
+    .split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/)
+    .map((part, i) =>
+      i % 2 === 1
+        ? part
+        : part
+            .replace(/\\\[([\s\S]+?)\\\]/g, (_, body: string) => `\n$$\n${body.trim()}\n$$\n`)
+            .replace(/\\\(([\s\S]+?)\\\)/g, (_, body: string) => `$${body.trim()}$`),
+    )
+    .join('');
+}
+
 /** A reply, drawn from its Markdown. */
 export function ReplyText({ text }: { text: string }): JSX.Element {
   return (
@@ -269,7 +288,7 @@ export function ReplyText({ text }: { text: string }): JSX.Element {
         rehypePlugins={[rehypeKatex]}
         components={COMPONENTS}
       >
-        {tablesApart(text)}
+        {tablesApart(mathDelimiters(text))}
       </Markdown>
     </div>
   );

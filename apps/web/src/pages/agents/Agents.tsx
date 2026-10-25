@@ -48,29 +48,90 @@ function slugOf(name: string): string {
     .slice(0, 40);
 }
 
-function seconds(value: number | null): string {
-  if (value === null) return '—';
-  if (value < 60) return `${Math.round(value)} s`;
-  return `${Math.floor(value / 60)} min ${Math.round(value % 60)} s`;
-}
-
 function money(dollars: number): string {
   return `$${dollars.toFixed(4)}`;
 }
 
-/** A filled-in example, so a demonstration does not wait on typing. */
-const EXAMPLE = {
-  name: 'Literature Scout',
-  slug: 'literature-scout',
-  description: 'Finds what was published recently on a topic, and says what is new in it.',
-  instructions: [
-    'You are a literature scout. For the topic in the question:',
-    '1. Search arXiv for papers from the last twelve months, and pick the three most relevant.',
-    '2. Delegate one reader per paper. Give each reader the topic and the paper title, and ask it to search arXiv for that paper and record exactly one finding with record_finding: title = the short name of the paper; text = authors, year, arXiv link, and one line on what it adds.',
-    '3. Reply with a short digest: what is new, what is still open, and which paper to read first.',
-    'Do not invent papers, authors or links. Give only what a search returned.',
-  ].join('\n'),
-};
+interface Template {
+  readonly name: string;
+  readonly slug: string;
+  readonly description: string;
+  readonly instructions: string;
+}
+
+// Ready agents for a demonstration. Each hands the work to readers that
+// search and record findings (the host has no sandbox), so a run shows a call
+// tree and findings.
+const TEMPLATES: readonly Template[] = [
+  {
+    name: 'Literature Scout',
+    slug: 'literature-scout',
+    description: 'Finds recent papers on a topic and says what is new.',
+    instructions: [
+      'For the topic in the question:',
+      '1. Search arXiv for papers from the last twelve months, and pick the three most relevant.',
+      '2. Delegate one reader per paper. Give each reader the topic and the paper title. Each reader searches arXiv for the paper and records one finding with record_finding: title = the short name of the paper; text = authors, year, arXiv link, and one line on what it adds.',
+      '3. Reply with a short digest: what is new, what is still open, and which paper to read first.',
+      'Give only papers a search returned.',
+    ].join('\n'),
+  },
+  {
+    name: 'Sequence Detective',
+    slug: 'sequence-detective',
+    description: 'Names an integer sequence from its first terms, with OEIS.',
+    instructions: [
+      'For the sequence or counting problem in the question:',
+      '1. Search OEIS with the terms, and pick up to three candidate sequences.',
+      '2. Delegate one reader per candidate. Each reader searches OEIS for it and records one finding with record_finding: title = the A-number and name; text = the terms that match, a formula, and where it differs.',
+      '3. Reply with the best match and how sure you are.',
+    ].join('\n'),
+  },
+  {
+    name: 'Related Work Mapper',
+    slug: 'related-work',
+    description: 'Maps earlier, parallel and follow-up work around an idea.',
+    instructions: [
+      'For the paper or idea in the question:',
+      '1. Name three directions: earlier foundations, parallel approaches, and recent follow-ups.',
+      '2. Delegate one reader per direction. Each reader searches arXiv and records one finding with record_finding: title = the direction; text = the two most relevant papers, with authors, year and link.',
+      '3. Reply with a short map of how the directions connect.',
+      'Give only papers a search returned.',
+    ].join('\n'),
+  },
+  {
+    name: 'Open Problem Finder',
+    slug: 'open-problems',
+    description: 'Lists open problems and conjectures stated in recent papers.',
+    instructions: [
+      'For the area in the question:',
+      '1. Search arXiv for recent papers that state open problems or conjectures in it.',
+      '2. Delegate three readers, one per problem. Each records one finding with record_finding: title = the problem in a few words; text = where it is stated (authors, year, link) and what is known.',
+      '3. Reply with the problems in order of how approachable they look.',
+    ].join('\n'),
+  },
+  {
+    name: 'Method Comparer',
+    slug: 'method-comparer',
+    description: 'Compares three methods for one problem from the literature.',
+    instructions: [
+      'For the problem in the question:',
+      '1. Search arXiv and pick three different methods used for it.',
+      '2. Delegate one reader per method. Each records one finding with record_finding: title = the method; text = the key paper (authors, year, link), its strength and its limit.',
+      '3. Reply with a short comparison and which method to try first.',
+    ].join('\n'),
+  },
+];
+
+/** A random template, not the one just shown, with a slug no agent has yet. */
+function pickTemplate(previous: string, taken: ReadonlySet<string>): Template {
+  const others = TEMPLATES.filter((item) => item.name !== previous);
+  const free = others.filter((item) => !taken.has(item.slug));
+  const pool = free.length > 0 ? free : others;
+  const template = pool[Math.floor(Math.random() * pool.length)] ?? TEMPLATES[0]!;
+  let slug = template.slug;
+  for (let n = 2; taken.has(slug); n += 1) slug = `${template.slug}-${n}`;
+  return { ...template, slug };
+}
 
 export function Agents(): JSX.Element {
   const { state: account } = useCurrentAccount();
@@ -134,11 +195,6 @@ export function Agents(): JSX.Element {
               Refresh
             </Button>
           </div>
-          <p className="mt-2 max-w-[44em] text-sm text-ink-2">
-            An agent is lumen&rsquo;s lead with a producer&rsquo;s instructions. Ask with one from a
-            new project, or from any app through the public API with a key. Each run is costed, and
-            the producer sees how much the agent is used.
-          </p>
           {listError ? (
             <Alert title="The agent was not withdrawn" className="mt-3">
               {listError}
@@ -172,12 +228,12 @@ export function Agents(): JSX.Element {
         </SurfaceMain>
         <SurfaceWell aria-label="Publish an agent">
           <Publish
+            taken={new Set(agents.map((agent) => agent.slug))}
             onPublished={(slug) => {
               setFresh(slug);
               setRevision((n) => n + 1);
             }}
           />
-          <Platform />
         </SurfaceWell>
       </Surfaces>
     </>
@@ -206,49 +262,28 @@ function AgentRow({
         'group/row relative -mx-6 px-6 py-5',
         ROW_PAPER,
         'after:absolute after:inset-x-6 after:top-0 after:h-px after:bg-rule-minor first:after:hidden',
-        fresh && 'before:absolute before:inset-y-4 before:left-3 before:w-0.5 before:bg-ink',
       )}
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className="text-base font-semibold text-ink">{agent.name}</h3>
         <span className="font-mono text-xs text-ink-2">{agent.slug}</span>
         {fresh ? (
-          <span className="border border-ink px-1.5 py-px text-xs font-medium text-ink">
-            Just published
-          </span>
+          <span className="text-sm text-ink-2">Published</span>
         ) : mine ? (
-          <span className="bg-well px-1.5 py-px text-xs font-medium text-ink">Yours</span>
+          <span className="text-sm text-ink-2">Yours</span>
         ) : null}
       </div>
       <p className="mt-1 max-w-[44em] text-sm text-ink">{agent.description}</p>
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-2 tabular-nums">
+        <span>{agent.owner}</span>
         <span>
-          By <span className="text-ink">{agent.owner}</span>
-        </span>
-        <span>
-          Published{' '}
-          <time dateTime={agent.createdAt} title={new Date(agent.createdAt).toLocaleString()}>
-            {new Date(agent.createdAt).toLocaleDateString(undefined, {
-              day: 'numeric',
-              month: 'short',
-            })}
-          </time>
+          <span className="font-medium text-ink">{usage?.sessions ?? 0}</span>{' '}
+          {usage?.sessions === 1 ? 'run' : 'runs'}
         </span>
         {usage && usage.sessions > 0 ? (
-          <>
-            <span>
-              <span className="font-medium text-ink">{usage.sessions}</span>{' '}
-              {usage.sessions === 1 ? 'run' : 'runs'}
-            </span>
-            <span>
-              <span className="font-medium text-ink">{money(usage.cost)}</span> spent
-            </span>
-            <span title="Median time from the question to the answer">
-              {seconds(usage.medianSecondsToRest)} median
-            </span>
-          </>
-        ) : mine ? (
-          <span>Not used yet</span>
+          <span>
+            <span className="font-medium text-ink">{money(usage.cost)}</span> spent
+          </span>
         ) : null}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -283,7 +318,13 @@ function AgentRow({
   );
 }
 
-function Publish({ onPublished }: { onPublished: (slug: string) => void }): JSX.Element {
+function Publish({
+  taken,
+  onPublished,
+}: {
+  taken: ReadonlySet<string>;
+  onPublished: (slug: string) => void;
+}): JSX.Element {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
@@ -345,18 +386,20 @@ function Publish({ onPublished }: { onPublished: (slug: string) => void }): JSX.
         </RegionName>
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
           onClick={() => {
-            setName(EXAMPLE.name);
-            setSlug(EXAMPLE.slug);
+            const template = pickTemplate(name, taken);
+            setName(template.name);
+            setSlug(template.slug);
             setSlugEdited(true);
-            setDescription(EXAMPLE.description);
-            setInstructions(EXAMPLE.instructions);
+            setDescription(template.description);
+            setInstructions(template.instructions);
             setError(null);
+            setDone(null);
           }}
         >
-          Fill an example
+          Random template
         </Button>
       </div>
       <form onSubmit={(event) => void submit(event)} className="grid gap-4" aria-busy={pending}>
@@ -367,7 +410,6 @@ function Publish({ onPublished }: { onPublished: (slug: string) => void }): JSX.
               id="agent-name"
               value={name}
               maxLength={100}
-              placeholder="Literature Scout"
               onChange={(event) => setName(event.target.value)}
             />
           </Field>
@@ -378,7 +420,6 @@ function Publish({ onPublished }: { onPublished: (slug: string) => void }): JSX.
               value={shownSlug}
               maxLength={40}
               spellCheck={false}
-              placeholder="literature-scout"
               aria-invalid={shownSlug !== '' && !slugOk}
               className="font-mono"
               onChange={(event) => {
@@ -389,32 +430,20 @@ function Publish({ onPublished }: { onPublished: (slug: string) => void }): JSX.
           </Field>
         </div>
         <Field>
-          <Label htmlFor="agent-description">What it does</Label>
+          <Label htmlFor="agent-description">Description</Label>
           <Input
             id="agent-description"
             value={description}
             maxLength={500}
-            placeholder="One line that people see in the list"
             onChange={(event) => setDescription(event.target.value)}
           />
         </Field>
         <Field>
-          <div className="flex items-baseline justify-between gap-4">
-            <Label htmlFor="agent-instructions">Instructions for the lead</Label>
-            <span
-              className={cn(
-                'text-xs tabular-nums',
-                instructions.length > INSTRUCTIONS_LIMIT ? 'text-ink' : 'text-ink-3',
-              )}
-            >
-              {instructions.length} / {INSTRUCTIONS_LIMIT}
-            </span>
-          </div>
+          <Label htmlFor="agent-instructions">Instructions</Label>
           <Textarea
             id="agent-instructions"
             value={instructions}
             rows={7}
-            placeholder="How lumen should work on every question asked with this agent"
             className="max-h-[36svh] min-h-36 font-mono text-sm leading-relaxed"
             onChange={(event) => setInstructions(event.target.value)}
           />
@@ -423,40 +452,16 @@ function Publish({ onPublished }: { onPublished: (slug: string) => void }): JSX.
           <Button type="submit" disabled={!ready || pending}>
             {pending ? 'Publishing…' : 'Publish'}
           </Button>
-          <p aria-live="polite" className="text-caption text-ink-2">
+          <p aria-live="polite" className="text-sm text-ink-2">
             {shownSlug !== '' && !slugOk
-              ? 'A slug is 3 to 40 lowercase letters, digits or dashes, and starts with a letter.'
+              ? 'Slug: lowercase letters, digits and dashes.'
               : done
-                ? `${done} is published. It is in the list, and in every new project’s agent menu.`
-                : 'Anyone signed in can ask with it. Only you see its instructions.'}
+                ? `${done} is published.`
+                : ''}
           </p>
         </div>
         {error ? <Alert title="The agent was not published">{error}</Alert> : null}
       </form>
-    </section>
-  );
-}
-
-/** How an app reaches the same agents: the consumer's side, in three lines. */
-function Platform(): JSX.Element {
-  const origin = typeof window === 'undefined' ? '' : window.location.origin;
-  return (
-    <section aria-labelledby="platform-name" className="pt-10 pb-8">
-      <RegionName id="platform-name">From another app</RegionName>
-      <p className="mb-3 max-w-[40em] text-sm text-ink-2">
-        The literature watch asks with these agents through the public API. It has no database, no
-        model calls and no billing of its own.
-      </p>
-      <pre className="overflow-x-auto border border-rule-minor bg-paper/60 p-4 font-mono text-xs leading-relaxed text-ink">
-        <span className="text-ink-3"># ask with an agent</span>
-        {'\n'}POST {origin}/api/v1/questions
-        {'\n'}
-        {'  '}
-        {'{ "question": "…", "agent": "literature-scout" }'}
-        {'\n\n'}
-        <span className="text-ink-3"># read the answer, findings and cost</span>
-        {'\n'}GET {origin}/api/v1/questions/:sessionId
-      </pre>
     </section>
   );
 }

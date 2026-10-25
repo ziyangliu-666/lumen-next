@@ -65,20 +65,6 @@ export function chosenAgent(): string {
   }
 }
 
-function AgentIcon(): JSX.Element {
-  // A small spark: the agent is lumen's lead with a producer's instructions.
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" className="size-3.5 shrink-0">
-      <path
-        d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3M3.4 3.4l2.1 2.1M10.5 10.5l2.1 2.1M3.4 12.6l2.1-2.1M10.5 5.5l2.1-2.1"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="square"
-      />
-    </svg>
-  );
-}
-
 /**
  * The agent for a new project, quiet in the field's toolbar beside the model.
  * "Lumen" is the plain lead. The last entry opens the registry to publish one.
@@ -112,39 +98,26 @@ export function AgentPicker({
         aria-label="Agent"
         size="sm"
         className={
-          'h-8! w-auto max-w-56 gap-1.5 border-transparent bg-transparent px-2 text-sm hover:text-ink ' +
+          'h-8! w-auto max-w-56 gap-1 border-transparent bg-transparent px-2 text-sm hover:text-ink ' +
           (shown === NO_AGENT ? 'text-ink-2' : 'text-ink')
         }
       >
-        <AgentIcon />
         <SelectValue>
           {shown === NO_AGENT
-            ? 'Lumen'
-            : (agents.find((agent) => agent.slug === shown)?.name ?? 'Lumen')}
+            ? 'No agent'
+            : (agents.find((agent) => agent.slug === shown)?.name ?? 'No agent')}
         </SelectValue>
       </SelectTrigger>
-      <SelectContent className="min-w-64">
-        <SelectItem value="lumen">
-          <span className="grid gap-0.5 text-left">
-            <span>Lumen</span>
-            <span className="text-xs text-ink-2">The lead, with no agent</span>
-          </span>
-        </SelectItem>
+      <SelectContent>
+        <SelectItem value="lumen">No agent</SelectItem>
         {agents.length > 0 ? <SelectSeparator /> : null}
         {agents.map((agent) => (
           <SelectItem key={agent.slug} value={agent.slug}>
-            <span className="grid gap-0.5 text-left">
-              <span className="truncate">{agent.name}</span>
-              <span className="truncate font-mono text-xs text-ink-2">
-                {agent.slug} · {agent.owner}
-              </span>
-            </span>
+            {agent.name}
           </SelectItem>
         ))}
         <SelectSeparator />
-        <SelectItem value={PUBLISH}>
-          <span className="text-ink-2">Publish an agent…</span>
-        </SelectItem>
+        <SelectItem value={PUBLISH}>Publish an agent…</SelectItem>
       </SelectContent>
     </Select>
   );
@@ -175,12 +148,7 @@ export function SessionAgent({ sessionId }: { sessionId: string }): JSX.Element 
   // Another session's agent, until this one's answer arrives, is not shown.
   if (!agent || agent.session !== sessionId) return null;
   return (
-    <a
-      href="#/agents"
-      title={`Led by the agent ${agent.slug}`}
-      className="inline-flex shrink-0 items-center gap-1.5 border border-rule-minor px-2 py-0.5 text-xs text-ink hover:border-ink"
-    >
-      <AgentIcon />
+    <a href="#/agents" className="shrink-0 text-ink-2 hover:text-ink">
       {agent.name}
     </a>
   );

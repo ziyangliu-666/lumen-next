@@ -1,0 +1,8 @@
+# One Ubuntu VM running k3s, on Vultr or AWS. Import the image into containerd.
+# Always pass the real ingress.host and image.tag at deployment time.
+ingress:
+  host: lumen.example.sslip.io
+
+tls:
+  enabled: true
+  clusterIssuer: letsencrypt

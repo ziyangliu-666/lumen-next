@@ -4,7 +4,7 @@ The chart in `lumen/` runs lumen-next as five services (identity, project,
 session, worker, billing), with PostgreSQL and RabbitMQ, on one node.
 `docs/platform/contract.md` says what each service owns and why.
 
-The same chart runs on local k3d and on the public k3s host in AWS. Local k3d
+The same chart runs on local k3d and on a public k3s host (Vultr or AWS). Local k3d
 is where you develop and test.
 
 ## Local: k3d
@@ -129,3 +129,9 @@ HTTPS with a Let's Encrypt certificate. The values for that host are in
 `aws/values-aws.yaml`. How the host was built, how to install KEDA and
 cert-manager there, and how to stop and delete it: see
 [aws/README.md](aws/README.md).
+
+## Public host on Vultr
+
+The same single-node chart can run on a Vultr Ubuntu VM. See
+[vultr/README.md](vultr/README.md) for provisioning, migration, and CI cutover.
+Both providers can use `public/values.yaml` and `public/cluster-issuer.yaml`.

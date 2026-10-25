@@ -68,7 +68,16 @@ const plainItem = (item) => {
 };
 function head(s, part, item, title) {
   // A plain running page number, top right, on content slides only (not on the title and end slides).
-  s.slideNumber = { x: 11.93, y: 0.42, w: 0.8, h: 0.32, fontSize: 14, color: GRAY, fontFace: SANS, align: 'right' };
+  s.slideNumber = {
+    x: 11.93,
+    y: 0.42,
+    w: 0.8,
+    h: 0.32,
+    fontSize: 14,
+    color: GRAY,
+    fontFace: SANS,
+    align: 'right',
+  };
   item = plainItem(item);
   txt(s, item, { x: 0.6, y: 0.42, w: 12, h: 0.32, fontSize: 14, color: GRAY });
   txt(s, title, {
@@ -111,16 +120,18 @@ function gifSize(f) {
 // diagram starts just below the title. Recordings have no band; they are fitted and centred.
 function shown(part, item, title, file, kind = 'scene') {
   const s = newSlide();
-  const n = spec.length;                       // this slide's number, 1-based
+  const n = spec.length; // this slide's number, 1-based
   const f = path.join(OUT, file);
   let box;
   if (kind === 'scene') {
     box = { x: 0.6, y: 1.3, w: 12.13, h: 5.0 };
   } else {
     const [pw, ph] = gifSize(f);
-    const top = 1.75, room = 7.0 - top;
+    const top = 1.75,
+      room = 7.0 - top;
     const k = Math.min(12.13 / pw, room / ph);
-    const w = pw * k, h = ph * k;
+    const w = pw * k,
+      h = ph * k;
     box = { x: 0.6 + (12.13 - w) / 2, y: top, w, h };
   }
   s.addImage({ path: f, ...box });
@@ -164,13 +175,26 @@ function shown(part, item, title, file, kind = 'scene') {
     h: 0.4,
     fontSize: 16,
   });
-  txt(s, 'live:  ' + URL, { x: 0.8, y: 6.15, w: 11, h: 0.4, fontSize: 15, fontFace: MONO, color: GRAY });
+  txt(s, 'live:  ' + URL, {
+    x: 0.8,
+    y: 6.15,
+    w: 11,
+    h: 0.4,
+    fontSize: 15,
+    fontFace: MONO,
+    color: GRAY,
+  });
   s.addNotes(spoken(1));
 }
 
 // ------------------------------------------------------------------ 1 overview
-shown('Overview', '1  ·  Context and business problem', 'What Lumen does: one question, a tree of agents',
-  'lumen-at-work-crop.gif', 'recording');
+shown(
+  'Overview',
+  '1  ·  Context and business problem',
+  'What Lumen does: one question, a tree of agents',
+  'lumen-at-work-crop.gif',
+  'recording',
+);
 shown('Overview', '1  ·  Platform thinking', 'Producers and consumers', 'platform.gif');
 shown('Overview', '1  ·  Scope', 'Use cases', 'usecases.gif');
 
@@ -178,29 +202,75 @@ shown('Overview', '1  ·  Scope', 'Use cases', 'usecases.gif');
 shown('Conduct', '2  ·  Status, milestones and effort', 'Plan and effort', 'milestones.gif');
 
 // ------------------------------------------------------------------ 3 logical architecture
-shown('Logical', '3  ·  Key architectural decisions', 'Logical architecture decisions', 'decisions.gif');
-shown('Logical', '3  ·  Logical architecture', 'Five services behind the API gateway', 'logical.gif');
+shown(
+  'Logical',
+  '3  ·  Key architectural decisions',
+  'Logical architecture decisions',
+  'decisions.gif',
+);
+shown(
+  'Logical',
+  '3  ·  Logical architecture',
+  'Five services behind the API gateway',
+  'logical.gif',
+);
 shown('Logical', '3  ·  Domain-driven design', 'Bounded contexts', 'contextmap.gif');
-shown('Logical', '3  ·  Producers and consumers', 'Public API: the calls in order', 'interaction.gif');
+shown(
+  'Logical',
+  '3  ·  Producers and consumers',
+  'Public API: the calls in order',
+  'interaction.gif',
+);
 
 // ------------------------------------------------------------------ 4 physical architecture
-shown('Physical', '4  ·  Key architectural decisions', 'Physical architecture decisions', 'physdecisions.gif');
+shown(
+  'Physical',
+  '4  ·  Key architectural decisions',
+  'Physical architecture decisions',
+  'physdecisions.gif',
+);
 shown('Physical', '4  ·  Physical architecture', 'Deployment diagram', 'deployment.gif');
-shown('Physical', '4  ·  Physical architecture', 'Pods on the server (recorded)', 'rec-pods-cut.gif', 'recording');
-shown('Physical', '4  ·  Key architectural decisions', 'Decision: one queue per level of the call tree',
-  'queues.gif');
+shown(
+  'Physical',
+  '4  ·  Physical architecture',
+  'Pods on the server (recorded)',
+  'rec-pods-cut.gif',
+  'recording',
+);
+shown(
+  'Physical',
+  '4  ·  Key architectural decisions',
+  'Decision: one queue per level of the call tree',
+  'queues.gif',
+);
 shown('Physical', '4  ·  Detailed design', 'Ask a question: sequence diagram', 'sequence.gif');
-shown('Physical', '4  ·  Detailed design', 'Ask a question through the public API (recorded)', 'rec-ask.gif',
-  'recording');
-shown('Physical', '4  ·  Detailed design', 'Availability: deleting a worker (recorded)', 'rec-kill.gif',
-  'recording');
+shown(
+  'Physical',
+  '4  ·  Detailed design',
+  'Ask a question through the public API (recorded)',
+  'rec-ask.gif',
+  'recording',
+);
+shown(
+  'Physical',
+  '4  ·  Detailed design',
+  'Availability: deleting a worker (recorded)',
+  'rec-kill.gif',
+  'recording',
+);
 
 shown('Physical', '4  ·  Persistence', 'Database schema', 'er.gif');
 
 // ------------------------------------------------------------------ 5 DevOps
 shown('DevOps', '5  ·  Source and artifacts', 'Branches and images', 'branches.gif');
 shown('DevOps', '5  ·  DevOps pipeline', 'CI/CD pipeline', 'pipeline.gif');
-shown('DevOps', '5  ·  DevOps pipeline', 'Pipeline runs (recorded)', 'rec-pipeline-cut.gif', 'recording');
+shown(
+  'DevOps',
+  '5  ·  DevOps pipeline',
+  'Pipeline runs (recorded)',
+  'rec-pipeline-cut.gif',
+  'recording',
+);
 shown('DevOps', '5  ·  Technical findings', 'Three problems we found and fixed', 'findings.gif');
 
 // ------------------------------------------------------------------ 6 demo

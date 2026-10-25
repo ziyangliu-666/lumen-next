@@ -1,7 +1,7 @@
 name: Platform deploy
 
 # The ASS demonstration (docs/platform/contract.md, "Public deployment"):
-# every push to ass/platform is a deployment to the k3s host in AWS.
+# every push to ass/platform is a deployment to the k3s host (Vultr or AWS).
 #
 # There is no registry. The runner builds the image, copies it to the host
 # over SSH and imports it into k3s containerd. The chart never pulls it.
@@ -261,7 +261,7 @@ jobs:
             echo "cd $REMOTE_DIR"
             echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml'
             printf 'helm upgrade --install lumen deploy/k8s/lumen -n lumen --create-namespace'
-            printf ' -f deploy/k8s/aws/values-aws.yaml --wait --timeout 10m'
+            printf ' -f deploy/k8s/public/values.yaml --wait --timeout 10m'
             printf ' %q' "${args[@]}"
             echo
           } | ssh -i "$SSH_KEY_FILE" "ubuntu@$SSH_HOST" bash -s

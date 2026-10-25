@@ -7,6 +7,6 @@ for t in "Catalan numbers" "Motzkin paths" "Dyck paths" "Schroeder numbers" "per
   "Young tableaux" "set partitions" "integer partitions" "Bell numbers" "Fibonacci identities" \
   "lattice paths" "plane trees" "Narayana numbers" "Stirling numbers" "q-analogues"; do
   curl -s "$API/questions" -H "$AUTH" -H "$JSON" -o /dev/null -w "%{http_code} " \
-    -d "{\"question\":\"What was published recently on $t?\",\"agent\":\"literature-scout\"}"
+    -d "{\"question\":\"What was published recently on $t?\",\"agent\":\"${AGENT:-literature-scout}\"}"
 done
 echo

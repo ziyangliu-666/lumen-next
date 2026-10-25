@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ReplyFiles, ReplyText, tablesApart } from './text';
+import { mathDelimiters, ReplyFiles, ReplyText, tablesApart } from './text';
 
 const html = (text: string): string => renderToStaticMarkup(<ReplyText text={text} />);
 
@@ -72,5 +72,26 @@ describe('KaTeX', () => {
     expect(version(here.resolve('katex/package.json'))).toBe(
       version(fromPlugin.resolve('katex/package.json')),
     );
+  });
+});
+
+describe('LaTeX written with backslash delimiters', () => {
+  it('turns \\( \\) and \\[ \\] into dollar signs', () => {
+    expect(mathDelimiters('length \\( n \\), so')).toBe('length $n$, so');
+    expect(mathDelimiters('then \\[ M(x) = 1 + xM(x) \\] holds')).toBe(
+      'then \n$$\nM(x) = 1 + xM(x)\n$$\n holds',
+    );
+  });
+
+  it('leaves code alone', () => {
+    expect(mathDelimiters('`\\(x\\)` and ```\n\\[y\\]\n```')).toBe(
+      '`\\(x\\)` and ```\n\\[y\\]\n```',
+    );
+  });
+
+  it('draws them with KaTeX', () => {
+    const out = html('grows like \\( C \\cdot \\frac{3^{n}}{n^{3/2}} \\) and \\[ M(0) = 1 \\]');
+    expect(out.match(/class="katex"/g)?.length).toBe(2);
+    expect(out).toContain('katex-display');
   });
 });

@@ -7,10 +7,27 @@ import { cursorId, money, UUID } from './validation.js';
 // PM/core decision in #52 (28 Sep): a flat USD 1 account cap lives in the
 // store, not a monthly reset or migration default. COALESCE preserves saved 0.
 // Display and guard must use this same numeric SQL projection.
+/**
+ * The cap of an account with no wallet row: what a new account may spend in all
+ * before each further step needs an approval. BILLING_DEFAULT_CAP sets it (the
+ * public host uses 0.05, so a new account cannot run up the model bill); unset,
+ * it is 1 dollar. It goes into SQL as text, so only a plain amount is accepted.
+ */
+export const DEFAULT_CAP = defaultCap(process.env['BILLING_DEFAULT_CAP']);
+
+export function defaultCap(raw: string | undefined): string {
+  const value = (raw ?? '').trim();
+  if (value === '') return '1.000000';
+  if (!/^\d{1,6}(\.\d{1,6})?$/.test(value)) {
+    throw new Error(`BILLING_DEFAULT_CAP must be an amount such as 0.05, got "${value}"`);
+  }
+  return value;
+}
+
 const ACCOUNT_TOTALS = `
       select coalesce((select sum(amount) from ledger_entries
         where account_id = $1), 0) as spent,
-        coalesce((select cap from billing_wallets where account_id = $1), 1.000000::numeric) as cap`;
+        coalesce((select cap from billing_wallets where account_id = $1), ${DEFAULT_CAP}::numeric) as cap`;
 
 export interface LedgerEntry {
   readonly id: string;

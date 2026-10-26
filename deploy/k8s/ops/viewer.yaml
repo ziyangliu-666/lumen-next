@@ -1,0 +1,43 @@
+# A read-only account for the dashboard: everything the built-in "view" role
+# shows (pods, deployments, services, HPA; no secrets), plus nodes, events and
+# KEDA's scaled objects. Its token is the dashboard sign-in.
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: viewer, namespace: ops }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: viewer-token
+  namespace: ops
+  annotations: { kubernetes.io/service-account.name: viewer }
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: ops-viewer-view }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: view }
+subjects: [{ kind: ServiceAccount, name: viewer, namespace: ops }]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: { name: ops-viewer-extra }
+rules:
+  - apiGroups: ['']
+    resources: [nodes, namespaces, events, persistentvolumes]
+    verbs: [get, list, watch]
+  - apiGroups: [keda.sh]
+    resources: [scaledobjects, scaledjobs, triggerauthentications]
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: ops-viewer-extra }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: ops-viewer-extra }
+subjects: [{ kind: ServiceAccount, name: viewer, namespace: ops }]

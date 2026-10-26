@@ -16,3 +16,5 @@ data:
   LUMEN_COMPUTE_PROVIDER: none
   LUMEN_WORKER: {{ include "lumen.workerMode" . | quote }}
   LUMEN_DEMO_PACE_MS: {{ .Values.config.demoPaceMs | quote }}
+  # What a new account may spend in all before each step needs an approval.
+  BILLING_DEFAULT_CAP: {{ .Values.config.defaultCap | quote }}

@@ -26,6 +26,10 @@ config:
   logLevel: info
   sessionLifetimeMs: '604800000'
   demoPaceMs: '1500'
+  # A new account's total spending cap in dollars. Small on a public host, so
+  # nobody can run up the model bill with a fresh sign-up; staff raise it per
+  # account in Admin. Each step over it waits for the owner's approval.
+  defaultCap: '0.05'
   # "" picks the worker on its own: steering when extraSecrets holds a model
   # key (OPENAI_API_KEY or DEEPSEEK_API_KEY), demo otherwise.
   # Set "demo" or "steering" to force one.

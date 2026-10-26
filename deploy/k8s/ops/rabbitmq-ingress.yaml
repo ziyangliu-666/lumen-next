@@ -1,0 +1,22 @@
+# RabbitMQ's management page: the queue per level of the call tree, live.
+# Sign in with the "monitoring" user (read-only), made with rabbitmqctl.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rabbitmq-management
+  namespace: lumen
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [mq.example.sslip.io]
+      secretName: rabbitmq-management-tls
+  rules:
+    - host: mq.example.sslip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: rabbitmq, port: { number: 15672 } }

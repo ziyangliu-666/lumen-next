@@ -1,6 +1,7 @@
 import type { Money } from '@lumen/contracts';
 import type { Db } from '../../core/db/db.js';
 import { badRequest, HttpError } from '../../core/http/httpError.js';
+import { DEFAULT_CAP } from './ledger.js';
 import { UUID } from './validation.js';
 
 export interface TopupOrder {
@@ -37,7 +38,7 @@ export class Topups {
     // Money is compared in PostgreSQL numeric, not JS.
     const [capacity] = await this.db.query<{ fits: boolean }>(
       `select coalesce((select cap from billing_wallets where account_id = $1),
-        1.000000::numeric) + 5.000000::numeric <= 999999.999999::numeric as fits`,
+        ${DEFAULT_CAP}::numeric) + 5.000000::numeric <= 999999.999999::numeric as fits`,
       [accountId],
     );
     if (!capacity!.fits) throw new HttpError(409, 'lower the cap before purchasing a top-up');
@@ -79,7 +80,7 @@ export class Topups {
       // Both writes commit together. An explicitly saved zero is preserved.
       await tx.query(
         `insert into billing_wallets (account_id, cap)
-         select account_id, 1.000000::numeric + amount from billing_topups where id = $1
+         select account_id, ${DEFAULT_CAP}::numeric + amount from billing_topups where id = $1
          on conflict (account_id) do update set cap = billing_wallets.cap +
            (select amount from billing_topups where id = $1)`,
         [payment.orderId],

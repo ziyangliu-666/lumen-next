@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Load test of 20 October: queued turns and worker pods</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #ffffff; }
+  .diagram-container { width: 100%; overflow-x: auto; }
+  svg { width: 100%; min-width: 700px; display: block; }
+  @media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+</style>
+</head>
+<body>
+<div class="diagram-container">
+<svg viewBox="0 0 700 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="loadtest-title loadtest-desc">
+<title id="loadtest-title">Load test of 20 October: queued turns and worker pods</title>
+<desc id="loadtest-desc">Two line charts on one time axis: the turns in the queues rose to 55 and fell to 0, and KEDA moved the worker pods from 1 to 4 and back to 1.</desc>
+<defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker><marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bf4520"/></marker><marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker><marker id="arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#4f5d75" stroke-width="1.2"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<line x1="80" y1="190.0" x2="660" y2="190.0" stroke="rgba(45,49,66,0.25)" stroke-width="0.8"/>
+<line x1="80" y1="140.0" x2="660" y2="140.0" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+<line x1="80" y1="90.0" x2="660" y2="90.0" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+<line x1="80" y1="40.0" x2="660" y2="40.0" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+<line x1="80" y1="340.0" x2="660" y2="340.0" stroke="rgba(45,49,66,0.25)" stroke-width="0.8"/>
+<line x1="80" y1="317.5" x2="660" y2="317.5" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+<line x1="80" y1="295.0" x2="660" y2="295.0" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+<line x1="80" y1="272.5" x2="660" y2="272.5" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+<line x1="80" y1="250.0" x2="660" y2="250.0" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+<polyline points="80.0,190.0 154.1,140.0 192.8,90.0 237.9,67.5 276.6,80.0 315.2,52.5 469.9,190.0 621.3,190.0 656.8,190.0" fill="none" stroke="#4f5d75" stroke-width="1.6"/>
+<circle cx="80.0" cy="190.0" r="2.5" fill="#4f5d75"/>
+<circle cx="154.1" cy="140.0" r="2.5" fill="#4f5d75"/>
+<circle cx="192.8" cy="90.0" r="2.5" fill="#4f5d75"/>
+<circle cx="237.9" cy="67.5" r="2.5" fill="#4f5d75"/>
+<circle cx="276.6" cy="80.0" r="2.5" fill="#4f5d75"/>
+<circle cx="315.2" cy="52.5" r="2.5" fill="#4f5d75"/>
+<circle cx="469.9" cy="190.0" r="2.5" fill="#4f5d75"/>
+<circle cx="621.3" cy="190.0" r="2.5" fill="#4f5d75"/>
+<circle cx="656.8" cy="190.0" r="2.5" fill="#4f5d75"/>
+<polyline points="80.0,317.5 154.1,317.5 154.1,317.5 192.8,317.5 192.8,295.0 237.9,295.0 237.9,272.5 276.6,272.5 276.6,250.0 315.2,250.0 315.2,250.0 469.9,250.0 469.9,250.0 621.3,250.0 621.3,295.0 656.8,295.0 656.8,317.5" fill="none" stroke="#bf4520" stroke-width="2"/>
+<text x="72" y="193.5" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0em">0</text>
+<text x="72" y="143.5" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0em">20</text>
+<text x="72" y="93.5" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0em">40</text>
+<text x="72" y="43.5" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0em">60</text>
+<text x="72" y="26" fill="#4f5d75" font-size="8" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start" letter-spacing="0.14em">TURNS IN THE QUEUES (READY + UNACKED)</text>
+<text x="323.22222222222223" y="56.5" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start" letter-spacing="0em">55</text>
+<text x="72" y="343.5" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0em">0</text>
+<text x="72" y="321.0" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0em">1</text>
+<text x="72" y="298.5" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0em">2</text>
+<text x="72" y="276.0" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0em">3</text>
+<text x="72" y="253.5" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0em">4</text>
+<text x="72" y="236" fill="#4f5d75" font-size="8" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start" letter-spacing="0.14em">WORKER PODS</text>
+<text x="276.55555555555554" y="244" fill="#bf4520" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0em">4 pods at 61 s</text>
+<text x="652.7777777777778" y="309.5" fill="#bf4520" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0em">1 pod</text>
+<text x="80.0" y="362" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0em">0</text>
+<text x="176.66666666666669" y="362" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0em">30</text>
+<text x="273.33333333333337" y="362" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0em">60</text>
+<text x="370.0" y="362" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0em">90</text>
+<text x="466.6666666666667" y="362" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0em">120</text>
+<text x="563.3333333333333" y="362" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0em">150</text>
+<text x="660.0" y="362" fill="#4f5d75" font-size="10" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0em">180</text>
+<text x="370.0" y="384" fill="#4f5d75" font-size="8" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">SECONDS FROM 14:19:25 UTC</text>
+</svg>
+</div>
+</body>
+</html>

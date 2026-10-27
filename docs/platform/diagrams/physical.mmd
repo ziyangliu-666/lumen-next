@@ -1,12 +1,12 @@
 flowchart TB
-  U["Users and the lecturer<br/>(browser, curl, literature watch)"] -->|"HTTPS 443 / HTTP 80"| EIP
-  GH["GitHub Actions<br/>platform-deploy.yml"] -->|"SSH 22, deploy key:<br/>scp image + chart, helm upgrade"| EIP
-  DEV["Team laptop"] -->|"ssh -L 6443<br/>(kubectl tunnel)"| EIP
-  EIP["Elastic IP<br/>lumen.54-179-112-87.sslip.io"]
-  subgraph AWS["AWS ap-southeast-1 (Singapore)"]
-    subgraph SG["Security group: 80 and 443 open, 22 for the deploy key, 6443 closed"]
-      subgraph EC2["EC2 t3.medium: 2 vCPU, 4 GB + 2 GB swap, Ubuntu 24.04, 20 GB gp3"]
-        subgraph K3S["k3s single node"]
+  U["Users and the lecturer<br/>(browser, curl, literature watch)"] -->|"HTTPS 443 / HTTP 80"| IP
+  GH["GitHub Actions<br/>platform-deploy.yml"] -->|"SSH 22, deploy key:<br/>scp image + chart, helm upgrade"| IP
+  DEV["Team laptop"] -->|"ssh -L 6443<br/>(kubectl tunnel)"| IP
+  IP["Public IPv4 of the VM<br/>lumen.139-180-185-51.sslip.io"]
+  subgraph VULTR["«device» Vultr Cloud Compute vc2-2c-4gb, Singapore"]
+    subgraph FW["Firewall group: 22, 80 and 443 open; 6443 closed"]
+      subgraph VM["«execution environment» Ubuntu 24.04: 2 vCPU, 4 GB + 2 GB swap, 80 GB SSD"]
+        subgraph K3S["«execution environment» k3s, one node"]
           TR["Traefik (ships with k3s)<br/>IngressRoutes, /api/auth rate limit,<br/>HTTP to HTTPS redirect"]
           CM["cert-manager<br/>Let's Encrypt ClusterIssuer, HTTP-01<br/>Certificate lumen-tls"]
           subgraph Apps["namespace lumen: Deployments, Service port 4000"]
@@ -30,7 +30,7 @@ flowchart TB
       end
     end
   end
-  EIP --> TR
+  IP --> TR
   CM -.->|"TLS secret"| TR
   TR -->|"path rules"| Apps
   Apps -->|"SQL, all five services"| PG

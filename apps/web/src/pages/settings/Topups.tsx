@@ -1,3 +1,4 @@
+import { formatMoney } from '@/core/formatMoney';
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type { Money } from '@lumen/contracts';
 import { request, RequestFailure } from '@/core/api';
@@ -118,7 +119,7 @@ export function Topups(): JSX.Element {
                       {new Date(receipt.paidAt).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
-                      {receipt.amount.dollars.toFixed(4)}
+                      {formatMoney(receipt.amount)}
                     </TableCell>
                   </TableRow>
                 ))}

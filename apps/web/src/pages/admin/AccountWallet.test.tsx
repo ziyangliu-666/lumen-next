@@ -10,7 +10,7 @@ it('shows stored spend and a saved zero cap as separate figures, not credit', ()
     }),
   );
   expect(html).toContain('Total spent');
-  expect(html).toContain('USD 0.1235');
+  expect(html).toContain('USD 0.123456');
   expect(html).toContain('Account cap');
   expect(html).toContain('USD 0.0000');
   expect(html).toContain('not a balance');

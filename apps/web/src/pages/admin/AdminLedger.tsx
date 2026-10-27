@@ -1,3 +1,4 @@
+import { formatMoney } from '@/core/formatMoney';
 import { useEffect, useState, type JSX } from 'react';
 import type { Money } from '@lumen/contracts';
 import { request, RequestFailure } from '@/core/api';
@@ -46,9 +47,7 @@ export function LedgerRows({ entries }: Pick<LedgerPage, 'entries'>): JSX.Elemen
                 <span className="font-sans text-ink-3">No task</span>
               )}
             </TableCell>
-            <TableCell className="text-right font-mono">
-              ${entry.amount.dollars.toFixed(4)}
-            </TableCell>
+            <TableCell className="text-right font-mono">${formatMoney(entry.amount)}</TableCell>
           </TableRow>
         ))}
       </TableBody>

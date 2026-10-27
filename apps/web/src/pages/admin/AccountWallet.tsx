@@ -1,3 +1,4 @@
+import { formatMoney } from '@/core/formatMoney';
 import { useEffect, useState, type JSX } from 'react';
 import type { Money } from '@lumen/contracts';
 import { request, RequestFailure } from '@/core/api';
@@ -13,9 +14,9 @@ export function WalletFigures({ summary }: { summary: Summary }): JSX.Element {
     <>
       <dl className="grid grid-cols-[7rem_1fr] gap-x-4 gap-y-2 text-sm">
         <dt className="text-ink-2">Total spent</dt>
-        <dd className="font-mono tabular-nums">USD {summary.spent.dollars.toFixed(4)}</dd>
+        <dd className="font-mono tabular-nums">USD {formatMoney(summary.spent)}</dd>
         <dt className="text-ink-2">Account cap</dt>
-        <dd className="font-mono tabular-nums">USD {summary.cap.dollars.toFixed(4)}</dd>
+        <dd className="font-mono tabular-nums">USD {formatMoney(summary.cap)}</dd>
       </dl>
       <p className="mt-2 text-caption text-ink-2">
         All-time recorded spend, with no monthly reset. The cap is a spending limit, not a balance.

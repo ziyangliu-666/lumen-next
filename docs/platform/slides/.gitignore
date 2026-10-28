@@ -1,0 +1,7 @@
+node_modules/
+package-lock.json
+out/steps/
+out/sheets/
+out/preview/
+out/*.png
+out/slides.json

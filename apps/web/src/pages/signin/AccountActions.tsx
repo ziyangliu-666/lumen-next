@@ -36,6 +36,7 @@ export type AccountEntry =
 export function accountEntries(state: Ready): readonly AccountEntry[] {
   return [
     { kind: 'link', label: 'Projects', href: '#/home' },
+    { kind: 'link', label: 'Agents', href: '#/agents' },
     { kind: 'link', label: 'Settings', href: '#/settings' },
     ...(state.account.role === 'staff'
       ? [{ kind: 'link' as const, label: 'Admin', href: '#/admin' }]

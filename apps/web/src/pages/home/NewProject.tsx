@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react';
 import { ModelPicker, useModels } from '@/core/models';
+import { AgentPicker, chooseAgent, chosenAgent, useAgents } from '@/core/agents';
 
 /** The upload route's limit, said before sending rather than by the server. */
 const ATTACH_LIMIT = 10 * 1024 * 1024;
@@ -28,6 +29,10 @@ export function NewProject({ onUnauthorized }: { onUnauthorized: () => void }): 
   const [tooLarge, setTooLarge] = useState<string | null>(null);
   const models = useModels(true);
   const [model, setModel] = useState<string | undefined>(undefined);
+  const agents = useAgents(true);
+  // "Ask with this agent" on #/agents arrives here with the agent chosen.
+  const [agent, setAgent] = useState<string>(chosenAgent);
+  const leading = agents.find((item) => item.slug === agent);
   return (
     <section aria-labelledby="new-project-name" className="pt-4">
       {/* min-h-8: the height of the projects heading row beside it. */}
@@ -42,7 +47,7 @@ export function NewProject({ onUnauthorized }: { onUnauthorized: () => void }): 
         value={draft.question}
         onValueChange={setQuestion}
         onSubmit={() => {
-          void submit(files, model);
+          void submit(files, model, leading?.slug);
         }}
         onAttach={(file) => {
           if (file.size > ATTACH_LIMIT) {
@@ -54,14 +59,29 @@ export function NewProject({ onUnauthorized }: { onUnauthorized: () => void }): 
         }}
         attachments={files.map((file) => file.name)}
         onRemoveAttachment={(name) => setFiles((list) => list.filter((file) => file.name !== name))}
-        toolbar={<ModelPicker models={models} value={model} onChange={setModel} />}
+        toolbar={
+          <>
+            <AgentPicker
+              agents={agents}
+              value={agent}
+              onChange={(slug) => {
+                setAgent(slug);
+                chooseAgent(slug);
+              }}
+            />
+            {/* An agent's run uses the platform's default model. */}
+            {leading ? null : <ModelPicker models={models} value={model} onChange={setModel} />}
+          </>
+        }
         placeholder={PROJECT_PLACEHOLDER}
         hint={
           tooLarge
             ? `${tooLarge} is larger than 10 MB, the most one file can be.`
             : pending
               ? 'Starting…'
-              : ''
+              : leading
+                ? `${leading.name} leads this project, with the instructions ${leading.owner} published.`
+                : ''
         }
         sendLabel="Start the project"
         sendDisabled={pending || uncertain}

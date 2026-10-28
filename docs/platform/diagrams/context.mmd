@@ -1,0 +1,33 @@
+flowchart LR
+  subgraph Producers
+    P1["Agent author<br/>(publish-agent.mjs, web, API key)"]
+  end
+  subgraph Consumers
+    C1["Research team<br/>in the browser"]
+    C2["App built on the API<br/>(any client with an API key)"]
+  end
+  subgraph Apps["Apps on the platform"]
+    A1["Lumen web app<br/>(first app, cookie sign-in)"]
+    A2["Literature watch<br/>(second app, API key only)"]
+  end
+  subgraph Platform["Lumen Platform: https://lumen.139-180-185-51.sslip.io"]
+    API["Public API v1<br/>/api/v1: keys, agents, questions, usage<br/>OpenAPI 3.1"]
+    SEED["Seed: the run engine<br/>a question runs as a tree of costed,<br/>recorded steps under the account's cap"]
+    REG["Agent registry"]
+    LED["Wallet and ledger<br/>cap, spend, approvals"]
+  end
+  OP["Operator (team, staff accounts)<br/>usage for every account and agent"]
+  P1 -->|"POST /api/v1/agents"| REG
+  P1 -->|"GET /api/v1/usage (asProducer)"| API
+  C1 --> A1
+  C2 --> API
+  A1 -->|"REST + WebSocket"| SEED
+  A2 -->|"POST /api/v1/questions<br/>GET /api/v1/questions/:id"| API
+  API --> SEED
+  API --> REG
+  SEED --> LED
+  SEED -->|"runs the chosen agent"| REG
+  OP -->|"admin pages, usage (all)"| LED
+  OP --> API
+  MODEL[("Model provider<br/>OpenAI / DeepSeek<br/>(external)")]
+  SEED -->|"model calls (steering mode)"| MODEL

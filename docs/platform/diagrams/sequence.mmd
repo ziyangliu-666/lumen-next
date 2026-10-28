@@ -1,0 +1,36 @@
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant T as Traefik
+  participant P as project
+  participant S as session<br/>(kernel, QueueWorker)
+  participant Q as RabbitMQ
+  participant W as worker pod(s)
+  participant DB as PostgreSQL
+  B->>T: POST /api/projects {question}
+  T->>+P: route /api/projects
+  P->>+S: POST /internal/directory/start
+  S->>DB: insert session, root task (depth 0)
+  S->>S: budget check (billing module in-process)
+  S->>Q: publish turn on lumen.turns.0
+  S-->>-P: sessionId
+  P-->>-B: 201 {project, sessionId}
+  B->>T: GET /ws (WebSocket)
+  T->>S: route /ws
+  Q->>+W: deliver turn (prefetch = slots)
+  W->>S: POST /internal/turns/:id/step (lead plans)
+  S->>DB: insert step, add cost
+  S-->>B: step event on /ws
+  W->>S: POST /internal/turns/:id/delegate [3 readers]
+  S->>DB: insert 3 child tasks (depth 1)
+  S->>Q: publish 3 turns on lumen.turns.1
+  Q->>W: deliver reader turns (any pod)
+  W->>S: step, finding, spend (per reader)
+  S-->>B: step and finding events
+  W->>S: POST /internal/turns/:child/done
+  W->>Q: ack reader turns
+  S-->>W: delegate returns the children at rest
+  W->>S: step (lead reply), POST done
+  W->>-Q: ack root turn
+  S->>DB: root task status ended
+  S-->>B: task ended event

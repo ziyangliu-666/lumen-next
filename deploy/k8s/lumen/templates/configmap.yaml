@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lumen-config
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+data:
+  NODE_ENV: production
+  LUMEN_ORIGIN: {{ include "lumen.origin" . | quote }}
+  IDENTITY_SESSION_LIFETIME_MS: {{ .Values.config.sessionLifetimeMs | quote }}
+  # Secure cookies are not sent over plain HTTP, so sign-in fails without this.
+  IDENTITY_INSECURE_COOKIES: {{ ternary "false" "true" .Values.tls.enabled | quote }}
+  LUMEN_SESSION_URL: http://session:4000
+  LUMEN_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  # No Docker daemon in a pod: readers run without a sandbox.
+  LUMEN_COMPUTE_PROVIDER: none
+  LUMEN_WORKER: {{ include "lumen.workerMode" . | quote }}
+  LUMEN_DEMO_PACE_MS: {{ .Values.config.demoPaceMs | quote }}
+  # What a new account may spend in all before each step needs an approval.
+  BILLING_DEFAULT_CAP: {{ .Values.config.defaultCap | quote }}

@@ -22,16 +22,18 @@ const ATTACH_LIMIT = 10 * 1024 * 1024;
 const SIGN_IN_FIRST = 'Sign in to start.';
 
 /**
- * The way back to the intro: a tag in the corner of the front page with the
- * mark in it, live, its light turning. It stands out as a piece of lumen,
- * lifts and brightens under the pointer, and says only what it plays.
+ * The way back to the intro: a tag under the starters with the mark in it,
+ * live, its light turning. It stands out as a piece of lumen, lifts and
+ * brightens under the pointer, and says only what it plays. It sits in the
+ * text column, not fixed to a corner: fixed, it covered the starter cards
+ * whenever the column reached the foot of the screen.
  */
 function WatchIntro({ onClick }: { onClick: () => void }): JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group fixed bottom-6 left-margin z-10 flex h-11 items-center gap-3 border border-ink bg-paper pr-4 pl-2 text-sm font-medium text-ink transition-[translate,background-color,color] duration-200 ease-out hover:-translate-y-0.5 hover:bg-ink hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+      className="group mt-8 flex h-11 w-fit items-center gap-3 border border-ink bg-paper pr-4 pl-2 text-sm font-medium text-ink transition-[translate,background-color,color] duration-200 ease-out hover:-translate-y-0.5 hover:bg-ink hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
     >
       <IntroOrb className="size-7 group-hover:invert" />
       What is lumen?
@@ -218,6 +220,9 @@ export function Landing(): JSX.Element {
                   />
                 </details>
               ) : null}
+              {intro === 'playing' || intro === 'wanted' ? null : (
+                <WatchIntro onClick={() => setIntro('playing')} />
+              )}
             </>
           }
         </div>
@@ -228,9 +233,6 @@ export function Landing(): JSX.Element {
         <div aria-hidden="true" className="fixed inset-0 z-[80] bg-paper" />
       ) : null}
       {intro === 'playing' ? <Intro onDone={() => setIntro('ended')} /> : null}
-      {intro === 'playing' || intro === 'wanted' ? null : (
-        <WatchIntro onClick={() => setIntro('playing')} />
-      )}
     </Bleed>
   );
 }

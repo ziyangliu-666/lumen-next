@@ -1,0 +1,72 @@
+{{- /* identity, project and billing scale on CPU. session never scales. */ -}}
+{{- range list "identity" "project" "billing" }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ . }}
+  labels:
+    {{- include "lumen.labels" $ | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ . }}
+  minReplicas: {{ $.Values.hpa.minReplicas }}
+  maxReplicas: {{ $.Values.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $.Values.hpa.cpuPercent }}
+{{- end }}
+{{- if .Values.keda.enabled }}
+---
+# The worker scales on the turns waiting for it (docs/platform/contract.md).
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: worker-rabbitmq
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: lumen-core
+      key: KEDA_RABBITMQ_URL
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker
+  labels:
+    {{- include "lumen.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: worker
+  minReplicaCount: {{ .Values.worker.minReplicas }}
+  maxReplicaCount: {{ .Values.worker.maxReplicas }}
+  pollingInterval: 10
+  # cooldownPeriod only governs scale to zero, and min is 1. The scale-down
+  # from N to 1 is the HPA's: one minute instead of five, so the demo shows
+  # the workers go back down.
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
+  triggers:
+    {{- range .Values.worker.queues }}
+    - type: rabbitmq
+      metadata:
+        # HTTP: the management API counts unacknowledged messages too.
+        protocol: http
+        queueName: {{ . }}
+        mode: QueueLength
+        value: {{ $.Values.worker.queueLength | quote }}
+      authenticationRef:
+        name: worker-rabbitmq
+    {{- end }}
+{{- end }}

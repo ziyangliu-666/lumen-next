@@ -1,0 +1,21 @@
+# Let's Encrypt for the whole cluster. Not in the chart: a ClusterIssuer is
+# cluster-wide, and it is applied once, after cert-manager is installed:
+#   kubectl apply -f deploy/k8s/public/cluster-issuer.yaml
+# No contact email: Let's Encrypt accepts an account without one, and it
+# refuses placeholder domains. cert-manager renews before expiry anyway.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-account-key
+    solvers:
+      # HTTP-01 through Traefik: cert-manager creates a temporary Ingress for
+      # /.well-known/acme-challenge/ on port 80. The chart's redirect route
+      # leaves that path alone.
+      - http01:
+          ingress:
+            ingressClassName: traefik

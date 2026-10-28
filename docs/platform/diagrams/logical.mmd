@@ -1,0 +1,25 @@
+flowchart LR
+  B["Browser /<br/>API client"] -->|"HTTPS"| T["Traefik Ingress<br/>routes by path prefix<br/>never routes /internal/*"]
+  subgraph Services["Five services: one image, one command each"]
+    direction TB
+    ID["<b>identity</b> (HPA 1-3)<br/>module modules/identity + API keys<br/>/api/auth/*, /api/me*, /api/v1/keys"]
+    PR["<b>project</b> (HPA 1-3)<br/>module modules/projects + registry<br/>/api/projects*, /api/v1/agents,<br/>/api/v1/questions, /api/v1/usage"]
+    BI["<b>billing</b> (HPA 1-3)<br/>module modules/billing<br/>/api/wallet/*, /api/admin/*"]
+    SE["<b>session</b> (1 replica)<br/>module modules/session: the kernel<br/>/ws stream, web app, QueueWorker<br/>/api/sessions/*, /api/v1/questions/:id"]
+    WO["<b>worker</b> (KEDA 1-4)<br/>module modules/steering: agent loop<br/>sandbox, project files"]
+  end
+  T --> ID & PR & BI & SE & WO
+  PR -->|"internal HTTP<br/>/internal/directory/*"| SE
+  BI -->|"internal HTTP<br/>/internal/approvals/resume"| SE
+  WO -->|"internal HTTP /internal/turns/:id/<br/>step, delegate, finding, spend, done"| SE
+  subgraph MQ["RabbitMQ"]
+    direction TB
+    Q0[["lumen.turns.0 (root)"]]
+    Q1[["lumen.turns.1 (readers)"]]
+    Q2[["lumen.turns.2 (depth 2+)"]]
+    X{{"lumen.steers (fanout)"}}
+  end
+  SE -->|"publish turns by depth,<br/>publish task.steer"| MQ
+  MQ -->|"consume turns (slots per depth),<br/>steers on an exclusive queue per pod"| WO
+  DB[("PostgreSQL 16<br/>one shared database<br/>tables grouped by module")]
+  Services ==>|"every service, own module tables"| DB

@@ -18,6 +18,7 @@ const pages = {
   settings: () => import('./pages/settings/Settings.js'),
   account: () => import('./pages/signin/AccountSettings.js'),
   admin: () => import('./pages/admin/Admin.js'),
+  agents: () => import('./pages/agents/Agents.js'),
 };
 const Home = lazy(() => pages.home().then((page) => ({ default: page.Home })));
 const Session = lazy(() => pages.session().then((page) => ({ default: page.Session })));
@@ -25,6 +26,7 @@ const Settings = lazy(() => pages.settings().then((page) => ({ default: page.Set
 const AccountSettings = lazy(() =>
   pages.account().then((page) => ({ default: page.AccountSettings })),
 );
+const Agents = lazy(() => pages.agents().then((page) => ({ default: page.Agents })));
 const Admin = lazy(() => pages.admin().then((page) => ({ default: page.Admin })));
 
 /**
@@ -38,6 +40,7 @@ function fetchAhead(): void {
     void pages.session();
     void pages.settings();
     void pages.account();
+    void pages.agents();
   };
   if ('requestIdleCallback' in window) window.requestIdleCallback(later, { timeout: 4000 });
   else globalThis.setTimeout(later, 2000);
@@ -65,6 +68,7 @@ const routes: readonly Route[] = [
   { path: '/signin', render: () => <SignIn /> },
   { path: '/home', render: () => <Home /> },
   { path: '/session', render: () => <Session /> },
+  { path: '/agents', render: () => <Agents /> },
   { path: '/settings', render: () => settingsPage('wallet') },
   { path: '/settings/account', render: () => settingsPage('account') },
   { path: '/settings/keys', render: () => settingsPage('keys') },

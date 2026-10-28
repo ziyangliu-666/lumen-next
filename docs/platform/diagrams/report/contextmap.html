@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bounded contexts and domain events</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #ffffff; }
+  .diagram-container { width: 100%; overflow-x: auto; }
+  svg { width: 100%; min-width: 720px; display: block; }
+  @media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+</style>
+</head>
+<body>
+<div class="diagram-container">
+<svg viewBox="0 0 720 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="contextmap-title contextmap-desc">
+<title id="contextmap-title">Bounded contexts and domain events</title>
+<desc id="contextmap-desc">Five bounded contexts with session as the core domain; the arrows are the domain events that pass between the contexts.</desc>
+<defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker><marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bf4520"/></marker><marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker><marker id="arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#4f5d75" stroke-width="1.2"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<path d="M 160,96 L 292,96 Q 300,96 300,104 L 300,148" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M 282,148 L 282,132 Q 282,124 274,124 L 160,124" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M 160,300 L 292,300 Q 300,300 300,292 L 300,236" fill="none" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<path d="M 420,148 L 420,98 Q 420,90 428,90 L 560,90" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M 560,130 L 446,130 Q 438,130 438,138 L 438,148" fill="none" stroke="#bf4520" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+<path d="M 420,236 L 420,292 Q 420,300 428,300 L 560,300" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M 560,272 L 446,272 Q 438,272 438,264 L 438,236" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+<rect x="162.1" y="75.0" width="131.8" height="18.0" rx="2" fill="#ffffff"/>
+<text x="228.0" y="88.5" fill="#5a6580" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">QUESTION ASKED</text>
+<rect x="179.1" y="129.0" width="69.9" height="18.0" rx="2" fill="#ffffff"/>
+<text x="214.0" y="142.6" fill="#5a6580" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">FINDING</text>
+<rect x="178.2" y="305.0" width="87.6" height="18.0" rx="2" fill="#ffffff"/>
+<text x="222.0" y="318.6" fill="#5a6580" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">PRINCIPAL</text>
+<rect x="439.4" y="69.0" width="105.2" height="18.0" rx="2" fill="#ffffff"/>
+<text x="492.0" y="82.5" fill="#5a6580" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">TURN QUEUED</text>
+<rect x="438.5" y="102.0" width="122.9" height="18.0" rx="2" fill="#ffffff"/>
+<text x="500.0" y="115.5" fill="#bf4520" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">STEP RECORDED</text>
+<rect x="426.1" y="305.0" width="131.8" height="18.0" rx="2" fill="#ffffff"/>
+<text x="492.0" y="318.6" fill="#5a6580" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">SPEND RECORDED</text>
+<rect x="460.6" y="249.0" width="78.7" height="18.0" rx="2" fill="#ffffff"/>
+<text x="500.0" y="262.6" fill="#5a6580" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">APPROVAL</text>
+<rect x="4" y="68" width="156" height="72" rx="6" fill="#ffffff"/>
+<rect x="4" y="68" width="156" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="82.0" y="91.5" fill="#2d3142" font-size="14.9" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">Project</text>
+<text x="82.0" y="108.5" fill="#4f5d75" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">projects, findings</text>
+<text x="82.0" y="125.5" fill="#4f5d75" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">agent registry</text>
+<rect x="4" y="268" width="156" height="60" rx="6" fill="#ffffff"/>
+<rect x="4" y="268" width="156" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="82.0" y="294.0" fill="#2d3142" font-size="14.9" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">Identity</text>
+<text x="82.0" y="311.0" fill="#4f5d75" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">accounts, API keys</text>
+<rect x="250" y="148" width="220" height="88" rx="6" fill="#ffffff"/>
+<rect x="250" y="148" width="220" height="88" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1"/>
+<text x="360.0" y="179.5" fill="#2d3142" font-size="14.9" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">Session</text>
+<text x="360.0" y="196.5" fill="#4f5d75" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">call tree of tasks</text>
+<text x="360.0" y="213.5" fill="#4f5d75" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">steps, never changed</text>
+<rect x="560" y="68" width="156" height="72" rx="6" fill="#ffffff"/>
+<rect x="560" y="68" width="156" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="638.0" y="91.5" fill="#2d3142" font-size="14.9" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">Worker</text>
+<text x="638.0" y="108.5" fill="#4f5d75" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">agent loop</text>
+<text x="638.0" y="125.5" fill="#4f5d75" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">no saved state</text>
+<rect x="560" y="252" width="156" height="76" rx="6" fill="#ffffff"/>
+<rect x="560" y="252" width="156" height="76" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="638.0" y="277.5" fill="#2d3142" font-size="14.9" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">Billing</text>
+<text x="638.0" y="294.5" fill="#4f5d75" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">budget cap, ledger</text>
+<text x="638.0" y="311.5" fill="#4f5d75" font-size="13" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">approvals</text>
+<line x1="20" y1="356" x2="700" y2="356" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+<text x="20" y="378" fill="#4f5d75" font-size="13" font-weight="400" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start" letter-spacing="0.18em">LEGEND</text>
+<line x1="100.4" y1="375" x2="126.4" y2="375" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+<text x="134.4" y="379" fill="#4f5d75" font-size="13" font-weight="400" font-family="'Geist', system-ui, sans-serif" text-anchor="start" letter-spacing="0em">domain event</text>
+<line x1="254.0" y1="375" x2="280.0" y2="375" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<text x="288.0" y="379" fill="#4f5d75" font-size="13" font-weight="400" font-family="'Geist', system-ui, sans-serif" text-anchor="start" letter-spacing="0em">upstream</text>
+<line x1="376.4" y1="375" x2="402.4" y2="375" stroke="#bf4520" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+<text x="410.4" y="379" fill="#4f5d75" font-size="13" font-weight="400" font-family="'Geist', system-ui, sans-serif" text-anchor="start" letter-spacing="0em">the step record</text>
+<rect x="553.4" y="369" width="16" height="11" rx="2" fill="rgba(191,69,32,0.08)" stroke="#bf4520"/>
+<text x="577.4" y="379" fill="#4f5d75" font-size="13" font-weight="400" font-family="'Geist', system-ui, sans-serif" text-anchor="start" letter-spacing="0em">core domain</text>
+</svg>
+</div>
+</body>
+</html>

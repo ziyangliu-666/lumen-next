@@ -1,0 +1,41 @@
+flowchart TB
+  U["Users and the lecturer<br/>(browser, curl, literature watch)"] -->|"HTTPS 443 / HTTP 80"| IP
+  GH["GitHub Actions<br/>platform-deploy.yml"] -->|"SSH 22, deploy key:<br/>scp image + chart, helm upgrade"| IP
+  DEV["Team laptop"] -->|"ssh -L 6443<br/>(kubectl tunnel)"| IP
+  IP["Public IPv4 of the VM<br/>lumen.139-180-185-51.sslip.io"]
+  subgraph VULTR["«device» Vultr Cloud Compute vc2-2c-4gb, Singapore"]
+    subgraph FW["Firewall group: 22, 80 and 443 open; 6443 closed"]
+      subgraph VM["«execution environment» Ubuntu 24.04: 2 vCPU, 4 GB + 2 GB swap, 80 GB SSD"]
+        subgraph K3S["«execution environment» k3s, one node"]
+          TR["Traefik (ships with k3s)<br/>IngressRoutes, /api/auth rate limit,<br/>HTTP to HTTPS redirect"]
+          CM["cert-manager<br/>Let's Encrypt ClusterIssuer, HTTP-01<br/>Certificate lumen-tls"]
+          subgraph Apps["namespace lumen: Deployments, Service port 4000"]
+            ID["identity 1-3<br/>HPA CPU 70%"]
+            PR["project 1-3<br/>HPA CPU 70%"]
+            BI["billing 1-3<br/>HPA CPU 70%"]
+            SE["session 1<br/>Recreate strategy"]
+            WO["worker 1-4<br/>KEDA ScaledObject"]
+          end
+          subgraph State["StatefulSets and volumes (local-path)"]
+            PG[("postgres-0<br/>postgres:16-alpine, PVC 2Gi")]
+            RB[("rabbitmq-0<br/>rabbitmq:3.13-management, PVC 1Gi")]
+            PVC[("worker-projects<br/>PVC 2Gi, ReadWriteOnce")]
+          end
+          subgraph Ops["Cluster add-ons and config"]
+            KEDA["KEDA operator<br/>reads queue length every 10 s"]
+            MS["metrics-server<br/>CPU for the HPAs"]
+            SEC["Secret lumen-core (generated in cluster)<br/>ConfigMap lumen-config"]
+          end
+        end
+      end
+    end
+  end
+  IP --> TR
+  CM -.->|"TLS secret"| TR
+  TR -->|"path rules"| Apps
+  Apps -->|"SQL, all five services"| PG
+  SE -->|"AMQP"| RB
+  WO -->|"AMQP"| RB
+  WO --- PVC
+  KEDA -->|"management API"| RB
+  KEDA -->|"scales 1-4"| WO

@@ -1,0 +1,27 @@
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant BI as billing
+  participant DB as PostgreSQL
+  participant S as session
+  participant W as worker
+  W->>+S: delegate [readers]
+  Note over S: guard: escalate
+  S->>DB: approval: pending
+  S->>DB: task: waiting
+  S-->>B: task waiting (/ws)
+  S-->>-W: waiting
+  W->>S: done (waiting)
+  Note over W: ack the turn
+  B->>+BI: grant approval
+  BI->>DB: approval: consumed
+  BI-->>-B: 200
+  loop outbox, 30 s lease
+    BI->>DB: claim row
+    BI->>+S: approvals/resume
+  end
+  S->>DB: find the task
+  Note over S: guard: allow
+  S->>DB: child tasks
+  S-->>-BI: 200
+  BI->>DB: resume done

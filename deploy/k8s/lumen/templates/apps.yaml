@@ -1,0 +1,164 @@
+{{- /*
+The five services. One image; each runs its own entry point
+(node apps/server/dist/services/<name>.js), as docs/platform/contract.md says.
+"needs" is what a service connects to at startup: the init container waits
+for it, so a fresh install does not fill the pod list with crash loops.
+*/ -}}
+{{- $services := list
+  (dict "name" "identity" "needs" (list "postgres:5432"))
+  (dict "name" "project" "needs" (list "postgres:5432"))
+  (dict "name" "session" "needs" (list "postgres:5432" "rabbitmq:5672"))
+  (dict "name" "worker" "needs" (list "postgres:5432" "rabbitmq:5672"))
+  (dict "name" "billing" "needs" (list "postgres:5432"))
+-}}
+{{- range $services }}
+{{- $name := .name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "lumen.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: http
+      port: 4000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "lumen.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+spec:
+  {{- if eq $name "session" }}
+  # Exactly one: the kernel holds running tasks in memory, and a second
+  # replica would not see them. Recreate, so that two kernels never overlap
+  # during a rollout and a worker's report never reaches the wrong one.
+  replicas: 1
+  strategy:
+    type: Recreate
+  {{- else if and (eq $name "worker") (not $.Values.keda.enabled) }}
+  replicas: 1
+  {{- end }}
+  {{- /* No replicas for the others: the HPA or KEDA owns the count, and an
+       upgrade must not reset it. */}}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "lumen.labels" $ | nindent 8 }}
+        app.kubernetes.io/name: {{ $name }}
+      annotations:
+        # Roll the pods when the configuration or the optional keys change.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        checksum/extra: {{ toJson $.Values.extraSecrets | sha256sum }}
+    spec:
+      # The image's entrypoint starts as root to run dockerd; these services
+      # need neither, so they start as the node user directly.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        {{- if eq $name "worker" }}
+        fsGroup: 1000
+        {{- end }}
+      # Service links would add RABBITMQ_PORT=tcp://... and the like to the env.
+      enableServiceLinks: false
+      {{- if eq $name "worker" }}
+      # The worker finishes the turn in hand on SIGTERM; a turn can take minutes.
+      terminationGracePeriodSeconds: {{ $.Values.worker.terminationGracePeriodSeconds }}
+      {{- end }}
+      initContainers:
+        - name: wait-for-dependencies
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command:
+            - node
+            - -e
+            - |
+              const net = require('node:net');
+              const targets = process.argv.slice(1);
+              const open = (target) => new Promise((resolve) => {
+                const [host, port] = target.split(':');
+                const socket = net.connect(Number(port), host, () => { socket.end(); resolve(true); });
+                socket.on('error', () => resolve(false));
+              });
+              (async () => {
+                for (;;) {
+                  const results = await Promise.all(targets.map(open));
+                  if (results.every(Boolean)) process.exit(0);
+                  console.log('waiting for', targets.filter((_, i) => !results[i]).join(' '));
+                  await new Promise((resolve) => setTimeout(resolve, 2000));
+                }
+              })();
+            {{- range .needs }}
+            - {{ . | quote }}
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          workingDir: /app
+          command: ["node", "apps/server/dist/services/{{ $name }}.js"]
+          ports:
+            - name: http
+              containerPort: 4000
+          env:
+            {{- include "lumen.appEnv" $ | nindent 12 }}
+            {{- if eq $name "worker" }}
+            - name: LUMEN_VOLUME_ROOT
+              value: /data/projects
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: lumen-config
+            - secretRef:
+                name: lumen-extra
+                optional: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          resources:
+            {{- toYaml $.Values.resources.app | nindent 12 }}
+          # Migrations run at startup (node-pg-migrate behind an advisory
+          # lock), so give the first start time before liveness counts.
+          startupProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- if eq $name "worker" }}
+          volumeMounts:
+            - name: projects
+              mountPath: /data/projects
+          {{- end }}
+      {{- if eq $name "worker" }}
+      volumes:
+        - name: projects
+          persistentVolumeClaim:
+            claimName: worker-projects
+      {{- end }}
+{{- end }}

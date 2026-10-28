@@ -1,0 +1,40 @@
+flowchart LR
+  subgraph IdentityBC["Identity context (identity service)"]
+    ACC["<b>Account</b> (aggregate)<br/>email, role, credentials"]
+    KEY["<b>ApiKey</b> (aggregate)<br/>prefix, SHA-256 hash, scopes"]
+  end
+  subgraph RegistryBC["Registry context (project service)"]
+    AG["<b>Agent</b> (aggregate)<br/>slug, instructions, withdrawn"]
+    INT["<b>QuestionIntent</b> (entity)<br/>account, agent, question, session"]
+  end
+  subgraph ProjectBC["Project context (project service)"]
+    PRJ["<b>Project</b> (aggregate)<br/>title, mode, last visit"]
+    FND["<b>Finding</b> (entity)<br/>title, text"]
+  end
+  subgraph SessionBC["Session context (session service): the seed"]
+    SES["<b>Session</b> (aggregate root)<br/>owns the Task tree"]
+    TSK["<b>Task</b> (entity)<br/>agent, depth, status,<br/>own cost, pending approval"]
+    STP["<b>Step</b> (value)<br/>kind, text, detail, cost"]
+  end
+  subgraph SteeringBC["Steering context (worker service)"]
+    WRK["<b>Worker loop</b><br/>agents, tools, sandbox"]
+  end
+  subgraph BillingBC["Billing context (billing service)"]
+    WAL["<b>Wallet</b> (aggregate)<br/>cap"]
+    LED["<b>LedgerEntry</b> (entity)<br/>amount, reason"]
+    APR["<b>Approval</b> (aggregate)<br/>attempt, amount, status"]
+  end
+  EV["<b>Domain events</b><br/>step.appended<br/>finding.recorded<br/>task.cost: spend recorded<br/>task.status waiting: approval requested<br/>approval granted: resume outbox<br/>turn queued, turn done"]
+  ACC --> KEY
+  ACC -->|"owns"| PRJ
+  INT -->|"names"| AG
+  PRJ -->|"one session per question"| SES
+  INT -->|"claimed by the root turn"| SES
+  SES --> TSK --> STP
+  WRK -. "WorkerReport port, no direct DB writes" .-> TSK
+  TSK -->|"emits"| EV
+  EV -->|"spend"| LED
+  EV -->|"approval requested"| APR
+  EV -->|"finding"| FND
+  WAL --> LED
+  APR -->|"granted: resume the task"| TSK

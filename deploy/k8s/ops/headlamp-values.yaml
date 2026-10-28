@@ -1,0 +1,25 @@
+# Headlamp, a read-only Kubernetes dashboard for the lecturers. Install with:
+#   helm upgrade --install headlamp headlamp/headlamp -n ops --create-namespace \
+#     -f deploy/k8s/ops/headlamp-values.yaml --set "ingress.hosts[0].host=ops.<ip-with-dashes>.sslip.io" \
+#     --set "ingress.tls[0].hosts[0]=ops.<ip-with-dashes>.sslip.io"
+# Sign in with the token of the read-only service account (viewer.yaml).
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  hosts:
+    - host: ops.example.sslip.io
+      paths:
+        - path: /
+          type: Prefix
+  tls:
+    - secretName: headlamp-tls
+      hosts:
+        - ops.example.sslip.io
+resources:
+  requests: { cpu: 10m, memory: 48Mi }
+  limits: { memory: 192Mi }
+# No cluster-admin for the dashboard itself: people sign in with the read-only token.
+clusterRoleBinding:
+  create: false

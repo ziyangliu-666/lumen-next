@@ -1,0 +1,5 @@
+# Built report files. The submitted copies live in the coursework repository.
+report/out/
+progress/*.docx
+progress/*.pdf
+__pycache__/

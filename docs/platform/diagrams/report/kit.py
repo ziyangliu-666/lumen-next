@@ -33,10 +33,10 @@ SANS = "'Geist', system-ui, sans-serif"
 MONO = "'Geist Mono', ui-monospace, monospace"
 SERIF = "'Instrument Serif', serif"
 
-NAME = 13       # node-name role
-SUB = 10        # sublabel role
-LABEL = 9       # arrow-label role
-TAG = 8         # eyebrow / type tag role
+NAME = 14       # node-name role
+SUB = 11.5     # sublabel role
+LABEL = 10.5   # arrow-label role
+TAG = 9         # eyebrow / type tag role
 
 FONTS = ("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1"
          "&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap")
@@ -46,12 +46,20 @@ def esc(s):
     return html.escape(str(s), quote=True)
 
 
-def mono_w(text, size=LABEL, track=0.06):
-    return len(text) * size * (0.62 + track)
+def use(px, name=None):
+    """Sets the type sizes of the next diagram. px is the smallest size in viewBox
+    pixels; draw.py picks it so that the text prints at 8 pt or more."""
+    global NAME, SUB, LABEL, TAG
+    SUB = LABEL = TAG = px
+    NAME = name or round(px * 1.15, 1)
 
 
-def sans_w(text, size=NAME):
-    return len(text) * size * 0.60
+def mono_w(text, size=None, track=0.06):
+    return len(text) * (size or LABEL) * (0.62 + track)
+
+
+def sans_w(text, size=None):
+    return len(text) * (size or NAME) * 0.60
 
 
 class Diagram:
@@ -86,8 +94,9 @@ class Diagram:
         dash = ' stroke-dasharray="5,4"' if dashed else ""
         self.add("arrows", '<path d="%s" fill="none" stroke="%s" stroke-width="%s"%s%s/>' % (d, color, width, dash, m))
 
-    def label(self, cx, cy, text, color=SOFT, size=LABEL, anchor="middle", upper=True):
+    def label(self, cx, cy, text, color=SOFT, size=None, anchor="middle", upper=True):
         """A masked arrow label; (cx, cy) is the centre of the text. Code names keep their case."""
+        size = size or LABEL
         if upper:
             text = text.upper()
         w = mono_w(text, size) + 8
@@ -105,9 +114,9 @@ class Diagram:
                  'stroke-dasharray="4,4"/>' % (x, y, w, h, fill or ink(0.02), stroke))
         t = text.upper()
         tw = mono_w(t, TAG, 0.16) + 10
-        self.add("zones", '<rect x="%s" y="%s" width="%.1f" height="12" fill="%s"/>' % (x + 10, y - 6, tw, PAPER))
+        self.add("zones", '<rect x="%s" y="%s" width="%.1f" height="%s" fill="%s"/>' % (x + 10, y - TAG / 2 - 2, tw, TAG + 4, PAPER))
         self.add("zones", '<text x="%s" y="%s" fill="%s" font-size="%s" font-family="%s" letter-spacing="0.16em">%s</text>'
-                 % (x + 15, y + 3, color or MUTED, TAG, MONO, esc(t)))
+                 % (x + 15, y + TAG * 0.35, color or MUTED, TAG, MONO, esc(t)))
 
     def node(self, x, y, w, h, name, sub="", tag="", kind="backend", name_y=None, align="middle"):
         fill, stroke, dash = {
@@ -122,16 +131,7 @@ class Diagram:
         n.append('<rect x="%s" y="%s" width="%s" height="%s" rx="6" fill="%s"/>' % (x, y, w, h, PAPER))
         n.append('<rect x="%s" y="%s" width="%s" height="%s" rx="6" fill="%s" stroke="%s" stroke-width="1"%s/>'
                  % (x, y, w, h, fill, stroke, dash))
-        top = y
-        if tag:
-            tg = tag.upper()
-            tw = mono_w(tg, TAG - 1, 0.08) + 8
-            tcol = ACCENT if kind == "focal" else SOFT
-            n.append('<rect x="%s" y="%s" width="%.1f" height="12" rx="2" fill="transparent" stroke="%s" stroke-width="0.8"/>'
-                     % (x + 8, y + 6, tw, acc(0.5) if kind == "focal" else ink(0.25)))
-            n.append('<text x="%.1f" y="%s" fill="%s" font-size="%s" font-family="%s" text-anchor="middle" '
-                     'letter-spacing="0.08em">%s</text>' % (x + 8 + tw / 2, y + 15, tcol, TAG - 1, MONO, esc(tg)))
-            top = y + 12
+        top = y      # the type tag is not drawn: the name, the legend and the caption carry the type
         cx = x + w / 2 if align == "middle" else x + 12
         lines = sub.split("\n") if sub else []
         if name_y is None:
@@ -148,12 +148,13 @@ class Diagram:
         n.append('<rect x="%s" y="%s" width="%s" height="%s" rx="4" fill="%s" stroke="%s" stroke-width="0.8"/>'
                  % (x, y, w, h, ink(0.05), MUTED))
         n.append('<text x="%s" y="%.1f" fill="%s" font-size="%s" font-weight="500" font-family="%s">%s</text>'
-                 % (x + 8, y + h / 2 + 4, INK, NAME - 1, SANS, esc(name)))
+                 % (x + 8, y + h / 2 + 4, INK, NAME, SANS, esc(name)))
         if tag_right:
             n.append('<text x="%s" y="%.1f" fill="%s" font-size="%s" font-family="%s" text-anchor="end">%s</text>'
-                     % (x + w - 8, y + h / 2 + 3.5, MUTED, SUB - 0.5, MONO, esc(tag_right)))
+                     % (x + w - 8, y + h / 2 + 3.5, MUTED, SUB, MONO, esc(tag_right)))
 
-    def text(self, x, y, s, size=SUB, color=MUTED, family=MONO, anchor="start", weight=400, layer="top", track=0):
+    def text(self, x, y, s, size=None, color=MUTED, family=MONO, anchor="start", weight=400, layer="top", track=0):
+        size = size or SUB
         self.add(layer, '<text x="%s" y="%s" fill="%s" font-size="%s" font-weight="%s" font-family="%s" text-anchor="%s" '
                  'letter-spacing="%sem">%s</text>' % (x, y, color, size, weight, family, anchor, track, esc(s)))
 
@@ -164,7 +165,7 @@ class Diagram:
         """items: list of (kind, text); kind is 'muted', 'link', 'accent', 'dashed', 'focal', 'store', 'external'."""
         self.add("top", '<line x1="20" y1="%s" x2="%s" y2="%s" stroke="%s" stroke-width="0.8"/>' % (y, self.w - 20, y, ink(0.12)))
         self.text(20, y + 22, "LEGEND", TAG, MUTED, MONO, track=0.18)
-        x = 88
+        x = 20 + mono_w("LEGEND", TAG, 0.18) + 18
         for kind, t in items:
             if kind in ("muted", "link", "accent", "dashed"):
                 col = {"muted": MUTED, "link": LINK, "accent": ACCENT, "dashed": MUTED}[kind]

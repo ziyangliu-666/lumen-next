@@ -49,7 +49,7 @@ EXTRA_COVER = ["Public address: https://lumen.139-180-185-51.sslip.io",
 
 TEXT_W = Inches(6.27)            # A4 portrait, 1 inch margins
 LAND_W = Inches(9.69)            # A4 landscape, 1 inch margins
-LAND_H = Inches(5.0)             # height left for figures and captions on a landscape page
+LAND_H = Inches(5.6)             # height left for figures and captions on a landscape page
 GREY = RGBColor(0x4F, 0x5D, 0x75)
 CODE_FONT = "Courier New"
 
@@ -266,8 +266,8 @@ class Builder:
             self.counters[k] = 0
         number = ".".join(str(c) for c in self.counters[:level])
         self.headings.append((level, number, text))
-        if level == 1 and len(self.headings) > 1:
-            self.doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+        # no forced page break before a chapter: it left half-empty pages at the end of
+        # sections 2 to 5; keep_with_next keeps a heading off the bottom of a page
         p = self.doc.add_paragraph(style="Heading %d" % level)
         p.add_run(text)
         bm = "_Toc%04d" % len(self.headings)
@@ -278,21 +278,25 @@ class Builder:
         end.set(qn("w:id"), str(len(self.headings)))
         p._p.insert(1, start)
         p._p.append(end)
-        p.paragraph_format.space_before = Pt(14 if level == 1 else 10)
+        p.paragraph_format.space_before = Pt(22 if level == 1 else 10)
         p.paragraph_format.space_after = Pt(6)
+        p.paragraph_format.keep_with_next = True
 
     def para(self, text):
         p = self.doc.add_paragraph()
         add_inline(p, text)
+        if text.rstrip().endswith(":") or text.startswith("**") and text.rstrip().endswith("**"):
+            p.paragraph_format.keep_with_next = True
 
     def bullet_list(self, items):
-        for depth, mark, text in items:
+        for k, (depth, mark, text) in enumerate(items):
             p = self.doc.add_paragraph()
             pf = p.paragraph_format
-            indent = 0.28 + 0.28 * depth
+            hang = 0.22 if mark in "-*" else 0.32      # room for "10." and "12."
+            indent = 0.1 + hang + 0.28 * depth
             pf.left_indent = Inches(indent)
-            pf.first_line_indent = Inches(-0.22)
-            pf.space_after = Pt(3)
+            pf.first_line_indent = Inches(-hang)
+            pf.space_after = Pt(8 if k == len(items) - 1 else 3)
             pf.tab_stops.add_tab_stop(Inches(indent))
             p.add_run(("•" if mark in "-*" else mark) + "\t")
             add_inline(p, text)
@@ -303,12 +307,23 @@ class Builder:
         t = self.doc.add_table(rows=len(rows), cols=ncols)
         t.alignment = WD_TABLE_ALIGNMENT.CENTER
         set_table_borders(t)
-        # column widths: each column gets at least its longest word, and the rest of
-        # the width goes to the columns with the most text
+        # column widths: each column gets at least its longest word (a short label column
+        # gets its whole text, so "reader agent" or "8 to 19 Oct" does not wrap), and the
+        # rest of the width goes to the columns with the most text
         size = Pt(9) if ncols >= 4 or sum(len(c) for r in rows for c in r) > 1500 else Pt(9.5)
         plain = [[re.sub(r"[*`]", "", c) for c in r] for r in rows]
-        total_chars = 6.27 * 72 / (size.pt * 0.52)
-        mins = [min(max(max((len(w) for w in r[c].split()), default=4) for r in plain) + 2, 24) for c in range(ncols)]
+        pad = Inches(0.16)                      # left and right cell margins together
+        avail = TEXT_W - pad * ncols
+        total_chars = avail / 12700 / (size.pt * 0.55)
+        def wlen(text, bold=False):
+            # capitals and bold text are wider than the average character
+            n = len(text) + 0.5 * sum(ch.isupper() for ch in text)
+            return n * 1.1 if bold else n
+        mins = []
+        for c in range(ncols):
+            longest_word = max(max((wlen(w, ri == 0) for w in r[c].split()), default=3) for ri, r in enumerate(plain))
+            longest_cell = max(wlen(r[c], ri == 0) for ri, r in enumerate(plain))
+            mins.append(min(longest_cell if longest_cell <= 16 else longest_word, 24) + 1.5)
         prefs = [min(max(len(r[c]) for r in plain), 120) for c in range(ncols)]
         if sum(mins) >= total_chars:
             lens = mins
@@ -319,8 +334,10 @@ class Builder:
             lens = [m + extra * w / tw for m, w in zip(mins, want)]
         if ncols == 2 and rows[0][0] == "Identifier":
             lens = [12, 88]
+        if ncols == 6 and rows[0][0] == "Identifier":      # the AISS table
+            lens = [10, 21, 23, 23, 13, 10]
         total = sum(lens)
-        widths = [int(TEXT_W * n / total) for n in lens]
+        widths = [int(avail * n / total + pad) for n in lens]
         t.autofit = False
         tblPr = t._tbl.tblPr
         layout = OxmlElement("w:tblLayout")
@@ -335,11 +352,12 @@ class Builder:
         grid = t._tbl.tblGrid
         for gc, w in zip(grid.findall(qn("w:gridCol")), widths):
             gc.set(qn("w:w"), str(int(w / 635)))
+        short = len(rows) <= 8 and sum(len(c) for r in plain for c in r) <= 700
         for ri, row in enumerate(rows):
             tr = t.rows[ri]
             if ri == 0:
                 repeat_header(tr)
-            if len(" ".join(row)) < 400:
+            if len(" ".join(row)) < 1500:      # a row breaks across pages only when it is very long
                 no_split(tr)
             for ci, text in enumerate(row):
                 cell = tr.cells[ci]
@@ -349,8 +367,9 @@ class Builder:
                 p.paragraph_format.space_before = Pt(1)
                 p.paragraph_format.line_spacing = 1.0
                 add_inline(p, text, size=size, bold=(ri == 0))
-                # a short table stays on one page; a long one keeps its header with the first row
-                if ri == 0 or (len(rows) <= 14 and ri < len(rows) - 1):
+                # a short table stays on one page; a longer one may break, so that it does not
+                # leave a large empty space; its header stays with the first row
+                if ri == 0 or (short and ri < len(rows) - 1):
                     p.paragraph_format.keep_with_next = True
                 if ri == 0:
                     set_cell_shading(cell, "F2F2F2")

@@ -19,7 +19,7 @@ Code base: https://github.com/ziyangliu-666/lumen-next (branch `ass/platform`)
 Lumen is an AI for research. You ask one question; several AI agents share
 the work; you see every step and its cost.
 
-The terms below have one meaning each in this report:
+The report uses these terms, each with one meaning:
 
 | Term | Meaning |
 |---|---|
@@ -27,8 +27,9 @@ The terms below have one meaning each in this report:
 | reader agent | An agent that the lead agent gives one part of the work, for example one paper to read. |
 | task | One agent's part of the work, with its own cost. |
 | call tree | The tree of tasks of one question: the lead agent's task at the root, the reader agents' tasks under it. |
-| turn | One run of the agent loop for one task. A turn is the unit of work that goes on a queue. The figures from the presentation call a queued turn a "job". |
+| turn | One run of the agent loop for one task. A turn is the unit of work that goes on a queue. The proposal's plan (section 2.1) calls a queued turn a "job". |
 | step | One model call or tool call inside a turn, saved with its cost. |
+| fan-out | One call of the `delegate` tool, by which an agent opens several child tasks at once. |
 | finding | A result that an agent records, for example the title and the main idea of a paper. |
 | steer | A message from a person to a running agent. |
 | budget cap | The most that an account may spend before a person approves more. |
@@ -37,17 +38,17 @@ The terms below have one meaning each in this report:
 | session | One question and its call tree. |
 | project | The place that holds a user's sessions, findings and files. |
 
-Research teams give work to AI agents. Each team that does this builds the
-same parts again: sign-in, a record of each step and its cost, a budget cap,
-a sandbox for commands, and a live view of the run. Lumen started as one
+Research teams give work to AI agents. Each of these teams builds the same
+parts again. The parts are sign-in, a record of each step and its cost, a
+budget cap, a sandbox for commands and a live view of the run. Lumen started as one
 Node.js application with five modules: identity, projects, session, steering
 and billing. That application is the base product.
 
 This project makes Lumen a platform. The modules run as five services on
 Kubernetes, behind one public HTTPS address. Producers publish agents.
 Consumers ask questions through the web app or through a public API. The
-platform runs each question as a call tree, records every step with its cost,
-streams the run live, and holds every step that would pass the budget cap
+platform runs each question as a call tree and records each step with its
+cost. It streams the run live. A step that would pass the budget cap waits
 until the owner approves it. Figure 1 shows the public address and one
 answered question on it.
 
@@ -56,20 +57,20 @@ answered question on it.
 The team submitted the proposal (version 2) on 6 October 2026. The lecturer's
 review on the same day asked for "a horizontally scalable cloud-native
 microservice-oriented system". The team built the platform from 8 to 21
-October, presented it on 26 October 2026 with a live demonstration on the
-public address, and submits this report by 16 November 2026. The platform is
-live at the address on the cover page.
+October. The team presented it on 26 October 2026, with a live demonstration
+on the public address. The platform is live at the address on the cover
+page.
 
 ### 1.2 Business Needs
 
-The briefing asks two questions: what are the pain points, and what does a
-new use case gain when it is built on the platform?
+The table gives the pain points of the users and what a use case gains when
+it is built on the platform.
 
 | Pain point | What the platform gives |
 |---|---|
 | Each team that runs agents builds sign-in, cost control, a step record and a live view again. | The platform builds them once. An app gets them through an API key. |
-| An agent author cannot offer a good agent to other teams. | An agent registry: publish once, and every consumer can choose the agent. |
-| A team cannot run another team's agent safely. | The platform runs the chosen agent under the consumer's own budget cap and records every step and its cost. |
+| An agent author cannot offer a good agent to other teams. | An agent registry. The author publishes the agent once; consumers choose it by name. |
+| A team cannot run another team's agent safely. | The platform runs the chosen agent under the consumer's own budget cap and records each step and its cost. |
 | Load comes in bursts: one question fans out to several reader agents. | Workers are added when turns wait on the queue, and removed after. |
 | A model call costs money, with no limit. | Each step is checked against the account's budget cap; a step that passes it waits for an approval. |
 
@@ -80,7 +81,7 @@ new use case gain when it is built on the platform?
 | Research teams (consumers) | Business | Ask questions, watch the run, keep the findings, control the cost. |
 | Agent authors (producers) | Business | Publish an agent once; see how much it is used. |
 | App developers (consumers of the API) | Business and IT | Build an app on the API with a key, for example the literature watch. |
-| Operator (the team, with staff accounts) | IT | Run the cluster; read usage and spend for every account and agent. |
+| Operator (the team, with staff accounts) | IT | Run the cluster; read usage and spend per account and per agent. |
 | Model provider (OpenAI) | External | Supply the model calls. Not built by the team. |
 | Hosting provider (AWS, then Vultr) | External | Supply the virtual machine that runs the cluster (section 3.2). |
 | NUS-ISS lecturers | Assessor | Assess the architecture, the demonstration and this report. |
@@ -88,20 +89,21 @@ new use case gain when it is built on the platform?
 
 ### 1.4 Project Scope
 
-The scope is the platform side of Lumen: the services, the messages between
-them, the deployment, the pipeline, the public API, and two apps on the
-platform. The architecture is wider than the build in a few places. Section
-3.4 lists each of them with its resolution.
+The scope is the platform side of Lumen. It includes the services, the
+messages between them, the deployment, the pipeline, the public API and two
+apps on the platform. In a few places the architecture is wider than the
+build; section 3.4 lists each place with its resolution.
 
 The work has two phases:
 
-- **Phase 1 (8 October to 16 November 2026).** Five services on k3s on one
-  node, the public HTTPS address, autoscaling of pods, the pipeline, the
-  public API version 1, the agent registry and the literature watch. All of
-  it is built and running.
-- **Phase 2 (after the course).** The roadmap in section 3.4: a second
-  session replica, one database per service, and a managed cluster with
-  several nodes when the budget allows it (section 3.2.1).
+- **Phase 1 (8 October to 16 November 2026).** Five services on k3s, a small
+  Kubernetes distribution, on one node. Phase 1 also has the public HTTPS
+  address, pod autoscaling, the pipeline, the public API version 1, the agent
+  registry and the literature watch. It is built and runs on the public
+  address.
+- **Phase 2 (after the course).** The roadmap in section 3.4. It adds a second
+  session replica and one database per service. When the budget allows, it
+  adds a managed cluster with several nodes (section 3.2.1).
 
 #### 1.4.1 Functionality in scope
 
@@ -118,13 +120,16 @@ The table gives each use case of the proposal and its status on 27 October 2026.
 
 Other functions in scope:
 
-- Sign-up, sign-in and the auth cookie on every service.
+- Sign-up, sign-in and the auth cookie, checked by each service.
 - A question runs as a call tree: the lead agent delegates to reader agents.
 - The live stream of steps over a WebSocket (`/ws`).
-- Autoscaling: HPA on CPU for identity, project and billing; KEDA on queue
-  length for the worker.
+- Autoscaling. The Kubernetes Horizontal Pod Autoscaler (HPA) scales
+  identity, project and billing on CPU. KEDA (Kubernetes Event-driven
+  Autoscaling) scales the worker on queue length.
 - A k6 load test and an autoscaling test on the public host.
-- A CI/CD pipeline with SCA, SAST, an image scan, DAST and a smoke load.
+- A CI/CD pipeline. It audits the dependencies (SCA), analyses the code
+  (SAST), scans the image, scans the live site (DAST) and runs a short load
+  test after each deployment (the smoke load).
 
 #### 1.4.2 Functionality out of scope
 
@@ -148,10 +153,10 @@ Other functions in scope:
 ### 2.1 Project Plan
 
 The proposal estimated ten person-days per member, fifty in total, from 8 to
-21 October. The table below is the work breakdown of the proposal, with the
-owner of each task. Figure 2 is the schedule of the proposal.
+21 October. The table gives the tasks of the proposal and the owner of each
+task. Figure 2 is the schedule of the proposal.
 
-| WBS | Task | Owner | Estimate (days) |
+| No. | Task | Owner | Estimate (days) |
 |---|---|---|---|
 | 1 | Architecture: service boundaries, API and event contracts | LIU ZIYANG | 3 |
 | 2 | Session service and stream service | LIU ZIYANG | 7 |
@@ -170,10 +175,10 @@ owner of each task. Figure 2 is the schedule of the proposal.
 
 ### 2.2 Project Status
 
-On 27 October 2026 every task of the plan is done, with the changes in
-section 3.4. The platform runs on the public address. The last deployment is
-pipeline run 40284716751 of 26 October 2026: every stage passed, and the
-smoke load was skipped because the workers run the real model.
+On 27 October 2026 the eleven tasks of the plan are done, with the changes
+in section 3.4. The platform runs on the public address. The last deployment
+is pipeline run 40284716751 of 26 October 2026. Its stages passed, except
+the smoke load, which did not run because the workers use the real model.
 
 | Area | Status on 27 October 2026 | Evidence |
 |---|---|---|
@@ -188,8 +193,7 @@ smoke load was skipped because the workers run the real model.
 | Approvals across HTTP between billing and session | Verified in an integration test with four scenarios | `docs/platform/evidence/2026-10-21-approval-http.md` |
 | Default budget cap of a new account on the public host | USD 0.05 | Commit `ade7f7a`, run 40284716751 |
 
-Outstanding issues are the open items of section 3.4. None of them blocks
-the demonstration or the use cases.
+The open issues are in section 3.4.
 
 ### 2.3 Project Metrics
 
@@ -199,7 +203,7 @@ The milestones below come from the git history and the pipeline runs.
 |---|---|---|
 | 1 Oct | Proposal version 1 | `01_Proposal-v1_2026-10-01.docx` |
 | 6 Oct | Proposal version 2, and the lecturer's review | `03_Proposal-v2_2026-10-06.docx` |
-| 8 to 19 Oct | Module work in the base product that the services reuse: API key lifecycle, durable approvals, over-cap approvals | Merged pull requests on `main` |
+| 8 to 19 Oct | Module work in the base product that the services reuse: API key lifecycle, durable approvals, over-cap approvals | Merged pull requests in the base product |
 | 19 Oct | The platform integration branch starts from the base product | Commit `320aa39` |
 | 20 Oct | The five services, the Helm chart with HPA and KEDA, the Traefik ingress, the deploy pipeline, the public API and the literature watch | Commits `cbb8372` to `7d575db` |
 | 20 Oct | The image scan gate stops a deployment with 5 critical CVEs | Run 39439752963 |
@@ -210,9 +214,9 @@ The milestones below come from the git history and the pipeline runs.
 | 26 Oct | Presentation at 11:25, with a live demonstration on the public host | Presentation schedule |
 | 16 Nov | Report submission | Briefing |
 
-Effort per member. Each member spent about ten person-days (80 hours), as the
-work breakdown of the proposal planned: 400 hours in total. The hours are the
-plan's person-days at eight hours a day; the team did not keep time sheets.
+Effort per member. The team did not keep time sheets. The table gives the
+planned effort: ten person-days of eight hours for each member, 400 hours in
+total.
 
 | Member | Main work | Effort (hours) |
 |---|---|---|
@@ -231,25 +235,25 @@ plan's person-days at eight hours a day; the team did not keep time sheets.
 
 The platform is five services. Each service is built from one module of the
 base product, with a new entry point (`apps/server/src/services/<name>.ts`).
-Every service runs from the same container image with a different command.
+The five services run from one container image, each with its own command.
 Figure 3 shows the tiers, the services, the queues and the data store.
-
-![Figure 3. Logical architecture: Traefik routes each request by path to one of five services; session puts turns on RabbitMQ, a worker takes them, calls the model and reports each step back to session; every service keeps its own tables in one PostgreSQL database. Source: services and chart on the integration branch, commit ade7f7a.](figures/d-logical.png)
 
 Two kinds of call cross a process boundary:
 
 - **Messages on RabbitMQ.** The session service puts each turn on a durable
-  queue. Any worker pod takes it. Steers go on a fanout exchange to every
-  worker pod.
+  queue. Any worker pod takes it. Steers go on a fanout exchange, which gives
+  a copy to each worker pod.
 - **Internal HTTP.** The worker reports each step back to the session
   service. The project and worker services reach the running kernel through
   the session directory. The billing service resumes an approved task.
 
-The **kernel** is the part of the session module that runs the call tree: it
+The **kernel** is the part of the session module that runs the call tree. It
 opens tasks, rolls up their cost, checks the budget cap and streams each step.
-All five services share one PostgreSQL database. A port that only reads or
+The five services share one PostgreSQL database. A port that only reads or
 writes the database stays in-process: a service builds the other module over
 the shared database (AD-06, AISS-02).
+
+![Figure 3. Logical architecture. Traefik routes each request by path to one of five services. Session puts turns on RabbitMQ; a worker takes them, calls the model and reports each step back to session. Each service keeps its own tables in one PostgreSQL database. Source: services and chart on the integration branch, commit ade7f7a.](figures/d-logical.png)
 
 #### 3.1.1 Key Architectural Decisions
 
@@ -259,10 +263,10 @@ The key architectural decisions taken are as follows:
 |---|---|
 | AD-01 | **Service boundaries follow the existing modules.** Decision: five services (identity, project, session, worker, billing), each one an existing module with a new entry point. Alternative: the eight services of the proposal, written new. Trade-off: fewer services than the proposal; the stream and the model gateway are not separate services. Rationale: the modules already have clear ports and tests. Reuse leaves the time for the part that must change: the calls between processes. The base product keeps its tests green, because the module internals do not change. |
 | AD-02 | **A turn crosses from session to worker on a durable RabbitMQ queue.** Decision: the kernel takes a `Worker` port. The session service gives it a `QueueWorker`, which publishes the turn and waits for `/internal/turns/:id/done`. Alternatives: a direct HTTP call from session to a worker; the worker loop inside session. Trade-off: one more moving part (the broker) and a second protocol. Rationale: a slow model call never holds a web request. Any worker pod can take any turn. A worker that dies before it acknowledges leaves the turn on the queue for another worker. KEDA can scale on the queue length. The kernel does not change. |
-| AD-03 | **One queue per task depth.** Decision: `lumen.turns.0` (lead agents), `lumen.turns.1` (reader agents), `lumen.turns.2` (depth 2 and deeper), each with its own slots per pod (`LUMEN_WORKER_SLOTS`, default 4). Alternative: one queue. Trade-off: three queues to watch and three KEDA triggers. Rationale: a parent turn keeps its worker slot while `delegate` waits for its children. With one queue, waiting parents can fill every slot, and the children never start. With one queue per depth, the deepest level never waits, so the work always drains. |
+| AD-03 | **One queue per task depth.** Decision: `lumen.turns.0` (lead agents), `lumen.turns.1` (reader agents), `lumen.turns.2` (depth 2 and deeper), each with its own slots per pod (`LUMEN_WORKER_SLOTS`, default 4). Alternative: one queue. Trade-off: three queues to watch and three KEDA triggers. Rationale: a parent turn keeps its worker slot while `delegate` waits for its children. With one queue, waiting parents can take all slots, and the children never start. With one queue per depth, the deepest level never waits, so the queues drain. |
 | AD-04 | **The session service is the only writer of the call tree.** Decision: the worker reports each step, delegation, finding and spend through the `WorkerReport` port. In the worker service this port is `RemoteReport`, which calls `/internal/turns/:turnId/<member>` on session. Alternative: the worker writes steps to the database. Trade-off: one HTTP call per step, and `delegate` holds a call open for up to 15 minutes. Rationale: a worker that dies loses nothing, because each step is already saved. The kernel keeps the cost roll-up, the budget checks and the live stream in one place. |
-| AD-05 | **Steers go on a fanout exchange.** Decision: `task.steer` from the browser arrives at session over `/ws`. Session publishes it on `lumen.steers`. Every worker pod has an exclusive, auto-delete queue bound to it, and the pod that runs the task applies it. Alternative: a table of which pod runs which task. Trade-off: every pod sees every steer. Rationale: steers are rare and small; no pod needs to know where a task runs. |
-| AD-06 | **One shared database, with in-process modules for database-only ports.** Decision: every service connects to the same PostgreSQL database. A port that only touches the database (for example `requireProject`) is built in-process over it. Alternative: one database per service, with an API call for every read across modules. Trade-off: the services share the schema; one database is a single point of failure. Rationale: one transaction writes a step, its cost and the ledger entry together. The tables are already grouped by module (migration prefixes), so a later split is mechanical (AISS-02). |
+| AD-05 | **Steers go on a fanout exchange.** Decision: `task.steer` from the browser arrives at session over `/ws`. Session publishes it on `lumen.steers`. Each worker pod has an exclusive, auto-delete queue bound to it, and the pod that runs the task applies it. Alternative: a table of which pod runs which task. Trade-off: each pod receives each steer. Rationale: steers are rare and small; no pod needs to know where a task runs. |
+| AD-06 | **One shared database, with in-process modules for database-only ports.** Decision: the five services connect to the same PostgreSQL database. A port that only touches the database (for example `requireProject`) is built in-process over it. Alternative: one database per service, with an API call for each read across modules. Trade-off: the services share the schema; one database is a single point of failure. Rationale: one transaction writes a step, its cost and the ledger entry together. The tables are already grouped by module (migration prefixes), so a later split is mechanical (AISS-02). |
 | AD-07 | **The public API is a versioned path with API keys and scopes.** Decision: `/api/v1/*`; keys of the form `lmn_<prefix>_<secret>`, stored as a SHA-256 hash; five scopes; a token-bucket rate limit per key (60 a minute, burst 20) that answers 429; an OpenAPI 3.1 document. A key works only on `/api/v1/*`; the web app's routes stay cookie-only. Alternative: the cookie for apps too. Trade-off: two ways to sign in. Rationale: an app needs a credential that it can store, scope and revoke without a password. The key guard refuses a version 1 route that is not in its scope table, so a new route is closed until it is listed. |
 | AD-08 | **An agent is a set of instructions for the lead agent, chosen per question.** Decision: a producer publishes a slug, a name, a description and instructions (at most 4,000 characters). `POST /api/v1/questions` writes a question intent row first. The worker claims it on the root turn with `FOR UPDATE SKIP LOCKED` and puts the agent's instructions in front of the question. Alternative: the proposal's registered agent endpoint and manifest. Trade-off: a producer cannot bring its own code or model. Rationale: the producer and consumer roles work end to end with no change to the kernel or the worker loop, and with no untrusted code (AISS-09). |
 
@@ -292,9 +296,9 @@ Each service has the same internal layers, the structure of a module:
 | Ports and adapters | Interfaces between modules, and their local or remote adapters. | `Worker`, `WorkerReport`, `SessionDirectory`; `QueueWorker`, `RemoteReport`, `remoteSessionDirectory` |
 | Data access | SQL stores over the shared database. | `modules/session/pgTrace.ts`, `services/platform/registry.ts` |
 
-The ports and adapters layer made the split possible. The kernel depends on
-the `Worker` interface, not on the worker. In the base product the adapter is
-the in-process worker. In the platform it is `QueueWorker`. The same is true
+The ports and adapters layer made the split possible. The kernel depends
+only on the `Worker` interface. In the base product the adapter is the
+in-process worker. In the platform it is `QueueWorker`. The same is true
 for `WorkerReport` (`RemoteReport`) and `SessionDirectory`
 (`remoteSessionDirectory`).
 
@@ -317,31 +321,31 @@ The internal calls, from `docs/platform/contract.md`:
 |---|---|---|---|
 | session | worker | RabbitMQ `lumen.turns.<depth>` | Run one turn of one task. |
 | session | worker | RabbitMQ fanout `lumen.steers` | Deliver a steer to the pod that runs the task. |
-| worker | session | `POST /internal/turns/:turnId/{step, delegate, finding, spend, stopped, done}` | Report the turn. `delegate` waits up to 15 minutes; every other call 10 seconds. |
+| worker | session | `POST /internal/turns/:turnId/{step, delegate, finding, spend, stopped, done}` | Report the turn. `delegate` waits up to 15 minutes; the other calls 10 seconds. |
 | project, worker | session | `POST /internal/directory/{start, list, stop, context, task-session}` | Reach the running kernel. |
 | billing | session | `POST /internal/approvals/resume` | Resume a task after the owner approves. |
 
-Every `/internal/*` route checks the header `x-lumen-internal` against the
+Each `/internal/*` route checks the header `x-lumen-internal` against the
 secret `LUMEN_INTERNAL_KEY` with a constant-time comparison. A request
 without it gets 401.
 
 #### 3.1.4 Platform Design
 
 **Platform roles.** The briefing names the seed, the producers and the
-consumers. The **seed** is the core that every app on the platform uses.
+consumers. The **seed** is the core that the apps on the platform use.
 
 | Role | Who | What they do on the platform |
 |---|---|---|
 | Seed | The run engine: session, worker, billing | A question runs as a call tree of costed, recorded steps under the account's budget cap. |
 | Producer | An agent author | Publishes an agent in the registry (`POST /api/v1/agents`). Reads its usage (`GET /api/v1/usage`, `asProducer`). |
 | Consumer | A research team, or an app on the API | Asks a question with a chosen agent; reads the answer, the findings and the cost. |
-| Operator | The team (staff accounts) | Reads usage for every account and agent (`all` in `/api/v1/usage`, and the admin pages). |
+| Operator | The team (staff accounts) | Reads usage per account and per agent (`all` in `/api/v1/usage`, and the admin pages). |
 
 The web app is the first consumer. The literature watch is the second. It
 uses only the public API and an API key.
 
-**Domain-driven design.** The team took the nouns that users say in the six
-use cases (agent, question, step, budget cap) and grouped them into five
+**Domain-driven design.** The team took the nouns of the six use cases (for
+example agent, question, step and budget cap). It grouped them into five
 bounded contexts. Each context is one module and one service. Figure 4 is the
 context map: the session context is the core domain, and the arrows are the
 domain events between the contexts.
@@ -362,8 +366,8 @@ Rules that each aggregate keeps:
   limits the depth of the tree. A task's total cost is its own cost plus the
   cost of its children; the kernel does the roll-up. Only the kernel changes
   a task's status.
-- **Wallet and LedgerEntry.** Money is `numeric(12,6)`. Every total is a SUM
-  in SQL, never a sum of JavaScript numbers.
+- **Wallet and LedgerEntry.** Money is `numeric(12,6)`. The database
+  computes each total with SUM in SQL, with no JavaScript arithmetic.
 - **Approval.** One approval belongs to one attempt of one operation
   (`unique (account_id, attempt_id)`). A grant is consumed once. An old
   approval never authorises a different turn.
@@ -383,7 +387,7 @@ state change that carries the event:
 | turn queued, turn done | Session (`lumen.turns.*`), worker (`/done`) | Worker; the kernel |
 | agent published, agent withdrawn | Project (registry) | Consumers (`GET /api/v1/agents`) |
 
-The contexts talk through ports, not through each other's code. Two examples:
+The contexts talk only through ports. Two examples:
 
 - The kernel asks a `BudgetGuard` before it spends. Billing implements it as
   a chain: the account may spend; the charge fits the budget cap; else ask
@@ -395,8 +399,6 @@ The contexts talk through ports, not through each other's code. Two examples:
 are the calls on the public API, version 1. Figure 5 shows them on the public
 host: a producer's agent in the registry, its usage, and the literature watch
 that used it.
-
-![Figure 5. Producer and consumer on the public host. (a) The Agents page: a producer publishes Literature Scout. (b) The same page later: 18 runs of the agent and USD 0.1451 spent by its consumers. (c) The literature watch asks with the agent through the API and prints a digest; the producer reads its usage with GET /api/v1/usage. Source: demonstration recording, 25 October 2026.](figures/s-producer.png)
 
 1. A producer creates an API key with the `agents:write` scope, or signs in.
 2. The producer publishes an agent: `POST /api/v1/agents` with a slug, a
@@ -412,12 +414,13 @@ that used it.
 7. The producer and the operator read usage: `GET /api/v1/usage` returns
    sessions, cost and the median time to an answer per agent.
 
+![Figure 5. Producer and consumer on the public host. (a) The Agents page: a producer publishes Literature Scout. (b) The same page later: 18 runs of the agent and USD 0.1451 spent by its consumers. (c) The literature watch asks with the agent through the API and prints a digest; the producer reads its usage with GET /api/v1/usage. Source: demonstration recording, 25 October 2026.](figures/s-producer.png)
+
 **What a new app saves.** The literature watch is about 210 lines of code in
 `watch.mjs` and 36 in `publish-agent.mjs`. It has no database, no model
 calls, no sandbox and no billing of its own. The platform gives it sign-in
 and keys, the agent runtime, the sandbox, the budget cap and approvals, and
-scaling. This is the answer to the briefing's third question for this
-platform.
+scaling.
 
 ### 3.2 Physical Architecture & Design
 
@@ -425,7 +428,8 @@ Figure 6 shows the deployment. The platform runs on one virtual machine (VM)
 with k3s, a small Kubernetes distribution. Section 3.2.1 gives the reason
 for one node (AD-09).
 
-![Figure 6. UML deployment: one Vultr VM in Singapore runs k3s; the namespace lumen holds the five service Deployments with their replica ranges, and the PostgreSQL and RabbitMQ StatefulSets; clients reach Traefik on 443, GitHub Actions deploys over SSH 22, and the worker calls the OpenAI API. Source: deploy/k8s/lumen (Helm chart) and deploy/k8s/vultr/bootstrap.sh.](figures/d-deployment.png){wide}
+![Figure 6. UML deployment. One Vultr VM in Singapore runs k3s. The namespace lumen holds the five service Deployments with their replica ranges, and the PostgreSQL and RabbitMQ StatefulSets. Clients reach Traefik on 443, GitHub Actions deploys over SSH 22, and the worker calls the OpenAI API. Source: deploy/k8s/lumen (Helm chart) and deploy/k8s/vultr/bootstrap.sh.](figures/d-deployment.png){wide}
+
 
 | Part | Value |
 |---|---|
@@ -444,9 +448,9 @@ The key architectural decisions taken are as follows:
 
 | Identifier | Description |
 |---|---|
-| AD-09 | **The platform runs on one node, for budget.** Decision: one VM with 2 vCPU and 4 GB runs k3s and the whole chart. Alternative: Amazon EKS with three worker nodes in three availability zones and the Cluster Autoscaler (the proposal). Reason: budget. One node costs USD 0.65 a day on Vultr, or USD 1.45 a day on EC2. The minimal EKS setup costs USD 7.36 a day, five to eleven times more (Figure 7). Trade-off: one node is one failure domain, there is no node autoscaling, and pods scale only inside 2 vCPU and 4 GB. The details, the measured scaling inside the node and the growth path follow this table. |
-| AD-10 | **The gateway is a Traefik ingress, not a gateway service.** Decision: Traefik IngressRoutes route by path prefix, end TLS, redirect HTTP, and rate-limit `/api/auth` (average 10, burst 20). Each service checks the cookie or the API key itself. Alternative: the API gateway service of the proposal. Trade-off: the auth check runs in every service, not once at the edge; the per-key rate limit is in each pod. Rationale: one less service to build and run; Traefik ships with k3s. |
-| AD-11 | **Two autoscalers for two kinds of load.** Decision: HPA on CPU (70%, 1 to 3 replicas) for identity, project and billing. KEDA on the length of the three turn queues (`QueueLength` 5, 1 to 4 replicas, polling every 10 s, scale-down window 60 s) for the worker. Session has one replica with the `Recreate` strategy. Trade-off: session does not scale (AISS-01). Rationale: request load shows in CPU. Agent load shows in the queues before it shows in CPU, because a worker waits on the model most of the time. `Recreate` makes sure that two kernels never run at the same time during a rollout. |
+| AD-09 | **The platform runs on one node, for budget.** Decision: one VM with 2 vCPU and 4 GB runs k3s and the whole chart. Alternative: Amazon EKS with three worker nodes in three availability zones and the Cluster Autoscaler (the proposal). Reason: budget. One node costs USD 0.65 a day on Vultr, or USD 1.45 a day on EC2. The minimal EKS setup costs USD 7.36 a day, five to eleven times more (Figure 7). Trade-off: one node is one failure domain, there is no node autoscaling, and pods scale only inside 2 vCPU and 4 GB. |
+| AD-10 | **The gateway is a Traefik ingress.** Decision: Traefik IngressRoutes route by path prefix, end TLS, redirect HTTP, and rate-limit `/api/auth` (average 10, burst 20). Each service checks the cookie or the API key itself. Alternative: the API gateway service of the proposal. Trade-off: the auth check runs in each service instead of once at the edge; the per-key rate limit is in each pod. Rationale: one less service to build and run; Traefik ships with k3s. |
+| AD-11 | **Two autoscalers for two kinds of load.** Decision: HPA on CPU (70%, 1 to 3 replicas) for identity, project and billing. KEDA on the length of the three turn queues (`QueueLength` 5, 1 to 4 replicas, polling every 10 s, scale-down window 60 s) for the worker. Session has one replica with the `Recreate` strategy. Trade-off: session does not scale (AISS-01). Rationale: request load shows in CPU. Agent load shows in the queues before it shows in CPU, because a worker waits on the model most of the time. With `Recreate`, the old kernel stops before the new one starts, so two kernels do not run at the same time. |
 | AD-12 | **No image registry.** Decision: the workflow builds `lumen-next:<commit sha>`, copies it to the host with `scp`, and imports it with `k3s ctr images import`. Alternative: GHCR or ECR. Trade-off: the copy is slower than a pull, and only one node can use the image. Rationale: no registry to pay for and no registry credential to keep. It fits one node (AD-09). |
 | AD-13 | **Secrets are generated inside the cluster.** Decision: the chart generates the database password, the RabbitMQ password and `LUMEN_INTERNAL_KEY` on the first install (`randAlphaNum`). It keeps them on upgrade (`lookup`) and on uninstall (`resource-policy: keep`). The only GitHub secrets are the SSH key, the host and the model key. Alternative: keep the secrets in GitHub. Trade-off: a lost cluster loses the secrets, and the data with them. Rationale: the core secrets never leave the cluster and never appear in a log. |
 | AD-14 | **A public HTTPS address on sslip.io with Let's Encrypt.** Decision: the host name is built from the VM's IP address. Alternative: buy a domain and use a managed DNS service. Trade-off: the name changes when the IP address changes, as it did when the host moved on 25 October. Rationale: a real certificate and a stable name at no cost, so the lecturer can open the platform during and after the presentation. |
@@ -480,14 +484,14 @@ a new account has a budget cap of USD 0.05.
 - **No node autoscaling.** The Cluster Autoscaler needs a node group. The
   capacity is fixed at 2 vCPU and 4 GB; on EC2 the node reported 3.7 GiB of
   memory to Kubernetes.
-- **Pods scale inside the node.** At full scale-out (3 identity, 3 project,
-  3 billing, 4 worker and 1 session pod) the memory limits add up to 4.4 GiB:
-  14 × 256 MiB, plus 384 MiB for PostgreSQL and 512 MiB for RabbitMQ. The
-  requests are much lower (50m CPU and 128 MiB a pod), so the scheduler
-  places all pods, and the 2 GB swap file takes the peaks.
+- **Pods scale inside the node.** At full scale-out there are 3 identity,
+  3 project, 3 billing, 4 worker and 1 session pod. Their memory limits add up
+  to 4.4 GiB: 14 × 256 MiB, plus 384 MiB for PostgreSQL and 512 MiB for
+  RabbitMQ. The requests are lower (50m CPU and 128 MiB a pod), so the
+  scheduler places the pods. The 2 GB swap file takes the peaks.
 - **One node is also the floor.** The first install on a 1 vCPU, 2 GB VM
-  failed: the node swapped, the one CPU stayed at 100%, the k3s API timed
-  out and the deploy failed (run 40161155236). 2 vCPU and 4 GB is the smallest size that holds the
+  failed (run 40161155236). The node swapped, the one CPU stayed at 100%, and
+  the k3s API timed out. 2 vCPU and 4 GB is the smallest size that holds the
   chart.
 - **Node-local storage.** The volumes use local-path, and the workers' file
   volume is `ReadWriteOnce`. Both work only on one node.
@@ -506,22 +510,23 @@ backing services do.
 1. Install the same Helm chart on EKS with a managed node group of three
    nodes in three availability zones. Add the Cluster Autoscaler, which adds
    a node when pods stay `Pending`.
-2. Push the image to Amazon ECR and pull it on every node. This replaces the
-   copy over SSH (AD-12).
+2. Push the image to Amazon ECR; each node pulls it from there. This replaces
+   the copy over SSH (AD-12).
 3. Move the project files to EFS (`ReadWriteMany`) or S3, PostgreSQL to
    Amazon RDS Multi-AZ, and RabbitMQ to Amazon MQ or a three-node cluster.
 4. Add a values file for EKS: storage classes, image repository and the
    ingress load balancer. The templates, the HPAs and the KEDA ScaledObject
    stay as they are.
 
-The team takes this path when a sponsor funds the hosting, or when the load
-passes what 2 vCPU and 4 GB hold, which shows as pods that stay `Pending`.
+The team takes this path in two cases. The first is when a sponsor funds the
+hosting. The second is when the load passes what 2 vCPU and 4 GB hold; pods
+that stay `Pending` show this.
 
 #### 3.2.2 Technology and Services
 
 | Technology | Use | Trade-off and rationale |
 |---|---|---|
-| Node.js 22, TypeScript, Fastify | All five services | The stack of the base product. Reuse, not rewrite. |
+| Node.js 22, TypeScript, Fastify | The five services | The stack of the base product, so the modules are reused as they are. |
 | React | The web app, served by the session service | One origin, so no CORS. |
 | PostgreSQL 16 | All persistent data | Transactions, `FOR UPDATE SKIP LOCKED` for queues of rows, `numeric` for money. One shared database (AD-06). |
 | node-pg-migrate | Schema migrations at startup | Takes an advisory lock, so pods that start together migrate one after another. Platform tables start at 090, so they never collide with the base product. |
@@ -529,7 +534,7 @@ passes what 2 vCPU and 4 GB hold, which shows as pods that stay `Pending`.
 | k3s | Kubernetes on one node | Small footprint; ships Traefik, local-path storage and metrics-server (AD-09). |
 | Traefik | Ingress, TLS end, HTTP redirect, rate limit | Ships with k3s (AD-10). |
 | cert-manager, Let's Encrypt | TLS certificate | Free; renews on its own. |
-| KEDA | Worker autoscaling on queue length | Scales on the cause of the load, not on CPU (AD-11). |
+| KEDA | Worker autoscaling on queue length | Scales on the queue length, which rises before CPU does (AD-11). |
 | Helm | One chart for k3d and the public host | A values file for each environment (`values.yaml`, `public/values.yaml`). |
 | Vultr Cloud Compute (AWS EC2 until 24 October) | The host | Lowest price for 2 vCPU and 4 GB (AD-09). |
 | GitHub Actions | CI/CD | Free for a public repository; secrets for SSH. |
@@ -548,7 +553,7 @@ main tables and their relations.
 
 Transactions and concurrency:
 
-- **Money** is `numeric(12,6)`. Every total is a SUM in SQL.
+- **Money** is `numeric(12,6)`. The database computes each total with SUM.
 - **The approval decision** runs in one transaction with `SELECT ... FOR
   UPDATE`, so a grant is consumed once.
 - **The approval delivery** is an outbox. A granted row gets
@@ -671,7 +676,7 @@ Data groups:
 - Data format: files that agents write (code, data, notes) under
   `/data/projects/<project>`.
 - Proposed storage technology: a 2 Gi `ReadWriteOnce` local-path volume that
-  every worker pod mounts. This works because all pods are on one node.
+  the worker pods mount. This works only while the pods are on one node.
 - Security requirements and controls: the files routes check that the
   principal may touch the project. Agent commands run in a sandbox only when
   a compute provider is set; the public host sets none.
@@ -687,13 +692,13 @@ Data groups:
   in the repository. The model key reaches the host on SSH standard input at
   deploy time.
 - Trade-off consideration: no external secret manager (for example AWS
-  Secrets Manager). One node and one environment do not need one.
+  Secrets Manager). For one node and one environment, Kubernetes Secrets
+  hold the secrets.
 
 #### 3.2.4 Detailed Design
 
-This section shows two use cases. Use case A shows the platform roles and the
-message path. Use case B shows the budget cap and a call that crosses three
-services.
+Use case A shows the platform roles and the message path. Use case B shows
+the budget cap and a call that crosses three services.
 
 **Use case A: ask a question with a chosen agent through the API**
 
@@ -754,17 +759,15 @@ Failure handling in this use case:
   another worker (section 4.2).
 - `/done` answers 404 (session restarted and stopped the task): the worker
   acknowledges and drops the turn, so it does not loop.
-- The agent lookup fails: the turn runs with the plain question. The agent is
-  an addition to the question, never a condition for it.
+- The agent lookup fails: the turn runs with the plain question.
 - The client passes its rate: 429 with `Retry-After`. The literature watch
   waits and asks again.
 
 **Use case B: a fan-out over the budget cap waits for the owner's approval**
 
-Figure 10 shows the sequence. Figure 11 shows the same use case in the web
-app.
+Figure 10 shows the sequence. Figure 11 shows the same use case in the web app.
 
-![Figure 10. UML sequence diagram of use case B: the guard escalates a fan-out over the budget cap, the task waits without holding a worker, the owner grants the approval, and the billing outbox resumes the task with the same attempt id. Source: modules/billing/budgetChain.ts, modules/billing/approvals.ts, modules/session/kernel.ts.](figures/d-seq_approval.png)
+![Figure 10. UML sequence diagram of use case B. The guard escalates a fan-out over the budget cap, and the task waits without holding a worker. The owner grants the approval, and the billing outbox resumes the task with the same attempt id. Source: modules/billing/budgetChain.ts, modules/billing/approvals.ts, modules/session/kernel.ts.](figures/d-seq_approval.png)
 
 1. The lead agent's worker calls `delegate` (`POST
    /internal/turns/:id/delegate`).
@@ -798,16 +801,16 @@ app.
 
 Design points:
 
-- A guard that throws is not a "yes". The kernel treats it as "could not be
-  checked" and does not run the work.
+- When the guard throws an error, the kernel treats the check as failed and
+  does not run the work.
 - The approval survives a restart of any pod. It is in `billing_approvals`
   and `tasks.pending`, not in memory.
-- One approval covers exactly one operation. The attempt id ties them.
+- One approval covers one operation. The attempt id ties them.
 - An integration test starts billing and session as separate HTTP listeners
-  over one migrated database and passes four scenarios: grant and resume
-  once, reject, a wrong internal key or another account, and a session that
-  answers 503 until the lease expires
-  (`docs/platform/evidence/2026-10-21-approval-http.md`).
+  over one migrated database
+  (`docs/platform/evidence/2026-10-21-approval-http.md`). It passes four
+  scenarios: grant and resume once; reject; a wrong internal key or another
+  account; a session that answers 503 until the lease expires.
 
 ### 3.3 Other Architectural Decisions
 
@@ -815,15 +818,13 @@ The key architectural decisions taken are as follows:
 
 | Identifier | Description |
 |---|---|
-| AD-15 | **One platform image, one command per service.** Decision: `deploy/k8s/Dockerfile` builds one image for all five services; each Deployment starts `node apps/server/dist/services/<name>.js`. The platform image differs from the base product's image in two ways: it has no Docker engine and no sandbox packages (the workers run with `LUMEN_COMPUTE_PROVIDER=none`), and it installs the Debian security updates at build time. Both came from the image scan (section 5.3). Trade-off: every service carries all the code, and a change in one module redeploys all five. Rationale: one build, one scan, one copy to the host. The services cannot drift to different versions of the shared code. |
+| AD-15 | **One platform image, one command per service.** Decision: `deploy/k8s/Dockerfile` builds one image for all five services; each Deployment starts `node apps/server/dist/services/<name>.js`. The platform image differs from the base product's image in two ways. It has no Docker engine and no sandbox packages, because the workers run with `LUMEN_COMPUTE_PROVIDER=none`. It also installs the Debian security updates at build time. Both changes came from the image scan (section 5.3). Trade-off: each service carries the code of all five, and a change in one module redeploys all five. Rationale: the pipeline builds, scans and copies one image. The services cannot drift to different versions of the shared code. |
 | AD-16 | **A demo worker for load tests.** Decision: `LUMEN_WORKER=demo` runs `demoWorker`, which fans out to three reader agents and waits `LUMEN_DEMO_PACE_MS` (1500 ms) per step, with no model call. Trade-off: the load test does not measure the model's latency. Rationale: the test costs no money and is repeatable, and the queue grows enough to make KEDA scale. The pipeline's smoke load runs only when the effective worker mode is `demo`. |
-| AD-17 | **A lost RabbitMQ connection ends the process.** Decision: on `close`, the service exits and Kubernetes restarts the pod. Alternative: a reconnect loop. Rationale: a turn that was not acknowledged goes back on its queue. A reconnect loop could hold a half-open channel. The exit is simpler and safer. |
+| AD-17 | **A lost RabbitMQ connection ends the process.** Decision: on `close`, the service exits and Kubernetes restarts the pod. Alternative: a reconnect loop. Rationale: a turn that was not acknowledged goes back on its queue, so the exit loses no work. A reconnect loop could hold a half-open channel. |
 | AD-18 | **A worker shuts down gracefully.** Decision: on SIGTERM the worker stops taking turns, finishes the turns in hand, then closes the broker and the database. `terminationGracePeriodSeconds` is 120. Rationale: in the common case, a scale-in by KEDA does not cut a turn in the middle. |
-| AD-19 | **Every service runs the migrations under an advisory lock.** Decision: node-pg-migrate in every service at startup; platform migrations numbered from 090 with `checkOrder: false`. Trade-off: startup waits for the lock. Rationale: no separate migration job; pods that start together migrate one after another. |
+| AD-19 | **Each service runs the migrations under an advisory lock.** Decision: each service runs node-pg-migrate at startup; platform migrations numbered from 090 with `checkOrder: false`. Trade-off: startup waits for the lock. Rationale: no separate migration job; pods that start together migrate one after another. |
 | AD-20 | **Rate limits at two levels.** Decision: Traefik limits `/api/auth` (average 10, burst 20) against password guessing. The key guard limits each API key (60 a minute, burst 20) in each pod. Trade-off: the per-key limit is per pod (AISS-07). Rationale: no shared store (for example Redis) to add. |
 | AD-21 | **The default budget cap of a new account comes from configuration.** Decision: `BILLING_DEFAULT_CAP` sets the budget cap of a new account; the chart sets USD 0.05 on the public host; staff raise it per account. Alternative: the fixed USD 1 in SQL. Trade-off: a new user meets the approval flow after a few questions. Rationale: a public sign-up cannot run up the model bill. |
-
-Section 4 gives the reasons for the decisions on quality attributes.
 
 ### 3.4 Architectural Limitation
 
@@ -834,7 +835,7 @@ The key outstanding architectural issues in the solution are as follows:
 | AISS-01 | `session` has one replica. It is a single point of failure for running questions, and it does not scale out. | The kernel keeps running tasks, the pending turns (`QueueWorker`) and the `/ws` sockets in memory. A second replica would not see them. A restart stops the open tasks (`kernel.restore`). | Move the live stream to its own `stream` service (as in the proposal) and the task state to the database. Then run several session replicas. Phase 2. | LIU ZIYANG | Open |
 | AISS-02 | One shared database, not one per service (proposal). The services share the schema, and the database is a single point of failure. | The modules still read across tables in-process (for example `requireProject`). | Step 1: one schema and one database user per service. Step 2: replace the in-process reads across modules with internal calls or events. Step 3: one database per service, on a managed service (Amazon RDS). Phase 2. | HE RONG | Open |
 | AISS-03 | One node, not EKS (proposal). One failure domain; no node autoscaling; pods scale only inside 2 vCPU and 4 GB. | The platform runs on one node for budget; section 3.2.1 (AD-09) gives the cost, the trade-off and the growth path. | The same chart on EKS with three nodes and the Cluster Autoscaler; ECR, EFS or S3, RDS. Phase 2, when the hosting is funded. | HE RONG | Open, by decision |
-| AISS-04 | A redelivered turn runs again from its start. Steps appear twice, and a model call can be paid twice. | Delivery is at least once. If a worker dies after some steps but before the acknowledgement, another worker runs the whole turn again. Seen on the public host: after a hard kill the question still ended, but cost USD 0.08 with 8 findings, against USD 0.03 and 3 findings for an undisturbed question. | Make turns idempotent: an idempotency key per step, or resume from the recorded steps. | LI ZHUOYANG | Open |
+| AISS-04 | A redelivered turn runs again from its start. Steps appear twice, and a model call can be paid twice. | Delivery is at least once. If a worker dies after some steps but before the acknowledgement, another worker runs the whole turn again. On the public host, a question still ended after a hard kill. It cost USD 0.08 with 8 findings; an undisturbed question cost USD 0.03 with 3 findings. | Make turns idempotent: an idempotency key per step, or resume from the recorded steps. | LI ZHUOYANG | Open |
 | AISS-05 | No network policies (proposal); one shared internal key. A pod in the cluster that has the key can call any `/internal/*` route. | The ingress never routes `/internal/*`, and the key is checked in constant time. | Network policies that allow only the calls in section 3.1.3; one key per caller, or mutual TLS through a service mesh. | LU YI | Open |
 | AISS-06 | No tracing or metrics stack (proposal: OpenTelemetry, Prometheus). A slow question is hard to diagnose across services. | The services write structured logs with the session, task and turn ids. | OpenTelemetry with one trace id per question across the queue and the internal calls; Prometheus and Grafana for queue length, latency and errors. | LIU ZIYANG | Open |
 | AISS-07 | The per-key rate limit is per pod. With N project pods, the true limit is up to N times higher. | The token buckets are in memory in each pod (AD-20). | A shared limiter in Redis, or a per-key limit at the Traefik edge. | LU YI | Open |
@@ -843,7 +844,7 @@ The key outstanding architectural issues in the solution are as follows:
 | AISS-10 | The budget check does not reserve the money. Work that runs at the same time can pass the budget cap a little. | `MonthlyCapHandler` checks the estimate against the budget cap but does not hold it. | Reserve the estimate in the ledger at the check point, and settle it when the step is recorded. | HE RONG | Open |
 | AISS-11 | The public API, the API keys and the registry were not on the public host at first. | On 20 October 2026, before the API code was merged, `GET /api/v1/openapi.json` returned 404. | Merged and deployed by run 39441445313; verified on the public host: keys, registry, asking with an agent, usage, OpenAPI (200), 429 after 21 requests, and the literature watch end to end. | LU YI, PENG XUJIAN | Closed |
 | AISS-12 | The load test is small. The proposal's targets (200 concurrent sessions, 1,000 open streams) were not tested. | The recorded test used 10 virtual users on one node. One node cannot hold the target load (AD-09). | Run the `full` profile (30 virtual users), then a larger test on EKS with node autoscaling. | PENG XUJIAN | Open |
-| AISS-13 | The Traefik rate limit can count every user as one client. | The k3s ServiceLB can replace the client IP, so all users could share the `/api/auth` limit. | `externalTrafficPolicy: Local` on the Traefik service, or a `sourceCriterion` on the middleware. | LU YI | Open |
+| AISS-13 | The Traefik rate limit can count all users as one client. | The k3s ServiceLB can replace the client IP, so all users could share the `/api/auth` limit. | `externalTrafficPolicy: Local` on the Traefik service, or a `sourceCriterion` on the middleware. | LU YI | Open |
 
 ---
 
@@ -856,16 +857,16 @@ Design choices for performance:
 - **No web request waits for a model.** A question returns `201` as soon as
   the session exists. The work runs on the queues (AD-02).
 - **The fan-out runs in parallel.** The three reader agents of one question
-  are three turns on `lumen.turns.1`, so they run on different slots or pods
-  at the same time.
+  are three turns on `lumen.turns.1`. They run at the same time, on different
+  slots or pods.
 - **Each pod has a bounded number of turns.** A pod takes at most
   `LUMEN_WORKER_SLOTS` (4) turns per depth (RabbitMQ prefetch per channel).
 - **Static assets are cached.** `/assets/*` has
   `Cache-Control: public, max-age=31536000, immutable`.
 - **Load balancing.** Kubernetes Services balance HTTP across replicas.
   RabbitMQ balances turns across worker pods.
-- **Scaling on the cause of the load.** KEDA adds workers when turns wait
-  (AD-11), inside the one node (AD-09).
+- **Scaling on queue length.** KEDA adds workers when turns wait (AD-11),
+  inside the one node (AD-09).
 
 Measured result. On 20 October 2026 the team ran k6 against the public HTTPS
 address (one EC2 `t3.medium`, k3s). The workers were in demo mode
@@ -896,25 +897,26 @@ What the result shows:
 
 - KEDA added the second worker about 12 s after the queues first held more
   than the target. It reached the maximum of 4 pods about 38 s later.
-- With one pod, the unacknowledged count stayed at 4 per queue: every slot
-  was full. With four pods it rose to 16 on `lumen.turns.1`: every new pod
-  took work.
+- With one pod, the unacknowledged count stayed at 4 per queue, so all
+  slots were full. With four pods it rose to 16 on `lumen.turns.1`, so each
+  new pod took work.
 - `lumen.turns.2` stayed empty, because reader agents (depth 1) do not
   delegate.
 - After the run the identity HPA showed 3 replicas. The node used 2.0 GiB of
   3.7 GiB memory. RabbitMQ used the most CPU (324m).
-- The demo question has several steps at 1.5 s each, so 5 s is about the
-  least it can take (the minimum was 5.1 s). The median of 6.1 s shows that
-  the wait in the queue added about 1 s at 10 users.
+- The demo question has several steps at 1.5 s each. So 5 s is about the
+  least it can take, and the minimum was 5.1 s. The median of 6.1 s shows
+  that the wait in the queue added about 1 s at 10 users.
 
-With the real model, the same profile on 21 October gave 131 questions, 130
-at rest when the profile ended, 0% failed HTTP requests, a median time to
-rest of 4.1 s and a p95 of 27.0 s. A worker waits on the model most of the
-time, so the queues grew less, and KEDA added one worker. On the current
+On 21 October the team ran the same profile with the real model. It gave
+131 questions, 130 at rest when the profile ended, and 0% failed HTTP
+requests. The median time to rest was 4.1 s and the p95 27.0 s. A worker
+waits on the model most of the time, so the queues grew less, and KEDA added
+one worker. On the current
 host, 15 questions at once took the workers from 1 to 3. Figure 13 shows the
 three runs in the terminal.
 
-![Figure 13. Scaling on the public host, in the terminal. (a) k6 with the real model, 21 October 2026 (EC2): 131 questions, 0.00% failed. (b) The KEDA autoscaler of the worker during that run: 1 to 2 replicas and back. (c) 15 questions at once on the Vultr host, 25 October 2026: the ScaledObject, the queue at 15 turns for 5 a worker, and three worker pods. Source: terminal recordings in docs/platform/slides/out and the demonstration recordings.](figures/s-scaling.png)
+![Figure 13. Scaling on the public host, in the terminal. (a) k6 with the real model, 21 October 2026 (EC2): 131 questions, 0.00% failed. (b) The KEDA autoscaler of the worker during that run: 1 to 2 replicas and back; repeated rows are left out. (c) 15 questions at once on the Vultr host, 25 October 2026: the ScaledObject, the queue at 15 turns for 5 a worker, and three worker pods; repeated rows are left out. Source: terminal recordings in docs/platform/slides/out and the demonstration recordings.](figures/s-scaling.png)
 
 The proposal's targets (200 concurrent sessions, 1,000 open streams) need
 more than one node (AISS-12, AD-09).
@@ -936,14 +938,13 @@ recovers as the table shows.
 
 Other measures for availability:
 
-- **Probes.** Every service has startup, readiness and liveness probes on
-  `/api/health`. An init container waits for PostgreSQL (and for RabbitMQ in
+- **Probes.** The five services have startup, readiness and liveness probes
+  on `/api/health`. An init container waits for PostgreSQL (and for RabbitMQ in
   session and worker), so a fresh install does not crash-loop.
-- **Rolling updates.** `helm upgrade --install --wait` waits until every
-  Deployment is ready. The workflow then polls the public `/api/health`.
-- **Durable approval delivery.** The outbox row and the lease (section 3.2.4)
-  make sure that a granted approval resumes its task, also when a pod
-  restarts.
+- **Rolling updates.** `helm upgrade --install --wait` waits until the
+  Deployments are ready. The workflow then polls the public `/api/health`.
+- **Durable approval delivery.** With the outbox row and the lease (section
+  3.2.4), a granted approval resumes its task, also after a pod restart.
 
 Worker failure. On 20 October 2026 the team deleted the only worker pod 1 to
 2 seconds after a question was asked through `POST /api/v1/questions` (demo
@@ -971,16 +972,16 @@ Controls that are built:
 | Transport | HTTPS with a Let's Encrypt certificate. HTTP redirects to HTTPS. `Strict-Transport-Security: max-age=31536000; includeSubDomains`. |
 | Network | Firewall: 80 and 443 open, 22 for the deploy key; 6443 closed. The Kubernetes API and the RabbitMQ management page only through an SSH tunnel. PostgreSQL and RabbitMQ have no route from outside the cluster. |
 | Edge | Traefik never routes `/internal/*`. Rate limit on `/api/auth` (average 10, burst 20). |
-| Service to service | Every `/internal/*` route needs `x-lumen-internal`, compared in constant time; 401 without it. |
+| Service to service | Each `/internal/*` route needs `x-lumen-internal`, compared in constant time; 401 without it. |
 | Users | scrypt password hashes; HTTP-only session cookie; Origin check on writes; equal hash work when an account does not exist; OAuth sign-in with GitHub and Google when configured. |
 | API keys | SHA-256 hash only; shown once; five scopes; a key works only on `/api/v1/*`; a route that is not in the scope table is refused; 429 per key; 401 when revoked. |
 | Authorisation | Only the owner or staff may read a session or open its stream; another person's session answers 404. Admin routes need the staff role. |
 | Data | Saved model keys encrypted with AES-256-GCM. Account deletion erases the account's secrets in the same transaction. |
-| Spend | A new account on the public host has a budget cap of USD 0.05 (AD-21). Every step over the budget cap waits for the owner's approval. |
+| Spend | A new account on the public host has a budget cap of USD 0.05 (AD-21). A step over the budget cap waits for the owner's approval. |
 | Secrets | Core secrets generated in the cluster, never in GitHub or a log (AD-13). The model key goes to the host on SSH standard input. |
 | Containers | A platform image with no Docker engine and with the Debian security updates installed at build. Pods run as user 1000, not root. The watch CronJob has a read-only root file system and drops all capabilities. |
 | Response headers | `Referrer-Policy`, `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy`. |
-| Pipeline | SCA (`npm audit`), SAST (CodeQL), image scan (Trivy, gate on a CRITICAL with a fix), DAST (OWASP ZAP baseline). The Trivy action is pinned to a commit, not a tag. The gate stopped two deployments on 20 October (section 5.3). |
+| Pipeline | SCA (`npm audit`), SAST (CodeQL), image scan (Trivy, gate on a CRITICAL with a fix), DAST (OWASP ZAP baseline). The Trivy action is pinned to a commit instead of a tag. The gate stopped two deployments on 20 October (section 5.3). |
 
 Controls in the proposal that are not built:
 
@@ -995,44 +996,35 @@ Controls in the proposal that are not built:
 
 How the platform is extended:
 
-- **A new agent (producer).** No code and no deployment. Publish it with
-  `POST /api/v1/agents` or on the Agents page (Figure 5). Consumers can
-  choose it by its slug at once.
-- **A new app (consumer).** Create an API key with the scopes it needs, read
-  the OpenAPI document at `/api/v1/openapi.json`, and call the API. The
-  literature watch is the example: about 210 lines, no database, no model,
-  no billing. It ran end to end on the public host with only the URL and a
-  key (Figure 5 (c)).
-- **A new API route.** Add the route and one row in `ROUTE_SCOPES`. Until the
-  row exists, an API key cannot call the route.
-- **A new budget rule.** Add a `BudgetHandler` to the `BudgetChain`. A new
-  check point adds one name to `CheckPoint` and one call in the kernel.
-- **A new service.** Write a module with ports, an entry point in
-  `apps/server/src/services/`, one block in the chart and one rule in the
-  IngressRoute. The image does not change.
-- **More capacity.** Change `worker.maxReplicas`, `hpa.maxReplicas` or the
-  slots in the values file. On EKS, add nodes (AD-09).
+| Extension | What to do | What changes |
+|---|---|---|
+| A new agent (producer) | Publish it with `POST /api/v1/agents` or on the Agents page (Figure 5). Consumers can choose it by its slug at once. | No code and no deployment |
+| A new app (consumer) | Create an API key with the scopes it needs, read the OpenAPI document at `/api/v1/openapi.json`, and call the API. The literature watch ran end to end on the public host with only the URL and a key (Figure 5 (c)). | Nothing on the platform; the watch is about 210 lines, with no database, model or billing |
+| A new API route | Add the route and one row in `ROUTE_SCOPES`. Until the row exists, an API key cannot call the route. | One route and one row |
+| A new budget rule | Add a `BudgetHandler` to the `BudgetChain`. A new check point adds one name to `CheckPoint` and one call in the kernel. | One handler class |
+| A new service | Write a module with ports, an entry point in `apps/server/src/services/`, one block in the chart and one rule in the IngressRoute. | New code; the image stays one image |
+| More capacity | Change `worker.maxReplicas`, `hpa.maxReplicas` or the slots in the values file. On EKS, add nodes (AD-09). | The values file only |
 
 How the platform is maintained:
 
 - **Ports and adapters.** The kernel, the worker loop and the modules did not
-  change for the split. Only adapters were added (`QueueWorker`,
-  `RemoteReport`, `remoteSessionDirectory`). The base product on `main` still
-  runs the same modules in one process.
+  change for the split. The team added only adapters (`QueueWorker`,
+  `RemoteReport`, `remoteSessionDirectory`). The base product still runs the
+  same modules in one process.
 - **Tests.** `npm run verify` runs the format check, lint, typecheck and the
-  tests with coverage on every push. In run 40284716751 of 26 October 2026,
+  tests with coverage on each push. In run 40284716751 of 26 October 2026,
   1,198 tests in 131 files passed (5 skipped); line coverage was 97.5%,
   branch coverage 92.34% and function coverage 99.51%. `turn.test.ts` tests
   the whole turn protocol without a network; `approvalResume.test.ts` tests
   the approval across two HTTP listeners.
-- **One chart for every environment.** k3d on a laptop and k3s on the public
+- **One chart for both environments.** k3d on a laptop and k3s on the public
   host use the same chart with a different values file. The move from EC2 to
   Vultr on 25 October changed one values file and one GitHub secret.
 - **Migrations are history.** An applied migration is never edited; a change
   is a new file.
-- **Contracts in the repository.** `docs/platform/contract.md` and
-  `docs/platform/public-api.md` define every call between services and every
-  API route.
+- **Contracts in the repository.** `docs/platform/contract.md` defines the
+  calls between services. `docs/platform/public-api.md` defines the API
+  routes.
 
 ---
 
@@ -1041,8 +1033,6 @@ How the platform is maintained:
 ### 5.1 Source Control Strategy
 
 Figure 15 shows the repository and its activity.
-
-![Figure 15. Source control. (a) The five service entry points on the integration branch, apps/server/src/services. (b) Commits per week in the repository. Sources: (a) GitHub, Playwright capture, 27 October 2026; (b) GitHub Insights, captured by the team on 23 October 2026.](figures/s-source.png)
 
 | Item | Strategy |
 |---|---|
@@ -1055,17 +1045,18 @@ Figure 15 shows the repository and its activity.
 | Developers | Each member commits with a personal GitHub account; the history has commits from all five members. The pipeline deploys with a dedicated SSH key, kept as the GitHub secret `PLATFORM_SSH_KEY`. |
 | Language | Everything in the repository is in English. |
 
+![Figure 15. Source control. (a) The five service entry points on the integration branch, apps/server/src/services. (b) Commits per week in the repository. Sources: (a) GitHub, Playwright capture, 27 October 2026; (b) GitHub Insights, captured by the team on 23 October 2026.](figures/s-source.png)
+
 ### 5.2 Continuous Integration
 
-Figure 16 shows the pipeline, `.github/workflows/platform-deploy.yml`.
-Figure 17 shows two real runs: one that passed and one that the image scan
-stopped.
+The pipeline is `.github/workflows/platform-deploy.yml`. Figure 16 shows two
+real runs: one that passed and one that the image scan stopped. Figure 17 in
+section 5.3 shows the jobs and their order.
 
-![Figure 16. The deploy pipeline. Verify, SCA and SAST run in parallel; deploy builds the image, scans it, copies it to the host and installs it; DAST and the smoke load test the live host; summary reports every stage. The durations are from run 39441445313 of 20 October 2026.](figures/d-pipeline.png){wide}
 
 Triggers:
 
-- every push to the integration branch;
+- a push to the integration branch;
 - a manual run (`workflow_dispatch`) with a choice of worker mode: `auto`,
   `demo` or `steering`.
 
@@ -1075,26 +1066,27 @@ Triggers:
 | `sca` | `npm audit --omit=dev --audit-level=high`. Only production dependencies go into the image. | A high or critical advisory in a production dependency. |
 | `sast` | CodeQL for JavaScript and TypeScript. Keeps the SARIF file. | CodeQL fails to run. |
 
-The repository also has `ci.yml` and `security.yml` for `main`.
+The repository also has `ci.yml` and `security.yml` for the base product.
 
-![Figure 17. Two runs of the pipeline on GitHub Actions. (a) Run 40284716751 of 26 October 2026: every stage passed in 8 min 31 s; the smoke load was skipped because the workers run the real model. (b) Run 39439752963 of 20 October 2026: the image scan failed the deploy job, so DAST and the smoke load did not run. Source: GitHub, Playwright capture, 27 October 2026.](figures/s-runs.png)
+![Figure 16. Two runs of the pipeline on GitHub Actions. (a) Run 40284716751 of 26 October 2026 passed in 8 min 31 s; the smoke load did not run, because the workers use the real model. (b) Run 39439752963 of 20 October 2026: the image scan failed the deploy job, so DAST and the smoke load did not run. Source: GitHub, Playwright capture, 27 October 2026.](figures/s-runs.png)
 
 ### 5.3 Continuous Delivery
 
 | Environment | Where | How it is deployed |
 |---|---|---|
 | Local | k3d on a laptop, `http://lumen.localhost` | `helm upgrade --install` by the developer, with `values.yaml`. |
-| Public | k3s on one VM, `https://lumen.139-180-185-51.sslip.io` | The pipeline, on every push to the integration branch. |
+| Public | k3s on one VM, `https://lumen.139-180-185-51.sslip.io` | The pipeline, on each push to the integration branch. |
 
 There is no separate staging environment. A push to the integration branch is
 the approval to deploy, and the pipeline gates are the checks.
 
-The `deploy` job needs `verify`, `sca` and `sast`. Its steps:
+Figure 17 shows the jobs. The `deploy` job needs `verify`, `sca` and `sast`.
+Its steps:
 
 1. Build the image `lumen-next:<commit sha>` from `deploy/k8s/Dockerfile`.
 2. Scan the image with Trivy. One pass reports HIGH and CRITICAL in the job
-   summary. A second pass fails the job on a CRITICAL with a fix, so a
-   vulnerable image never reaches the host.
+   summary. A second pass fails the job on a CRITICAL with a fix, so the
+   image does not reach the host.
 3. `docker save`; copy the image and the chart to the host with `scp`; import
    the image with `k3s ctr images import`.
 4. `helm upgrade --install --wait` with `public/values.yaml`, the host name
@@ -1108,28 +1100,33 @@ After the deploy:
 | Job | What it does |
 |---|---|
 | `dast` | OWASP ZAP baseline scan of the public URL. Warnings do not fail the job; a FAIL-level rule does. The report is an artefact. |
-| `smoke-load` | k6 `PROFILE=smoke` (2 virtual users for 30 s) with 4 accounts. Runs only when the effective worker mode is `demo`, so a push never pays for model calls. |
+| `smoke-load` | k6 `PROFILE=smoke` (2 virtual users for 30 s) with 4 accounts. Runs only when the effective worker mode is `demo`, so a push does not pay for model calls. |
 | `summary` | Always runs. Writes the public URL, the image tag and one row per stage. |
 
-How a deployment is verified: `helm --wait` waits for every readiness probe;
-the workflow polls the public health check; DAST runs against the live
-address; the smoke load runs in demo mode; `deploy/k8s/demo.sh` checks the
-whole flow by hand.
+Four checks verify a deployment:
+
+- `helm --wait` waits for the readiness probes, and the workflow polls the
+  public health check;
+- DAST runs against the live address;
+- the smoke load runs in demo mode;
+- `deploy/k8s/demo.sh` checks the whole flow by hand.
+
+![Figure 17. The deploy pipeline. Verify, SCA and SAST run in parallel; deploy builds the image, scans it, copies it to the host and installs it; DAST and the smoke load test the live host; summary reports the result of each stage. The durations are from run 39441445313 of 20 October 2026.](figures/d-pipeline.png){wide}
 
 The pipeline ran 21 times from 20 to 26 October 2026; 17 runs passed.
 Figure 18 shows the list and the Helm history on the host.
 
+![Figure 18. Delivery history. (a) The runs of the Platform deploy workflow, 25 and 26 October 2026, with the two failures on the day of the host move. (b) The Helm release history on the EC2 host, 21 October 2026: one install and three upgrades. Sources: (a) GitHub, Playwright capture, 27 October 2026; (b) terminal recording in docs/platform/slides/out.](figures/s-history.png)
+
 | Run | Date | Result | What it shows |
 |---|---|---|---|
 | 39439752963, 39440170020 | 20 Oct | Failed at the image scan | The gate found 5 critical CVEs: one in `perl-base` with a fix, and others in the `docker.io` package of the base product's image. The image never reached the host. |
-| 39441445313 | 20 Oct | Passed, every stage | The fix: a platform image without Docker, with the Debian security updates (commit `44630f7`). Jobs ran 12 min 30 s in total (Figure 16). |
+| 39441445313 | 20 Oct | Passed, all stages | The fix: a platform image without Docker, with the Debian security updates (commit `44630f7`). Jobs ran 12 min 30 s in total (Figure 17). |
 | 39542685448 | 21 Oct | Passed; smoke load skipped | The first deployment with the real model. |
 | 40160854228 | 25 Oct | Failed at verify | The format check found two files out of format; nothing deployed. |
 | 40161155236 | 25 Oct | Failed at deploy | The first install on a 1 vCPU, 2 GB Vultr VM; the VM was resized to 2 vCPU and 4 GB (AD-09). |
 | 40162838596 | 25 Oct | Passed | The first deployment on the Vultr host. |
 | 40284716751 | 26 Oct | Passed; smoke load skipped | The default budget cap of USD 0.05; 8 min 31 s. |
-
-![Figure 18. Delivery history. (a) The runs of the Platform deploy workflow, 25 and 26 October 2026, with the two failures on the day of the host move. (b) The Helm release history on the EC2 host, 21 October 2026: one install and three upgrades. Sources: (a) GitHub, Playwright capture, 27 October 2026; (b) terminal recording in docs/platform/slides/out.](figures/s-history.png)
 
 Rollback: deploy the previous commit again (push a revert), or run
 `helm rollback` through the SSH tunnel.
@@ -1142,7 +1139,7 @@ Rollback: deploy the previous commit again (push a revert), or run
 
 | Finding | What happened | What the team did |
 |---|---|---|
-| Deadlock with one queue | A parent turn keeps its slot while its children run. One queue for all turns can fill every slot with waiting parents. Found in design. | One queue per depth (AD-03). |
+| Deadlock with one queue | A parent turn keeps its slot while its children run. With one queue, waiting parents can take all slots. Found in design. | One queue per depth (AD-03). |
 | The agent choice races the root turn | The root turn can reach a worker before `POST /api/projects` returns. | The intent row is written first; the worker claims it by session id, or by account and question text (AD-08). |
 | KEDA's default scale-down | The HPA that KEDA makes waits 300 s before it scales down. | The chart sets 60 s, so the workers leave a minute after the load. |
 | KEDA runs in another namespace | KEDA could not reach RabbitMQ by its short name. | The RabbitMQ URL for KEDA uses `rabbitmq.<ns>.svc.cluster.local`. |
@@ -1157,8 +1154,8 @@ Rollback: deploy the previous commit again (push a revert), or run
 The team presented on 26 October 2026 with a live demonstration on the
 public host and the real model. The run sheet had five steps:
 
-1. Ask a question in the browser: the lead agent searches arXiv and gives
-   three reader agents one paper each; the call tree grows with the cost of
+1. Ask a question in the browser. The lead agent searches arXiv and gives
+   three reader agents one paper each. The call tree grows with the cost of
    each task.
 2. Publish an agent, ask with it from the literature watch, and read usage.
 3. Show KEDA on the live server: the ScaledObject and the worker pods.
@@ -1174,11 +1171,11 @@ runs it.
 ### 6.3 Use of AI tools
 
 The team used Claude, an AI assistant made by Anthropic, to help design the
-architecture and to write code, tests, the Helm chart, the pipeline, the
-diagrams, and the text of this report and the slides. The team reviewed, ran
-and corrected this output. The team is responsible for all of the content in
-this report, the code and the presentation. The proposal made the same
-declaration.
+architecture. Claude also helped to write the code, the tests, the Helm
+chart, the pipeline, the diagrams, and the text of this report and the
+slides. The team reviewed, ran and corrected this output. The team is
+responsible for the content of this report, the code and the presentation.
+The proposal made the same declaration.
 
 ### 6.4 References
 

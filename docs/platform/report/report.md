@@ -171,7 +171,7 @@ task. Figure 2 is the schedule of the proposal.
 | 11 | Load tests and capacity results | HE RONG | 3 |
 | | **Total** | | **50** |
 
-![Figure 2. The schedule of the proposal: eleven tasks over ten working days, 8 to 21 October 2026. Source: proposal version 2, Table 4 and Figure 9, 6 October 2026.](figures/d-gantt.png)
+![Figure 2. The schedule of the proposal: eleven tasks over ten working days, 8 to 21 October 2026. Source: proposal version 2, Table 4 and Figure 10, 6 October 2026.](figures/d-gantt.png)
 
 ### 2.2 Project Status
 
@@ -502,7 +502,7 @@ a new account has a budget cap of USD 0.05.
 |---|---|---|---|
 | 20 Oct, EC2 | k6, 1 to 10 virtual users, demo worker | Workers 1 to 4 by KEDA, back to 1; identity 1 to 3 by HPA; node memory 2.0 of 3.7 GiB after the run | Section 4.1 |
 | 21 Oct, EC2 | k6, real model `gpt-4.1-nano` | Workers 1 to 2 by KEDA, back to 1 | `2026-10-21-load-real-model.md` |
-| 25 Oct, Vultr | 15 questions at once, real model `gpt-4.1-mini` | Workers 1 to 3 by KEDA | Figure 13 (c) |
+| 25 Oct, Vultr | 15 questions at once, real model `gpt-4.1-mini` | Workers 1 to 3 by KEDA | Figure 14 (c) |
 
 *The growth path.* The design does not change; only the values and three
 backing services do.
@@ -523,6 +523,10 @@ hosting. The second is when the load passes what 2 vCPU and 4 GB hold; pods
 that stay `Pending` show this.
 
 #### 3.2.2 Technology and Services
+
+Figure 8 shows the stack by layer; the table after it gives the use and the trade-off of each part.
+
+![Figure 8. The technology stack of the Lumen Platform by layer, from the clients down to the one host. Image generated with gpt-image-1.5 from the list in this section and checked against the Helm chart and the workflows on the integration branch.](figures/d-techstack.png)
 
 | Technology | Use | Trade-off and rationale |
 |---|---|---|
@@ -546,10 +550,10 @@ that stay `Pending` show this.
 
 All persistent data is in one PostgreSQL 16 database on a 2 Gi local-path
 volume. Each module owns its tables; the table name or the migration prefix
-shows the owner (for example `012_billing_approvals.sql`). Figure 8 shows the
+shows the owner (for example `012_billing_approvals.sql`). Figure 9 shows the
 main tables and their relations.
 
-![Figure 8. Logical data model of the main tables, grouped by owning module. The tasks table holds the call tree: each task has a parent, a depth, its own cost and, when it waits for an approval, its blocked operation. Source: migrations in apps/server/src/core/db/migrations.](figures/d-er.png)
+![Figure 9. Logical data model of the main tables, grouped by owning module. The tasks table holds the call tree: each task has a parent, a depth, its own cost and, when it waits for an approval, its blocked operation. Source: migrations in apps/server/src/core/db/migrations.](figures/d-er.png)
 
 Transactions and concurrency:
 
@@ -704,10 +708,10 @@ the budget cap and a call that crosses three services.
 
 Precondition: a producer published the agent `literature-scout`. The consumer
 has an API key with the scopes `questions:write` and `questions:read`.
-Figure 9 shows the sequence. The numbers in the list match the numbers in the
+Figure 10 shows the sequence. The numbers in the list match the numbers in the
 figure.
 
-![Figure 9. UML sequence diagram of use case A: the literature watch asks with a chosen agent, a worker runs the root turn, and the app reads the answer. Source: services/platform/askRoutes.ts, services/shared/queueWorker.ts, services/worker.ts.](figures/d-seq_ask.png)
+![Figure 10. UML sequence diagram of use case A: the literature watch asks with a chosen agent, a worker runs the root turn, and the app reads the answer. Source: services/platform/askRoutes.ts, services/shared/queueWorker.ts, services/worker.ts.](figures/d-seq_ask.png)
 
 1. The client sends `POST /api/v1/questions {question, agent:
    "literature-scout"}` with `Authorization: Bearer lmn_...`.
@@ -765,9 +769,9 @@ Failure handling in this use case:
 
 **Use case B: a fan-out over the budget cap waits for the owner's approval**
 
-Figure 10 shows the sequence. Figure 11 shows the same use case in the web app.
+Figure 11 shows the sequence. Figure 12 shows the same use case in the web app.
 
-![Figure 10. UML sequence diagram of use case B. The guard escalates a fan-out over the budget cap, and the task waits without holding a worker. The owner grants the approval, and the billing outbox resumes the task with the same attempt id. Source: modules/billing/budgetChain.ts, modules/billing/approvals.ts, modules/session/kernel.ts.](figures/d-seq_approval.png)
+![Figure 11. UML sequence diagram of use case B. The guard escalates a fan-out over the budget cap, and the task waits without holding a worker. The owner grants the approval, and the billing outbox resumes the task with the same attempt id. Source: modules/billing/budgetChain.ts, modules/billing/approvals.ts, modules/session/kernel.ts.](figures/d-seq_approval.png)
 
 1. The lead agent's worker calls `delegate` (`POST
    /internal/turns/:id/delegate`).
@@ -797,7 +801,7 @@ Figure 10 shows the sequence. Figure 11 shows the same use case in the web app.
     404 from session (for example on a second delivery) is final, so the loop
     also clears the row.
 
-![Figure 11. Use case B in the web app. (a) The question waits: "Not run: it is over the cap and needs your approval"; the call tree shows the lead agent as "Waiting on you". (b) The Wallet page: the budget cap and the approved fan-out. (c) The ledger: one row for each model call, with its task and its cost. Source: demonstration recording of the same web app on a local server, 22 October 2026, model gpt-4.1.](figures/s-approval.png)
+![Figure 12. Use case B in the web app. (a) The question waits: "Not run: it is over the cap and needs your approval"; the call tree shows the lead agent as "Waiting on you". (b) The Wallet page: the budget cap and the approved fan-out. (c) The ledger: one row for each model call, with its task and its cost. Source: demonstration recording of the same web app on a local server, 22 October 2026, model gpt-4.1.](figures/s-approval.png)
 
 Design points:
 
@@ -872,10 +876,10 @@ Measured result. On 20 October 2026 the team ran k6 against the public HTTPS
 address (one EC2 `t3.medium`, k3s). The workers were in demo mode
 (`LUMEN_DEMO_PACE_MS=1500`, no model calls). Profile `short`: 1 to 10
 virtual users over 30 s, hold 1 min, down over 20 s. Each virtual user signs
-in, asks a question, and polls until the root task is at rest. Figure 12
+in, asks a question, and polls until the root task is at rest. Figure 13
 shows the turns in the queues and the worker pods over the run.
 
-![Figure 12. Load test of 20 October 2026: the turns in the queues rose to 55 and fell to 0; KEDA moved the worker pods from 1 to 4 within 61 s and back to 1 after the queues were empty for the 60 s scale-down window. Source: docs/platform/evidence/2026-10-20-load-and-scaling.md, samples of kubectl and the RabbitMQ management API.](figures/d-loadtest.png)
+![Figure 13. Load test of 20 October 2026: the turns in the queues rose to 55 and fell to 0; KEDA moved the worker pods from 1 to 4 within 61 s and back to 1 after the queues were empty for the 60 s scale-down window. Source: docs/platform/evidence/2026-10-20-load-and-scaling.md, samples of kubectl and the RabbitMQ management API.](figures/d-loadtest.png)
 
 | Measure | Result |
 |---|---|
@@ -913,10 +917,10 @@ On 21 October the team ran the same profile with the real model. It gave
 requests. The median time to rest was 4.1 s and the p95 27.0 s. A worker
 waits on the model most of the time, so the queues grew less, and KEDA added
 one worker. On the current
-host, 15 questions at once took the workers from 1 to 3. Figure 13 shows the
+host, 15 questions at once took the workers from 1 to 3. Figure 14 shows the
 three runs in the terminal.
 
-![Figure 13. Scaling on the public host, in the terminal. (a) k6 with the real model, 21 October 2026 (EC2): 131 questions, 0.00% failed. (b) The KEDA autoscaler of the worker during that run: 1 to 2 replicas and back; repeated rows are left out. (c) 15 questions at once on the Vultr host, 25 October 2026: the ScaledObject, the queue at 15 turns for 5 a worker, and three worker pods; repeated rows are left out. Source: terminal recordings in docs/platform/slides/out and the demonstration recordings.](figures/s-scaling.png)
+![Figure 14. Scaling on the public host, in the terminal. (a) k6 with the real model, 21 October 2026 (EC2): 131 questions, 0.00% failed. (b) The KEDA autoscaler of the worker during that run: 1 to 2 replicas and back; repeated rows are left out. (c) 15 questions at once on the Vultr host, 25 October 2026: the ScaledObject, the queue at 15 turns for 5 a worker, and three worker pods; repeated rows are left out. Source: terminal recordings in docs/platform/slides/out and the demonstration recordings.](figures/s-scaling.png)
 
 The proposal's targets (200 concurrent sessions, 1,000 open streams) need
 more than one node (AISS-12, AD-09).
@@ -950,7 +954,7 @@ Worker failure. On 20 October 2026 the team deleted the only worker pod 1 to
 2 seconds after a question was asked through `POST /api/v1/questions` (demo
 mode, `docs/platform/evidence/2026-10-20-worker-kill.md`). On 25 October the
 team repeated the hard kill on the Vultr host with the real model and the
-agent `literature-scout`. Figure 14 shows that run.
+agent `literature-scout`. Figure 15 shows that run.
 
 | Test | What happened | Result |
 |---|---|---|
@@ -958,7 +962,7 @@ agent `literature-scout`. Figure 14 shows that run.
 | Hard kill (`--grace-period=0 --force`), 20 Oct, 15:05:41 UTC | The turns in hand were not acknowledged. Two seconds later, one turn on depth 0 and two on depth 1 were held by the new pod. | The question ended at 15:05:51 (12.6 s after it started), with USD 0.08 and 8 findings. The redelivered turns ran again from their start (AISS-04). |
 | Hard kill with the real model, 25 Oct | The worker pod was force-deleted while the reader agents ran. A new pod took the turns. | The question ended with 3 findings and USD 0.010238. |
 
-![Figure 14. A worker deleted during a question. (a) Vultr host, 25 October 2026: the question with the agent runs, the worker pod is force-deleted, a new pod starts, and the question ends with 3 findings. (b) The pods and the autoscalers of the namespace lumen, 21 October 2026 (EC2). Source: terminal recordings in docs/platform/slides/out and the demonstration recordings.](figures/s-kill.png)
+![Figure 15. A worker deleted during a question. (a) Vultr host, 25 October 2026: the question with the agent runs, the worker pod is force-deleted, a new pod starts, and the question ends with 3 findings. (b) The pods and the autoscalers of the namespace lumen, 21 October 2026 (EC2). Source: terminal recordings in docs/platform/slides/out and the demonstration recordings.](figures/s-kill.png)
 
 No question was lost in any test. A hard kill makes the redelivered turns run
 twice, which costs more and records duplicate findings (AISS-04).
@@ -1032,7 +1036,7 @@ How the platform is maintained:
 
 ### 5.1 Source Control Strategy
 
-Figure 15 shows the repository and its activity.
+Figure 16 shows the repository and its activity.
 
 | Item | Strategy |
 |---|---|
@@ -1045,12 +1049,12 @@ Figure 15 shows the repository and its activity.
 | Developers | Each member commits with a personal GitHub account; the history has commits from all five members. The pipeline deploys with a dedicated SSH key, kept as the GitHub secret `PLATFORM_SSH_KEY`. |
 | Language | Everything in the repository is in English. |
 
-![Figure 15. Source control. (a) The five service entry points on the integration branch, apps/server/src/services. (b) Commits per week in the repository. Sources: (a) GitHub, Playwright capture, 27 October 2026; (b) GitHub Insights, captured by the team on 23 October 2026.](figures/s-source.png)
+![Figure 16. Source control. (a) The five service entry points on the integration branch, apps/server/src/services. (b) Commits per week in the repository. Sources: (a) GitHub, Playwright capture, 27 October 2026; (b) GitHub Insights, captured by the team on 23 October 2026.](figures/s-source.png)
 
 ### 5.2 Continuous Integration
 
-The pipeline is `.github/workflows/platform-deploy.yml`. Figure 16 shows two
-real runs: one that passed and one that the image scan stopped. Figure 17 in
+The pipeline is `.github/workflows/platform-deploy.yml`. Figure 17 shows two
+real runs: one that passed and one that the image scan stopped. Figure 18 in
 section 5.3 shows the jobs and their order.
 
 
@@ -1068,7 +1072,7 @@ Triggers:
 
 The repository also has `ci.yml` and `security.yml` for the base product.
 
-![Figure 16. Two runs of the pipeline on GitHub Actions. (a) Run 40284716751 of 26 October 2026 passed in 8 min 31 s; the smoke load did not run, because the workers use the real model. (b) Run 39439752963 of 20 October 2026: the image scan failed the deploy job, so DAST and the smoke load did not run. Source: GitHub, Playwright capture, 27 October 2026.](figures/s-runs.png)
+![Figure 17. Two runs of the pipeline on GitHub Actions. (a) Run 40284716751 of 26 October 2026 passed in 8 min 31 s; the smoke load did not run, because the workers use the real model. (b) Run 39439752963 of 20 October 2026: the image scan failed the deploy job, so DAST and the smoke load did not run. Source: GitHub, Playwright capture, 27 October 2026.](figures/s-runs.png)
 
 ### 5.3 Continuous Delivery
 
@@ -1080,7 +1084,7 @@ The repository also has `ci.yml` and `security.yml` for the base product.
 There is no separate staging environment. A push to the integration branch is
 the approval to deploy, and the pipeline gates are the checks.
 
-Figure 17 shows the jobs. The `deploy` job needs `verify`, `sca` and `sast`.
+Figure 18 shows the jobs. The `deploy` job needs `verify`, `sca` and `sast`.
 Its steps:
 
 1. Build the image `lumen-next:<commit sha>` from `deploy/k8s/Dockerfile`.
@@ -1111,17 +1115,17 @@ Four checks verify a deployment:
 - the smoke load runs in demo mode;
 - `deploy/k8s/demo.sh` checks the whole flow by hand.
 
-![Figure 17. The deploy pipeline. Verify, SCA and SAST run in parallel; deploy builds the image, scans it, copies it to the host and installs it; DAST and the smoke load test the live host; summary reports the result of each stage. The durations are from run 39441445313 of 20 October 2026.](figures/d-pipeline.png){wide}
+![Figure 18. The deploy pipeline. Verify, SCA and SAST run in parallel; deploy builds the image, scans it, copies it to the host and installs it; DAST and the smoke load test the live host; summary reports the result of each stage. The durations are from run 39441445313 of 20 October 2026.](figures/d-pipeline.png){wide}
 
 The pipeline ran 21 times from 20 to 26 October 2026; 17 runs passed.
-Figure 18 shows the list and the Helm history on the host.
+Figure 19 shows the list and the Helm history on the host.
 
-![Figure 18. Delivery history. (a) The runs of the Platform deploy workflow, 25 and 26 October 2026, with the two failures on the day of the host move. (b) The Helm release history on the EC2 host, 21 October 2026: one install and three upgrades. Sources: (a) GitHub, Playwright capture, 27 October 2026; (b) terminal recording in docs/platform/slides/out.](figures/s-history.png)
+![Figure 19. Delivery history. (a) The runs of the Platform deploy workflow, 25 and 26 October 2026, with the two failures on the day of the host move. (b) The Helm release history on the EC2 host, 21 October 2026: one install and three upgrades. Sources: (a) GitHub, Playwright capture, 27 October 2026; (b) terminal recording in docs/platform/slides/out.](figures/s-history.png)
 
 | Run | Date | Result | What it shows |
 |---|---|---|---|
 | 39439752963, 39440170020 | 20 Oct | Failed at the image scan | The gate found 5 critical CVEs: one in `perl-base` with a fix, and others in the `docker.io` package of the base product's image. The image never reached the host. |
-| 39441445313 | 20 Oct | Passed, all stages | The fix: a platform image without Docker, with the Debian security updates (commit `44630f7`). Jobs ran 12 min 30 s in total (Figure 17). |
+| 39441445313 | 20 Oct | Passed, all stages | The fix: a platform image without Docker, with the Debian security updates (commit `44630f7`). Jobs ran 12 min 30 s in total (Figure 18). |
 | 39542685448 | 21 Oct | Passed; smoke load skipped | The first deployment with the real model. |
 | 40160854228 | 25 Oct | Failed at verify | The format check found two files out of format; nothing deployed. |
 | 40161155236 | 25 Oct | Failed at deploy | The first install on a 1 vCPU, 2 GB Vultr VM; the VM was resized to 2 vCPU and 4 GB (AD-09). |
